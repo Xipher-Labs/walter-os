@@ -1,0 +1,43 @@
+# minimal .gitleaks.toml for the pre-commit hook. PR #55 ships the canonical
+# version with more allowlist rules — merge those in when #55 lands.
+#
+# `extend.useDefault = true` inherits gitleaks' built-in rule set (AWS, GCP,
+# GitHub PATs, Slack tokens, private-key headers, etc.). Without it, a config
+# file that only declares an `[allowlist]` would scan with zero rules and
+# silently let every secret pass.
+
+title = "Walter-OS gitleaks config (pre-commit minimum)"
+
+[extend]
+useDefault = true
+
+# Global allowlist: paths that should never be scanned for secrets.
+# tests/fixtures/ contains deliberately fake secrets for bats tests.
+# Generated caches, local agent memory, and worktree copies are excluded so local
+# scans do not fail on non-public artifacts while tracked first-party and
+# vendored release files remain covered.
+[allowlist]
+description = "Walter-OS global allowlist"
+paths = [
+  '''tests/fixtures/''',
+  '''^\.claude/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)__pycache__/''',
+  '''^\.git/''',
+  '''\.example\.md$''',
+  '''\.example$''',
+]
+
+# Keep external/ in scope, but ignore exact fake values used by vendored
+# sanitization examples. Real secrets in external/ still fail.
+regexTarget = "secret"
+regexes = [
+  '''sk-proj-abc123def456ghi789jkl012mno345''',
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0In0\.aBcDeFgHiJkLmNoPqRsT''',
+  '''dGhpcyBpcyBhIHNlY3JldCBrZXkgdmFsdWU=''',
+  # Historical docs used a fake GitHub token-shaped fixture to demonstrate that
+  # the hook blocks staged secrets. Keep the allowlist exact so real GitHub
+  # tokens in docs or code still fail.
+  '''ghp_jk2lH8wPzAxRtNqYcVBdM3sEFGuiKLMOPQ4r''',
+]

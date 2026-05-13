@@ -1,0 +1,119 @@
+{
+  "name": "Content Publishing — Cross-Post Markdown",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "REPLACE_WITH_WEBHOOK_PATH",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "notes": "Receives { markdown: string, url?: string, tags?: string[] }"
+    },
+    {
+      "id": "node-002",
+      "name": "Parse Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\n// Parse items[0].json.markdown\n// Strip markdown syntax, extract first paragraph\n// Truncate to MAX_CHAR_COUNT (default 280)\n// Append tags and URL if configured\nreturn [{ json: { postBody: 'REPLACE_WITH_PARSED_TEXT', url: items[0].json.url } }];"
+      }
+    },
+    {
+      "id": "node-003",
+      "name": "Post to X/Twitter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twitter.com/2/tweets",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twitterOAuth2Api",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "text", "value": "={{$node['Parse Markdown'].json.postBody}}" }
+          ]
+        }
+      },
+      "notes": "Requires Twitter API credentials with write scope"
+    },
+    {
+      "id": "node-004",
+      "name": "Post to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "REPLACE_WITH_LINKEDIN_UGC_POST_SCHEMA"
+      },
+      "notes": "Requires LinkedIn OAuth2 with w_member_social scope"
+    },
+    {
+      "id": "node-005",
+      "name": "Post to Bluesky",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "REPLACE_WITH_BLUESKY_POST_RECORD"
+      },
+      "notes": "Requires Bluesky App Password"
+    },
+    {
+      "id": "node-006",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "REPLACE_WITH_SLACK_OR_TELEGRAM_WEBHOOK_URL",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "text", "value": "Content publishing failed: ={{$node.error.message}}" }
+          ]
+        }
+      },
+      "notes": "Connected to each platform node's error output"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[ { "node": "Parse Markdown", "type": "main", "index": 0 } ]]
+    },
+    "Parse Markdown": {
+      "main": [
+        [
+          { "node": "Post to X/Twitter", "type": "main", "index": 0 },
+          { "node": "Post to LinkedIn", "type": "main", "index": 0 },
+          { "node": "Post to Bluesky", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

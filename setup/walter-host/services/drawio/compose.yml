@@ -1,0 +1,33 @@
+# Draw.io / diagrams.net self-hosted.
+#
+# Why drawio over Excalidraw: drawio's AI feature ("Smart Templates" + GPT
+# integration) is more mature for technical/architecture diagrams. Excalidraw
+# is hand-drawn-style, drawio is BPMN/UML/architecture-grade. Excalidraw also
+# has AI but only via paid Excalidraw+. drawio works offline + has the
+# "Insert > AI Generated" flow (uses your own OpenAI key from LiteLLM).
+#
+# URL: draw.${WALTER_DOMAIN} (CF Tunnel + Access)
+
+services:
+  drawio:
+    image: jgraph/drawio:latest
+    container_name: drawio
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8083:8080"
+    environment:
+      # Disable analytics + Google services for privacy
+      DRAWIO_PLUGINS_ENABLED: "true"
+      DRAWIO_GOOGLE_CLIENT_ID: ""
+      DRAWIO_GOOGLE_VIEWER_CLIENT_ID: ""
+      DRAWIO_GITLAB_ID: ""
+      DRAWIO_DROPBOX_APPKEY: ""
+      DRAWIO_ONEDRIVE_CLIENT_ID: ""
+      # Public URL
+      DRAWIO_BASE_URL: https://draw.${WALTER_DOMAIN}
+      DRAWIO_VIEWER_URL: https://draw.${WALTER_DOMAIN}/js/viewer-static.min.js
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080 | grep -q drawio || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3

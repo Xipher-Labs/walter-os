@@ -1,0 +1,36 @@
+# gemini-sub-router — wraps `gemini -p --output-format=json` (Gemini CLI)
+# as an OpenAI-compatible HTTP endpoint backed by the operator's Google AI
+# Pro subscription. Joins the LiteLLM Docker network.
+# Auth: bind-mount /home/walter/.gemini (OAuth creds) from host.
+
+services:
+  gemini-sub-router:
+    build: .
+    container_name: gemini-sub-router
+    restart: unless-stopped
+    environment:
+      PORT: "1458"
+      HOME: /home/appuser
+      NO_COLOR: "1"
+      TERM: dumb
+      # GSR_APIKEY: required when exposing to LiteLLM network.
+      # Generate: openssl rand -hex 32
+      GSR_APIKEY: ${GSR_APIKEY:?GSR_APIKEY must be set — generate with: openssl rand -hex 32}
+    volumes:
+      - ${HOME}/.gemini:/home/appuser/.gemini:rw
+      - /tmp/gemini-sub-router:/tmp:rw
+    ports:
+      - "127.0.0.1:1458:1458"
+    networks:
+      - litellm_net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1458/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  litellm_net:
+    external: true
+    name: litellm_default

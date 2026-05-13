@@ -1,0 +1,74 @@
+name: codeql
+
+# CodeQL semantic analysis for the Control Tower Next.js / TypeScript app.
+#
+# Scope: javascript-typescript only (apps/control-tower/).
+# CodeQL does not have a first-class bash language target (AC-6 / open question #4).
+# Shell script scanning is covered by:
+#   - shellcheck in ci.yml (static analysis)
+#   - gitleaks.yml (secret patterns)
+#   - bash-denylist.sh PreToolUse hook (RCE injection patterns)
+#
+# All uses: lines are pinned to 40-char commit SHAs per AC-10.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - dev
+      - staging
+  schedule:
+    - cron: '45 3 * * 3'   # weekly Wednesday 03:45 UTC
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write   # required to upload SARIF results
+
+jobs:
+  analyze:
+    name: codeql analysis
+    runs-on: ubuntu-latest
+    # CodeQL SARIF upload requires "Code scanning" enabled on the repo, which
+    # is free for PUBLIC repos and a paid GHAS feature on PRIVATE repos.
+    # Walter-OS is private during pre-v0.2.0 OSS prep. Gate the job so it
+    # only runs once the repo is published — at that point Code Scanning
+    # turns on automatically and this gate becomes a no-op.
+    if: github.event.repository.visibility == 'public'
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        # actions/checkout v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@bc0b696b4103f5fe60f15749af68a046868d511a
+        # github/codeql-action (latest bundle commit)
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended catches more injection patterns than
+          # security-and-quality (the default). Specifically covers:
+          # - prototype pollution
+          # - command injection via exec/spawn
+          # - path traversal
+          # - SSRF patterns
+          queries: security-extended
+          # Scope to the Control Tower app directory
+          config: |
+            paths:
+              - apps/control-tower
+
+      - name: Autobuild (Next.js TypeScript)
+        uses: github/codeql-action/autobuild@bc0b696b4103f5fe60f15749af68a046868d511a
+        # github/codeql-action (latest bundle commit)
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@bc0b696b4103f5fe60f15749af68a046868d511a
+        # github/codeql-action (latest bundle commit)
+        with:
+          category: /language:${{ matrix.language }}

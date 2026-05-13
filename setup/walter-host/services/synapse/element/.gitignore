@@ -1,0 +1,3 @@
+# config.json is rendered at deploy time from config.json.template via envsubst.
+# Do not commit the rendered output — it contains operator-specific domain names.
+config.json

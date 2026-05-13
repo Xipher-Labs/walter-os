@@ -1,0 +1,39 @@
+rules:
+  - id: walter-os-eval-with-variable
+    languages: [bash]
+    severity: ERROR
+    message: >-
+      `eval` with a shell variable expansion. Even with quotes, `eval`
+      re-parses its argument as shell, so any value containing
+      `;`, `|`, backticks, `$(...)`, or shell metacharacters runs as
+      code. Walter-OS prior fix (PR #57 P0-04) removed `eval` from
+      doctor.sh for this exact reason. Use direct invocation or `bash -c`
+      with `--` and explicit positional args (then quote internally), or
+      better, restructure to avoid dynamic dispatch.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      owasp: "A03:2021 - Injection"
+      walter-os-history: |
+        scripts/walter/subcommands/doctor.sh had `eval "[[ -d
+        '$WALTER_OS_HOME' ]]"` — fixed in P0-04.
+    pattern-either:
+      - pattern-regex: |
+          (^|\s)eval\s+["'].*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?.*["']
+      - pattern-regex: |
+          (^|\s)eval\s+\$\{?[A-Za-z_][A-Za-z0-9_]*\}?
+
+  - id: walter-os-bash-c-with-variable
+    languages: [bash]
+    severity: ERROR
+    message: >-
+      `bash -c` (or `sh -c`, `zsh -c`) with an interpolated shell
+      variable. Equivalent injection sink to `eval`. Pass the value as
+      a positional argument (`bash -c 'echo "$1"' _ "$VALUE"`) or pipe
+      via stdin.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      owasp: "A03:2021 - Injection"
+    pattern-regex: |
+      (bash|sh|zsh|dash|ksh)\s+-c\s+["'][^"']*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[^"']*["']

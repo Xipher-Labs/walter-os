@@ -1,0 +1,124 @@
+{
+  "name": "Hackathon Team Formation — Form to Balanced Teams",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Webhook: Form Submission",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 200],
+      "parameters": {
+        "path": "REPLACE_WITH_WEBHOOK_PATH",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "notes": "Register this URL as the webhook in Tally or Typeform"
+    },
+    {
+      "id": "node-002",
+      "name": "Parse Form Submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 200],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\n// Tally and Typeform have different payload shapes\n// Extract: name, handle, primary_skills (array), secondary_skills, preferences\nconst payload = items[0].json;\n// Example for Tally:\n// const fields = payload.data.fields;\nreturn [{ json: {\n  name: 'EXTRACT_FROM_PAYLOAD',\n  handle: 'EXTRACT_FROM_PAYLOAD',\n  primary_skills: ['EXTRACT_FROM_PAYLOAD'],\n  secondary_skills: 'EXTRACT_FROM_PAYLOAD',\n  preferences: 'EXTRACT_FROM_PAYLOAD'\n} }];"
+      }
+    },
+    {
+      "id": "node-003",
+      "name": "Store Participant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [650, 200],
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "hackathon_participants",
+        "columns": "name, handle, primary_skills, secondary_skills, preferences, event_slug",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": { "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "REPLACE_WITH_CREDENTIAL_NAME" }
+      },
+      "notes": "Schema: CREATE TABLE hackathon_participants (id SERIAL PRIMARY KEY, name TEXT, handle TEXT, primary_skills JSONB, secondary_skills TEXT, preferences TEXT, event_slug TEXT, created_at TIMESTAMPTZ DEFAULT now())"
+    },
+    {
+      "id": "node-004",
+      "name": "Manual Trigger: Run Matching",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 450],
+      "notes": "Trigger this manually when registration closes and you are ready to form teams"
+    },
+    {
+      "id": "node-005",
+      "name": "Fetch All Participants",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [450, 450],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM hackathon_participants WHERE event_slug = 'REPLACE_WITH_EVENT_SLUG' ORDER BY created_at",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": { "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "REPLACE_WITH_CREDENTIAL_NAME" }
+      }
+    },
+    {
+      "id": "node-006",
+      "name": "LLM: Form Teams",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 450],
+      "parameters": {
+        "method": "POST",
+        "url": "REPLACE_WITH_LLM_ENDPOINT",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"REPLACE_WITH_MODEL\",\n  \"max_tokens\": 2048,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Form balanced hackathon teams of REPLACE_WITH_TEAM_SIZE from these participants. Balance frontend, backend, and design skills across teams. Return JSON: { teams: [ { name: 'Team X', members: [...], rationale: '...' } ] }\\n\\nParticipants: {{JSON.stringify($items)}}\"\n  }]\n}"
+      }
+    },
+    {
+      "id": "node-007",
+      "name": "Format Team Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 450],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\n// Parse LLM response and format team announcements for Discord\nconst raw = items[0].json.content ? items[0].json.content[0].text : items[0].json.choices[0].message.content;\nconst { teams } = JSON.parse(raw);\nreturn teams.map((team, i) => ({\n  json: {\n    message: `**${team.name}**\\nMembers: ${team.members.join(', ')}\\nRationale: ${team.rationale}`\n  }\n}));"
+      }
+    },
+    {
+      "id": "node-008",
+      "name": "Discord: Post Teams",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 450],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://discord.com/api/v10/channels/REPLACE_WITH_CHANNEL_ID/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"content\": \"{{$json.message}}\" }"
+      },
+      "notes": "Requires Discord Bot token in Authorization header: Bot REPLACE_WITH_BOT_TOKEN"
+    }
+  ],
+  "connections": {
+    "Webhook: Form Submission": { "main": [[ { "node": "Parse Form Submission", "type": "main", "index": 0 } ]] },
+    "Parse Form Submission": { "main": [[ { "node": "Store Participant", "type": "main", "index": 0 } ]] },
+    "Manual Trigger: Run Matching": { "main": [[ { "node": "Fetch All Participants", "type": "main", "index": 0 } ]] },
+    "Fetch All Participants": { "main": [[ { "node": "LLM: Form Teams", "type": "main", "index": 0 } ]] },
+    "LLM: Form Teams": { "main": [[ { "node": "Format Team Messages", "type": "main", "index": 0 } ]] },
+    "Format Team Messages": { "main": [[ { "node": "Discord: Post Teams", "type": "main", "index": 0 } ]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  }
+}

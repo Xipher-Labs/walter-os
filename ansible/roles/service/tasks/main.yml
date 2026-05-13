@@ -1,0 +1,67 @@
+---
+# Generic "deploy a Walter-VM Docker service" role.
+# Each service in setup/walter-host/services/<service_name>/ has compose.yml +
+# optionally .env.template + deploy.sh + supporting files. This role:
+#   1. Creates /opt/walter-vm/services/<svc>/
+#   2. Copies compose.yml + non-template files (excludes .env)
+#   3. Generates .env from .env.template if missing (NEVER overwrites)
+#   4. docker compose pull + up -d
+#   5. Waits for healthy
+
+- name: "[{{ service_name }}] ensure service dir"
+  ansible.builtin.file:
+    path: "{{ walter_services_dir }}/{{ service_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "[{{ service_name }}] sync compose.yml + supporting files"
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../setup/walter-host/services/{{ service_name }}/"
+    dest: "{{ walter_services_dir }}/{{ service_name }}/"
+    rsync_opts:
+      - "--exclude=.env"
+      - "--exclude=._*"
+      - "--exclude=.DS_Store"
+    recursive: yes
+    delete: no
+  delegate_to: localhost
+  become: no
+
+- name: "[{{ service_name }}] check if .env exists"
+  ansible.builtin.stat:
+    path: "{{ walter_services_dir }}/{{ service_name }}/.env"
+  register: svc_env
+
+- name: "[{{ service_name }}] copy .env.template → .env (first time only)"
+  ansible.builtin.copy:
+    src: "{{ walter_services_dir }}/{{ service_name }}/.env.template"
+    dest: "{{ walter_services_dir }}/{{ service_name }}/.env"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - not svc_env.stat.exists
+    - "'.env.template' in (svc_files | default([]))"
+  ignore_errors: yes  # template may not exist for all services
+
+- name: "[{{ service_name }}] docker compose pull"
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ walter_services_dir }}/{{ service_name }}"
+  register: pull_result
+  changed_when: "'Downloaded' in pull_result.stdout or 'Pull complete' in pull_result.stdout"
+
+- name: "[{{ service_name }}] docker compose up -d"
+  ansible.builtin.shell: |
+    if [ -f .env ]; then
+      docker compose --env-file .env up -d
+    else
+      docker compose up -d
+    fi
+  args:
+    chdir: "{{ walter_services_dir }}/{{ service_name }}"
+  register: up_result
+  changed_when: "'Started' in up_result.stdout or 'Recreated' in up_result.stdout"

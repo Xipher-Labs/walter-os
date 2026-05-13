@@ -1,0 +1,10 @@
+[submodule "external/vercel-agent-skills"]
+	path = external/vercel-agent-skills
+	url = https://github.com/vercel-labs/agent-skills.git
+	# PINNED to ce3e64e468f8fa09a2d075d102771838061fdac0 for supply chain security
+	# DO NOT add 'branch =' — that enables --remote drift. See: docs/operational/security-audit-2026-05-11.md P0-05
+[submodule "external/marchetto-agent-skills"]
+	path = external/marchetto-agent-skills
+	url = https://github.com/JuanMarchetto/agent-skills.git
+	# PINNED to 871b3bd334f94c53120ea3548a7d3866b5fb8054 for supply chain security
+	# DO NOT add 'branch =' — that enables --remote drift. See: docs/operational/security-audit-2026-05-11.md P0-05

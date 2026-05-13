@@ -1,0 +1,25 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "https://matrix.${WALTER_DOMAIN}",
+      "server_name": "${WALTER_DOMAIN}"
+    }
+  },
+  "brand": "Walter-VM Element",
+  "default_country_code": "AR",
+  "show_labs_settings": true,
+  "features": {
+    "feature_video_rooms": false,
+    "feature_thread": true
+  },
+  "default_theme": "dark",
+  "disable_custom_urls": true,
+  "disable_guests": true,
+  "disable_login_language_selector": false,
+  "disable_3pid_login": true,
+  "default_federate": false,
+  "permalink_prefix": "https://element.${WALTER_DOMAIN}",
+  "integrations_ui_url": "",
+  "integrations_rest_url": "",
+  "integrations_widgets_urls": []
+}

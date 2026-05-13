@@ -1,0 +1,54 @@
+# Walter-VM — Postgres with pg_partman + pg_cron (analytics extension)
+#
+# This service runs alongside the existing postgres used by n8n, but as a
+# SEPARATE container+volume for the DevRel analytics DB.
+# Isolation rationale: different lifecycle (analytics can be wiped without
+# affecting n8n), different Dockerfile (extensions not needed by n8n), and
+# different backup cadence.
+#
+# DB name: walter_devrel_analytics
+# Port: 5433 (host) → 5432 (container) to avoid conflict with n8n's PG.
+#
+# Refs: docs/specs/devrel-analytics-stack.md (V-prereq-6)
+# Refs: docs/operational/council-v2-prereqs.md
+
+services:
+  postgres-analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: postgres-analytics
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: walter_devrel_analytics
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: ${ANALYTICS_PG_PASS}
+
+      # pg_cron must know which DB to connect to for scheduling
+      # (mirrors postgresql.conf cron.database_name = 'walter_devrel_analytics')
+      PGDATA: /var/lib/postgresql/data
+
+    ports:
+      # Expose on localhost only — Tailscale or caddy proxy handles access.
+      # Port 5433 on host to avoid clash with n8n's postgres on 5432.
+      - "127.0.0.1:5433:5432"
+
+    volumes:
+      - analytics_pg_data:/var/lib/postgresql/data
+      # Custom postgresql.conf is baked into the image (COPY in Dockerfile).
+      # Override here only if you need runtime changes without rebuilding.
+
+    networks: [analytics_net]
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics -d walter_devrel_analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  analytics_pg_data:
+
+networks:
+  analytics_net:
+    driver: bridge

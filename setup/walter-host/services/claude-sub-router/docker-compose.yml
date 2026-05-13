@@ -1,0 +1,38 @@
+# claude-sub-router — wraps `claude -p --output-format=json` (Claude Code CLI)
+# as an OpenAI-compatible HTTP endpoint backed by the operator's Max sub.
+# Joins the LiteLLM Docker network so it's reachable by service hostname.
+# Auth: bind-mount /home/walter/.claude (OAuth tokens) from host.
+# Replaces the legacy musistudio/claude-code-router stanza in llm-proxies/.
+
+services:
+  claude-sub-router:
+    build: .
+    container_name: claude-sub-router
+    restart: unless-stopped
+    environment:
+      PORT: "1457"
+      HOME: /home/appuser
+      # CSR_APIKEY: required when exposing to LiteLLM network.
+      # Generate: openssl rand -hex 32
+      CSR_APIKEY: ${CSR_APIKEY:?CSR_APIKEY must be set — generate with: openssl rand -hex 32}
+    volumes:
+      # Bind-mount host's claude auth dir. The CLI refreshes OAuth tokens
+      # on demand. Read-write so token refresh persists across restarts.
+      - ${HOME}/.claude:/home/appuser/.claude:rw
+      # Writable tmp for the CLI's working directory.
+      - /tmp/claude-sub-router:/tmp:rw
+    ports:
+      - "127.0.0.1:1457:1457"
+    networks:
+      - litellm_net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1457/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  litellm_net:
+    external: true
+    name: litellm_default

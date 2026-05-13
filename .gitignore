@@ -1,0 +1,96 @@
+# Walter-OS .gitignore
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+!.env.template
+secrets.env
+*.key
+*.pem
+*-key.json
+
+# Audit and runtime artifacts
+audit-*.md
+audit.log
+audit.err
+spend-status.json
+audit-status.json
+baselines/
+hook-checksums.json
+mcp-snapshots/
+
+# Generated assets (regenerable, big)
+assets/generated/
+
+# OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# Node / Python / Rust standard ignores
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+target/
+.venv/
+venv/
+dist/
+build/
+
+# Editor temp
+*.bak
+*.orig
+*.tmp
+.tmp/
+
+# Claude Code local-only settings
+.claude/settings.local.json
+.claude/agent-memory/
+
+# ============================================================
+# Control Tower (Next.js app)
+# ============================================================
+apps/control-tower/.next/
+apps/control-tower/node_modules/
+apps/control-tower/out/
+
+# ============================================================
+# Wiki — private content stays out of public repo
+# ============================================================
+# Walter-OS wiki/ is operator-maintained KB (Karpathy LLM Wiki pattern).
+# Content may include confidential work data, legal documents, and medical
+# records. Public repo carries only SCHEMA.md + README.md.
+# Content lives in a private Forgejo mirror at git.${WALTER_DOMAIN}/operator/walter-wiki.
+wiki/*
+!wiki/SCHEMA.md
+!wiki/README.md
+!wiki/.gitkeep
+
+# Claude Code session artifacts (accidentally committed in earlier commits — keep ignored)
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.claude/agents/*.tmp
+
+# ============================================================
+# .example template siblings — never commit the actual operator-customized file
+# Each .example file ships in-repo as a template; the operator copies it without
+# the .example suffix and customizes locally. The customized file MUST NOT be
+# committed (would leak operator config and overwrite forkers' customizations).
+# ============================================================
+setup/mise.toml
+setup/agent-approvals.yml
+setup/codex-config.toml
+scripts/repos.txt
+contexts/_examples/personal.env
+setup/walter-host/singer/config.env
+setup/walter-host/services/alerting/cron
+
+# Operator-local notes (never committed — contains personal config values)
+OPERATOR-NOTES.md

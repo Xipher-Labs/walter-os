@@ -1,0 +1,123 @@
+name: readme-lint
+
+on:
+  push:
+    paths:
+      - "README.md"
+      - "tests/oss/**"
+      - ".markdownlint.json"
+      - "skills/**"
+      - "agents/**"
+      - "LICENSE"
+      - "NOTICE"
+      - "COMMERCIAL.md"
+      - "SECURITY.md"
+      - "CODE_OF_CONDUCT.md"
+      - "CONTRIBUTING.md"
+      - "contexts/**"
+      - ".github/workflows/readme-lint.yml"
+  pull_request:
+    paths:
+      - "README.md"
+      - "tests/oss/**"
+      - ".markdownlint.json"
+      - "skills/**"
+      - "agents/**"
+      - "LICENSE"
+      - "NOTICE"
+      - "COMMERCIAL.md"
+      - "SECURITY.md"
+      - "CODE_OF_CONDUCT.md"
+      - "CONTRIBUTING.md"
+      - "contexts/**"
+      - ".github/workflows/readme-lint.yml"
+
+jobs:
+  readme-structure:
+    name: README structure + depersonalization
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install bats + python3-yaml (founder-skills assertions need yaml.safe_load)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq bats python3-yaml
+
+      - name: Run readme-detailed bats suite [AC-11]
+        run: bats tests/oss/readme-detailed.bats
+
+      - name: Run depersonalization bats suite [AC-4]
+        run: bats tests/oss/depersonalization.bats
+
+      - name: Run founder-skills bats suite [W-13 AC-8]
+        run: bats tests/oss/founder-skills.bats
+
+      - name: Run founder-skills-extension bats suite [W-14 AC-8]
+        run: bats tests/oss/founder-skills-extension.bats
+
+      - name: Run license-files bats suite [audit B-5]
+        run: bats tests/oss/license-files.bats
+
+      - name: Run oss-ready-docs bats suite [audit B-5]
+        run: bats tests/oss/oss-ready-docs.bats
+
+      - name: Run operator-contexts bats suite [audit B-5]
+        run: bats tests/oss/operator-contexts.bats
+
+      - name: Run review-loop-policy bats suite [audit B-5]
+        run: bats tests/oss/review-loop-policy.bats
+
+      - name: Run hermes-agent bats suite [audit B-5]
+        run: bats tests/oss/hermes-agent.bats
+
+      - name: Run walter-personal-skeleton bats suite [audit B-5]
+        run: bats tests/oss/walter-personal-skeleton.bats
+
+  readme-markdown-lint:
+    name: Markdown lint [AC-12]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+
+      - name: Run markdownlint on README.md
+        run: markdownlint --config .markdownlint.json README.md
+
+  readme-cross-links:
+    name: Cross-link resolution belt-and-suspenders
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify relative markdown links resolve to existing paths
+        run: |
+          # Extract all relative markdown links from README.md
+          # Format: [text](path) — capture the path portion
+          # Skip external URLs (http/https), anchors (#), and mailto links
+          grep -oE '\]\([^)]+\)' README.md \
+            | sed 's/^\](//;s/)$//' \
+            | grep -vE '^(https?://|#|mailto:)' \
+            | while IFS= read -r link; do
+                # Strip any anchor fragment from file links
+                path="${link%%#*}"
+                if [ -z "$path" ]; then
+                  continue
+                fi
+                # Check if it's a file or directory
+                if [ -f "$path" ] || [ -d "$path" ]; then
+                  echo "OK: $path"
+                else
+                  echo "MISSING: $path"
+                  echo "::warning::Cross-link target not found: $path (may resolve post-merge)"
+                fi
+              done
+          echo "Cross-link check complete (missing targets are warnings, not errors)"
+          echo "Files from dependent PRs will be present after merge:"
+          echo "  - CONTRIBUTING.md, SECURITY.md, COMMERCIAL.md, LICENSE, NOTICE"
+          echo "  - n8n/workflows/"
+          echo "  - contexts/hackathons/"
+          echo "  - docs/operational/operator-contexts.md"
+          echo "  - setup/walter-host/services/*/SUGGESTIONS.md"

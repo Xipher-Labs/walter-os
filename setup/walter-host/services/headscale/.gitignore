@@ -1,0 +1,3 @@
+# Rendered from config.yaml.template at deploy time via envsubst.
+# Contains the real WALTER_DOMAIN value — do not commit.
+config.yaml

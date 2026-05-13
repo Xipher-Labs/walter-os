@@ -1,0 +1,17 @@
+# Walter Council zombie watchdog — runs every 5 minutes.
+#
+# Checks for Plane issues in "claimed" state with stale heartbeats
+# (older than WALTER_HEARTBEAT_DEAD_THRESHOLD seconds, default 1800).
+# Zombies are re-queued to "ready" state and an alert is emitted.
+#
+# Installation (on walter-vm, as user "walter"):
+#   crontab -l 2>/dev/null | cat - /path/to/this/file | crontab -
+#   # or: sudo cp this-file /etc/cron.d/walter-watchdog
+#
+# See: docs/specs/walter-council-v2.md — Improvement 5 (T-19, T-20)
+# Prereq: R-prereq-2 — cron permissions for walter user
+
+WALTER_OS_HOME=/usr/local/share/walter-os
+WALTER_CONFIG=/home/walter/.config/walter-os
+
+*/5 * * * * . ${WALTER_CONFIG}/env && ${WALTER_OS_HOME}/scripts/agents/watchdog.sh >> /var/log/walter-council/watchdog.log 2>&1

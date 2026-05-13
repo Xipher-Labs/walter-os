@@ -1,0 +1,3 @@
+{
+  "mock_response": "mock-explain-response: This skill helps you do X, Y, and Z. Use it when you need to accomplish A. It works by reading B and producing C. Relevant for operators who use D. Available via `walter explain <skill-name>`."
+}

@@ -1,0 +1,25 @@
+rules:
+  - id: walter-os-curl-pipe-shell
+    languages: [bash]
+    severity: ERROR
+    message: >-
+      `curl ... | bash` (or `| sh`, `| zsh`). Supply-chain footgun:
+      anything the remote serves runs immediately, with no integrity
+      check. Pin and verify: download, checksum/sig-verify, then exec.
+      Walter-OS daily-supply-chain-audit explicitly forbids this idiom
+      in installer flows.
+    metadata:
+      category: security
+      cwe: "CWE-494: Download of Code Without Integrity Check"
+      references:
+        - https://www.idontplaydarts.com/2016/04/detecting-curl-pipe-bash-server-side/
+        - https://github.com/SeungOnCho/cyber-curl-pipe-bash
+    pattern-either:
+      - pattern-regex: |
+          curl\s+[^|]*\|\s*(bash|sh|zsh)\b
+      - pattern-regex: |
+          wget\s+[^|]*-O-\s*\|\s*(bash|sh|zsh)\b
+      - pattern-regex: |
+          wget\s+[^|]*-qO-\s*\|\s*(bash|sh|zsh)\b
+      - pattern-regex: |
+          fetch\s+[^|]*-o\s*-\s*[^|]*\|\s*(bash|sh|zsh)\b

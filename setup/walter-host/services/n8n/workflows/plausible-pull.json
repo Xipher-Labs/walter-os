@@ -1,0 +1,160 @@
+{
+  "name": "Plausible Analytics Pull (plausible-pull)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-plausible",
+      "name": "Schedule Trigger (1h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.PLAUSIBLE_URL }}/api/v1/stats/breakdown",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "site_id",
+              "value": "={{ $env.PLAUSIBLE_SITE_ID }}"
+            },
+            {
+              "name": "period",
+              "value": "custom"
+            },
+            {
+              "name": "date",
+              "value": "={{ $today.minus(1, 'hours').format('yyyy-MM-dd') }},={{ $today.format('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "property",
+              "value": "event:page"
+            },
+            {
+              "name": "metrics",
+              "value": "visitors,pageviews,bounce_rate,visit_duration"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "plausible-api-call",
+      "name": "Plausible API \u2014 Page Breakdown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "plausible-api-cred",
+          "name": "Plausible API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map Plausible stats \u2192 analytics_events rows\n// Refs: docs/specs/devrel-analytics-stack.md Decision 4\nconst results = $json.results || [];\nconst occurredAt = new Date().toISOString();\nconst rows = [];\n\nfor (const entry of results) {\n  const page = entry.page || entry.dimensions?.[0] || 'unknown';\n  const contentId = `plausible:${page.replace(/^https?:\\/\\/[^/]+/, '')}`;\n\n  if (entry.metrics?.pageviews || entry.pageviews) {\n    rows.push({\n      platform: 'plausible',\n      content_id: contentId,\n      event_type: 'view',\n      occurred_at: occurredAt,\n      metric_value: entry.metrics?.pageviews ?? entry.pageviews ?? 0,\n      metadata: JSON.stringify({ page, bounce_rate: entry.metrics?.bounce_rate ?? entry.bounce_rate })\n    });\n  }\n  if (entry.metrics?.visitors || entry.visitors) {\n    rows.push({\n      platform: 'plausible',\n      content_id: contentId,\n      event_type: 'impression',\n      occurred_at: occurredAt,\n      metric_value: entry.metrics?.visitors ?? entry.visitors ?? 0,\n      metadata: JSON.stringify({ page })\n    });\n  }\n}\n\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "map-plausible-to-analytics",
+      "name": "Map \u2192 analytics_events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (occurred_at, platform, content_id, event_type, metric_value, metadata) VALUES ($1::timestamptz, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (platform, content_id, event_type, occurred_at) DO UPDATE SET metric_value = EXCLUDED.metric_value, ingested_at = NOW()",
+        "additionalFields": {
+          "queryParams": "={{ [$json.occurred_at, $json.platform, $json.content_id, $json.event_type, $json.metric_value, $json.metadata] }}"
+        }
+      },
+      "id": "upsert-plausible-events",
+      "name": "Upsert analytics_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "analytics-pg-cred",
+          "name": "Analytics Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (1h)": {
+      "main": [
+        [
+          {
+            "node": "Plausible API \u2014 Page Breakdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plausible API \u2014 Page Breakdown": {
+      "main": [
+        [
+          {
+            "node": "Map \u2192 analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map \u2192 analytics_events": {
+      "main": [
+        [
+          {
+            "node": "Upsert analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    "devrel-analytics",
+    "tier-1",
+    "plausible"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part A \u2014 AC-2. Pulls page breakdown stats from self-hosted Plausible every 1h. Prereq: PLAUSIBLE_URL + PLAUSIBLE_SITE_ID env vars + Plausible API Key credential in n8n."
+}

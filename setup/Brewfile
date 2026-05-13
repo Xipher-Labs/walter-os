@@ -1,0 +1,122 @@
+# Walter-OS Brewfile — declarative brew packages.
+# Run: brew bundle --file=setup/Brewfile
+#
+# Or via setup/bootstrap.sh which calls this in the right order.
+# Safe to re-run; brew bundle is idempotent.
+
+# ============================================================
+# Required CLIs (install.sh / hooks / walter-os CLI need these)
+# ============================================================
+
+brew "jq"             # JSON. install.sh + hooks + audit script require it.
+brew "git"            # Latest git (macOS ships with old one).
+brew "gh"             # GitHub CLI for /pr command + scripts.
+
+# ============================================================
+# Runtime version manager (replaces nvm/pyenv/rbenv/asdf)
+# ============================================================
+
+brew "mise"           # Manages node, python, rust, go, bun versions per-project.
+brew "vercel-cli"     # Vercel deploys (replaces abandoned vercel-mcp; see skills/vercel-cli)
+brew "hcloud"         # Hetzner Cloud CLI (replaces hetzner-mcp; see skills/hcloud-cli)
+brew "tea"            # Forgejo/Gitea CLI (replaces forgejo-mcp; see skills/forgejo-cli)
+brew "railway"        # Railway PaaS CLI (replaces railway-mcp; see skills/railway-cli)
+tap "grafana/grafana"
+brew "grafana/grafana/mcp-grafana"  # official Grafana MCP (Go binary; replaces @leval/mcp-grafana)
+                      # See setup/mise.toml.example for declarative defaults.
+
+# ============================================================
+# Modern shell tooling
+# ============================================================
+
+brew "ripgrep"        # rg — fast grep
+brew "fd"             # modern find
+brew "fzf"            # fuzzy finder (used by zoxide, lazygit, etc.)
+brew "bat"            # cat with syntax highlighting + line numbers
+brew "eza"            # modern ls (used to be exa)
+brew "zoxide"         # smarter cd
+brew "starship"       # cross-shell prompt
+brew "tmux"
+brew "neovim"         # editor (Cursor for primary, nvim for terminal)
+
+# ============================================================
+# Test + lint (CI-equivalent local)
+# ============================================================
+
+brew "bats-core"      # tests/ in walter-os run on this
+brew "shellcheck"     # CI uses it; install for parity
+brew "actionlint"     # GitHub Actions linting
+
+# ============================================================
+# Security tooling
+# ============================================================
+
+brew "gitleaks"       # pre-commit secret scan
+brew "trufflehog"     # alternative / complement
+brew "semgrep"        # SAST. Used by web-security-baseline + audit.
+
+# ============================================================
+# Databases (local dev)
+# ============================================================
+
+brew "postgresql@16"  # local Postgres for personal projects
+brew "redis"          # used by some app components
+brew "sqlite"         # ubiquitous
+
+# ============================================================
+# Containers
+# ============================================================
+
+cask "orbstack"       # Docker alternative. Faster + free for personal.
+                      # Drop-in for `docker` and `kubectl` CLIs.
+
+# ============================================================
+# Mobile testing (React Native projects)
+# ============================================================
+
+tap "mobile-dev-inc/tap"
+brew "mobile-dev-inc/tap/maestro"  # YAML mobile + web UI test flows
+                                    # MCP wrapper: paisanos-maestro-mcp
+
+# ============================================================
+# Solana toolchain (optional — Solana program development)
+# ============================================================
+
+# Solana CLI installed separately via the official installer (not in brew).
+# Anchor likewise. See bootstrap.sh.
+
+# ============================================================
+# Fonts (for branding work + nice terminals)
+# ============================================================
+
+cask "font-jetbrains-mono-nerd-font"   # terminal + editor
+cask "font-inter"                       # body text in landing pages
+cask "font-geist"                       # alternative body
+cask "font-geist-mono"                  # alternative mono
+
+# ============================================================
+# Apps — primary toolchain
+# ============================================================
+
+cask "claude"                # Claude desktop (claude.ai)
+cask "cursor"                # primary editor
+cask "ghostty"               # terminal (or use iTerm2 / Warp / Alacritty)
+cask "raycast"               # launcher (replaces Spotlight)
+cask "rectangle"             # window snapping (free)
+cask "tailscale"             # VPN mesh
+
+# ============================================================
+# Apps — design + content
+# ============================================================
+
+cask "figma"                 # if also using Figma alongside Penpot
+cask "obsidian"              # vault + markdown notes
+# Optional: cask "penpot"    # if you want a desktop app vs web
+
+# ============================================================
+# Apps — utilities
+# ============================================================
+
+cask "1password"             # if NOT going Vaultwarden-only
+cask "1password-cli"         # CLI integration (if using 1Password)
+cask "bitwarden"             # alternative (works with Vaultwarden via API)

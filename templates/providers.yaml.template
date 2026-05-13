@@ -1,0 +1,23 @@
+# providers.yaml — Walter-OS provider choices
+#
+# This file is the canonical source of truth for which provider is active
+# per category. Generated and updated by `walter providers configure`.
+# Do not edit manually unless you know what you are doing — re-run the
+# wizard to make changes.
+#
+# Slugs per category:
+#   llm:                litellm | anthropic | openai | ollama
+#   project_management: plane | linear | plane_cloud | none
+#   git:                forgejo | github | gitlab
+#   secrets:            infisical | doppler | onepassword | bitwarden | none
+#   web_analytics:      plausible | plausible_cloud | cloudflare | ga4 | none
+#   search:             brave | algolia | none
+#   embeddings:         nomic | openai_ada | voyage | none
+
+llm: litellm
+project_management: plane
+git: forgejo
+secrets: infisical
+web_analytics: plausible
+search: brave
+embeddings: nomic

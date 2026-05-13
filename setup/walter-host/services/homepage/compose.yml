@@ -1,0 +1,17 @@
+services:
+  homepage:
+    # Pin updated 2026-05-11 — bump via release notes at https://github.com/gethomepage/homepage/releases
+    image: ghcr.io/gethomepage/homepage:v1.0.4
+    container_name: homepage
+    restart: unless-stopped
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: "home.${WALTER_DOMAIN},localhost,127.0.0.1"
+      # Template variables for services.yaml — Homepage reads HOMEPAGE_VAR_* at runtime
+      HOMEPAGE_VAR_WALTER_DOMAIN: "${WALTER_DOMAIN}"
+      HOMEPAGE_VAR_WALTER_TELEGRAM_BOT_HANDLE: "${WALTER_TELEGRAM_BOT_HANDLE}"
+      HOMEPAGE_VAR_WALTER_OPENCLAW_BOT_HANDLE: "${WALTER_OPENCLAW_BOT_HANDLE}"
+    ports:
+      - "127.0.0.1:3010:3000"
+    volumes:
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro

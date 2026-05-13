@@ -1,0 +1,12 @@
+[walter]
+# Walter-OS development uses staging level:
+# - 14-day minimum release age (blocks on fresh releases but practical for dev)
+# - exact pinning strategy
+# - reviewer subagent review required
+# - CVSS >= 7 blocks with ack
+#
+# Why not production (21d)? Walter-OS itself ships tooling, not infra serving
+# production traffic. 14d provides meaningful protection without over-constraining
+# the tooling iteration cycle.
+protection = "staging"
+context    = "projects-personal"

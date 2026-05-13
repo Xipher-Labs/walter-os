@@ -1,0 +1,115 @@
+{
+  "name": "Expense Categorization — Email to Google Sheets",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 30 }]
+        }
+      }
+    },
+    {
+      "id": "node-002",
+      "name": "Gmail: Get Expense Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "filters": {
+          "labelIds": ["REPLACE_WITH_GMAIL_LABEL_ID"],
+          "readStatus": "unread"
+        },
+        "returnAll": false,
+        "limit": 50,
+        "options": { "attachmentsBinaryData": false }
+      },
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID", "name": "REPLACE_WITH_CREDENTIAL_NAME" }
+      }
+    },
+    {
+      "id": "node-003",
+      "name": "Loop: For Each Email",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "node-004",
+      "name": "LLM: Extract Expense Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "REPLACE_WITH_LLM_ENDPOINT",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"REPLACE_WITH_MODEL\",\n  \"max_tokens\": 256,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Extract expense data from this email.\\nSubject: {{$json.subject}}\\nBody snippet: {{$json.snippet}}\\n\\nReturn JSON only: { \\\"merchant\\\": string, \\\"amount\\\": number, \\\"currency\\\": string, \\\"date\\\": \\\"YYYY-MM-DD\\\", \\\"description\\\": string }\\nIf you cannot extract any field, use null.\"\n  }]\n}"
+      }
+    },
+    {
+      "id": "node-005",
+      "name": "Parse and Categorize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\n// Parse LLM response and apply category mapping\nconst raw = items[0].json.content ? items[0].json.content[0].text : items[0].json.choices[0].message.content;\nconst expense = JSON.parse(raw);\n\n// REPLACE WITH YOUR CATEGORY RULES\nconst categories = {\n  'Food': ['restaurant', 'cafe', 'pizza', 'sushi', 'uber eats', 'deliveroo'],\n  'Transport': ['uber', 'taxi', 'bus', 'train', 'metro', 'parking'],\n  'Utilities': ['electricity', 'water', 'gas', 'internet', 'phone'],\n  'Shopping': ['amazon', 'ebay', 'store', 'shop', 'market']\n};\n\nconst merchant = (expense.merchant || '').toLowerCase();\nlet category = 'Uncategorized';\nfor (const [cat, keywords] of Object.entries(categories)) {\n  if (keywords.some(k => merchant.includes(k))) { category = cat; break; }\n}\n\nreturn [{ json: { ...expense, category, rawSubject: items[0].json.subject, sourceEmail: 'REPLACE_WITH_INBOX_EMAIL' } }];"
+      }
+    },
+    {
+      "id": "node-006",
+      "name": "Google Sheets: Append Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1250, 300],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "appendOrUpdate",
+        "documentId": { "value": "REPLACE_WITH_SPREADSHEET_ID", "__rl": true, "mode": "id" },
+        "sheetName": { "value": "REPLACE_WITH_SHEET_NAME", "__rl": true, "mode": "name" },
+        "columnToMatchOn": "Date",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{$json.date}}",
+            "Merchant": "={{$json.merchant}}",
+            "Amount": "={{$json.amount}}",
+            "Currency": "={{$json.currency}}",
+            "Category": "={{$json.category}}",
+            "Raw Subject": "={{$json.rawSubject}}",
+            "Source Email": "={{$json.sourceEmail}}"
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_SHEETS_CREDENTIAL_ID", "name": "REPLACE_WITH_CREDENTIAL_NAME" }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[ { "node": "Gmail: Get Expense Emails", "type": "main", "index": 0 } ]] },
+    "Gmail: Get Expense Emails": { "main": [[ { "node": "Loop: For Each Email", "type": "main", "index": 0 } ]] },
+    "Loop: For Each Email": { "main": [[ { "node": "LLM: Extract Expense Data", "type": "main", "index": 0 } ]] },
+    "LLM: Extract Expense Data": { "main": [[ { "node": "Parse and Categorize", "type": "main", "index": 0 } ]] },
+    "Parse and Categorize": { "main": [[ { "node": "Google Sheets: Append Row", "type": "main", "index": 0 } ]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  }
+}

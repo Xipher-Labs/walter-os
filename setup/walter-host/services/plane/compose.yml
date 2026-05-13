@@ -1,0 +1,152 @@
+# Plane self-host with pre-built images from Docker Hub
+# Tag: stable (= v1.3.0 as of 2026-04-06)
+#
+# Listens on 127.0.0.1:8090 — cloudflared proxies plane.${WALTER_DOMAIN} here.
+
+x-plane-app-env: &plane-app-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@plane-db:5432/${POSTGRES_DB}
+    REDIS_URL: redis://plane-redis:6379/
+    AMQP_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@plane-mq:5672/${RABBITMQ_VHOST}
+    USE_MINIO: "1"
+
+services:
+  web:
+    image: makeplane/plane-frontend:stable
+    container_name: plane-web
+    restart: always
+    <<: *plane-app-env
+    depends_on:
+      - api
+
+  admin:
+    image: makeplane/plane-admin:stable
+    container_name: plane-admin
+    restart: always
+    <<: *plane-app-env
+    depends_on:
+      - api
+
+  space:
+    image: makeplane/plane-space:stable
+    container_name: plane-space
+    restart: always
+    <<: *plane-app-env
+    depends_on:
+      - api
+
+  live:
+    image: makeplane/plane-live:stable
+    container_name: plane-live
+    restart: always
+    <<: *plane-app-env
+    depends_on:
+      - api
+
+  api:
+    image: makeplane/plane-backend:stable
+    container_name: plane-api
+    restart: always
+    command: ./bin/docker-entrypoint-api.sh
+    <<: *plane-app-env
+    depends_on:
+      - plane-db
+      - plane-redis
+      - plane-mq
+
+  worker:
+    image: makeplane/plane-backend:stable
+    container_name: plane-worker
+    restart: always
+    command: ./bin/docker-entrypoint-worker.sh
+    <<: *plane-app-env
+    depends_on:
+      - api
+
+  beat-worker:
+    image: makeplane/plane-backend:stable
+    container_name: plane-beat-worker
+    restart: always
+    command: ./bin/docker-entrypoint-beat.sh
+    <<: *plane-app-env
+    depends_on:
+      - api
+
+  migrator:
+    image: makeplane/plane-backend:stable
+    container_name: plane-migrator
+    restart: "no"
+    command: ./bin/docker-entrypoint-migrator.sh
+    <<: *plane-app-env
+    depends_on:
+      - plane-db
+      - plane-redis
+      - plane-mq
+
+  plane-db:
+    image: postgres:16-alpine
+    container_name: plane-db
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  plane-redis:
+    image: redis:7-alpine
+    container_name: plane-redis
+    restart: always
+    volumes:
+      - redisdata:/data
+
+  plane-mq:
+    image: rabbitmq:3-management-alpine
+    container_name: plane-mq
+    restart: always
+    env_file: .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  plane-minio:
+    image: minio/minio:latest
+    container_name: plane-minio
+    restart: always
+    command: server /export --console-address ":9090"
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - uploads:/export
+
+  proxy:
+    image: makeplane/plane-proxy:stable
+    container_name: plane-proxy
+    restart: always
+    ports:
+      - "127.0.0.1:8090:80"
+    env_file: .env
+    environment:
+      FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
+      BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+    depends_on:
+      - web
+      - api
+      - admin
+      - space
+      - live
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  rabbitmq_data:

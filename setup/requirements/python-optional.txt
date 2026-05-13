@@ -1,0 +1,20 @@
+# Optional Python helper packages for Walter-OS profiles.
+# Install only when using the related profile:
+#   python3 -m pip install -r setup/requirements/python-optional.txt
+
+# tests/unit/*.py
+pytest==9.0.3
+
+# skills/nanobanana/scripts/generate.py
+google-genai==2.2.0
+pillow==12.2.0
+
+# skills/devrel-analyst/scripts/query.py and setup/walter-host/singer/
+psycopg2-binary==2.9.12
+singer-python==6.8.0
+
+# scripts/wiki/* YAML validation fallback when uvx is unavailable
+pyyaml==6.0.3
+
+# scripts/kuma-bulk-monitors.py
+uptime-kuma-api==1.2.1

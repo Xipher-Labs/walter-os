@@ -1,0 +1,117 @@
+- Walter-VM:
+    - Plane:
+        href: https://plane.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: plane.png
+        description: Project tracker (issues, sprints)
+    - Forgejo:
+        href: https://git.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: forgejo.png
+        description: Self-hosted git (Obsidian vault sync)
+    - Infisical:
+        href: https://secrets.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: infisical.png
+        description: Secrets manager (7 workspaces)
+    - LiteLLM:
+        href: https://llm.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: openai.png
+        description: LLM gateway (virtual keys, budgets)
+    - Control Tower:
+        href: https://walter.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: anthropic.png
+        description: Walter Council dashboard (Phase U — agent status, chat, metrics)
+    - n8n:
+        href: https://n8n.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: n8n.png
+        description: Workflow automation (Plane → IA → PR)
+
+- DevRel Analytics:
+    - Postiz:
+        href: https://postiz.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: postiz.png
+        description: Social media scheduling + DevRel content pipeline (Phase V)
+    - Metabase:
+        href: https://analytics.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: metabase.png
+        description: Analytics dashboards — DevRel metrics, funnel, engagement (Phase V)
+
+- Observability:
+    - Uptime Kuma:
+        href: https://status.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: uptime-kuma.png
+        description: Service uptime monitoring
+    - Grafana:
+        href: https://grafana.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: grafana.png
+        description: Metrics (Prom) + logs (Loki)
+    - Walter Bot:
+        href: https://t.me/{{HOMEPAGE_VAR_WALTER_TELEGRAM_BOT_HANDLE}}
+        icon: telegram.png
+        description: Alerting Telegram bot
+
+- Personal Assistant:
+    - OpenClaw:
+        href: https://claw.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: openclaw.png
+        description: Multi-channel assistant (Phase 1 — Telegram only)
+    - OpenClaw Bot:
+        href: https://t.me/{{HOMEPAGE_VAR_WALTER_OPENCLAW_BOT_HANDLE}}
+        icon: telegram.png
+        description: OpenClaw Telegram channel
+    - Element / Matrix:
+        href: https://chat.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: element.png
+        description: Self-hosted Beeper alternative (pending K4.5)
+
+- Communication:
+    - Rocket.Chat:
+        href: https://chat.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: rocket-chat.png
+        description: Self-hosted Slack alternative (mobile clients available)
+    - Element (Matrix):
+        href: https://chat-matrix.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: element.png
+        description: Beeper SH base — Synapse + Element web client
+
+- VPN / Network:
+    - WireGuard VPN:
+        href: https://vpn.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: wireguard.png
+        description: Private VPN (UDP 51820)
+    - Headscale:
+        href: https://headscale.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: headscale.png
+        description: Self-hosted Tailscale control plane
+
+- Design / Diagrams:
+    - Penpot:
+        href: https://penpot.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: penpot.png
+        description: Open Figma alternative
+    - Drawio:
+        href: https://draw.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: drawio.png
+        description: Architecture diagrams + AI insert
+
+- LLM Gateway:
+    - LiteLLM Admin:
+        href: https://llm.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: openai.png
+        description: Virtual keys, budgets, fallback chain
+    - Claude proxy:
+        href: https://llm.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: anthropic.png
+        description: claude-code-router (subscription fallback)
+
+- Storage & Sync:
+    - Syncthing:
+        href: https://sync.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: syncthing.png
+        description: P2P file sync hub (v2.0.16)
+    - Backups (restic):
+        href: https://drive.google.com
+        icon: restic.png
+        description: Daily encrypted → Cloud Volume + Drive
+    - WireGuard VPN:
+        href: https://vpn.{{HOMEPAGE_VAR_WALTER_DOMAIN}}
+        icon: wireguard.png
+        description: Private VPN (UDP 51820, no third party)

@@ -1,0 +1,15 @@
+# Wiki consolidation cron — T-16 (Walter Council v2, Improvement 3)
+#
+# Runs the wiki consolidation job weekly on Sundays at 02:00 UTC.
+# The walter-run wrapper loads env vars from Infisical before executing.
+#
+# Prereqs:
+#   - /usr/local/bin/walter-run must exist (see setup/walter-host/install-cron.sh)
+#   - WIKI_DIR, LITELLM_BASE_URL, PLANE_* env vars provisioned in Infisical
+#   - Log rotation configured for /var/log/walter-council/
+#
+# To manually trigger: sudo -u walter /usr/local/bin/walter-run wiki-consolidation
+#
+# Spec: docs/specs/walter-council-v2.md — T-16, Improvement 3
+
+0 2 * * 0 /usr/local/bin/walter-run wiki-consolidation >> /var/log/walter-council/wiki-consolidation.log 2>&1

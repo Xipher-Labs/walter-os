@@ -1,0 +1,219 @@
+<!-- Keep a Changelog 1.1 | SemVer -->
+# Changelog
+
+All notable changes to Walter-OS are documented in this file.
+
+Format: [Keep a Changelog 1.1](https://keepachangelog.com/en/1.1.0/)
+Versioning: [SemVer](https://semver.org/)
+
+<!-- FORMAT NOTE
+  v0.2.0 entry below is a hand-written narrative. The repo history
+  predates the conventional-commit convention so git-cliff cannot
+  auto-generate meaningful entries for it.
+  From v0.3.0 onward, git-cliff generates entries automatically from
+  conventional commit subjects. See docs/specs/phase-w-7-versioning-release.md AC-3.
+-->
+
+---
+
+## [Unreleased]
+
+---
+
+## [0.2.0] — 2026-05-11
+
+Walter Council v2 (Phases F → M → R → T → U → V) + Phase W OSS readiness.
+Six PRs in sequence. Merge order: Phase F → M → R → T → U → V. See
+`docs/operational/council-v2-deployment-runbook.md` for the step-by-step.
+
+### Phase F — Foundation: Observability + Cost Attribution
+
+- Added `scripts/agents/lib/metrics.sh`: Prometheus textfile writer with
+  `metric_inc` / `metric_set` functions. Writes to
+  `/var/lib/walter-council/metrics.prom` with flock-based concurrency control.
+- Wired metrics into `scripts/agents/run.sh`: task start/end, agent state,
+  token counts.
+- Added Node Exporter textfile_collector volume mount so
+  `curl walter-vm:9100/metrics` exposes all `walter_council_*` metrics.
+- Added Grafana dashboard `walter-council.json` with 6 panels: tasks/day,
+  tokens/agent, success rate, approval-gate heatmap, agent state, P95 duration.
+- Extended `walter-os status` with a "Council (today)" section.
+- Extended `scripts/agents/lib/llm.sh`: `llm_invoke` now tags every call with
+  `agent_id`, `task_id`, `context`, and `model_alias` in LiteLLM metadata.
+- Added `walter-os spend report --by-agent --last 7d` and `--by-task` variants.
+- Added `scripts/agents/lib/alerts.sh`: unified `alert_emit <tier> <message>
+  <context_json>` with four tiers:
+  - `info` — log-only, no Telegram
+  - `warn` — Telegram with `[WARN]` prefix
+  - `critical` — Telegram with `[CRITICAL]` prefix + Control Tower flag file
+  - `panic` — Telegram + email + Council pause flag + `gate.lock` (blocks all
+    `approval-gate.sh` decisions until `walter-os agents unlock`)
+
+### Phase M — Memory + Intelligence
+
+- Added `scripts/wiki/normalize-frontmatter.sh`: one-time normalization pass
+  over `~/sync/wiki/**/*.md` with auto-fix for path-inferrable types and report
+  for ambiguous pages.
+- Added `wiki/SCHEMA.md` defining required frontmatter fields.
+- Added `scripts/wiki/wiki-validator.sh`: validates a single file against the
+  schema. Installed as a `PreToolUse` hook for `Write|Edit` tools via
+  `install.sh --upgrade`.
+- Added `### Wiki integrity` section to `AGENTS.md` global (this commit).
+- Added `scripts/agents/migrations/001_lessons_schema.sql` and
+  `scripts/agents/lib/lessons.sh` with `lessons_init`, `_lesson_embed`,
+  `lesson_write`, `lesson_query`, `lessons_list`, `lessons_rate`. Backing store:
+  `~/.config/walter-os/lessons.db` (SQLite). Embedding: LiteLLM
+  `local-embed` (nomic-embed-text via Ollama on standby homelab node or CPU-based on walter-vm).
+  FTS5 fallback when embedding service is unavailable.
+- Integrated lesson extraction at end of each successful agent task (cheap haiku
+  call: "what did you learn?").
+- Integrated lesson injection at start of each agent task: top-5 relevant
+  lessons injected under `## Lessons from the Council` in system prompt.
+- Added `walter-os lessons list` and `walter-os lessons rate` subcommands.
+- Added `scripts/wiki/consolidate.sh`: weekly deduplication job using cosine
+  similarity (threshold 0.92). Outputs JSON report + creates Plane issue with
+  `wiki:consolidation` label. Also detects contradictions and stale pages.
+- Added wiki consolidation cron: Sundays 02:00 via `walter-run wiki-consolidation`.
+
+### Phase R — Resilience: Recovery + Project Induction
+
+- Added heartbeat writer to `scripts/agents/run.sh`: background loop writes
+  JSONL to `/var/lib/walter-council/heartbeats/<agent>/<issue_id>.heartbeat`
+  every 60 seconds.
+- Added `scripts/agents/lib/heartbeat.sh` with `heartbeat_write`,
+  `heartbeat_read_last`, `heartbeat_checkpoint_steps`, `heartbeat_read_checkpoint`.
+- Added `scripts/agents/watchdog.sh`: runs every 5 minutes via cron, detects
+  issues `claimed` with heartbeat gap > 30 minutes, posts zombie comment to Plane,
+  returns issue to `ready`, calls `alert_emit warn`.
+- Added `walter-os agents status` zombie section ("Zombies detected (last 7d): N").
+- Added `plane_issue_create` and `plane_issues_list_by_state` helpers to
+  `scripts/agents/lib/plane.sh`.
+- Added `skills/project-induction/` skill: 12-question interactive interview
+  generating project charter, repo-level `AGENTS.md`, Plane epic with 5+ tasks,
+  and wiki page. Supports `--non-interactive --answers-file <yaml>`.
+  Auto-includes `medical-data-compliance` rule if PHI answer is yes.
+- Added `walter-os new project <type> <name>` CLI subcommand.
+
+### Phase T — Trust + Controls + Consensus Mode
+
+- Added `setup/templates/trust-tiers.yml` and `~/.config/walter-os/trust-tiers.yml`
+  (installed by `install.sh`): per-agent trust tier assignments.
+  reviewer=high, triage/researcher/coder=medium, liaison/janitor=low.
+- Extended `hooks/approval-gate.sh` with trust tier lookup: reads `trust-tiers.yml`
+  via `yq` on each invocation; auto-allows categories in the agent's tier override
+  list. Hot-reloads on each call (no restart needed).
+- Added `walter-os agents trust <agent>` subcommand.
+- Added `gate.lock` enforcement: `approval-gate.sh` checks for
+  `~/.config/walter-os/gate.lock` first; if present, blocks ALL operations with
+  panic lock message.
+- Added `walter-os agents unlock --reason "..."` subcommand.
+- Replaced all direct Telegram curl calls in agent scripts with `alert_emit`.
+- Added `scripts/agents/lib/mode.sh` with `mode_consensus_get`,
+  `mode_consensus_set`, `mode_consensus_is_on`. Backing store:
+  `~/.config/walter-os/mode.json`.
+- Added `walter-os mode consensus {on|off|status}` subcommand.
+- Added `scripts/agents/lib/vote.sh`: `vote_council` fans out to 3 agents in
+  parallel via LiteLLM, collects yes/no votes with reasons, returns JSON with
+  quorum result. 15s timeout per agent (abstain on timeout).
+- Extended `approval-gate.sh` with consensus eligibility: eligible categories
+  (lint-fix, doc-update, wiki-edit, minor dep bumps, etc.) in consensus mode
+  return exit code 8 (awaiting-consensus) instead of exit 7 (block).
+- Extended `scripts/agents/lib/plane.sh` with `awaiting-consensus` and
+  `awaiting-human` state transitions. Watchdog skips issues in these states.
+- Added full consensus vote trigger in `scripts/agents/run.sh`: on exit 8, reads
+  Plane issue tags, calls `vote_council`, transitions issue state based on quorum.
+- Added `walter-os agents summary --since <ISO-date>` subcommand.
+- Added `tests/agents/consensus.bats` end-to-end bats suite (7 test cases).
+
+### Phase U — Control Tower UI
+
+- Added `apps/control-tower/`: Next.js 16 App Router application.
+- Added Docker Compose service `setup/walter-host/services/control-tower/compose.yml`.
+- Agent Status Board: 6 agent cards with state badge (idle/working/blocked),
+  current issue link, time in state. Updates via SSE in ≤2 seconds.
+- Decision Timeline: last 50 events from `events.log` with tier color coding.
+  Refreshes every 30 seconds.
+- Metrics Dashboard: Grafana "Walter Council" dashboard embedded via signed
+  iframe (Grafana service account token, no extra login).
+- Cost Dashboard: spend by agent for last 7 days with sparklines (recharts).
+  Loads in ≤3 seconds.
+- HA Status: primary (walter-vm) vs standby (standby homelab node) health per service. 60s refresh.
+- Alert Feed: warn/critical/panic events with acknowledge button.
+- Mode Indicator: consensus mode ON/OFF toggle + auto-approved count since activation.
+- Council Chat (3-phase):
+  - Round 1 — parallel groupthink: 6 agents respond independently, ≤300 tokens
+    each, ≤30s total.
+  - Round 2 — sequential deliberation: agents respond in trust-tier-descending
+    order (reviewer first, janitor last), citing other agents by name. ≤75s.
+  - Synthesis — liaison produces convergences, disagreements, recommended path,
+    next steps. ≤90s. "Spin as spec + plan" button creates a Plane issue.
+- Ideation Session: same 3-phase flow with guided header. "Spin" button creates
+  Plane issue in `lane:code`.
+- Conversation history: searchable by date and term.
+- Tailscale-only middleware: rejects connections outside `100.64.0.0/10`.
+- Playwright smoke suite: 8 tests, all AC from spec.
+- GitHub Actions CI: `pnpm build`, `pnpm lint`, `pnpm typecheck`, Playwright on
+  every PR touching `apps/control-tower/**`.
+
+### Phase V — DevRel Analytics Stack
+
+- Added `docs/specs/devrel-analytics-stack.md` (proposal, awaiting approval).
+- Added `setup/walter-host/services/postgres/` analytics Postgres with custom Dockerfile
+  (`pg_partman` + `pg_cron` extensions).
+- Added schema: `analytics_events`, `content_pieces`, `ad_spend_events` tables
+  with time-based partitioning.
+- Added n8n ingestion workflows for YouTube Data API v3, Plausible, GitHub traffic.
+- Added Grafana provisioned datasource `Walter DevRel Analytics` (Postgres).
+- Added Grafana dashboards: channel performance, content piece comparison,
+  weekly digest view.
+
+Phase V implementation status is tracked in the PR.
+Twitter/X analytics: pending API approval decision (manual export workaround in
+place). LinkedIn: deferred (API approval multi-week, low ROI for scraping).
+Meta Ads: pending Business Verification. Google Ads: pending developer token.
+See `docs/operational/phase-v-tools-availability.md`.
+
+### Phase W — OSS Readiness (W-7: Versioning + Release)
+
+- Added `VERSION` file at repo root — single source of truth for semver string.
+- Added `walter-os version` subcommand: reads `VERSION`, prints `Walter-OS vX.Y.Z`,
+  optionally checks GitHub API for latest release and prints update notice.
+- Added `_version_is_newer()` helper with semver pre-release awareness.
+- Added `git-cliff.toml`: conventional commit type mappings for changelog generation.
+- Added `.github/workflows/release.yml`: automated GitHub Release on `v*` tag push.
+- Updated `CHANGELOG.md` to `## [0.2.0]` format generated by git-cliff convention.
+- Added Control Tower `VersionBadge` component: reads `WALTER_VERSION` env var,
+  shows "Update available" badge when `WALTER_UPDATE_AVAILABLE` is set.
+- Added `tests/cli/version.bats`: 7 bats tests covering AC-6.
+
+### Phase W — OSS Readiness (W-5: OSS-ready community health files, PR #51)
+
+### Added
+
+- OSS community health files: README rewrite (adopter-first with Builder/Founder/Operator
+  personas), CONTRIBUTING.md (AGPLv3 DCO, workflow, superpowers plugin),
+  SECURITY.md (responsible disclosure, 90-day window), CODE_OF_CONDUCT.md
+  (Contributor Covenant 2.1), .github/ issue and PR templates (this PR)
+
+### Changed
+
+- `README.md` — rewritten as adopter-first with Quick Start, persona orientation
+  (Builder / Founder / Operator), and docs index. Deep reference content preserved
+  below the fold.
+- `LICENSE` — switched from Apache-2.0 to AGPLv3 (PR #48)
+
+---
+
+## [0.1.0] — 2026-01-01 (approximate)
+
+Initial Walter-OS phases: core scaffolding, install pipeline, hooks, daily audit,
+MCP catalog, Walter-VM provisioning, Walter Council v1, Phase 2 CLI
+(profile / secrets / syncthing / agent-memory), security wave 1.
+
+See git log for details — no formal changelog was kept before 0.2.0.
+
+---
+
+[Unreleased]: https://github.com/xipher-labs/walter-os/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/xipher-labs/walter-os/releases/tag/v0.2.0
+[0.1.0]: https://github.com/xipher-labs/walter-os/releases/tag/v0.1.0

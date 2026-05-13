@@ -1,0 +1,50 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/promtail-positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Docker container logs
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: compose_project
+
+  # System logs (journalctl-like)
+  - job_name: syslog
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: syslog
+          host: walter-os
+          __path__: /var/log/syslog
+
+  - job_name: walter-watchdog
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: walter-watchdog
+          host: walter-os
+          __path__: /var/log/walter-watchdog.log
+
+  - job_name: restic
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: restic
+          host: walter-os
+          __path__: /var/log/walter-vm-restic/*.log

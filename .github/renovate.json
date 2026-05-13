@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommitsDisabled"
+  ],
+  "schedule": ["before 6am on monday"],
+  "timezone": "America/Argentina/Buenos_Aires",
+  "labels": ["dependencies", "renovate"],
+  "rangeStrategy": "pin",
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 10,
+  "automerge": false,
+  "minimumReleaseAge": "3 days",
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate dashboard — Walter-OS dependency updates",
+  "packageRules": [
+    {
+      "description": "Group all minor + patch updates of the same image",
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "{{depName}} (minor/patch)"
+    },
+    {
+      "description": "Auto-merge patch updates of well-trusted images after CI",
+      "matchUpdateTypes": ["patch"],
+      "matchPackageNames": [
+        "/^postgres$/",
+        "/^redis$/",
+        "/^prom/.+/",
+        "/^grafana/.+/"
+      ],
+      "automerge": false,
+      "labels": ["dependencies", "renovate", "patch-safe"]
+    },
+    {
+      "description": "Major bumps need explicit review",
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "renovate", "major-review-needed"],
+      "minimumReleaseAge": "14 days"
+    }
+  ],
+  "regexManagers": [
+    {
+      "fileMatch": ["^setup/walter-host/services/.+/compose\\.ya?ml$"],
+      "matchStrings": [
+        "image:\\s*(?<depName>[^\\s:]+):(?<currentValue>\\S+)"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "docker-compose": {
+    "fileMatch": ["^setup/walter-host/services/.+/compose\\.ya?ml$"],
+    "enabled": true
+  },
+  "git-submodules": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  }
+}

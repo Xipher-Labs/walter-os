@@ -1,0 +1,53 @@
+# WireGuard VPN — operator's own private VPN, no third-party dependency.
+# Runs on Walter-VM, exposes WG protocol on UDP/51820.
+#
+# Use case: laptop in open WiFi → tunnels all traffic via Walter-VM.
+# Independent of Cloudflare Access / Tailscale infrastructure.
+#
+# Web UI: https://vpn.${WALTER_DOMAIN} (CF Access protected) — generates
+# client configs (QR codes for phones, .conf files for laptops).
+#
+# Listens UDP/51820 publicly; web UI 51821 internal only.
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:14
+    container_name: wg-easy
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      # Public hostname clients connect to (UDP/51820)
+      WG_HOST: vpn.${WALTER_DOMAIN}
+      WG_PORT: 51820
+      WG_DEFAULT_DNS: "1.1.1.1, 1.0.0.1"
+      WG_ALLOWED_IPS: "0.0.0.0/0, ::/0"
+      # Web UI password (override on first deploy)
+      PASSWORD_HASH: ${WG_PASSWORD_HASH}
+      # UI port (internal only)
+      PORT: 51821
+      # MTU — leave default
+      WG_MTU: 1420
+      # Keepalive for clients behind NAT
+      WG_PERSISTENT_KEEPALIVE: 25
+      LANG: en
+      UI_TRAFFIC_STATS: "true"
+      UI_CHART_TYPE: 1
+    ports:
+      - "51820:51820/udp"             # public — clients connect here
+      - "127.0.0.1:51821:51821"       # internal — web UI behind cloudflared
+    volumes:
+      - wg_config:/etc/wireguard
+    healthcheck:
+      test: ["CMD-SHELL", "wg show 2>/dev/null | grep -q 'interface: wg0' || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  wg_config:

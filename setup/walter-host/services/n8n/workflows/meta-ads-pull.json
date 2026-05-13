@@ -1,0 +1,102 @@
+{
+  "name": "Meta Ads + Organic Pull via tap-facebook (meta-ads-pull)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-meta",
+      "name": "Schedule Trigger (6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "command": "=bash {{ $env.SINGER_SCRIPT_DIR || '/opt/walter-os/singer' }}/run-tap.sh facebook 2>&1"
+      },
+      "id": "run-tap-facebook",
+      "name": "Run tap-facebook",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "notes": "Runs Singer tap-facebook for Meta Ads + organic post data. Prereq: META_ACCESS_TOKEN with ads_read scope (V-prereq-2, 5-15 day App Review + Business Verification)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $json.stdout || '';\nconst stderr = $json.stderr || '';\nconst exitCode = $json.exitCode || 0;\n\nif (exitCode !== 0) {\n  return [{ json: { success: false, error: stderr, tap: 'tap-facebook' } }];\n}\n\nconst match = (stdout + stderr).match(/Done: (.+)/);\nreturn [{ json: { success: true, output: match?.[1] || 'ok', tap: 'tap-facebook' } }];"
+      },
+      "id": "parse-meta-result",
+      "name": "Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-success-meta",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "message": "=[tap-facebook] ERROR: {{ $json.error }}",
+        "additionalFields": {
+          "chat_id": "={{ $env.WALTER_TELEGRAM_CHAT_ID }}"
+        }
+      },
+      "id": "telegram-error-meta",
+      "name": "Telegram Error Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1120, 420],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-cred",
+          "name": "Walter Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (6h)": {
+      "main": [[{ "node": "Run tap-facebook", "type": "main", "index": 0 }]]
+    },
+    "Run tap-facebook": {
+      "main": [[{ "node": "Parse Result", "type": "main", "index": 0 }]]
+    },
+    "Parse Result": {
+      "main": [[{ "node": "Success?", "type": "main", "index": 0 }]]
+    },
+    "Success?": {
+      "main": [[], [{ "node": "Telegram Error Alert", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": ["devrel-analytics", "tier-2", "meta", "facebook", "singer"],
+  "versionId": "v1",
+  "notes": "Phase V Part B — AC-7. INACTIVE until Meta App Review approved (V-prereq-2). tap-facebook covers Meta Ads + organic post data. Incremental sync via state file at ~/.config/walter-os/singer-state/facebook.json. See docs/specs/devrel-analytics-stack.md."
+}

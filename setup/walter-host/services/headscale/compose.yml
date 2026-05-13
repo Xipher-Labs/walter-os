@@ -1,0 +1,60 @@
+# Headscale — self-hosted control plane for Tailscale clients.
+# Same protocol as Tailscale.com but YOUR control server, no third party.
+# https://github.com/juanfont/headscale
+#
+# Use:
+#   1. Operator devices run normal Tailscale clients (iOS/Mac/Linux/Windows)
+#   2. Tell client `tailscale login --login-server=https://headscale.${WALTER_DOMAIN}`
+#   3. Headscale assigns each device an IP in 100.64.0.0/10 mesh
+#   4. All P2P, encrypted, controlled by YOU
+#
+# URL admin: headscale.${WALTER_DOMAIN} (CF Access)
+# URL clients: headscale.${WALTER_DOMAIN}/derp + /key (CF Tunnel, no Access — clients use API key)
+#
+# Note: clients need to reach the server WITHOUT CF Access auth (machines can't
+# do interactive Google login). Workaround: bypass CF Access for /derp and
+# specific Tailscale paths, OR use Headscale's built-in token auth + expose
+# raw via separate subdomain.
+
+services:
+  headscale:
+    image: headscale/headscale:0.26.0
+    container_name: headscale
+    restart: unless-stopped
+    command: serve
+    ports:
+      - "127.0.0.1:8085:8080"      # main API + Tailscale clients
+      - "127.0.0.1:9095:9090"      # metrics
+    volumes:
+      - ./config.yaml:/etc/headscale/config.yaml:ro
+      - headscale_data:/var/lib/headscale
+    healthcheck:
+      test: ["CMD", "headscale", "version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  headscale-admin:
+    # Switched from gurucomputing/headscale-ui (Caddy+TLS, hostile to CF tunnel)
+    # to goodieshq/headscale-admin (modern svelte UI, HTTP plain on 80).
+    #
+    # Custom entrypoint patches index.html to clear `localStorage.debug` if
+    # populated by Honey/PayPal browser extensions (which inject
+    # `debug=honey:core-sdk:*` globally; SvelteKit then JSON.parse-crashes).
+    # Upstream bug — fix lives here until goodieshq/headscale-admin wraps
+    # its localStorage deserialize in try/catch.
+    image: goodieshq/headscale-admin:0.25.6
+    container_name: headscale-admin
+    restart: unless-stopped
+    # Patch logic lives in patch-honey.sh (separate file so YAML escape rules
+    # don't mangle the regex patterns). Mounted read-only.
+    entrypoint: ["/usr/local/bin/patch-honey.sh"]
+    volumes:
+      - ./patch-honey.sh:/usr/local/bin/patch-honey.sh:ro
+    ports:
+      - "127.0.0.1:8086:80"
+    depends_on:
+      - headscale
+
+volumes:
+  headscale_data:

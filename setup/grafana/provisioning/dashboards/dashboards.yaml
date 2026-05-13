@@ -1,0 +1,17 @@
+# Grafana dashboard provisioning
+# Loads dashboards from JSON files in the dashboards directory.
+#
+# Refs: https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+apiVersion: 1
+
+providers:
+  - name: Walter-OS
+    orgId: 1
+    folder: Walter-OS
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards

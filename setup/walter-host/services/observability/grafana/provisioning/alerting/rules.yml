@@ -1,0 +1,152 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: walter-vm-resources
+    folder: Walter-VM
+    interval: 1m
+    rules:
+      # Disk root usage > 85%
+      # Threshold lives in the PromQL — when the comparison returns no series
+      # the alert is healthy, when it returns >0 series it fires.
+      - uid: walter_disk_root_high
+        title: Disk / usage > 85%
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              expr: 100 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100)
+              instant: true
+              refId: A
+              type: query
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: B
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [85] }
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Walter-VM disk / over 85%
+          description: "Root filesystem at {{ $values.A | printf \"%.1f\" }}% used"
+
+      # Disk volume > 90%
+      - uid: walter_disk_volume_high
+        title: Disk /mnt/walter-vm-data > 90%
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              expr: 100 - (node_filesystem_avail_bytes{mountpoint="/mnt/walter-vm-data"} / node_filesystem_size_bytes{mountpoint="/mnt/walter-vm-data"} * 100)
+              instant: true
+              refId: A
+              type: query
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: B
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [90] }
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Walter-VM Cloud Volume over 90% used
+          description: "/mnt/walter-vm-data at {{ $values.A | printf \"%.1f\" }}% used — restic primary repo at risk"
+
+      # RAM > 90%
+      - uid: walter_ram_high
+        title: RAM > 90%
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              expr: 100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))
+              instant: true
+              refId: A
+              type: query
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: B
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [90] }
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Walter-VM RAM > 90%
+          description: "Memory at {{ $values.A | printf \"%.1f\" }}% used — running out of headroom"
+
+      # Container restart loop (cAdvisor)
+      # Use changes() on the start_time gauge — counts how many times the
+      # value jumped in the window (= restarts). rate() of a gauge is
+      # nonsense; this counts actual restart events.
+      - uid: walter_container_restart_loop
+        title: Container restart loop
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              expr: changes(container_start_time_seconds{name!=""}[10m])
+              instant: true
+              refId: A
+              type: query
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: B
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [2] }
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Container "{{ $labels.name }}" restart loop
+          description: "{{ $labels.name }} restarted {{ $values.A }} times in last 10 min"
+
+      # Load 1m > vCPU count (16)
+      - uid: walter_load_high
+        title: Load avg 1m > 16
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              expr: node_load1
+              instant: true
+              refId: A
+              type: query
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: B
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [16] }
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Walter-VM load1m > 16 (= vCPU count)
+          description: "load1m={{ $values.A | printf \"%.2f\" }} sustained 10min → CPU saturated"

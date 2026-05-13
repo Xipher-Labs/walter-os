@@ -1,0 +1,12 @@
+---
+all:
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_user: walter
+  children:
+    walter_vm:
+      hosts:
+        walter-os:
+          # Connect via cloudflared SSH tunnel (CF Access in front)
+          ansible_host: ssh.${WALTER_DOMAIN}
+          ansible_ssh_common_args: -o ProxyCommand="cloudflared access ssh --hostname=%h"

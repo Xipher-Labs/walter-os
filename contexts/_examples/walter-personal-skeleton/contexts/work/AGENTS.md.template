@@ -1,0 +1,63 @@
+# AGENTS.md — Work Context
+
+<!-- TODO: Fill in your company and stack details.
+     This file is loaded by Walter-OS when your cwd matches your work directory.
+     Delete these comment blocks as you fill in real values. -->
+
+## Company context
+
+<!-- TODO: Describe your company, product, and customer base. -->
+**[TODO: Your Company]** — [TODO: one-line description of what the company does
+and who its customers are].
+
+## Stack
+
+<!-- TODO: Fill in your actual tech stack. -->
+- Language/runtime: TODO (e.g. TypeScript, Rust, Go)
+- Frontend: TODO (e.g. Next.js, React, Vue)
+- Infra: TODO (e.g. AWS, Hetzner, bare-metal)
+- CI: TODO (e.g. GitHub Actions, GitLab CI)
+- Observability: TODO (e.g. Grafana + Prometheus, Datadog)
+
+## Workflow rules
+
+### PR creation
+
+<!-- TODO: Decide if agents may open PRs automatically or only draft them. -->
+Agents may prepare branches and draft PR descriptions. The operator opens every
+PR manually.
+
+### Branch flow
+
+<!-- TODO: Note any company-specific branch naming or required sign-offs. -->
+Same global `dev → staging → main` rule applies.
+
+### Issue tracker integration
+
+<!-- TODO: Set your tracker (Linear / Jira / Plane / GitHub Issues) and ticket format. -->
+Issue tracker: TODO
+Ticket reference format: `Refs: [TODO-NNN]`
+
+## Security posture
+
+- Changes touching auth, key handling, or network-exposed surfaces auto-invoke
+  the `security-auditor` subagent.
+- Dependency audit runs on every PR.
+- Secrets never appear in logs.
+
+## Approvals required
+
+<!-- TODO: Add any company-specific approval requirements. -->
+These actions need explicit operator confirmation:
+- Pushing to any branch other than the current feature branch.
+- Modifying CI configuration.
+- Adding a new production dependency.
+- Posting anything publicly.
+
+## Skill loading (this context)
+
+<!-- TODO: Add domain-specific skills for your stack. -->
+Auto-loaded in addition to global skills:
+- `web-security-baseline`
+- `frontend-quality`
+- `data-migration-safety`

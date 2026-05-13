@@ -1,0 +1,46 @@
+#!/usr/bin/env bats
+# Smoke test for install.sh --dry-run
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  cd "$REPO_ROOT"
+}
+
+@test "install.sh --dry-run exits 0" {
+  run ./install.sh --dry-run
+  [ "$status" -eq 0 ]
+}
+
+@test "install.sh --dry-run mentions every key step" {
+  run ./install.sh --dry-run
+  [[ "$output" == *"Preflight"* ]]
+  [[ "$output" == *"directories"* ]]
+  [[ "$output" == *"root config files"* ]]
+  [[ "$output" == *"skills"* ]]
+  [[ "$output" == *"hooks"* ]]
+}
+
+@test "install.sh --help prints something" {
+  run ./install.sh --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"install.sh"* ]] || [[ "$output" == *"Walter-OS"* ]]
+}
+
+@test "install.sh --help does not print internal section comments" {
+  run ./install.sh --help
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"---------- config ----------"* ]]
+  [[ "$output" != *"!/usr/bin/env bash"* ]]
+}
+
+@test "install.sh --check runs requirements check without writes" {
+  run ./install.sh --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Requirements check"* ]]
+  [[ "$output" == *"Minimum requirements satisfied"* ]]
+}
+
+@test "install.sh rejects unknown flags" {
+  run ./install.sh --not-a-real-flag
+  [ "$status" -eq 2 ]
+}

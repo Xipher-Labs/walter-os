@@ -1,0 +1,26 @@
+# Sample competitors.yml
+# Copy this file to ~/.config/walter-os/state/competitors.yml
+# and replace with your actual competitors.
+# DO NOT commit this file or your personal version to any repository.
+#
+# All four URL fields are optional per competitor. Only include pages
+# that are publicly accessible (no login required).
+
+competitors:
+  - name: Acme Analytics
+    changelog_url: https://acmeanalytics.example.com/changelog
+    pricing_url: https://acmeanalytics.example.com/pricing
+    careers_url: https://acmeanalytics.example.com/jobs
+    blog_url: https://acmeanalytics.example.com/blog
+
+  - name: BetaCorp
+    changelog_url: https://betacorp.example.com/releases
+    pricing_url: https://betacorp.example.com/pricing
+    careers_url: https://betacorp.example.com/careers
+    blog_url: https://betacorp.example.com/engineering
+
+  - name: GammaTools
+    # GammaTools has no public changelog
+    pricing_url: https://gammatools.example.com/plans
+    careers_url: https://jobs.gammatools.example.com
+    blog_url: https://gammatools.example.com/news

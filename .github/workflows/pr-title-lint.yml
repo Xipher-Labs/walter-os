@@ -1,0 +1,27 @@
+name: pr-title-lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  validate:
+    name: Validate PR title format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title matches '[TYPE] -CATEGORY- title' convention
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -e
+          REGEX='^\[(FEAT|FIX|DOCS|CHORE|TEST)\] -(SECURITY|BUSINESS|COMPLIANCE|OPERATIONS|TECHNICAL|CUSTOMER|CONTENT|LEARNING)- [^[:space:]].{0,58}[^[:space:].]$'
+          if ! echo "$PR_TITLE" | grep -qE "$REGEX"; then
+            echo "::error::PR title does not match Walter-OS convention."
+            echo "::error::Required format: [TYPE] -CATEGORY- title (sentence case, <=60 chars body)"
+            echo "::error::Allowed TYPE: FEAT / FIX / DOCS / CHORE / TEST"
+            echo "::error::Allowed CATEGORY: SECURITY / BUSINESS / COMPLIANCE / OPERATIONS / TECHNICAL / CUSTOMER / CONTENT / LEARNING"
+            echo "::error::Example: [FEAT] -BUSINESS- pricing experiment skill"
+            echo "::error::Your title: $PR_TITLE"
+            exit 1
+          fi
+          echo "PR title OK: $PR_TITLE"

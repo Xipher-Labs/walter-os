@@ -1,0 +1,25 @@
+name: issue-title-lint
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+jobs:
+  validate:
+    name: Validate issue title format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check issue title matches convention
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          set -e
+          REGEX='^\[(FEAT|FIX|DOCS|CHORE|TEST)\] -(SECURITY|BUSINESS|COMPLIANCE|OPERATIONS|TECHNICAL|CUSTOMER|CONTENT|LEARNING)- [^[:space:]].{0,58}[^[:space:].]$'
+          if ! echo "$ISSUE_TITLE" | grep -qE "$REGEX"; then
+            echo "::warning::Issue title doesn't match Walter-OS convention."
+            echo "::warning::Required format: [TYPE] -CATEGORY- title"
+            echo "::warning::See CONTRIBUTING.md -> 'Title convention'"
+            # Issues only WARN, don't fail (allow first-time contributors to land issues + maintainer fixes)
+            # PRs FAIL because we control the PR creation flow via templates
+          fi
+          echo "Issue title check complete."

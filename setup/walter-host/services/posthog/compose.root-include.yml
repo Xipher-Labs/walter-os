@@ -1,0 +1,147 @@
+# PostHog — simplified 6-service stack for root compose.yml include.
+# Requires: shared postgres, POSTHOG_SECRET, POSTHOG_DB_PASS, CLICKHOUSE_PASSWORD, WALTER_DOMAIN.
+#
+# For the full 27-service hobby stack (standalone deploy), use compose.yml in this directory.
+# That compose uses `extends:` and requires cloning the PostHog repo alongside it.
+#
+# This file is a flat (no extends) version suitable for `include:` from the root compose.
+# Docker Compose include: requires Compose file format v3.8+ and plugin v2.20+.
+#
+# Refs: docs/specs/devrel-analytics-stack.md, setup/walter-host/services/posthog/SUGGESTIONS.md
+
+x-posthog-common: &posthog-common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: '50m'
+      max-file: '3'
+
+services:
+  # PostHog ClickHouse — dedicated event storage (upstream default)
+  posthog-clickhouse:
+    <<: *posthog-common
+    image: clickhouse/clickhouse-server@sha256:adb9fcf85e17f0dda74742a17bf6957549adc99e97fddfcab3a2a82cf9b62bfe
+    container_name: posthog-clickhouse
+    environment:
+      CLICKHOUSE_DB: posthog
+      CLICKHOUSE_USER: posthog
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?required}
+    volumes:
+      - posthog_clickhouse_data:/var/lib/clickhouse
+      - posthog_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user posthog --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # PostHog Redis — dedicated (not shared, for operational isolation)
+  posthog-redis:
+    <<: *posthog-common
+    image: redis:7-alpine
+    container_name: posthog-redis
+    volumes:
+      - posthog_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostHog web — main application server
+  posthog:
+    <<: *posthog-common
+    image: posthog/posthog@sha256:ffb55d524fc78cb431b267218df4ff0c380e1980bcc8fa32ab9b73c4629799ef
+    container_name: posthog
+    command: ./bin/docker-server
+    environment:
+      SECRET_KEY: ${POSTHOG_SECRET:?required}
+      DATABASE_URL: postgresql://posthog:${POSTHOG_DB_PASS:?required}@postgres:5432/posthog
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: posthog
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      REDIS_URL: redis://posthog-redis:6379/
+      DISABLE_SECURE_SSL_REDIRECT: "1"
+      IS_BEHIND_PROXY: "1"
+      SITE_URL: https://posthog.${WALTER_DOMAIN}
+      INSTANCE_PREFERENCES_DISABLE_SURVEYS: "1"
+    depends_on:
+      posthog-clickhouse:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/_health/ | grep -q ok || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # PostHog worker — Celery worker (includes beat scheduling)
+  posthog-worker:
+    <<: *posthog-common
+    image: posthog/posthog@sha256:ffb55d524fc78cb431b267218df4ff0c380e1980bcc8fa32ab9b73c4629799ef
+    container_name: posthog-worker
+    command: ./bin/docker-worker-celery --without-gossip --without-mingle --without-heartbeat
+    environment:
+      SECRET_KEY: ${POSTHOG_SECRET}
+      DATABASE_URL: postgresql://posthog:${POSTHOG_DB_PASS}@postgres:5432/posthog
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: posthog
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      REDIS_URL: redis://posthog-redis:6379/
+      DISABLE_SECURE_SSL_REDIRECT: "1"
+      IS_BEHIND_PROXY: "1"
+      SITE_URL: https://posthog.${WALTER_DOMAIN}
+    depends_on:
+      posthog:
+        condition: service_started
+
+  # PostHog plugin-server — Node.js event ingestion pipeline
+  posthog-plugin-server:
+    <<: *posthog-common
+    image: posthog/posthog-node@sha256:053742e9cf76d8327ea14c156950a806ffce07e685d03ab957adcb7389a4b9cc
+    container_name: posthog-plugin-server
+    environment:
+      DATABASE_URL: postgresql://posthog:${POSTHOG_DB_PASS}@postgres:5432/posthog
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: posthog
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      REDIS_URL: redis://posthog-redis:6379/
+      SITE_URL: https://posthog.${WALTER_DOMAIN}
+    depends_on:
+      posthog:
+        condition: service_started
+
+  # PostHog asyncmigrationscheck — runs once to apply async migrations
+  posthog-asyncmigrationscheck:
+    <<: *posthog-common
+    image: posthog/posthog@sha256:ffb55d524fc78cb431b267218df4ff0c380e1980bcc8fa32ab9b73c4629799ef
+    container_name: posthog-asyncmigrationscheck
+    restart: "no"
+    command: python manage.py run_async_migrations --check
+    environment:
+      SECRET_KEY: ${POSTHOG_SECRET}
+      DATABASE_URL: postgresql://posthog:${POSTHOG_DB_PASS}@postgres:5432/posthog
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: posthog
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      REDIS_URL: redis://posthog-redis:6379/
+      DISABLE_SECURE_SSL_REDIRECT: "1"
+      IS_BEHIND_PROXY: "1"
+      SITE_URL: https://posthog.${WALTER_DOMAIN}
+    depends_on:
+      posthog:
+        condition: service_healthy
+
+volumes:
+  posthog_clickhouse_data:
+  posthog_clickhouse_logs:
+  posthog_redis_data:

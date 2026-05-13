@@ -1,0 +1,1593 @@
+<div align="center">
+
+<!-- TODO: replace with logo asset -->
+
+# Walter-OS
+
+**A self-hostable AI-agent operations framework by Xipher Labs**
+
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
+[![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-v0.2.0--alpha-orange.svg)](CHANGELOG.md)
+[![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
+
+</div>
+
+---
+
+Hi, I'm @f0x1777. I started Walter-OS as a personal operating system for
+building software with AI agents. After using it across real projects, I saw
+enough reusable value to open-source it through Xipher Labs, with the personal
+pieces stripped out and the workflows hardened for other technical operators.
+This release is still alpha, but the core idea is ready to study, fork, and
+improve.
+
+Walter-OS is an opinionated, single-repository operations framework that wires
+Claude Code, Codex CLI, Cursor, and a self-hosted VM together under the same
+agent contract, the same skills catalog, and the same MCP configuration. You
+fork it, apply a personal overlay, and get a consistent AI-agent environment
+that follows you across machines and tools.
+
+**Walter-OS IS**: an agent contract layer (`AGENTS.md` + context files), a
+curated skills library (50+ skills), a VM bootstrap stack (25+ self-hosted
+services), a Walter Council of six specialized agents, and an MCP catalog
+(29 servers across default and high-risk profiles).
+
+**Walter-OS IS NOT**: a zero-config starter kit you can `./install.sh` and
+walk away from. It is not a stable API — this is alpha software with breaking
+changes every sprint. It is not a generic agent framework; it has strong
+opinions about workflow, branch flow, and rigor levels. It requires a personal
+overlay before it does anything useful for you.
+
+---
+
+## Status: alpha — read this before relying on it
+
+> **This is v0.2.0-alpha. Things iterate fast, things break, things get
+> corrected on the fly while other work is in flight.**
+>
+> Walter-OS started as a **100% tailor-made setup for a single operator**
+> (Xipher Labs) and is in the process of being generalized for OSS adoption.
+> v0.2.0 is the first release intended for third parties; v0.3.0 will fill
+> founder-toolkit gaps; v0.4.0+ stabilizes APIs.
+>
+> **What this means for adopters:**
+>
+> - **Breaking changes are normal until v1.0.** Pin to a specific commit or
+>   tag in production. Read the CHANGELOG before pulling.
+> - **IaC idempotency is the goal**, not always the reality. Some bootstrap
+>   sequences may need a second `./install.sh` invocation or a
+>   `docker compose up -d` retry. We're tightening this every release.
+> - **The framework is opinionated by design.** The opinions came from one
+>   operator's daily workflow. We've stripped operator-personal config (for
+>   example, personal operator-specific configuration and defaults) but some
+>   opinions persist (TDD discipline, branch flow, 3-round review, AGPLv3). If
+>   they don't fit your style, fork + diverge.
+> - **Cross-compatibility is best-effort.** Tested primarily on macOS (Apple
+>   Silicon) + Hetzner Cloud Ubuntu 24.04. Linux dev workstations should work;
+>   Windows / WSL is unverified. Other cloud providers are documented as
+>   alternatives but only Hetzner is the reference deployment.
+> - **Issues and PRs are appreciated.** Especially for: reproducible bugs on
+>   non-reference platforms, depersonalization leaks we missed, security
+>   findings, doc gaps that confused you the first time. See
+>   [CONTRIBUTING.md](CONTRIBUTING.md) for the convention.
+> - **Security disclosures are private.** See [SECURITY.md](SECURITY.md) — do
+>   not file public issues for vulnerabilities.
+>
+> If you want a polished, stable, support-contracted agent framework, this
+> isn't it yet. If you want to see how one operator runs ten products with AI
+> at the wheel and learn the discipline they enforce — and contribute back —
+> you're in the right place.
+
+---
+
+## What is Walter-OS?
+
+Walter-OS ships two components that can be used independently:
+
+- **walter-os (client framework)** — installs on your workstation (Mac or
+  Linux). Provides skills, agent contexts, the AGENTS.md cascade, the `walter`
+  CLI, and the Walter Council agents. **Requires no VM.** Works with your
+  existing GitHub, Linear, and Anthropic API accounts.
+- **walter-host (`setup/walter-host/`)** — an optional self-hosted service
+  stack for a dedicated server (VM, homelab, or same machine). Provides
+  Forgejo, Plane, LiteLLM cost routing, Grafana dashboards, n8n automation,
+  and the other services the Council agents talk to. Deploy this if you want
+  internal services instead of SaaS.
+
+Four deployment patterns are supported — from **client-only** (no server
+needed) to **homelab walter-host** (full data sovereignty). See
+`docs/operational/walter-os-vs-walter-host.md` for the full breakdown,
+trade-offs, and which mode is right for your situation.
+
+---
+
+## Architecture overview
+
+Walter-OS is three layers stacked on top of each other:
+
+```mermaid
+graph TD
+    subgraph "Layer 1 — Agent contract"
+        AGENTS["AGENTS.md (global)"]
+        CTX["contexts/ (work / projects-personal / personal / hackathons)"]
+        REPO["Repo-level AGENTS.md"]
+        AGENTS --> CTX --> REPO
+    end
+
+    subgraph "Layer 2 — Skills + agents + commands + hooks"
+        SKILLS["50+ skills in skills/"]
+        AGENTS2["Agent definitions in agents/"]
+        CMDS["Slash commands in commands/"]
+        HOOKS["Shell hooks in hooks/"]
+    end
+
+    subgraph "Layer 3 — Walter-VM + Walter Council"
+        VM["Hetzner CX53 VM"]
+        SVCS["25+ self-hosted services\n(Cloudflare Tunnel + Caddy)"]
+        COUNCIL["Walter Council\n(6 specialized agents)"]
+        CT["Control Tower\n(browser UI)"]
+        VM --> SVCS
+        VM --> COUNCIL
+        COUNCIL --> CT
+    end
+
+    REPO --> SKILLS
+    SKILLS --> VM
+```
+
+**Layer 1 — Agent contract**: `AGENTS.md` is the single source of truth read
+by Claude Code, Codex CLI, and Cursor. It cascades from global (this file) →
+context (cwd-driven) → repo-level. Conflicts resolve most-specific-wins.
+The personal overlay at `~/.config/walter-os/overlay/` lets you override any
+template file without touching the repo.
+
+**Layer 2 — Skills + agents + commands + hooks**: skills are `SKILL.md` files
+that describe a repeatable methodology (brainstorming, TDD, PR review). Agents
+are subagent definitions that run as fresh-context Claude instances. Commands
+are slash commands (`/brainstorm`, `/write-plan`, `/execute-plan`). Hooks are
+shell scripts that run at key points in the git and Claude Code lifecycle
+(pre-commit, branch-flow guard, daily supply-chain audit).
+
+**Layer 3 — Walter-VM + Walter Council**: the VM runs the self-hosted services
+stack. The Walter Council is six specialized agents (triage, researcher, coder,
+reviewer, janitor, liaison) that work on Plane issues autonomously. Control
+Tower is the browser UI for monitoring and directing the Council.
+
+---
+
+## Walter Council
+
+The Walter Council is a set of six specialized agent definitions in `agents/`
+that work together on longer-horizon tasks without requiring the operator's
+constant attention. Each agent runs as a fresh-context Claude instance with
+read/write access scoped to its role.
+
+| Agent | Role | Trust tier | Auto-approved actions |
+|---|---|---|---|
+| **triage** | Reads new GitHub/Plane issues, labels, assigns, creates specs | medium | Create Plane issue, write spec draft |
+| **researcher** | Web search, competitive analysis, document summarization | medium | Read files, web search, write notes |
+| **coder** | Implements tasks from approved specs following TDD discipline | medium | Write files on `feature/*`, run tests |
+| **reviewer** | Reviews PRs: bugs, security, edge cases; no write tools | high | Read files only |
+| **janitor** | Dependency updates, dead code removal, lint fixes | low | Write files on dedicated branch |
+| **liaison** | Drafts external communications (emails, social posts, docs) | low | Write draft files |
+
+Trust tiers control which `approval-gate.sh` decisions auto-approve vs require
+operator review. The blocked-for-all-tiers list (push to main/staging, merge
+PRs, modify hooks/AGENTS.md) is hardcoded in `hooks/approval-gate.sh` and
+cannot be overridden by any tier.
+
+Council configuration lives in `agents/`. Trust tier assignments are in
+`~/.config/walter-os/trust-tiers.yml` (generated by `install.sh`).
+
+For the full Council design, see
+`docs/specs/walter-council-v2.md` and
+`docs/decisions/0009-agent-trust-tiers.md`.
+
+---
+
+## Skills catalog
+
+Walter-OS ships 50+ skills. Skills are Markdown files (`SKILL.md`) that
+describe a repeatable methodology. The agent reads the skill file when the
+skill is triggered (by name match or explicit invocation) and follows the
+workflow described.
+
+### From `obra/superpowers` (required plugin)
+
+These skills ship with the superpowers plugin. Walter-OS assumes they are
+installed.
+
+| Skill | Triggered by |
+|---|---|
+| `brainstorming` | `/brainstorm` command or "brainstorm" in task description |
+| `writing-plans` | `/write-plan` command |
+| `executing-plans` | `/execute-plan` command |
+| `test-driven-development` | Any implementation task; enforces RED-GREEN-REFACTOR |
+| `systematic-debugging` | "debug", "failing test", "can't reproduce" |
+| `root-cause-tracing` | "root cause", "intermittent failure" |
+| `verification-before-completion` | Before any PR creation |
+| `using-git-worktrees` | Multi-agent parallel work |
+| `code-reviewer` | PR review requests |
+| `defensive-programming` | Security-sensitive code paths |
+
+### Walter-OS native skills
+
+| Skill | Purpose |
+|---|---|
+| `nanobanana` | Image generation via Gemini API |
+| `daily-supply-chain-audit` | Daily MCP/skill security scan + NVD CVE check |
+| `pr-review` | Walter-OS-specific PR checklist |
+| `definition-of-done-validator` | Maps spec ACs to tests; blocks PR if uncovered |
+| `ai-spend-tripwire` | Guardrail on LLM API spend per session |
+| `hackathon-spinup` | 48h project orchestration: brand → landing → MVP → demo |
+| `brand-creation` | Logo, palette, identity pipeline via Gemini |
+| `project-induction` | Guided new-project interview → charter + spec + Plane epic |
+| `web-security-baseline` | Security checklist for web-exposed services |
+| `frontend-quality` | React/Next.js quality gate |
+| `data-migration-safety` | Postgres migration review discipline |
+| `regulatory-research-international` | Multi-jurisdiction regulatory lookup |
+| `medical-data-compliance` | PHI/HIPAA/GDPR guardrails for health data |
+| `landing-page-fast` | Rapid landing page scaffold with Astro + Tailwind |
+
+Skills auto-trigger based on description match. You can also invoke them
+explicitly by name: "apply the `hackathon-spinup` skill to this project."
+
+---
+
+## MCP catalog
+
+Walter-OS manages two MCP configuration profiles. The `install.sh` script
+writes both to `~/.claude/`.
+
+### Default profile (29 MCPs, auto-loaded)
+
+Low-blast-radius, read-mostly servers. Loaded in every Claude Code session.
+
+| Category | MCPs |
+|---|---|
+| **Dev tools** | `github`, `forgejo`, `sentry`, `playwright`, `maestro` |
+| **Project management** | `linear`, `plane` |
+| **Storage** | `filesystem`, `supabase`, `postgres` |
+| **Communication** | `slack`, `gmail`, `telegram` |
+| **Productivity** | `google_calendar`, `google_drive`, `notion`, `obsidian` |
+| **AI / infra** | `sequential_thinking`, `memory`, `brave_search` |
+| **Design** | `penpot` |
+| **Observability** | `grafana`, `elevenlabs` |
+
+### Manual profile (6 MCPs, opt-in only)
+
+Destructive / money-spending / lateral-movement-risk. Not loaded by default.
+Switch profiles before destructive provisioning work.
+
+| MCP | Why high-risk |
+|---|---|
+| `hetzner` | Can provision and destroy VMs; money-spending |
+| `cloudflare` | Can modify DNS and firewall rules |
+| `vercel` | Can deploy to production |
+| `stripe` | Money-spending |
+| `railway` | Can provision and destroy services |
+| `bitwarden` | Full credential vault access |
+
+To switch to the manual profile:
+
+```bash
+mv ~/.claude/settings.json ~/.claude/settings.default.json
+mv ~/.claude/settings.high-risk.json ~/.claude/settings.json
+# ... do high-risk work ...
+mv ~/.claude/settings.json ~/.claude/settings.high-risk.json
+mv ~/.claude/settings.default.json ~/.claude/settings.json
+```
+
+Or: `walter-os profile high-risk` / `walter-os profile default` if the CLI
+alias is installed.
+
+---
+
+## Repo structure
+
+```
+walter-os/
+├── AGENTS.md                    # Global agent contract (loaded by all tools)
+├── CHANGELOG.md                 # Semver changelog
+├── agents/                      # Walter Council agent definitions
+├── apps/
+│   └── control-tower/           # Next.js Council UI (must be docker build'd)
+├── bin/                         # Executable scripts (walter-os CLI)
+├── commands/                    # Slash commands (/brainstorm, /write-plan, etc.)
+├── contexts/
+│   ├── work/AGENTS.md           # Work context template
+│   ├── projects-personal/AGENTS.md  # Personal dev context template
+│   ├── personal/AGENTS.md       # Life context template
+│   └── hackathons/AGENTS.md     # Hackathon context template (operator-contexts PR)
+├── docs/
+│   ├── decisions/               # Architecture Decision Records (ADRs)
+│   ├── operational/             # Runbooks, checklists, audits
+│   └── specs/                   # Feature specs + implementation plans
+├── external/
+│   └── marchetto-agent-skills/  # Git submodule — additional skills
+├── hooks/                       # Shell hooks (pre-commit, branch-flow-guard, etc.)
+├── install.sh                   # Symlinks skills/agents/commands/hooks to ~/.claude
+├── mcp/
+│   └── servers.json             # Canonical MCP server registry with metadata
+├── scripts/                     # VM bootstrap and maintenance scripts
+├── setup/
+│   └── vm/
+│       ├── cloudflare/          # Cloudflare Tunnel setup scripts
+│       ├── services/            # Per-service compose + config files
+│       └── bootstrap-vm.sh     # Full VM provisioning entrypoint
+├── skills/                      # Walter-OS native skill library
+├── tests/                       # Test suites (bats, shell, wiki lint)
+│   └── oss/                     # OSS-specific tests (depersonalization, structure)
+└── wiki/                        # Internal wiki (frontmatter-validated)
+```
+
+The `install.sh` script symlinks `skills/`, `agents/`, `commands/`, and
+`hooks/` into `~/.claude/` and `~/.codex/`. Run it on every machine where
+you use Claude Code or Codex CLI.
+
+---
+
+## Disciplines overview
+
+Walter-OS enforces these disciplines universally — across all contexts, all
+projects, all tools.
+
+### Rigor levels
+
+Every task is classified before work begins:
+
+| Level | Criteria | Plan required | Tests |
+|---|---|---|---|
+| **tiny** | Typo, single-line config, dep bump, comment | None | Lint + typecheck |
+| **small** | Bug fix < 50 LOC, single function | 2-3 sentences in commit body | RED-GREEN-REFACTOR |
+| **major** | New feature, schema change, > 200 LOC, auth/money/PHI path | Spec in `docs/specs/` + plan | Full TDD + DoD validator |
+
+Auto-escalate to **major** (regardless of LOC) for: any change in `auth/`,
+`crypto/`, money flows, PHI data, DB migrations in production, changes to
+`hooks/`, `AGENTS.md`, `install.sh`, or `mcp/servers.json`.
+
+### Branch flow
+
+```
+feature/<slug> → dev → staging → main
+```
+
+PRs must target the next level. `hooks/branch-flow-guard.sh` blocks skipping
+levels. Hotfix to main requires `--allow-branch-skip` flag + justification in
+the PR body.
+
+### Definition of Done
+
+A task is not done until:
+- Spec exists at `docs/specs/<slug>.md` and acceptance criteria are current
+- Every AC has a test referencing it by ID (e.g., `[AC-1]` in test description)
+- All tests pass: unit + integration + e2e + DoD validator
+- Lint + typecheck + format clean
+- Security scan clean (`npm audit`, `cargo audit`, or equivalent)
+- Build clean
+- Reviewer subagent has approved
+
+The `definition-of-done-validator` skill enforces the AC-to-test mapping before
+PR creation.
+
+### Commit format
+
+```
+<type>(<scope>): <imperative summary, ≤72 chars>
+
+<body: why, not what>
+
+Refs: docs/specs/<slug>.md
+Closes <PROJ-NNN>
+```
+
+Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `security`.
+
+---
+
+## Quick start (client-only)
+
+```bash
+git clone https://github.com/xipher-labs/walter-os.git /opt/walter-os && cd /opt/walter-os
+./install.sh --check               # verify minimum local requirements
+./install.sh --dry-run             # preview all writes before touching your config
+./setup/personal-overlay-init.sh   # scaffold ~/.config/walter-os/overlay/
+```
+
+This gives you the local agent contract, skills, CLI, and overlay structure.
+The optional self-hosted service stack is a separate step:
+
+```bash
+docker compose up -d               # after configuring .env.local
+```
+
+See [Requirements](docs/operational/requirements.md) and
+[Step-by-step installation](#step-by-step-installation) for the full sequence
+with DNS, Cloudflare Tunnel, secrets bootstrap, and Control Tower build.
+
+---
+
+## Table of contents
+
+- [Personas](#personas)
+- [Stack at a glance](#stack-at-a-glance)
+- [Networking and access](#networking-and-access)
+- [Secrets flow](#secrets-flow)
+- [Multi-device strategy](#multi-device-strategy)
+- [Resource budget](#resource-budget)
+- [Step-by-step installation](#step-by-step-installation)
+- [Customization patterns](#customization-patterns)
+- [Walter-Bridge and CLI clients](#walter-bridge-and-cli-clients)
+- [Operator contexts at a glance](#operator-contexts-at-a-glance)
+- [n8n workflows](#n8n-workflows)
+- [Updating](#updating)
+- [Troubleshooting](#troubleshooting)
+- [Contribution](#contribution)
+- [Security](#security)
+- [License](#license)
+
+---
+
+## Personas
+
+Walter-OS is built for three primary personas. Read carefully — the "NOT for
+you" sections are as important as the "for you" sections.
+
+### Builder — solo engineer, shipping product fast
+
+**This is for you if:**
+- You write code most of the day and context-switch between multiple tools
+  (Claude Code, Codex CLI, Cursor, terminal).
+- You want your AI agents to follow the same disciplines everywhere — same
+  branch flow, same commit format, same rigor levels — without configuring
+  each tool separately.
+- You self-host at least some services (Postgres, Forgejo, Plane) and want
+  them wired into your agent's MCP catalog automatically.
+
+**This is NOT for you if:**
+- You want a no-configuration experience. Every service requires first-run
+  setup; the personal overlay is mandatory.
+- You need enterprise features: SSO beyond Google IdP, RBAC, audit trails
+  for compliance. Walter-OS has none of that.
+- You are not comfortable with Docker, DNS configuration, and Linux sysadmin
+  basics.
+
+Relevant context: `contexts/projects-personal/`
+
+---
+
+### Founder — pre-PMF, needs GTM tooling without a DevOps hire
+
+**This is for you if:**
+- You want a self-hosted PostHog, Postiz, n8n, and Metabase stack without
+  paying $300+/mo for SaaS equivalents.
+- You want AI agents that can help you with content publishing, analytics
+  workflows, and competitive research — all routed through your own LiteLLM
+  gateway with cost visibility.
+- You are comfortable spending a one-time 4–8 hour setup window to get a
+  permanent GTM stack that you own.
+
+**This is NOT for you if:**
+- You need uptime SLAs. This is a single-VM setup; if the VM goes down, your
+  services go down.
+- You are looking for a managed SaaS replacement with customer support.
+- Your team has more than 2–3 people. Walter-OS is designed for solo or
+  micro-team use; multi-user access requires manual Plane/Forgejo user
+  management.
+
+Relevant contexts: `contexts/projects-personal/`, `contexts/work/`
+
+---
+
+### Operator — homelab enthusiast, life-OS
+
+**This is for you if:**
+- You want Syncthing, Headscale, Synapse/Element, and Grafana in one
+  composable stack.
+- You think of your VM as an "always-on personal brain" — project management
+  (Plane), git hosting (Forgejo), secrets vault (Infisical), and AI gateway
+  (LiteLLM) all in one place.
+- You want your AI tools to respect privacy: secrets stay on your VM,
+  medical/PHI data stays on a local LLM, and you control routing decisions.
+
+**This is NOT for you if:**
+- You want a NAS-first setup. Walter-OS has SeaweedFS as an optional service
+  but is not a primary NAS solution.
+- You want automatic zero-downtime updates. Updates are manual (pull, rebuild,
+  compose up).
+- You need mobile-first management. There is no Walter-OS mobile app; the
+  Control Tower browser UI is the management surface.
+
+Relevant context: `contexts/personal/`
+
+---
+
+### Hackathon participant — brief mention
+
+Walter-OS ships a `contexts/hackathons/` context (added by the
+operator-contexts PR — see [Operator contexts at a glance](#operator-contexts-at-a-glance))
+with a PROMPT.md template optimized for 48h sprint mode: brand → landing →
+MVP → demo. The `hackathon-spinup` skill orchestrates the full sequence.
+Hackathon use does not require the full VM stack; you can run Walter-OS
+purely as the agent contract layer on your laptop.
+
+---
+
+## Stack at a glance
+
+> RAM budget values are typical RSS under moderate load, not hard container
+> limits. Actual usage varies significantly with usage patterns.
+
+| Service | What it does | Hostname | Profile | RAM budget | Docs |
+|---|---|---|---|---|---|
+| **Homepage** | Dashboard / service tiles | `home.yourdomain.com` | core | ~128 MB | `setup/walter-host/services/homepage/` |
+| **Forgejo** | Self-hosted Git + CI runner | `git.yourdomain.com` | core | ~256 MB | `setup/walter-host/services/forgejo/` |
+| **Plane** | Project management + issue tracker | `plane.yourdomain.com` | core | ~512 MB | `setup/walter-host/services/plane/` |
+| **Infisical** | Secrets vault (runtime + operator) | `secrets.yourdomain.com` | core | ~512 MB | `setup/walter-host/services/infisical/` |
+| **LiteLLM (Walter-Bridge)** | AI model gateway (37 aliases across 17 providers) | `bridge.yourdomain.com` | core | ~256 MB | `setup/walter-host/services/litellm/` |
+| **n8n** | Workflow automation | `n8n.yourdomain.com` | core | ~512 MB | `setup/walter-host/services/n8n/` |
+| **Uptime Kuma** | Service health monitoring | `status.yourdomain.com` | core | ~128 MB | `setup/walter-host/services/uptime-kuma/` |
+| **Grafana** | Metrics dashboards + alerting | `grafana.yourdomain.com` | monitoring | ~256 MB | `setup/walter-host/services/observability/` |
+| **Prometheus** | Metrics scraper | internal | monitoring | ~256 MB | `setup/walter-host/services/observability/` |
+| **Syncthing** | File sync across devices | `sync.yourdomain.com` | core | ~128 MB | `setup/walter-host/services/syncthing/` |
+| **Penpot** | UI/UX design tool (Figma alternative) | `penpot.yourdomain.com` | design | ~512 MB | `setup/walter-host/services/penpot/` |
+| **Drawio** | Technical diagrams | `draw.yourdomain.com` | design | ~128 MB | `setup/walter-host/services/drawio/` |
+| **RocketChat** | Team messaging | `chat.yourdomain.com` | comms | ~512 MB | `setup/walter-host/services/rocketchat/` |
+| **Synapse** | Matrix homeserver | `matrix.yourdomain.com` | comms | ~256 MB | `setup/walter-host/services/synapse/` |
+| **Element** | Matrix web client | `element.yourdomain.com` | comms | ~64 MB | `setup/walter-host/services/synapse/` |
+| **Headscale** | Self-hosted Tailscale control plane | `hs.yourdomain.com` | core | ~64 MB | `setup/walter-host/services/headscale/` |
+| **Headscale UI** | Headscale web interface | `hsui.yourdomain.com` | core | ~32 MB | `setup/walter-host/services/headscale/` |
+| **wg-easy (WireGuard)** | WireGuard VPN with admin UI | `wg.yourdomain.com` | core | ~32 MB | `setup/walter-host/services/wireguard/` |
+| **Metabase** | Analytics / SQL dashboards | `analytics.yourdomain.com` | analytics | ~1 GB | `setup/walter-host/services/` |
+| **PostHog** | Product analytics + session replay | `ph.yourdomain.com` | marketing | ~6 GB* | `setup/walter-host/services/` |
+| **Postiz** | Social media scheduling | `postiz.yourdomain.com` | marketing | ~512 MB | `setup/walter-host/services/postiz/` |
+| **SeaweedFS** | Distributed object storage | internal | analytics | ~256 MB | `setup/walter-host/services/` |
+| **Control Tower** | Agent Council browser UI | Tailscale-only | core | ~512 MB | `apps/control-tower/` |
+| **OpenClaw** | Open-source Claude interface | `openclaw.yourdomain.com` | core | ~128 MB | `setup/walter-host/services/openclaw/` |
+| **LLM proxies** | Subscription-backed model routers | internal | core | ~256 MB | `setup/walter-host/services/llm-proxies/` |
+| **Postgres** | Shared database for Plane, Infisical, n8n, Metabase | internal | core | ~256 MB | `setup/walter-host/services/postgres/` |
+| **Restic** | Automated backups | cron | core | ~64 MB | `setup/walter-host/services/restic/` |
+| **Alerting** | Grafana alert routing (email/Telegram) | internal | monitoring | ~32 MB | `setup/walter-host/services/alerting/` |
+
+*PostHog with ClickHouse and session replay enabled; ClickHouse alone accounts
+for ~2 GB. Requires `ulimit -n 262144` — see [Troubleshooting](#troubleshooting).
+
+**Profile key:**
+- `core` — always starts with `docker compose up -d`
+- `monitoring` — `docker compose --profile monitoring up -d`
+- `design` — `docker compose --profile design up -d`
+- `comms` — `docker compose --profile comms up -d`
+- `analytics` — `docker compose --profile analytics up -d`
+- `marketing` — `docker compose --profile marketing up -d`
+
+---
+
+## Networking and access
+
+```mermaid
+graph TD
+    Internet --> CF["Cloudflare DNS + CDN"]
+    CF --> CFA["CF Access (Google IdP SSO)"]
+    CFA --> Tunnel["Cloudflare Tunnel (cloudflared)"]
+    Tunnel --> Caddy["Caddy reverse proxy\n*.yourdomain.com"]
+    Caddy --> SvcA["Forgejo / Plane / n8n\n...and all other services"]
+    Caddy --> SvcB["Homepage / Uptime Kuma\n...core services"]
+
+    TS["Tailscale network\n(Headscale)"] --> CT["Control Tower\n(Tailscale-only, not on CF Tunnel)"]
+    TS --> Dev["Operator devices\n(Mac, homelab, etc.)"]
+```
+
+**Key properties:**
+
+- Zero public ports. The VM firewall blocks all inbound traffic except SSH
+  from known IPs. Cloudflare Tunnel handles inbound web traffic via outbound
+  connection from `cloudflared` on the VM.
+- All TLS is terminated by Caddy. Let's Encrypt certificates are auto-issued
+  and renewed. Caddy requests certs on first HTTPS request — allow 60 seconds
+  after initial `docker compose up`.
+- CF Access provides Google IdP SSO in front of every service on the Cloudflare
+  Tunnel. Users authenticate via Google before reaching any service.
+- Control Tower is additionally Tailscale-restricted: it does not appear in the
+  Cloudflare Tunnel routes and is only reachable via Headscale VPN. This
+  provides a second layer of access control for the agent management UI.
+- DNS pattern: `*.yourdomain.com` CNAME or A records point to Cloudflare, which
+  routes through the tunnel to the VM's Caddy instance. No wildcard cert required
+  — Caddy handles per-subdomain cert issuance.
+
+---
+
+## Secrets flow
+
+```mermaid
+graph LR
+    Infisical["Infisical\n(master vault)"]
+    Bitwarden["Bitwarden\n(cross-device operator secrets)"]
+    EnvLocal[".env.local\n(per-machine, gitignored)"]
+    Overlay["~/.config/walter-os/overlay/\npersonal.env"]
+    Containers["Docker containers\nenv_file per service"]
+    Agents["Claude Code / Codex CLI\nMCP servers"]
+
+    Infisical -->|"bootstrap.sh pulls secrets"| EnvLocal
+    EnvLocal -->|"docker compose env_file"| Containers
+    Bitwarden -->|"operator exports manually"| Overlay
+    Overlay -->|"install.sh symlinks"| Agents
+```
+
+**Three tiers:**
+
+1. **Service secrets** (database passwords, API keys for services) — stored in
+   Infisical. The `bootstrap.sh` script pulls them into `.env.local` on the VM.
+   Never committed to git.
+
+2. **Operator cross-device secrets** (personal API keys, token for LiteLLM
+   master key, Cloudflare API token) — stored in a Bitwarden secure note.
+   Exported manually to `~/.config/walter-os/overlay/personal.env` on each
+   machine. Not synced via Syncthing (too sensitive).
+
+3. **Context configuration** (paths, preferences, non-secret context variables)
+   — lives in `~/.config/walter-os/overlay/contexts/<ctx>/AGENTS.md`. This is
+   the personal overlay: it overrides repo template files without modifying the
+   repo. Synced via Syncthing or private git overlay (see
+   [Multi-device strategy](#multi-device-strategy)).
+
+**Bootstrap commands:**
+
+```bash
+# On each new machine (one-time):
+./setup/personal-overlay-init.sh   # scaffolds ~/.config/walter-os/overlay/
+# Edit ~/.config/walter-os/overlay/personal.env with your values.
+
+# On the VM (after .env.local is configured):
+./scripts/bootstrap.sh             # validates .env.local, creates Docker networks
+```
+
+For deeper detail on the overlay model, see
+`docs/operational/universal-vs-personal-config.md` (added in PR #49 logical tail).
+
+### Secrets bootstrap reference
+
+```bash
+# Generate a secure random password (for any service):
+openssl rand -hex 32
+
+# Generate a LiteLLM master key:
+openssl rand -base64 32
+
+# Generate a Postgres password (hex is safest — avoids shell escaping issues):
+openssl rand -hex 16
+
+# Verify Infisical connection:
+docker exec infisical-backend infisical secrets list --env=production
+
+# Export all secrets to .env.local (after Infisical is configured):
+infisical export --format=dotenv --env=production > .env.local
+```
+
+> Never commit `.env.local`. It is in `.gitignore`. If you accidentally stage
+> it, remove it: `git rm --cached .env.local`.
+
+### Environment variable reference
+
+The `.env.example` at the repo root documents every required and optional
+variable. Required variables (the stack will not start without them):
+
+| Variable | Used by | Description |
+|---|---|---|
+| `WALTER_DOMAIN` | Caddy, all services | Your base domain (e.g., `yourdomain.com`) |
+| `POSTGRES_PASSWORD` | Postgres | Shared Postgres superuser password |
+| `INFISICAL_SECRET_KEY` | Infisical | Encryption key for the secrets vault |
+| `LITELLM_MASTER_KEY` | LiteLLM | API key for Walter-Bridge authentication |
+| `CF_API_TOKEN` | cloudflared | Cloudflare API token for tunnel management |
+| `CLOUDFLARE_TUNNEL_TOKEN` | cloudflared | Tunnel token written by `02-create-tunnel.sh` |
+| `PLANE_SECRET_KEY` | Plane | Plane application secret key |
+| `N8N_ENCRYPTION_KEY` | n8n | Encrypts n8n credentials at rest |
+
+Optional but strongly recommended:
+
+| Variable | Used by | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | LiteLLM | For `haiku`, `sonnet`, `opus` aliases |
+| `OPENAI_API_KEY` | LiteLLM | For `gpt` alias |
+| `GEMINI_API_KEY` | LiteLLM | For `cheap` alias |
+| `RESTIC_REPOSITORY` | Restic | Backup target URL |
+| `RESTIC_PASSWORD` | Restic | Backup encryption passphrase |
+| `TELEGRAM_BOT_TOKEN` | Alerting | For Grafana alert routing to Telegram |
+| `POSTIZ_PG_PASS` | Postiz | Postiz database password (must be hex — no special chars) |
+
+---
+
+## Multi-device strategy
+
+Walter-OS is designed to work across multiple machines (VM + laptop + homelab
+box). The personal overlay directory `~/.config/walter-os/overlay/` must be
+present on every machine where you use Claude Code or Codex CLI. Three
+approaches for keeping it in sync:
+
+| Approach | When to use | How | Pros | Cons |
+|---|---|---|---|---|
+| **Syncthing only** | Personal use, non-technical operator, simplicity first | Add overlay dir as a Syncthing folder | Zero git overhead; auto-syncs in background; works offline | No change history; conflicts require manual resolution; not suitable if overlay contains secrets |
+| **Private git overlay** | Engineers who want audit trail; recommended for most operators | Create a private repo, init in `~/.config/walter-os/overlay/`, push/pull manually or via pre-commit hook | Full history; diff-able; can be automated via CI | Requires git discipline; manual commit/push after each change |
+| **Ansible / dotfiles repo** | Operators with existing dotfiles management | Treat overlay dir as a managed module in your dotfiles playbook (e.g., `config-personal` Ansible role) | Integrates with existing system provisioning; atomic role application | Most setup overhead; overkill for a single-person setup |
+
+**Most common for engineers**: private git overlay. Syncthing is the simpler
+alternative for personal use. Do not sync `personal.env` (secrets) via any
+of these — keep it in Bitwarden and export manually.
+
+For detailed setup instructions for each approach, see
+`docs/operational/multi-device-sync.md`.
+
+---
+
+## Resource budget
+
+Minimum specs: 4 vCPUs, 16 GB RAM, 80 GB SSD for core-only. Full stack
+(all profiles) requires 8 vCPUs, 32 GB RAM, 240 GB SSD.
+
+Before provisioning, run `./setup/walter-host/preflight-check.sh` to verify minimum
+requirements on an existing VM.
+
+| Tier | Use case | Hetzner SKU | vCPU | RAM | SSD | Max monthly | Per-hour |
+|---|---|---|---|---|---|---|---|
+| Floor | Core services only (no PostHog, no Postiz) | CX33 | 4 | 8 GB | 80 GB | $8.59 | $0.0118 |
+| Medium | Core + PostHog minimal setup | CX43 | 8 | 16 GB | 160 GB | $14.59 | $0.0200 |
+| **Recommended / Production** | Full stack, single operator | **CX53** | **16** | **32 GB** | **320 GB** | **$27.09** | **$0.0371** |
+| Heavy | Multi-zone HA, load-balanced | CX53 × 2 | 32 | 64 GB | 640 GB | $54.18 | $0.0742 |
+
+> Prices: Hetzner Cloud as of 2026-05-12 (USD, excl. VAT, Intel/AMD line — Ampere
+> ARM line is similar). `Per-hour` values are derived from `Max monthly` using a
+> 730 h/month assumption. Verify current pricing at
+> [Hetzner Cloud pricing](https://www.hetzner.com/cloud).
+>
+> **Heavy tier caveat**: requires improvements for cross-zone load balancing
+> (planned for v0.3.x). For now, single-node CX53 is the recommended ceiling.
+> For hosting alternatives (DigitalOcean, Vultr, bare metal), see
+> `docs/operational/hosting-providers-comparison.md`.
+
+### RAM budget by service
+
+| Service | Typical RSS | Notes |
+|---|---|---|
+| PostHog (full) | ~6 GB | ClickHouse ~2 GB; ingestion + UI ~1 GB; shared Postgres ~512 MB |
+| Metabase | ~1 GB | JVM-based; heap settable via `JAVA_OPTS` |
+| Plane | ~512 MB | Includes Plane API + worker + beat + frontend |
+| Infisical | ~512 MB | Backend + frontend |
+| n8n | ~512 MB | Node.js runtime |
+| Penpot | ~512 MB | Penpot app + Penpot exporter |
+| RocketChat | ~512 MB | Node.js, can spike to 1 GB |
+| Control Tower | ~512 MB | Next.js app server |
+| LiteLLM | ~256 MB | Python; spikes to 512 MB under parallel requests |
+| Forgejo | ~256 MB | Go binary; very lean |
+| Synapse | ~256 MB | Python; scales with rooms and users |
+| Prometheus | ~256 MB | Scales with metric count and retention |
+| Grafana | ~256 MB | Go binary |
+| Postgres (shared) | ~256 MB | Shared by Plane, Infisical, n8n, Metabase |
+| LLM proxies | ~256 MB | Three router containers |
+| OpenClaw | ~128 MB | Node.js |
+| Homepage | ~128 MB | Go binary |
+| Uptime Kuma | ~128 MB | Node.js |
+| Syncthing | ~128 MB | Go binary; scales with number of folders |
+| Headscale | ~64 MB | Go binary |
+| Headscale UI | ~32 MB | Static + minimal server |
+| wg-easy | ~32 MB | Node.js; very lean |
+| Alerting | ~32 MB | Shared Grafana alerting pipeline |
+| Restic | ~64 MB | Go binary; peaks during backup window |
+| Drawio | ~128 MB | Java; varies with diagram complexity |
+| SeaweedFS | ~256 MB | Go binary; scales with volume count |
+| **Total (core)** | **~3.5 GB** | Without monitoring/comms/design/analytics/marketing profiles |
+| **Total (full)** | **~12–14 GB** | All profiles; PostHog is the largest contributor |
+
+On a 32 GB VM you have comfortable headroom for the full stack plus kernel,
+Docker, Caddy, cloudflared, and OS overhead (~2 GB baseline).
+
+---
+
+## Step-by-step installation
+
+This section covers a clean install on a fresh Hetzner CX53 running Ubuntu
+24.04 LTS. Adapt paths and package names for other distributions or providers.
+
+### Prerequisites
+
+- A domain with access to DNS records (Cloudflare recommended — the setup
+  scripts target the Cloudflare API).
+- A Hetzner account (or equivalent cloud provider).
+- An SSH key pair. If you do not have one: `ssh-keygen -t ed25519`.
+- A Cloudflare account with the target domain added (free tier is sufficient
+  for the tunnel configuration).
+- `CF_API_TOKEN` and `CF_ACCOUNT_ID` exported in your local shell before
+  running the Cloudflare scripts.
+
+---
+
+### Step 1 — Provision the VM
+
+In the Hetzner Cloud console (`console.hetzner.com`):
+
+1. Create a new server: **CX53** (recommended), Ubuntu 24.04 LTS, your
+   preferred datacenter (FSN1 or NBG1 for EU latency).
+2. Attach your SSH public key.
+3. Enable automatic backups if this VM will hold irreplaceable data
+   (costs ~20% of server price).
+4. Note the VM's public IP address.
+
+You can also use the Hetzner CLI:
+
+```bash
+hcloud server create \
+  --name walter-vm \
+  --type cx53 \
+  --image ubuntu-24.04 \
+  --ssh-key your-ssh-key-name \
+  --location fsn1
+```
+
+---
+
+### Step 2 — DNS
+
+If using Cloudflare Tunnel (recommended): you do not need to set an A record
+for `*.yourdomain.com`. The tunnel handles routing without exposing the VM IP.
+Only set the Cloudflare Tunnel hostname routes (done in Step 7).
+
+If using direct DNS (not recommended — exposes VM IP):
+
+```
+A    yourdomain.com    <VM_IP>
+A    *.yourdomain.com  <VM_IP>
+```
+
+---
+
+### Step 3 — Install dependencies on the VM
+
+SSH into the VM and run:
+
+```bash
+ssh root@<VM_IP>
+apt-get update && apt-get upgrade -y
+apt-get install -y git curl wget docker.io docker-compose-plugin make
+systemctl enable --now docker
+# Add your user to the docker group (if not running as root):
+usermod -aG docker $USER
+```
+
+---
+
+### Step 4 — Clone the repository
+
+```bash
+git clone https://github.com/xipher-labs/walter-os.git /opt/walter-os
+cd /opt/walter-os
+git submodule update --init --recursive
+```
+
+> If `git submodule update` fails with `fatal: reference is not a tree`,
+> see [Troubleshooting](#troubleshooting) entry #6.
+
+---
+
+### Step 5 — Bootstrap the personal overlay (on your local machine)
+
+Run this on your **local machine** (Mac / Linux workstation), not on the VM:
+
+```bash
+cd /opt/walter-os   # or wherever you cloned locally
+./setup/personal-overlay-init.sh
+```
+
+This scaffolds `~/.config/walter-os/overlay/` with template files. Edit at
+minimum:
+
+```bash
+# ~/.config/walter-os/overlay/personal.env
+WALTER_DOMAIN=yourdomain.com
+WALTER_ADMIN_EMAIL=you@example.com
+WALTER_TIMEZONE=America/New_York    # or your local timezone
+```
+
+Additional keys — API tokens for Cloudflare, Anthropic, OpenAI, etc. — are
+documented in `.env.example` at the repo root.
+
+---
+
+### Step 6 — Configure secrets on the VM
+
+On the VM, create `.env.local` with your secrets:
+
+```bash
+cp .env.example .env.local
+# Edit .env.local: fill in all required values.
+# Minimum required: WALTER_DOMAIN, POSTGRES_PASSWORD, INFISICAL_SECRET_KEY,
+# LITELLM_MASTER_KEY, CF_API_TOKEN.
+```
+
+Then run the bootstrap script to validate and initialize Docker networks:
+
+```bash
+./scripts/bootstrap.sh
+```
+
+The bootstrap script verifies required variables are set and creates the Docker
+networks used by the compose files. It exits with a non-zero status and prints
+which variables are missing if any are unset.
+
+---
+
+### Step 7 — Set up Cloudflare Tunnel
+
+Run the four setup scripts in order from your local machine (they call the
+Cloudflare API and write a tunnel token to the VM via SSH):
+
+```bash
+export CF_API_TOKEN=<your-cloudflare-api-token>
+export CF_ACCOUNT_ID=<your-cloudflare-account-id>
+export WALTER_DOMAIN=yourdomain.com
+export VM_IP=<your-vm-ip>
+
+./setup/walter-host/cloudflare/01-create-zone.sh      # verify domain is in CF account
+./setup/walter-host/cloudflare/02-create-tunnel.sh    # create named tunnel, write token to VM .env.local
+./setup/walter-host/cloudflare/03-install-cloudflared.sh   # install cloudflared on VM
+./setup/walter-host/cloudflare/04-create-access.sh    # configure CF Access policies (Google IdP)
+```
+
+After this, `cloudflared` runs as a systemd service on the VM and maintains
+a persistent outbound connection to the Cloudflare network.
+
+For manual setup steps and CF Access configuration details, see
+`setup/walter-host/cloudflare/README.md`.
+
+---
+
+### Step 8 — Build the Control Tower image
+
+Control Tower is a Next.js application that must be built before the compose
+stack starts. The compose file references a local image (`walter-control-tower:latest`);
+if it is not built, `docker compose up` will fail with "image not found".
+
+```bash
+# On the VM, from /opt/walter-os:
+docker build -f apps/control-tower/Dockerfile -t walter-control-tower:latest .
+```
+
+This step is required even if you do not plan to use Control Tower immediately.
+Build time: 3–5 minutes on a CX53. The image is ~500 MB.
+
+---
+
+### Step 9 — Start the core stack
+
+```bash
+# Start core services only:
+docker compose up -d
+
+# Include optional profiles (add as many as needed):
+docker compose --profile comms --profile analytics up -d
+
+# All profiles (requires 32 GB RAM minimum):
+docker compose --profile comms --profile design --profile analytics \
+  --profile marketing --profile monitoring up -d
+```
+
+Watch logs during first start:
+
+```bash
+docker compose logs -f --tail=50
+```
+
+---
+
+### Step 10 — Verify
+
+Open in your browser:
+
+- `https://home.yourdomain.com` — Homepage dashboard (all service tiles)
+- `https://status.yourdomain.com` — Uptime Kuma monitoring
+
+Caddy issues Let's Encrypt certificates on the first HTTPS request. Allow
+60 seconds for cert issuance before refreshing if you see a certificate error.
+
+Check all containers are running:
+
+```bash
+docker compose ps
+```
+
+All containers should show `running (healthy)` or `running`. If any show
+`exited`, check logs: `docker compose logs <service-name>`.
+
+---
+
+### Step 11 — Per-service first-run
+
+Each service requires an operator-driven first-run (create admin account, set
+password, invite users). Consult each service's directory in
+`setup/walter-host/services/<svc>/` for specific steps.
+
+**Priority order** (complete in this sequence to avoid dependency issues):
+
+1. **Infisical** — create organization, add Machine Identity, store token
+   in `.env.local` as `INFISICAL_TOKEN`.
+2. **Plane** — create workspace, create first project, generate API token,
+   store as `PLANE_API_TOKEN` in `.env.local` and Infisical.
+3. **Forgejo** — complete setup wizard, add SSH key, create `walter-os` mirror
+   repo (optional).
+4. **n8n** — complete setup wizard, configure credentials for services you
+   plan to automate.
+5. **LiteLLM (Walter-Bridge)** — verify model aliases work:
+   ```bash
+   curl -X POST https://bridge.yourdomain.com/v1/chat/completions \
+     -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"cheap","messages":[{"role":"user","content":"ping"}]}'
+   ```
+6. **RocketChat / Synapse** — complete setup wizards per service README.
+
+---
+
+### Step 12 — Install Claude Code plugin (local machine)
+
+On your local development machine:
+
+```
+/plugin marketplace add obra/superpowers-marketplace
+/plugin install superpowers@superpowers-marketplace
+```
+
+Then restart Claude Code. The `obra/superpowers` plugin is required for
+`/brainstorm`, `/write-plan`, and `/execute-plan` slash commands.
+
+After installing, run `./install.sh` from the repo root to symlink skills,
+agents, commands, and hooks into `~/.claude/` and `~/.codex/`:
+
+```bash
+cd /path/to/walter-os-local-clone
+./install.sh
+```
+
+---
+
+### Step 13 — Configure Headscale (Tailscale VPN)
+
+To reach Control Tower via Tailscale:
+
+```bash
+# On the VM — create a preauth key (1-hour TTL by default):
+docker exec headscale headscale preauthkeys create --user 1 --reusable --expiration 1h
+
+# On your local machine — enroll:
+tailscale up --auth-key=<preauth-key> --login-server=https://hs.yourdomain.com
+```
+
+Control Tower will be reachable at `http://control-tower.yourdomain.com` only
+from enrolled Tailscale nodes. See `docs/operational/control-tower-runbook.md`
+for full Headscale enrollment steps.
+
+---
+
+### Step 14 — Set up Walter Council agents
+
+The Walter Council requires two environment variables per agent:
+
+```bash
+# In .env.local on the VM:
+COUNCIL_LITELLM_KEY=<your-litellm-master-key>
+COUNCIL_PLANE_TOKEN=<your-plane-api-token>
+```
+
+The agent definitions in `agents/` reference these via the MCP server
+configurations. The Council uses Plane for issue tracking and LiteLLM for
+model access — both must be configured before agents can be dispatched.
+
+To verify the Council is operational:
+
+```bash
+# From Control Tower (via Tailscale), trigger a test task:
+# Control Tower → Council → New Task → "ping: write a one-sentence summary of repo purpose"
+# A reviewer agent should respond within 60 seconds.
+```
+
+For full Council setup (creating trust tier config, configuring per-agent
+approval gates), see `docs/operational/council-v2-deployment-runbook.md`.
+
+---
+
+### Step 15 — Configure automated backups (Restic)
+
+Walter-OS ships a Restic backup configuration in `setup/walter-host/services/restic/`.
+Configure the backup target and schedule:
+
+```bash
+# In .env.local on the VM:
+RESTIC_REPOSITORY=s3:s3.amazonaws.com/your-backup-bucket/walter-vm
+RESTIC_PASSWORD=<secure-random-passphrase>
+AWS_ACCESS_KEY_ID=<your-s3-access-key>
+AWS_SECRET_ACCESS_KEY=<your-s3-secret-key>
+
+# Test backup manually:
+docker compose run --rm restic backup /data
+docker compose run --rm restic snapshots
+```
+
+The Restic container runs on a cron schedule defined in
+`setup/walter-host/cron/backup.sh`. By default it runs at 03:00 UTC daily and keeps
+7 daily, 4 weekly, and 12 monthly snapshots.
+
+**What is backed up**: Postgres data volume, Forgejo repositories, Infisical
+data, Plane project data, n8n workflows. Ephemeral container state is not
+backed up — this is intentional.
+
+---
+
+### Verification checklist
+
+After completing all steps, verify the full stack is operational:
+
+```bash
+# 1. All containers running
+docker compose ps
+
+# 2. Homepage loads (CF Access will prompt for Google auth)
+curl -s -o /dev/null -w "%{http_code}" https://home.yourdomain.com
+# Expected: 200 (after CF Access redirect and login)
+
+# 3. Walter-Bridge responds
+curl https://bridge.yourdomain.com/health \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY"
+# Expected: {"status": "healthy"}
+
+# 4. Plane API responds
+curl https://plane.yourdomain.com/api/v1/workspaces/ \
+  -H "X-API-Key: $PLANE_API_TOKEN"
+# Expected: JSON list of workspaces
+
+# 5. Run the bats test suite
+bats tests/oss/readme-detailed.bats
+
+# 6. Check uptime monitoring
+curl -s https://status.yourdomain.com/api/status-page/heartbeat/main
+# Expected: JSON with monitor statuses
+```
+
+---
+
+## Customization patterns
+
+Walter-OS is designed to be forked. All personal configuration lives in
+`~/.config/walter-os/overlay/` (never in the repo). Four customization layers:
+
+### Per-service customization
+
+Each service has an environment template in `setup/walter-host/services/<svc>/`.
+Edit the relevant variables in `.env.local` (on the VM) or `personal.env`
+(for cross-device non-secret config). The compose `env_file` directive reads
+`.env.local` — never commit this file.
+
+Common per-service tweaks:
+- Change service hostnames: update `CADDY_<SVC>_HOST` variables in `.env.local`.
+- Change Postgres database names: edit the `POSTGRES_DB` variables per service.
+- Disable a service: comment out its service block in the root compose override.
+
+### Profiles
+
+Optional service groups are activated with the `--profile` flag:
+
+```bash
+docker compose --profile comms up -d       # RocketChat + Synapse/Element
+docker compose --profile design up -d     # Penpot + Drawio
+docker compose --profile analytics up -d  # Metabase + PostHog + SeaweedFS
+docker compose --profile marketing up -d  # Postiz
+docker compose --profile monitoring up -d # extended Grafana dashboards
+```
+
+Core services (Forgejo, Plane, Infisical, LiteLLM, n8n, Homepage, Uptime Kuma,
+Headscale, Syncthing, Postgres, Restic, OpenClaw) always start regardless of
+profile flags.
+
+To add a new service as a profile:
+1. Create `setup/walter-host/services/<svc>/compose.yml` with `profiles: [<name>]` on
+   the service definition.
+2. Add a tile to `setup/walter-host/services/homepage/config/services.yaml`.
+3. Add a Caddy route block to `setup/walter-host/services/caddy/Caddyfile`.
+4. Document RAM budget in this README and in the service's directory.
+
+### Per-skill customization
+
+Add operator-private skills (not suitable for public repo) in:
+
+```
+~/.config/walter-os/overlay/skills/<skill-name>/SKILL.md
+```
+
+Walter-OS's `install.sh` discovers skills in both the repo `skills/` directory
+and the overlay `skills/` directory, and symlinks them all into `~/.claude/`.
+The overlay version takes precedence if there is a name collision.
+
+Skills follow the `SKILL.md` format — see any skill in `skills/` for the
+template structure.
+
+### Per-context customization
+
+The four context templates in `contexts/` (`work/`, `projects-personal/`,
+`personal/`, `hackathons/`) define what rules and skills apply when the agent's
+working directory matches a specific path pattern.
+
+Override any context template without modifying the repo:
+
+```
+~/.config/walter-os/overlay/contexts/<ctx>/AGENTS.md
+```
+
+The overlay `AGENTS.md` is loaded instead of the repo's template. Use this for
+company-specific context (your stack, your Linear ticket format, your staging
+URLs) that should not appear in the public repo.
+
+---
+
+## Walter-Bridge and CLI clients
+
+**Walter-Bridge** is the LiteLLM proxy instance (`setup/walter-host/services/litellm/`)
+that serves as a unified AI gateway for all tools on the operator's stack.
+
+### Why a gateway
+
+- **Single endpoint**: write `base_url: https://bridge.yourdomain.com/v1` in
+  every tool config. Rotate provider API keys in one place.
+- **Model aliasing**: use semantic names (`cheap`, `sonnet`, `vision`) in your
+  code and configs. Change the underlying model mapping in one file
+  (`setup/walter-host/services/litellm/config.yaml`) without touching every consumer.
+- **Spend visibility**: LiteLLM tags each request with context metadata.
+  The Metabase dashboard at `https://analytics.yourdomain.com` shows spend by
+  model, by date, and (if configured) by agent or task.
+- **Audit trail**: every model call is logged. Useful for debugging agent
+  behaviour and estimating monthly provider spend.
+- **Subscription proxies**: Walter-OS ships three internal routers in
+  `setup/walter-host/services/llm-proxies/` that can route requests through operator
+  subscription sessions (Claude Pro, Gemini Advanced, Codex) rather than
+  pay-per-token API keys. See the `llm-proxies/README.md` for ToS notes and
+  setup.
+
+### Model aliases (current config)
+
+`setup/walter-host/services/litellm/config.yaml` ships with **37 model aliases across
+17 providers** (Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, Mistral,
+Cohere, Azure OpenAI, AWS Bedrock, Google Vertex AI, xAI Grok, Perplexity,
+Together AI, DeepInfra, Replicate, Ollama, vLLM). Each provider is gracefully
+disabled when its env var is unset.
+
+Below are the 8 most commonly used aliases. See the config file for the
+complete list (37 entries including dated pins like `claude-3-5-sonnet`,
+provider-specific variants like `gemini-2.5-pro`, and `walter-embed` for
+local embeddings).
+
+| Alias | Maps to | Notes |
+|---|---|---|
+| `cheap` | Gemini 2.5 Flash | Default for summarization, scrapers, simple tasks |
+| `haiku` | Claude Haiku | Fast, cheap Anthropic model |
+| `sonnet` | Claude Sonnet | Default for coding and content |
+| `opus` | Claude Opus | High reasoning tasks, complex refactors |
+| `gpt` | GPT-4o | OpenAI alternative |
+| `claude-sub` | Claude.ai Pro (via CCR router) | Subscription fallback |
+| `gemini-sub` | Gemini Advanced (via proxy) | Subscription fallback |
+| `codex-sub` | OpenAI Codex (via proxy) | Subscription fallback |
+
+To add a new alias, add an entry to the `model_list` section of `config.yaml`
+and restart: `docker compose restart litellm`.
+
+### CLI client setup
+
+All three Claude Code-adjacent CLIs can be pointed at Walter-Bridge:
+
+**Claude Code** (`~/.claude/settings.json` — managed by `install.sh`):
+
+```json
+{
+  "model": "sonnet",
+  "apiBaseUrl": "https://bridge.yourdomain.com/v1",
+  "apiKey": "<your-litellm-master-key>"
+}
+```
+
+**Codex CLI** (`~/.codex/config.toml`):
+
+```toml
+[provider]
+name = "openai-compatible"
+base_url = "https://bridge.yourdomain.com/v1"
+api_key = "<your-litellm-master-key>"
+model = "gpt"
+```
+
+**Gemini CLI** (`~/.config/gemini/config.yaml`):
+
+```yaml
+provider: openai-compatible
+base_url: https://bridge.yourdomain.com/v1
+api_key: <your-litellm-master-key>
+model: gemini-sub
+```
+
+For local access (port-forwarded): replace `https://bridge.yourdomain.com/v1`
+with `http://localhost:4000/v1`.
+
+The `setup/walter-host/services/litellm/clients/` directory contains ready-to-use
+config templates for each CLI. Copy the appropriate template to the target
+config path and fill in your master key.
+
+---
+
+## Operator contexts at a glance
+
+Walter-OS loads a context-specific `AGENTS.md` based on your working directory.
+This allows the agent to have different rules and skills for work code vs
+personal projects vs homelab tasks — without manually switching configurations.
+
+| Context | Directory | Loaded when cwd matches | Primary use case |
+|---|---|---|---|
+| `work` | `contexts/work/` | `~/work/*` | Work projects: stricter rigor, no auto-PR, Linear integration |
+| `projects-personal` | `contexts/projects-personal/` | `~/Projects-Personal/*` | Personal dev: higher autonomy, auto-PR enabled, Plane integration |
+| `personal` | `contexts/personal/` | `~/personal/*` | Life tasks: Spanish, no branch flow, privacy-first |
+| `hackathons` | `contexts/hackathons/` | `~/hackathons/*` | 48h sprint mode: brand → landing → MVP → demo |
+
+**Cascade order**: global `AGENTS.md` → context `AGENTS.md` → repo-level
+`AGENTS.md`. Most-specific wins on a per-key basis.
+
+**Personal overlay**: the template files in `contexts/<ctx>/AGENTS.md` are
+generic. Override them at `~/.config/walter-os/overlay/contexts/<ctx>/AGENTS.md`
+to add your specific company, stack, issue tracker format, and team conventions.
+The overlay version loads instead of the repo template — the repo template
+remains clean for OSS distribution.
+
+**Per-context PROMPT.md**: each context directory ships a `PROMPT.md` — a
+paste-into-LLM template you can use to initialize a new conversation with the
+right context without waiting for the file discovery to run. Useful for web UIs
+(Claude.ai, ChatGPT) that do not load `AGENTS.md`.
+
+**Per-context SKILLS.md**: declares which Walter-OS skills auto-trigger in that
+context. For example, `contexts/work/SKILLS.md` lists `web-security-baseline`
+and `solana-rpc-review` as auto-loaded.
+
+For deeper reading on context cascade and overlay mechanics, see
+`docs/operational/operator-contexts.md`.
+
+---
+
+## n8n workflows
+
+Walter-OS ships six curated n8n workflow suggestions in `n8n/workflows/`. Each
+workflow is a JSON export from n8n plus a `README.md` explaining credentials,
+triggers, and expected output.
+
+**To import a workflow:**
+
+1. Open n8n at `https://n8n.yourdomain.com`.
+2. Go to **Integrations → Import Workflow**.
+3. Select the JSON file from `n8n/workflows/<workflow>/workflow.json`.
+4. Configure the credentials and trigger settings per the workflow's README.
+
+| Workflow | What it does |
+|---|---|
+| `content-publishing` | Cross-posts approved content to Twitter/X, LinkedIn, Mastodon on a schedule |
+| `ai-cost-tracking` | Ingests LiteLLM spend logs, categorizes by project, posts weekly digest to Telegram |
+| `github-triage` | Labels new GitHub issues, assigns to Plane, pings relevant channel |
+| `expense-categorization` | Reads bank export CSVs, classifies transactions, writes to Metabase |
+| `hackathon-team-formation` | Matches available skills to project requirements, notifies team channel |
+| `customer-interview-synthesis` | Ingests interview transcripts, extracts themes, drafts summary doc |
+
+Each workflow README documents: required credentials (what n8n credentials to
+configure), trigger configuration (webhook vs scheduled vs manual), and expected
+output format.
+
+> Note: `n8n/workflows/` is added by the operator-contexts PR. If the directory
+> does not exist on your branch, create it after merging that PR.
+
+---
+
+## Updating
+
+### Routine update (monthly recommended)
+
+```bash
+cd /opt/walter-os
+git pull origin main
+docker compose pull
+docker compose up -d
+# Re-include any profiles you use:
+docker compose --profile <name> up -d
+```
+
+`docker compose pull` downloads the latest images for all services. For
+services with pinned image tags (e.g. `n8n:2.18.7`), this is a no-op until
+the pin is bumped in the compose file.
+
+### Major version bumps
+
+Before running `docker compose pull` after a major version bump:
+
+1. Read `CHANGELOG.md` — breaking changes are annotated with `BREAKING:` prefix.
+2. For database services (Postgres, Infisical), check the service's migration
+   notes. Database schema migrations are not automatic in Walter-OS — you must
+   run them manually or via the service's built-in migration tool.
+3. Re-build Control Tower after any `apps/control-tower/` changes:
+   ```bash
+   docker build -f apps/control-tower/Dockerfile -t walter-control-tower:latest .
+   ```
+
+Service-specific migration notes (when they exist) are documented in
+`setup/walter-host/services/<svc>/MIGRATIONS.md`.
+
+### Rollback
+
+If an update breaks a service, roll back the image to the previous tag:
+
+```bash
+# Check what image version was running before the update:
+docker inspect <service-name> | grep -A2 '"Image"'
+
+# Pin the service to the previous tag in setup/walter-host/services/<svc>/compose.yml,
+# then restart:
+docker compose up -d --no-deps <service-name>
+```
+
+For Postgres, never roll back the image without also rolling back the data
+volume — Postgres data directories are not backwards-compatible across major
+versions. Always take a Restic snapshot before a major Postgres update:
+
+```bash
+docker compose run --rm restic backup /data/postgres
+```
+
+### Submodule pins
+
+`external/marchetto-agent-skills` is pinned to a specific commit hash in
+`.gitmodules`. To update:
+
+```bash
+cd external/marchetto-agent-skills
+git fetch origin
+git checkout <new-commit-hash>
+cd ../..
+git add external/marchetto-agent-skills
+git commit -m "chore(deps): bump marchetto-agent-skills to <hash>"
+```
+
+If a `git submodule update --init` fails with `fatal: reference is not a tree`,
+the upstream repo has force-pushed past the pinned commit. Check `.gitmodules`
+comments for a recovery pin hash, then:
+
+```bash
+git submodule update --init --force
+```
+
+Never pull submodules from a branch name — always pin to a commit hash for
+reproducibility.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Postiz fails to start / exits immediately | `POSTIZ_PG_PASS` unset or contains special characters (e.g., `@`, `#`) | Regenerate: `openssl rand -hex 16`; update in `.env.local`; `docker compose restart postiz` |
+| PostHog OOM at container startup | ClickHouse requires `ulimit -n 262144`; 32 GB RAM minimum | `ulimit -n 262144` before compose; add to `/etc/security/limits.conf` for persistence: `* soft nofile 262144` and `* hard nofile 262144` |
+| Control Tower image not found / compose fails with "pull access denied" | Image not built yet (`walter-control-tower:latest` is a local image) | `docker build -f apps/control-tower/Dockerfile -t walter-control-tower:latest .` |
+| Cloudflare Tunnel cert error / CERT_INVALID in browser | Stale or rotated tunnel token | Re-run `./setup/walter-host/cloudflare/02-create-tunnel.sh`; update `CLOUDFLARE_TUNNEL_TOKEN` in `.env.local`; `docker compose restart cloudflared` |
+| ClickHouse won't start / segfault at startup | `nofile` ulimit too low (kernel default is 1024; ClickHouse requires 262144) | See `docs/operational/known-issues.md` for the exact `/etc/security/limits.conf` entries; requires VM reboot or session restart |
+| `git submodule update` fails with "fatal: reference is not a tree" | Upstream repo has force-pushed past the pinned commit | Check `.gitmodules` comments for recovery hash; run `git submodule update --init --force` |
+| Walter-Bridge (LiteLLM) returns 401 Unauthorized | `LITELLM_MASTER_KEY` in `.env.local` does not match what the container was started with, or the key has been rotated | `docker compose down litellm && docker compose up -d litellm` after correcting the key; verify with `curl -H "Authorization: Bearer $KEY" https://bridge.yourdomain.com/health` |
+| Element won't complete login to Synapse ("Homeserver not found") | `element/config.json` was not rendered from the template during deploy | Re-run `./setup/walter-host/services/synapse/deploy.sh` which renders the template with your domain; restart synapse and element |
+| Plane API returns 403 on all agent calls | Plane API token expired or not created | Plane UI → Profile → API Tokens → create new token; update `PLANE_API_TOKEN` in `.env.local` and in Infisical |
+| Grafana dashboards show "No data" | Node Exporter not scraping, or Prometheus datasource URL misconfigured | Check `curl localhost:9090/targets` on the VM; verify `prometheus.yml` scrape interval and target IPs; confirm Node Exporter container is running |
+| Forgejo SSH clone returns "Permission denied (publickey)" | SSH public key not added to Forgejo account | Forgejo UI → Settings → SSH / GPG Keys → "Add Key" → paste `~/.ssh/id_ed25519.pub` |
+| Headscale node enrollment fails ("invalid auth key") | Preauth key has expired (default 1-hour TTL) | Generate a fresh key: `docker exec headscale headscale preauthkeys create --user 1 --reusable --expiration 24h` |
+| n8n workflow import fails ("version mismatch") | Exported workflow JSON was created with a newer n8n version than your running instance | Upgrade n8n: update the image tag in `setup/walter-host/services/n8n/compose.yml`; `docker compose pull n8n && docker compose up -d n8n` |
+| RocketChat admin wizard loops / won't complete | Browser cookie issue after a failed first-run attempt | Clear site data for the RocketChat URL (`chrome://settings/siteData`), then retry in a fresh browser session |
+| Metabase "Database connection failed" on first setup | Postgres container not reachable from Metabase by hostname | Verify both services share a Docker network; check: `docker network inspect analytics_net`; ensure Metabase's `MB_DB_HOST` matches the Postgres container name |
+| Syncthing "Out of sync" for agent-memory folder | Conflicting edits from two machines simultaneously | Syncthing creates conflict files (`.sync-conflict-*`); keep the newer-timestamp version; delete conflict files; press "Rescan" in Syncthing UI |
+| Infisical "Organization not found" on first login | Machine Identity not created; `INFISICAL_TOKEN` is blank or invalid | Infisical UI → Organization → Machine Identities → create identity; export token; set `INFISICAL_TOKEN` in `.env.local` |
+| `docker compose up` fails: "network not found" | Docker networks were deleted or never created | `docker compose down --remove-orphans` then `./scripts/bootstrap.sh` then `docker compose up -d` |
+| LiteLLM model alias returns "LLM Provider NOT provided" | Model alias not configured in `config.yaml` | Add the alias under `model_list` in `setup/walter-host/services/litellm/config.yaml`; `docker compose restart litellm` |
+| Caddy certificate issuance fails / "ACME error: connection refused" | Port 80 blocked by VM firewall (required for ACME HTTP-01 challenge) | Open port 80 temporarily: `ufw allow 80/tcp`; allow 60s for Caddy to obtain certs; can close port 80 again after initial issuance if using CF Tunnel mode |
+| Postiz social accounts won't authorize (OAuth redirect error) | `POSTIZ_BACKEND_URL` does not match the exact registered redirect URI in your OAuth app settings | Update `POSTIZ_BACKEND_URL` in `.env.local` to match exactly; regenerate OAuth app credentials if redirect URIs were changed |
+| OpenClaw returns "model not found" | OpenClaw is configured to use a LiteLLM alias that no longer exists | Check `OPENCLAW_MODEL` in `.env.local`; verify the model alias exists in `config.yaml`; default should be `litellm/sonnet` with `OPENCLAW_BASE_URL=http://litellm:4000` |
+
+---
+
+## Known limitations and alpha status
+
+Walter-OS is **alpha software** (v0.2.0-alpha). Expect breaking changes between
+minor versions. The following limitations are known and tracked:
+
+- **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
+  stack is designed for a single node. Multi-VM deployments require manual
+  configuration work not covered by this repo.
+- **No mobile management UI**: Control Tower is a desktop browser application.
+  Mobile access to the Walter Council is not supported in v0.2.
+- **Manual service updates**: `docker compose pull` only updates services with
+  `latest` or non-pinned tags. Pinned services (the majority) require manual
+  tag bumps in the compose files.
+- **Cloudflare dependency**: the default networking setup requires a Cloudflare
+  account. Alternative setups (direct DNS + Nginx + Let's Encrypt) are possible
+  but not documented or tested in this repo.
+- **AGENTS.md is not auto-loaded by all tools**: Cursor requires the Cursor
+  rules file, not AGENTS.md. A Cursor adapter is tracked in the backlog.
+- **No automatic secret rotation**: secrets in `.env.local` are static. Infisical
+  provides rotation for service secrets, but operator keys (API tokens) must be
+  rotated manually.
+- **Walter Council requires Plane**: the Council agents use Plane as their
+  task source. If Plane is not configured, the Council has no work queue.
+- **PostHog resource requirements**: PostHog with ClickHouse is the most
+  resource-intensive service. On a 16 GB VM, running PostHog alongside all other
+  services will cause OOM conditions. Use the `marketing` profile only on CX53+.
+
+These limitations are tracked in `docs/operational/future-implementations-roadmap.md`.
+Contributions that address them are welcome — see `CONTRIBUTING.md`.
+
+---
+
+## Contribution
+
+Walter-OS welcomes contributions. Before opening a pull request, read
+`CONTRIBUTING.md` for the branch flow, commit format requirements, and
+the Definition of Done checklist. The short version: `feature/<slug>` →
+`dev` → `staging` → `main`. All PRs require conventional commits and a
+passing bats test suite.
+
+Bug reports and feature requests go to GitHub Issues. Please use the issue
+templates — they map to the spec format used internally.
+
+By participating, you agree to follow the `CODE_OF_CONDUCT.md`. The project
+uses a standard Contributor Covenant.
+
+---
+
+## Security
+
+If you discover a security vulnerability, do not open a public GitHub issue.
+Follow the responsible disclosure process in `SECURITY.md` — the document
+includes the preferred contact method and response time commitments.
+
+For supply-chain security in your own Walter-OS installation: the
+`daily-supply-chain-audit` skill (at
+`skills/daily-supply-chain-audit/SKILL.md`) runs a daily diff of MCP server
+tool definitions, verifies commit-hash pins, and queries NVD for new CVEs in
+Claude Code and installed MCP servers. The daily audit hook at
+`hooks/daily-audit-gate.sh` blocks Claude Code sessions if CVSS ≥ 7 findings
+are unresolved.
+
+---
+
+## License
+
+### AGPLv3
+
+Walter-OS is licensed under the **GNU Affero General Public License v3.0 or
+later** (AGPL-3.0-or-later). See `LICENSE` for the full text.
+
+Key implications of the AGPL:
+
+- **Copyleft**: if you build a public network service on Walter-OS, you must
+  open-source your modifications under the same AGPL terms.
+- **No SaaS loophole**: serving Walter-OS over a network counts as distribution.
+  The AGPL closes the "SaaS loophole" present in the GPL.
+- **Free for personal use**: self-hosting for your own use (single operator,
+  private network) does not trigger the copyleft requirement.
+
+### Commercial license
+
+Operators who need to keep their modifications private (closed-source commercial
+derivative) may obtain a commercial license. Contact
+`licensing@xipherlabs.xyz` or see `COMMERCIAL.md` for terms and pricing.
+
+### Brand
+
+Walter-OS is created by **Xipher Labs**. Forkers are encouraged to replace the
+Xipher Labs attribution with their own organization in their fork's README and
+NOTICE file. The name "Walter-OS" may be retained with attribution per the
+`NOTICE` file terms.
+
+---
+
+<div align="center">
+<sub>Walter-OS by Xipher Labs — Build with discipline, ship with confidence.</sub>
+</div>

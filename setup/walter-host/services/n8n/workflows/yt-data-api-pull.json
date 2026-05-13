@@ -1,0 +1,170 @@
+{
+  "name": "YouTube Analytics Pull (yt-data-api-pull)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-yt",
+      "name": "Schedule Trigger (6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "getAll",
+        "channelId": "={{ $env.YT_CHANNEL_ID }}",
+        "returnAll": false,
+        "limit": 50,
+        "options": {}
+      },
+      "id": "youtube-videos",
+      "name": "YouTube Get Recent Videos",
+      "type": "n8n-nodes-base.youtube",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "yt-oauth-cred",
+          "name": "YouTube OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map YouTube analytics response \u2192 analytics_events rows\n// Refs: docs/specs/devrel-analytics-stack.md Decision 4\nconst items = $input.all();\nconst rows = [];\n\nfor (const item of items) {\n  const video = item.json;\n  const contentId = `youtube:${video.id}`;\n  const occurredAt = video.snippet?.publishedAt || new Date().toISOString();\n\n  // View count\n  if (video.statistics?.viewCount) {\n    rows.push({\n      platform: 'youtube',\n      content_id: contentId,\n      event_type: 'view',\n      occurred_at: occurredAt,\n      metric_value: parseInt(video.statistics.viewCount, 10),\n      metadata: JSON.stringify({ title: video.snippet?.title, channel: $env.YT_CHANNEL_ID })\n    });\n  }\n  // Like count\n  if (video.statistics?.likeCount) {\n    rows.push({\n      platform: 'youtube',\n      content_id: contentId,\n      event_type: 'like',\n      occurred_at: occurredAt,\n      metric_value: parseInt(video.statistics.likeCount, 10),\n      metadata: JSON.stringify({ title: video.snippet?.title })\n    });\n  }\n  // Comment count\n  if (video.statistics?.commentCount) {\n    rows.push({\n      platform: 'youtube',\n      content_id: contentId,\n      event_type: 'engagement',\n      occurred_at: occurredAt,\n      metric_value: parseInt(video.statistics.commentCount, 10),\n      metadata: JSON.stringify({ metric: 'comment_count' })\n    });\n  }\n}\n\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "map-yt-to-analytics",
+      "name": "Map \u2192 analytics_events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (occurred_at, platform, content_id, event_type, metric_value, metadata) VALUES ($1::timestamptz, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (platform, content_id, event_type, occurred_at) DO UPDATE SET metric_value = EXCLUDED.metric_value, ingested_at = NOW()",
+        "additionalFields": {
+          "queryParams": "={{ [$json.occurred_at, $json.platform, $json.content_id, $json.event_type, $json.metric_value, $json.metadata] }}"
+        }
+      },
+      "id": "upsert-analytics-events",
+      "name": "Upsert analytics_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "analytics-pg-cred",
+          "name": "Analytics Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "YT pull complete: {{ $items().length }} events upserted",
+        "additionalFields": {}
+      },
+      "id": "telegram-notify-yt",
+      "name": "Telegram Notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-cred",
+          "name": "Walter Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (6h)": {
+      "main": [
+        [
+          {
+            "node": "YouTube Get Recent Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Get Recent Videos": {
+      "main": [
+        [
+          {
+            "node": "Map \u2192 analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map \u2192 analytics_events": {
+      "main": [
+        [
+          {
+            "node": "Upsert analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert analytics_events": {
+      "main": [
+        [
+          {
+            "node": "Telegram Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    "devrel-analytics",
+    "tier-1",
+    "youtube"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part A \u2014 AC-1. Pulls video stats from YouTube Data API v3 every 6h. Prereq: YT_CHANNEL_ID env var + YouTube OAuth2 credential configured in n8n. See docs/specs/devrel-analytics-stack.md."
+}

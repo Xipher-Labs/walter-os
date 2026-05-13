@@ -1,0 +1,44 @@
+# Headscale configuration template
+#
+# IMPORTANT: server_url must be updated with your actual WALTER_DOMAIN.
+# The bootstrap script renders this via envsubst.
+#
+# For the compose-based deployment, this file is mounted read-only into
+# the headscale container at /etc/headscale/config.yaml.
+#
+# Refs: https://github.com/juanfont/headscale/blob/main/config-example.yaml
+
+server_url: https://headscale.example.com
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: false
+
+private_key_path: /var/lib/headscale/private.key
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+ip_prefixes:
+  - 100.64.0.0/10
+
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 24h
+
+disable_check_updates: true
+ephemeral_node_inactivity_timeout: 30m
+node_update_check_interval: 10s
+
+db_type: sqlite3
+db_path: /var/lib/headscale/db.sqlite
+
+acme_url: https://acme-v02.api.letsencrypt.org/directory
+acme_email: ""
+tls_letsencrypt_cache_dir: /var/lib/headscale/cache
+
+log:
+  level: info

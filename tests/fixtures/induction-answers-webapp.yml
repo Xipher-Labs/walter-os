@@ -1,0 +1,12 @@
+# Fixture: project-induction non-interactive answers (webapp type)
+# Used by tests/agents/project-induction.bats (R12 — epic label kind bug)
+
+project_name: webapp-test
+project_type: webapp
+description: "A webapp project for testing epic linking via description prefix"
+stack: "Next.js 15 + Supabase + Vercel"
+non_negotiable_rules: "All data must be encrypted at rest"
+critical_integrations: "Supabase, Vercel"
+success_kpis: "100 DAU within 3 months, < 200ms p95 latency"
+phi_data: false
+financial_data: false

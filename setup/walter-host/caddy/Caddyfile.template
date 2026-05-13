@@ -1,0 +1,22 @@
+# Caddyfile.template — Walter-OS reverse proxy
+# This file uses ${WALTER_DOMAIN} placeholders. Substitute with envsubst
+# before deploying: envsubst < Caddyfile.template > /etc/caddy/Caddyfile
+#
+# DO NOT hardcode operator domain names in this file.
+
+hermes.${WALTER_DOMAIN} {
+    # Default route → dashboard (port 9119, web UI)
+    reverse_proxy localhost:9119
+
+    # /health and /v1/* → gateway (port 8642, OpenAI-compatible API + healthcheck)
+    # Kuma monitor at https://hermes.${WALTER_DOMAIN}/health hits the gateway,
+    # matching the Docker healthcheck (curl http://127.0.0.1:8642/health).
+    @gateway path /health /v1/*
+    handle @gateway {
+        reverse_proxy localhost:8642
+    }
+
+    tls {
+        on_demand
+    }
+}

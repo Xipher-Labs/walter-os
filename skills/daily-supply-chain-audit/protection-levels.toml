@@ -1,0 +1,33 @@
+# Walter-OS Protection Level Bundles
+# Single source of truth for protection level definitions.
+# Consumed by: scripts/parse-manifest.py, install.sh, audit.sh
+#
+# Auto-assignment rules (applied when no walter-os.toml manifest is found):
+#   ~/work/*  or remote matches github.com:<your-work-org>/*  -> production
+#   ~/Projects-Personal/*                                -> staging
+#   Repo name contains "hackathon" or type = "hackathon" -> sandbox
+#   Everything else                                      -> staging (safe default)
+
+[experimental]
+minReleaseAge = "0d"
+pinStrategy   = "any"
+auditGate     = "info"
+review        = "self"
+
+[sandbox]
+minReleaseAge = "7d"
+pinStrategy   = "minor"
+auditGate     = "warn"
+review        = "self"
+
+[staging]
+minReleaseAge = "14d"
+pinStrategy   = "exact"
+auditGate     = "high"
+review        = "reviewer"
+
+[production]
+minReleaseAge = "21d"
+pinStrategy   = "exact"
+auditGate     = "high+drift"
+review        = "reviewer+security-auditor"

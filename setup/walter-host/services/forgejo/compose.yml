@@ -1,0 +1,45 @@
+services:
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:15
+    container_name: forgejo
+    restart: unless-stopped
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: forgejo-db:5432
+      FORGEJO__database__NAME: forgejo
+      FORGEJO__database__USER: forgejo
+      FORGEJO__database__PASSWD: ${FORGEJO_DB_PASS:?required — set in .env or fetch from Infisical (walter-os/dev/FORGEJO_DB_PASS)}
+      FORGEJO__server__DOMAIN: git.${WALTER_DOMAIN}
+      FORGEJO__server__ROOT_URL: https://git.${WALTER_DOMAIN}/
+      FORGEJO__server__SSH_DOMAIN: git.${WALTER_DOMAIN}
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - forgejo-data:/data
+    depends_on:
+      forgejo-db:
+        condition: service_healthy
+
+  forgejo-db:
+    image: postgres:16-alpine
+    container_name: forgejo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forgejo
+      POSTGRES_PASSWORD: ${FORGEJO_DB_PASS:?required — set in .env or fetch from Infisical (walter-os/dev/FORGEJO_DB_PASS)}
+      POSTGRES_DB: forgejo
+    volumes:
+      - forgejo-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgejo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  forgejo-data:
+  forgejo-db-data:

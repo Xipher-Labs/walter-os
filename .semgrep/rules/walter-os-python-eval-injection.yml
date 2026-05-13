@@ -1,0 +1,60 @@
+rules:
+  - id: walter-os-python-eval-injection
+    languages: [bash]
+    severity: ERROR
+    message: >-
+      Shell variable interpolated directly into `python3 -c` argument.
+      This is a code-injection sink: a value containing single quotes,
+      double quotes, or newlines breaks out of the Python string literal
+      and executes attacker-controlled Python in the agent context.
+      Walter-OS has shipped this bug twice (PR #27 review: lessons.sh and
+      run.sh). Fix: pass the value via stdin
+      (`printf '%s' "$VAR" | python3 -c '... sys.stdin.read() ...'`) or
+      via an environment variable read with `os.environ['VAR']`.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://owasp.org/Top10/A03_2021-Injection/
+        - https://cwe.mitre.org/data/definitions/94.html
+      walter-os-history: |
+        Two prior incidents in Walter-OS used this exact anti-pattern:
+        - scripts/agents/lib/lessons.sh (fixed PR #27)
+        - scripts/agents/run.sh (fixed PR #27)
+    patterns:
+      # Match python3 -c "...$VAR..." where the argument string ITSELF
+      # contains a shell variable expansion. We use [^"']* / [^']* to
+      # constrain the body to a single quoted literal so that variables
+      # AFTER the closing quote (positional args, which are safe) do
+      # not trigger the rule.
+      - pattern-either:
+          - pattern-regex: |
+              python3?\s+-c\s+"[^"]*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[^"]*"
+          - pattern-regex: |
+              python3?\s+-c\s+'[^']*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[^']*'
+      # Allow when the python literal references sys.stdin or os.environ
+      # — those are the safe ingestion paths. (When a script pipes via
+      # stdin with `printf '%s' "$VAR" | python3 -c '...'`, the $VAR
+      # is in the printf, not in the python -c argument, so this rule
+      # won't match anyway.)
+      - pattern-not-regex: |
+          python3?\s+-c\s+["'][^"']*(sys\.stdin|os\.environ)[^"']*["']
+
+  - id: walter-os-python-triple-quote-interpolation
+    languages: [bash]
+    severity: ERROR
+    message: >-
+      Triple-quoted Python string with interpolated shell variable. Even
+      triple quotes do not save you: a single `'''` inside the value
+      closes the literal, and the remainder is interpreted as Python.
+      Walter-OS lessons.sh was vulnerable to exactly this. Pipe the
+      value via stdin or pass via env var.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      walter-os-history: |
+        scripts/agents/lib/lessons.sh used `python3 -c "...'''$VAR'''..."`
+        which an attacker-controlled lesson body could escape.
+    pattern-regex: |
+      python3?\s+-c\s+["'].*('''|""")\$\{?[A-Za-z_][A-Za-z0-9_]*\}?('''|""").*["']

@@ -1,0 +1,62 @@
+# Walter Council Control Tower — standalone deployment
+#
+# NOTE: As of Walter-OS v0.2.0, this service is now inlined in the root
+# compose.yml for all-in-one deployments. This standalone file is retained
+# for teams that want to run Control Tower independently of the full stack.
+# For the all-in-one stack, use: docker compose up -d control-tower
+#
+# Exposes port 3000 internally — access via Tailscale only.
+# Cloudflare Tunnel routes tower.${WALTER_DOMAIN} → localhost:3000.
+# Public exposure is blocked: CF Access restricts to Tailscale IPs.
+
+services:
+  control-tower:
+    image: walter-control-tower:latest
+    container_name: control-tower
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      # LiteLLM gateway
+      LITELLM_BASE_URL: "${LITELLM_BASE_URL}"
+      LITELLM_API_KEY: "${LITELLM_API_KEY}"
+      # Plane
+      PLANE_API_URL: "${PLANE_API_URL}"
+      PLANE_API_TOKEN: "${PLANE_API_TOKEN}"
+      PLANE_WORKSPACE_SLUG: "${PLANE_WORKSPACE_SLUG}"
+      PLANE_PROJECT_ID: "${PLANE_PROJECT_ID}"
+      # Grafana
+      GRAFANA_URL: "${GRAFANA_URL}"
+      GRAFANA_SA_TOKEN: "${GRAFANA_SA_TOKEN}"
+      # Control Tower admin auth
+      CONTROL_TOWER_ADMIN_TOKEN: "${CONTROL_TOWER_ADMIN_TOKEN:?CONTROL_TOWER_ADMIN_TOKEN is required}"
+      CONTROL_TOWER_AUTH_DISABLED: "${CONTROL_TOWER_AUTH_DISABLED:-false}"
+      # Tailscale access enforcement
+      TAILSCALE_ENFORCE: "${TAILSCALE_ENFORCE:-true}"
+      TAILSCALE_CGNAT_CIDR: "${TAILSCALE_CGNAT_CIDR:-100.64.0.0/10}"
+    volumes:
+      # Walter-council data (metrics, heartbeats) — read-only
+      - /var/lib/walter-council:/var/lib/walter-council:ro
+      # Walter-council logs (events, consensus-votes, watchdog) — read-only
+      - /var/log/walter-council:/var/log/walter-council:ro
+      # Operator config (mode.json, trust-tiers.yml) — read-only
+      # The mode toggle calls walter-os CLI via server-side exec, not direct file write
+      - /root/.config/walter-os:/root/.config/walter-os:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - walter-internal
+
+networks:
+  walter-internal:
+    external: true
+    name: walter-internal

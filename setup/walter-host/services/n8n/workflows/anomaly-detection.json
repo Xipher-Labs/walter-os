@@ -1,0 +1,165 @@
+{
+  "name": "DevRel Anomaly Detection (anomaly-detection)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-anomaly",
+      "name": "Schedule Trigger (1h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Anomaly detection: 3\u03c3 rule over 30-day baseline\n-- For each platform, compute last-hour engagement vs 30d rolling average + stddev\n-- AC-15: engagement > baseline + 3*stddev triggers alert\nSELECT\n  ae.platform,\n  ae.content_id,\n  COALESCE(cp.title, ae.content_id)  AS title,\n  COALESCE(cp.url, '')               AS url,\n  SUM(ae.metric_value)               AS last_hour_engagement,\n  stats.avg_engagement,\n  stats.stddev_engagement,\n  stats.avg_engagement + 3 * COALESCE(stats.stddev_engagement, 1) AS threshold_3sigma\nFROM analytics_events ae\nLEFT JOIN content_pieces cp ON cp.id = ae.content_id\nLEFT JOIN (\n  -- 30-day baseline: hourly engagement aggregates\n  SELECT\n    platform,\n    content_id,\n    AVG(hourly_sum)    AS avg_engagement,\n    STDDEV(hourly_sum) AS stddev_engagement\n  FROM (\n    SELECT\n      platform, content_id,\n      date_trunc('hour', occurred_at) AS hour,\n      SUM(metric_value) AS hourly_sum\n    FROM analytics_events\n    WHERE occurred_at BETWEEN NOW() - INTERVAL '30 days' AND NOW() - INTERVAL '1 hour'\n      AND event_type IN ('engagement', 'like', 'click', 'retweet', 'impression')\n    GROUP BY platform, content_id, date_trunc('hour', occurred_at)\n  ) hourly\n  GROUP BY platform, content_id\n  HAVING COUNT(hourly_sum) >= 24\n) stats ON stats.platform = ae.platform AND stats.content_id = ae.content_id\nWHERE ae.occurred_at >= NOW() - INTERVAL '1 hour'\n  AND ae.event_type IN ('engagement', 'like', 'click', 'retweet', 'impression')\nGROUP BY ae.platform, ae.content_id, cp.title, cp.url,\n  stats.avg_engagement, stats.stddev_engagement\nHAVING SUM(ae.metric_value) > stats.avg_engagement + 3 * COALESCE(stats.stddev_engagement, 1)\nORDER BY last_hour_engagement DESC\nLIMIT 5",
+        "additionalFields": {}
+      },
+      "id": "anomaly-query",
+      "name": "Detect Anomalies (3\u03c3)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "analytics-pg-cred",
+          "name": "Analytics Postgres"
+        }
+      },
+      "notes": "3\u03c3 anomaly detection: content with last-hour engagement > 30-day baseline + 3*stddev. Returns top 5 anomalies. Uses analytics_events table directly (not materialized view for freshness)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $items().length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-anomalies",
+      "name": "Any Anomalies?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format anomalies as Telegram alert messages\n// Refs: docs/specs/devrel-analytics-stack.md (AC-15)\n// Pattern: alert_emit info 'anomaly: <content_piece> 5x baseline'\nconst anomalies = $input.all();\nconst messages = anomalies.map(item => {\n  const a = item.json;\n  const title = a.title || a.content_id;\n  const platform = (a.platform || '').toUpperCase();\n  const engagement = parseInt(a.last_hour_engagement || 0);\n  const baseline = parseFloat(a.avg_engagement || 0);\n  const multiple = baseline > 0 ? (engagement / baseline).toFixed(1) : 'N/A';\n  const url = a.url ? `\\n\ud83d\udd17 ${a.url}` : '';\n\n  return {\n    alert_text: `\ud83d\udea8 [DevRel Anomaly] ${platform}: \"${title}\"\\n\ud83d\udcc8 ${engagement} engagements (${multiple}x baseline)${url}`,\n    content_id: a.content_id,\n    platform: a.platform,\n    multiple\n  };\n});\n\nreturn messages.map(m => ({ json: m }));"
+      },
+      "id": "format-alert",
+      "name": "Format Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.WALTER_TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.alert_text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-anomaly-alert",
+      "name": "Telegram Anomaly Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-cred",
+          "name": "Walter Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Sends alert via Phase F alerts pipeline (Telegram bot). Alert format: 'anomaly: <content_piece> Nx baseline' as per spec AC-15."
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (1h)": {
+      "main": [
+        [
+          {
+            "node": "Detect Anomalies (3\u03c3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Anomalies (3\u03c3)": {
+      "main": [
+        [
+          {
+            "node": "Any Anomalies?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Anomalies?": {
+      "main": [
+        [
+          {
+            "node": "Format Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Format Alert": {
+      "main": [
+        [
+          {
+            "node": "Telegram Anomaly Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    "devrel-analytics",
+    "anomaly-detection",
+    "alerts"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part D \u2014 AC-15. Runs every 1h. Queries analytics_events for content with engagement > 30-day baseline + 3\u03c3 (3-sigma rule). Fires Telegram alert for each anomaly detected. Reuses Phase F alerts pipeline (Telegram bot). Activate after Tier 1 data starts populating (need 7+ days of baseline). See docs/specs/devrel-analytics-stack.md."
+}

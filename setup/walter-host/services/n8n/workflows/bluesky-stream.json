@@ -1,0 +1,150 @@
+{
+  "name": "Bluesky Engagement Pull (bluesky-stream)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-bsky",
+      "name": "Schedule Trigger (1h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://bsky.social/xrpc/app.bsky.actor.getAuthorFeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "actor",
+              "value": "={{ $env.BSKY_HANDLE }}"
+            },
+            {
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "filter",
+              "value": "posts_no_replies"
+            }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "bsky-get-feed",
+      "name": "Bluesky AT Protocol \u2014 Author Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ],
+      "notes": "Uses Bluesky AT Protocol public API (no auth needed for public profiles). For private posts, set Authorization header with session token from app.bsky.server.createSession.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bsky-api-cred",
+          "name": "Bluesky Session Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map Bluesky feed \u2192 analytics_events rows\n// AT Protocol feed item: { post: { uri, cid, record, replyCount, repostCount, likeCount, indexedAt } }\n// Refs: docs/specs/devrel-analytics-stack.md Decision 4\nconst feed = $json.feed || [];\nconst rows = [];\n\nfor (const item of feed) {\n  const post = item.post;\n  if (!post) continue;\n\n  // Extract post ID from AT URI (at://did/app.bsky.feed.post/rkey)\n  const uri = post.uri || '';\n  const rkey = uri.split('/').pop() || post.cid;\n  const contentId = `bluesky:${rkey}`;\n  const occurredAt = post.indexedAt || new Date().toISOString();\n  const text = post.record?.text || '';\n\n  if (post.likeCount !== undefined) {\n    rows.push({\n      platform: 'bluesky',\n      content_id: contentId,\n      event_type: 'like',\n      occurred_at: occurredAt,\n      metric_value: post.likeCount,\n      metadata: JSON.stringify({ uri, text: text.substring(0, 200) })\n    });\n  }\n  if (post.repostCount !== undefined) {\n    rows.push({\n      platform: 'bluesky',\n      content_id: contentId,\n      event_type: 'engagement',\n      occurred_at: occurredAt,\n      metric_value: post.repostCount,\n      metadata: JSON.stringify({ uri, metric: 'repost_count' })\n    });\n  }\n  if (post.replyCount !== undefined) {\n    rows.push({\n      platform: 'bluesky',\n      content_id: contentId,\n      event_type: 'engagement',\n      occurred_at: occurredAt,\n      metric_value: post.replyCount,\n      metadata: JSON.stringify({ uri, metric: 'reply_count' })\n    });\n  }\n}\n\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "map-bsky-to-analytics",
+      "name": "Map \u2192 analytics_events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (occurred_at, platform, content_id, event_type, metric_value, metadata) VALUES ($1::timestamptz, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (platform, content_id, event_type, occurred_at) DO UPDATE SET metric_value = EXCLUDED.metric_value, ingested_at = NOW()",
+        "additionalFields": {
+          "queryParams": "={{ [$json.occurred_at, $json.platform, $json.content_id, $json.event_type, $json.metric_value, $json.metadata] }}"
+        }
+      },
+      "id": "upsert-bsky-events",
+      "name": "Upsert analytics_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "analytics-pg-cred",
+          "name": "Analytics Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (1h)": {
+      "main": [
+        [
+          {
+            "node": "Bluesky AT Protocol \u2014 Author Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bluesky AT Protocol \u2014 Author Feed": {
+      "main": [
+        [
+          {
+            "node": "Map \u2192 analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map \u2192 analytics_events": {
+      "main": [
+        [
+          {
+            "node": "Upsert analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    "devrel-analytics",
+    "tier-1",
+    "bluesky",
+    "atproto"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part A \u2014 AC-4. Polls Bluesky AT Protocol author feed every 1h for post engagement (likes, reposts, replies). Free API, no paid tier needed. Prereq: BSKY_HANDLE env var. Auth optional for public profiles."
+}

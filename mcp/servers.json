@@ -1,0 +1,378 @@
+{
+  "$schema": "https://walter-os.local/mcp-servers.schema.json",
+  "version": "2.0.0",
+  "comment": "Canonical MCP server registry for Walter-OS. Verified against npm/pypi 2026-05-04. The install.sh script generates per-tool configs (~/.claude/settings.json mcpServers + ~/.codex/config.toml) FROM this file. Edit here, not in the generated files. NEW: github + linear are remote MCPs (HTTP/SSE) using vendor-hosted official servers.",
+  "servers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official GitHub MCP (remote HTTP). Uses GitHub Copilot infrastructure. Replaces the deprecated @modelcontextprotocol/server-github npm package.",
+      "load": "default",
+      "disabled": true
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@2026.1.14",
+        "/Users/${USER}/work",
+        "/Users/${USER}/Projects-Personal",
+        "/Users/${USER}/personal"
+      ],
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-anthropic",
+      "comment": "Read-write access to project directories. Restrict scopes above.",
+      "load": "default"
+    },
+    "slack": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-slack@2025.4.25"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_TEAM_ID": "${SLACK_TEAM_ID}"
+      },
+      "contexts": [
+        "work"
+      ],
+      "trust": "official-anthropic",
+      "load": "default"
+    },
+    "linear": {
+      "type": "sse",
+      "url": "https://mcp.linear.app/sse",
+      "contexts": [
+        "work"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official Linear MCP (remote SSE, OAuth-based). First connect opens browser to authorize. Replaces @tacticlaunch/mcp-linear community package.",
+      "load": "default",
+      "disabled": true
+    },
+    "plane": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@makeplane/plane-mcp-server@0.1.5"
+      ],
+      "env": {
+        "PLANE_API_TOKEN": "${PLANE_API_TOKEN}",
+        "PLANE_BASE_URL": "${PLANE_BASE_URL}"
+      },
+      "contexts": [
+        "projects-personal"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official from Plane (publisher: plane-engineering). Self-hosted Plane on Walter-VM.",
+      "load": "default",
+      "disabled": false
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@0.7.0"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      },
+      "contexts": [
+        "projects-personal"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official from Supabase. For personal-project Postgres + auth + storage.",
+      "load": "default"
+    },
+    "gmail": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@gongrzhe/server-gmail-autoauth-mcp@1.1.11"
+      ],
+      "env": {
+        "GMAIL_CREDENTIALS_PATH": "${HOME}/.config/walter-os/gmail-credentials.json",
+        "GMAIL_TOKEN_PATH": "${HOME}/.config/walter-os/gmail-token.json"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "community-popular",
+      "comment": "Auto-OAuth flow on first use. Place Google Cloud OAuth client JSON at the credentials path.",
+      "load": "default"
+    },
+    "google_calendar": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@cocal/google-calendar-mcp@2.6.1"
+      ],
+      "env": {
+        "GOOGLE_OAUTH_CREDENTIALS": "${HOME}/.config/walter-os/google-oauth-credentials.json"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "community-active",
+      "load": "default"
+    },
+    "google_drive": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-google-drive@1.6.2"
+      ],
+      "env": {
+        "GOOGLE_OAUTH_CREDENTIALS": "${HOME}/.config/walter-os/google-oauth-credentials.json"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "community-active",
+      "load": "default"
+    },
+    "notion": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@notionhq/notion-mcp-server@2.2.1"
+      ],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\":\"Bearer ${NOTION_TOKEN}\",\"Notion-Version\":\"2022-06-28\"}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official from Notion. Token from notion.so/my-integrations.",
+      "load": "default"
+    },
+    "elevenlabs": {
+      "command": "uvx",
+      "args": [
+        "elevenlabs-mcp==0.9.1"
+      ],
+      "env": {
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official from ElevenLabs. Python package via uvx (NOT npm). Pinned to ==0.9.1; bump deliberately after `daily-supply-chain-audit` confirms the new release is >= minReleaseAge old.",
+      "load": "default"
+    },
+    "bitwarden": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bitwarden/mcp-server@2026.2.0"
+      ],
+      "env": {
+        "BW_SESSION": "${BW_SESSION}",
+        "BW_SERVER": "${BW_SERVER}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official from Bitwarden. Compatible with self-hosted Vaultwarden via BW_SERVER. Run 'bw login' + 'bw unlock' to get BW_SESSION.",
+      "load": "manual",
+      "disabled": true
+    },
+    "grafana": {
+      "command": "mcp-grafana",
+      "args": [],
+      "env": {
+        "GRAFANA_URL": "${GRAFANA_URL}",
+        "GRAFANA_API_KEY": "${GRAFANA_API_KEY}"
+      },
+      "contexts": [
+        "work"
+      ],
+      "trust": "official-vendor",
+      "comment": "Official from grafana/mcp-grafana (Go binary). Install: brew install grafana/grafana/mcp-grafana. Replaces @leval/mcp-grafana community package.",
+      "load": "default"
+    },
+    "sentry": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@sentry/mcp-server@0.33.0"
+      ],
+      "env": {
+        "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}",
+        "SENTRY_ORG": "${SENTRY_ORG}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "comment": "Read errors, search issues, resolve/ignore. Read-only by default — no deletion of issues.",
+      "load": "default"
+    },
+    "stripe": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@stripe/mcp@0.3.3"
+      ],
+      "env": {
+        "STRIPE_API_KEY": "${STRIPE_API_KEY}"
+      },
+      "contexts": [
+        "projects-personal"
+      ],
+      "trust": "official-vendor",
+      "money": true,
+      "comment": "Stripe payments for personal projects. Use TEST mode key (sk_test_...) by default. LIVE mode key only via separate config — operator confirms each LIVE action.",
+      "load": "manual"
+    },
+    "cloudflare": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@cloudflare/mcp-server-cloudflare@0.2.0"
+      ],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "${CLOUDFLARE_API_TOKEN}",
+        "CLOUDFLARE_ACCOUNT_ID": "${CLOUDFLARE_ACCOUNT_ID}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "destructive": true,
+      "comment": "DNS, Workers, R2, Zero Trust. DNS changes can break sites — operator confirms each change. Scope token to specific zones.",
+      "load": "manual"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.71"
+      ],
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-vendor",
+      "comment": "E2E tests + scraping + screenshots. Microsoft official. No env required — uses locally installed browsers (run 'npx playwright install' once).",
+      "load": "default"
+    },
+    "sequential_thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking@2025.12.18"
+      ],
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-anthropic",
+      "comment": "Chain-of-thought scaffolding for complex problems. Free, no env needed.",
+      "load": "default"
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory@2026.1.26"
+      ],
+      "env": {
+        "MEMORY_FILE_PATH": "${HOME}/.config/walter-os/mcp-memory.json"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-anthropic",
+      "comment": "Knowledge-graph memory across sessions. Complements the file-based memory in ~/.claude/projects/.../memory/ — that one is curated by the agent, this one is automatic.",
+      "load": "default"
+    },
+    "brave_search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search@0.6.2"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "contexts": [
+        "all"
+      ],
+      "trust": "official-anthropic",
+      "comment": "Web search via Brave (privacy-respecting, free tier 2k queries/mo). Alternative when WebSearch not available.",
+      "load": "default",
+      "disabled": false
+    },
+    "penpot": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@penpot/mcp@2.14.1"
+      ],
+      "env": {
+        "PENPOT_URL": "${PENPOT_URL}",
+        "PENPOT_USERNAME": "${PENPOT_USERNAME}",
+        "PENPOT_PASSWORD": "${PENPOT_PASSWORD}"
+      },
+      "contexts": [
+        "projects-personal"
+      ],
+      "trust": "official-vendor",
+      "comment": "Open-source Figma alternative. Self-hostable on Walter-VM. Read/edit design files, export assets, manage components.",
+      "load": "default"
+    },
+    "maestro": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "paisanos-maestro-mcp@0.2.1"
+      ],
+      "contexts": [
+        "projects-personal"
+      ],
+      "trust": "community",
+      "comment": "Maestro YAML flows for mobile (iOS/Android) AND web UI testing. Requires Maestro CLI installed locally (bootstrap.sh handles via brew tap mobile-dev-inc). Complements Playwright — use Maestro for E2E user-journey-style tests, Playwright for fine-grained DOM/network control + visual regression."
+    }
+  },
+  "context_routing": {
+    "all": "Loaded regardless of cwd",
+    "work": "Loaded only when cwd matches ~/work/* or remote is ${WALTER_WORK_GITHUB_ORG}",
+    "projects-personal": "Loaded only when cwd matches ~/Projects-Personal/*",
+    "personal": "Loaded only when cwd matches ~/personal/*"
+  },
+  "trust_levels": {
+    "official-anthropic": "Maintained by Anthropic",
+    "official-vendor": "Maintained by the service vendor (Notion, Plane, Supabase, ElevenLabs, Bitwarden)",
+    "community-very-active": "Community-maintained, frequent releases (telegram has 30+ versions)",
+    "community-popular": "Community-maintained, widely used (gmail has high download count)",
+    "community-active": "Community-maintained, recent activity",
+    "community": "Community-maintained, fewer signals — verify before sensitive use"
+  },
+  "verified_at": "2026-05-04",
+  "verification_method": "npm view <pkg> version + npm search for canonical names",
+  "deferred": {
+    "comment": "These services were on the original wish list but lack a trustworthy MCP server as of verification date. Revisit periodically.",
+    "mattermost": "Only @dakatan/mcp-mattermost@0.0.5 available (single-version, immature). Use REST API directly for now.",
+    "monday": "Only @pipeworx/mcp-monday@0.1.0 available (single-version). Defer.",
+    "postman": "mcp-postman is just a Newman runner, not a full MCP. Use Postman directly.",
+    "vercel": "Dropped MCP (community @robinson_ai_systems/vercel-mcp@1.0.1 not maintained — single version, last updated long ago). Use vercel CLI directly + the vercel-cli skill (skills/vercel-cli/SKILL.md).",
+    "postgres": "Dropped MCP — only 7 GitHub stars, single maintainer. Use psql CLI directly + skills/postgres-cli/SKILL.md.",
+    "hetzner": "Dropped MCP — only 1 star, very young. Use hcloud CLI (official, brew installable) + skills/hcloud-cli/SKILL.md.",
+    "telegram": "Dropped MCP — @overpod/mcp-telegram@1.36.0 ran in MTProto user-bot mode = full read/write access to ALL personal chats. Too much surface for an agent. Use Bot API directly (bot only sees chats it's been added to) via skills/telegram-bot-cli/SKILL.md.",
+    "obsidian": "Dropped MCP — community @fazer-ai/mcp-obsidian@1.2.0 needs the Local REST API plugin running 24/7. With Forgejo-synced vault, the agent reads/writes via filesystem MCP directly on the Obsidian folder. Simpler.",
+    "forgejo": "Dropped MCP — community forgejo-mcp@1.2.0. Forgejo ships an official `tea` CLI (Gitea-compatible). Use that + skills/forgejo-cli/SKILL.md.",
+    "railway": "Dropped MCP — community railway-mcp@2.2.0. Railway ships an excellent official CLI. Use that + skills/railway-cli/SKILL.md."
+  }
+}

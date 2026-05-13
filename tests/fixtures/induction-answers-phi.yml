@@ -1,0 +1,12 @@
+# Fixture: project-induction with PHI data flag
+# Used by tests/agents/project-induction.bats (T-23) — PHI compliance path
+
+project_name: phi-records-test
+project_type: service
+description: "A medical records service handling patient health data"
+stack: "React Native + Solana + IPFS"
+non_negotiable_rules: "PHI never leaves local environment; all medical data encrypted"
+critical_integrations: "Ollama (local LLM), Solana, IPFS/Arweave"
+success_kpis: "100% PHI stays local, zero data leaks"
+phi_data: true
+financial_data: false

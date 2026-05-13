@@ -1,0 +1,57 @@
+# AGENTS.md — Projects-Personal Context
+
+<!-- TODO: Fill in your active personal software projects.
+     This file is loaded by Walter-OS when your cwd matches your personal
+     projects directory. Delete comment blocks as you fill in real values. -->
+
+## Mode
+
+Higher autonomy than work context. Auto-PR enabled after review iterations
+converge. Wrong-but-fast is acceptable on branches that are not staging or main.
+
+Hard limits stay the same: branch flow, security gates, never auto-merge.
+
+## Active projects
+
+<!-- TODO: Add your active personal projects below. For each project, describe:
+     - What it is
+     - Its tech stack
+     - Any regulatory context relevant to your jurisdiction
+     - Any special agent rules (e.g. "never auto-deploy this one") -->
+
+### TODO: Project 1
+
+[TODO: one-line description]
+
+Stack: TODO
+
+### TODO: Project 2
+
+[TODO: one-line description]
+
+Stack: TODO
+
+## Issue tracker integration
+
+Issue tracker: TODO
+Spec location: `docs/specs/<slug>.md` (committed to each project repo)
+
+## Toolchain shortcuts
+
+<!-- TODO: Override if your defaults differ from Walter-OS generic templates. -->
+- Landing pages: Astro (static) or Next.js App Router (dynamic)
+- Database: Supabase (managed Postgres + auth + realtime + storage)
+- Deploy: Vercel (frontend), Fly.io or Railway (stateful services)
+- Analytics: Plausible (self-hosted)
+- Auth: Supabase Auth or Clerk
+
+## Skill loading (this context)
+
+Auto-loaded in addition to global skills:
+- `hackathon-spinup`
+- `brand-creation`
+- `regulatory-research-international`
+- `landing-page-fast`
+- `frontend-quality`
+- `data-migration-safety`
+- `web-security-baseline`

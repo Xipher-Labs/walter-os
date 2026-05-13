@@ -1,0 +1,45 @@
+name: secret-scan
+
+# Runs gitleaks on push and pull requests to detect secrets before they
+# reach history. Uses .gitleaks.toml at repo root for allowlist configuration.
+# All uses: lines are pinned to 40-char commit SHAs per AC-10.
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - staging
+      - 'feat/**'
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - dev
+      - staging
+
+# The gitleaks-action queries `GET /repos/{owner}/{repo}/pulls/{n}/commits`
+# on pull_request events; without pull-requests: read it 403s
+# ("Resource not accessible by integration") and the job fails.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    name: gitleaks secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        # actions/checkout v4
+        with:
+          fetch-depth: 0   # full history so gitleaks detect covers all commits
+
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        # gitleaks/gitleaks-action v2.3.9
+        # On PRs, the action runs `gitleaks protect --staged` automatically
+        # when GITHUB_EVENT_NAME == pull_request.
+        # On push, it runs `gitleaks detect` against the full commit range.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml

@@ -1,0 +1,37 @@
+# chatgpt-codex-router — Thin HTTP bridge wrapping Codex CLI as OpenAI-compatible API.
+# Joins the same Docker network as LiteLLM so it's reachable by hostname.
+# Auth state is bind-mounted from the host's ~/.codex directory (walter user).
+# See docs/runbooks/chatgpt-codex-router.md for operational procedures.
+
+services:
+  chatgpt-codex-router:
+    build: .
+    container_name: chatgpt-codex-router
+    restart: unless-stopped
+    environment:
+      PORT: "1456"
+      HOME: /home/appuser
+      # CCR_APIKEY: required when exposing to LiteLLM network.
+      # Generate: openssl rand -hex 32
+      CCR_APIKEY: ${CCR_APIKEY:?CCR_APIKEY must be set — generate with: openssl rand -hex 32}
+    volumes:
+      # Bind-mount host's codex auth dir so token refresh survives restarts.
+      # One-time login: docker exec -it chatgpt-codex-router codex login
+      - ${HOME}/.codex:/home/appuser/.codex:rw
+    ports:
+      # Expose to localhost for operator debugging via ssh -L
+      - "127.0.0.1:1456:1456"
+    networks:
+      - litellm_net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1456/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  # Reuse the existing LiteLLM Docker network by its real name.
+  litellm_net:
+    external: true
+    name: litellm_default

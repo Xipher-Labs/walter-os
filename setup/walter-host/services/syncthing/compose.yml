@@ -1,0 +1,50 @@
+# Syncthing — always-on P2P file-sync hub on Walter-VM.
+#
+# Role: hub. Other devices (Mac laptop, future M2 Ultra desktop, phone)
+# connect TO this hub. The hub is online 24/7, so devices don't need to
+# overlap online time. Each device picks which folders to share with hub.
+#
+# Folders managed here:
+#   /mnt/walter-vm-data/sync/obsidian-vault   — operator's Obsidian vault
+#   /mnt/walter-vm-data/sync/projects-personal — selective dev projects
+#   /mnt/walter-vm-data/sync/personal          — finanzas/salud/journaling notes
+#   /mnt/walter-vm-data/sync/screenshots       — Shottr/CleanShot drop folder
+#
+# Web UI: https://sync.${WALTER_DOMAIN} (CF Tunnel + CF Access, Google IdP).
+# Listen device port 22000/tcp+udp + 21027/udp (LAN discovery — disabled
+# since this is internet-facing and we use explicit device IDs).
+#
+# Persistence: named volume syncthing_config + bind mount /mnt/walter-vm-data/sync.
+
+services:
+  syncthing:
+    image: lscr.io/linuxserver/syncthing:2.0.16
+    container_name: syncthing
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    ports:
+      # Web UI — only on localhost; cloudflared forwards from sync.${WALTER_DOMAIN}
+      - "127.0.0.1:8384:8384"
+      # Listening port for device-to-device sync — exposed to internet.
+      # Devices connect via the tunnel hostname or directly via VM's public IP.
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+      # NO 21027/udp — disabled because LAN discovery doesn't work for
+      # remote devices. Use explicit device IDs instead.
+    volumes:
+      - syncthing_config:/config
+      - /mnt/walter-vm-data/sync:/sync:rw
+    # /rest/system/ping requires authentication (now that GUI auth is set);
+    # /rest/noauth/health is the bypass-friendly probe for liveness checks.
+    # See https://docs.syncthing.net/rest/system-ping-get.html
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8384/rest/noauth/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  syncthing_config:

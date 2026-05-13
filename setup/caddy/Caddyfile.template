@@ -1,0 +1,165 @@
+# Caddyfile.template — Walter-OS reverse proxy configuration
+#
+# This file uses ${VAR} syntax compatible with envsubst.
+# The bootstrap script renders it: envsubst < Caddyfile.template > Caddyfile
+#
+# All services are on the walter_net Docker network and reachable
+# by container name. Caddy is the only publicly-facing service.
+#
+# TLS: Automatic via ACME (Let's Encrypt or ZeroSSL). Ensure:
+#   - Ports 80 and 443 are open on the host
+#   - DNS A records for all subdomains point to this server
+#   - Or use a wildcard DNS entry: *.${WALTER_DOMAIN} → server IP
+#
+# Tailscale note: if serving only on Tailscale, replace the site
+# addresses with `https://<service>.${WALTER_DOMAIN}` and point
+# Tailscale DNS to this host. ACME still works via HTTP-01 challenge
+# if port 80 is reachable, or use DNS-01 challenge for internal-only.
+#
+# Refs: docs/specs/phase-w-1-docker-compose.md
+# Refs: setup/SERVICES-INVENTORY.md
+
+# ---------------------------------------------------------------------------
+# Global options
+# ---------------------------------------------------------------------------
+
+{
+  email ${WALTER_ADMIN_EMAIL}
+  # Use staging ACME for testing — remove for production
+  # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# ---------------------------------------------------------------------------
+# CORE SERVICES
+# ---------------------------------------------------------------------------
+
+# Plane — project management
+plane.${WALTER_DOMAIN} {
+  reverse_proxy plane-proxy:80
+}
+
+# Forgejo — git hosting
+git.${WALTER_DOMAIN} {
+  reverse_proxy forgejo:3000
+}
+
+# Infisical — secrets manager
+secrets.${WALTER_DOMAIN} {
+  reverse_proxy infisical:8080
+}
+
+# LiteLLM — LLM gateway
+llm.${WALTER_DOMAIN} {
+  reverse_proxy litellm:4000
+}
+
+# Grafana — dashboards
+grafana.${WALTER_DOMAIN} {
+  reverse_proxy grafana:3000
+}
+
+# n8n — workflow automation
+n8n.${WALTER_DOMAIN} {
+  reverse_proxy n8n:5678
+}
+
+# Uptime Kuma — uptime monitoring
+status.${WALTER_DOMAIN} {
+  reverse_proxy uptime-kuma:3001
+}
+
+# Homepage — service dashboard
+home.${WALTER_DOMAIN} {
+  reverse_proxy homepage:3000
+}
+
+# Syncthing — file sync web UI
+sync.${WALTER_DOMAIN} {
+  reverse_proxy syncthing:8384
+}
+
+# Headscale — Tailscale control plane (Headscale API + Tailscale clients)
+headscale.${WALTER_DOMAIN} {
+  reverse_proxy headscale:8080
+}
+
+# Headscale Admin UI
+headscale-admin.${WALTER_DOMAIN} {
+  reverse_proxy headscale-admin:80
+}
+
+# WireGuard web UI
+vpn.${WALTER_DOMAIN} {
+  reverse_proxy wg-easy:51821
+}
+
+# Control Tower — Walter Council UI (Tailscale-only)
+# NOTE: Access is enforced at the app layer (TAILSCALE_ENFORCE=true).
+# For defence-in-depth, add a `remote_ip` matcher here or use Cloudflare Access.
+tower.${WALTER_DOMAIN} {
+  reverse_proxy control-tower:3000 {
+    # Strip attacker-controlled IP headers; set from actual remote address only.
+    # Prevents X-Forwarded-For spoofing that would break Tailscale IP enforcement.
+    header_up -X-Forwarded-For
+    header_up -X-Real-IP
+    header_up -CF-Connecting-IP
+    header_up X-Real-IP {remote_host}
+  }
+}
+
+# PostHog — product analytics
+posthog.${WALTER_DOMAIN} {
+  reverse_proxy posthog:8000
+}
+
+# Postiz — social media scheduling (promoted from devrel profile in v0.2.0)
+postiz.${WALTER_DOMAIN} {
+  reverse_proxy postiz:3000
+}
+
+# Metabase — analytics / BI dashboards (promoted from devrel profile in v0.2.0)
+metabase.${WALTER_DOMAIN} {
+  reverse_proxy metabase:3000
+}
+
+# ---------------------------------------------------------------------------
+# DESIGN PROFILE (--profile design)
+# ---------------------------------------------------------------------------
+
+# Penpot — design tool
+penpot.${WALTER_DOMAIN} {
+  reverse_proxy penpot-frontend:8080
+}
+
+# Draw.io — diagrams
+draw.${WALTER_DOMAIN} {
+  reverse_proxy drawio:8080
+}
+
+# ---------------------------------------------------------------------------
+# ASSISTANT PROFILE (--profile assistant)
+# ---------------------------------------------------------------------------
+
+# OpenClaw — personal AI assistant admin UI (Phase 2)
+claw.${WALTER_DOMAIN} {
+  reverse_proxy openclaw:18789
+}
+
+# ---------------------------------------------------------------------------
+# COMMS PROFILE (--profile comms)
+# ---------------------------------------------------------------------------
+
+# Synapse — Matrix homeserver
+matrix.${WALTER_DOMAIN} {
+  reverse_proxy synapse:8008
+}
+
+# Element Web — Matrix client
+chat-matrix.${WALTER_DOMAIN} {
+  reverse_proxy element-web:80
+}
+
+# Rocket.Chat — team chat
+chat.${WALTER_DOMAIN} {
+  reverse_proxy rocketchat:3000
+}

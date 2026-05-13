@@ -1,0 +1,125 @@
+# LLM subscription proxies — operator's personal Claude Pro / ChatGPT Plus
+# subscriptions exposed as OpenAI-compatible endpoints, used by LiteLLM as
+# FALLBACK after API-key budget caps are hit.
+#
+# Operator decision: this is for personal use only, not third-party served,
+# so subscription ToS interpretation is operator's call. Walter-OS just hosts
+# the proxies.
+#
+# Endpoints (internal, not exposed via cloudflared):
+#   claude-code-router:  http://claude-code-router:3456   (OpenAI-compat)
+#   chatgpt-proxy:       http://chatgpt-proxy:8080         (OpenAI-compat)
+#
+# Both join `litellm_net` so LiteLLM can reach them by service name.
+
+services:
+
+  claude-code-router:
+    image: node:24-slim
+    container_name: claude-code-router
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NPM_CONFIG_PREFIX: /app/.npm-global
+      PATH: /app/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      HOME: /app
+      # APIKEY for the CCR daemon. Set CCR_APIKEY in personal.env or Infisical
+      # to a random 32-byte hex string: openssl rand -hex 32
+      # Also referenced in litellm/config.yaml as os.environ/CCR_APIKEY.
+      CCR_APIKEY: "${CCR_APIKEY:?CCR_APIKEY required — generate with: openssl rand -hex 32}"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ ! -x /app/.npm-global/bin/ccr ]; then
+          mkdir -p /app/.npm-global
+          npm install -g @musistudio/claude-code-router@2026.5.7
+        fi
+        mkdir -p /app/.claude-code-router
+        # APIKEY is mandatory — set CCR_APIKEY in personal.env or Infisical.
+        # litellm/config.yaml references it via os.environ/CCR_APIKEY.
+        # ALWAYS reconcile the existing config with current CCR_APIKEY: an
+        # earlier deployment may have a stale APIKEY (e.g. the old
+        # 'ccr-internal' default). If config.json's APIKEY != CCR_APIKEY,
+        # CCR daemon would accept the OLD key while LiteLLM sends the NEW
+        # key, silently breaking the claude-sub aliases on upgrade.
+        CCR_CFG=/app/.claude-code-router/config.json
+        regenerate=1
+        if [ -s "$CCR_CFG" ]; then
+          existing_key=$(grep -oE '"APIKEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$CCR_CFG" | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+          if [ "$existing_key" = "$CCR_APIKEY" ]; then
+            regenerate=0
+          else
+            echo "ccr: existing config APIKEY differs from CCR_APIKEY env — regenerating" >&2
+          fi
+        fi
+        if [ "$regenerate" = "1" ]; then
+          cat > "$CCR_CFG" <<JSON
+        {
+          "HOST": "0.0.0.0",
+          "PORT": 3456,
+          "APIKEY": "${CCR_APIKEY}",
+          "Providers": []
+        }
+        JSON
+        fi
+        # Clean stale PID file from previous container runs (volume-persisted).
+        rm -f /tmp/.claude-code-router/.pid /app/.claude-code-router/.pid 2>/dev/null || true
+        # `ccr restart` always kills+starts; safer than `ccr start` which
+        # silently no-ops if it sees a stale PID file. The daemon binds 0.0.0.0
+        # inside the container; docker port-maps 127.0.0.1:3456 on host.
+        /app/.npm-global/bin/ccr restart || /app/.npm-global/bin/ccr start || true
+        # Verify port came up before going to sleep
+        for i in $(seq 1 30); do
+          if node -e "require('net').createConnection(3456,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+            echo "ccr ✓ listening on 3456"
+            break
+          fi
+          [ "$i" -eq 30 ] && echo "ccr ✗ failed to bind after 60s"
+          sleep 2
+        done
+        # Keep PID 1 alive (the actual ccr daemon is detached).
+        exec sleep infinity
+    volumes:
+      - claude_router_data:/app
+    ports:
+      # Expose to localhost so `ssh -L 3456:127.0.0.1:3456 walter-vm` works
+      # for operator UI access. Internal services hit it via service name.
+      - "127.0.0.1:3456:3456"
+    networks:
+      - litellm_net
+    # node:24-slim has no curl/wget — use node's http module. We hit /health
+    # rather than /v1/models because the latter returns empty when Providers
+    # is [] (which is the steady state until operator wires providers); the
+    # daemon being up is what we actually want to verify.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3456/health',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # ChatGPT proxy disabled — pandora-next is now paid (requires license_id).
+  # Free alternatives evaluated:
+  #   - xqdoo00o/ChatGPT-To-API: low maintenance, occasional breaks
+  #   - gngpp/ninja:             larger surface, single-user reasonable
+  # Either can be plugged in here when operator wants. For now, the OpenAI
+  # API key path (model_name=gpt) handles it. ChatGPT subscription is
+  # available via Codex CLI directly, separate from this gateway.
+  #
+  # chatgpt-proxy:
+  #   image: ghcr.io/xqdoo00o/chatgpt-to-api:latest
+  #   ...
+
+volumes:
+  claude_router_data:
+  claude_router_node:
+  chatgpt_proxy_data:
+
+networks:
+  # Reuse the network the litellm container already attached to.
+  # If your existing litellm uses a different network name, edit here.
+  litellm_net:
+    external: true
+    name: litellm_default

@@ -1,0 +1,33 @@
+# PostHog — hobby stack overrides
+# Vendored from operator VM /opt/posthog/docker-compose.override.yml (2026-05-12).
+# Apply this file alongside compose.yml for a single-node hobby deployment:
+#   docker compose -f compose.yml -f compose.override.yml up -d
+#
+# Notable changes from upstream defaults:
+# - proxy: exposed on 127.0.0.1:8100 (instead of 0.0.0.0:80) — Caddy reverse-proxies externally
+# - temporal-ui: exposed on 127.0.0.1:8181 (instead of 0.0.0.0:8081)
+# - web: skips migration check on startup (POSTHOG_SKIP_MIGRATION_CHECKS=1)
+# - livestream + feature-flags: bind-mount ./share for GeoLite2 DB
+
+services:
+  proxy:
+    ports: !override
+      - "127.0.0.1:8100:8000"
+  temporal-ui:
+    ports: !override
+      - "127.0.0.1:8181:8080"
+  web:
+    command: /code/bin/docker-server
+    environment:
+      POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+      SKIP_SERVICE_VERSION_REQUIREMENTS: "1"
+    volumes: !override
+      - ./share:/share
+  livestream:
+    volumes:
+      - ./share:/share
+  feature-flags:
+    volumes:
+      - ./share:/share
+  temporal-django-worker:
+    command: /code/bin/temporal-django-worker

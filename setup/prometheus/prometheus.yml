@@ -1,0 +1,58 @@
+# Prometheus configuration for Walter-OS
+#
+# Scrapes metrics from all services on walter_net.
+# Retention and size limits are set via CLI args in compose.yml (30d / 10GB).
+#
+# Refs: setup/SERVICES-INVENTORY.md
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    instance: walter-os
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  # Node exporter — host metrics
+  - job_name: node-exporter
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # cAdvisor — container metrics
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Grafana
+  - job_name: grafana
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: /metrics
+
+  # n8n
+  - job_name: n8n
+    static_configs:
+      - targets: ['n8n:5678']
+    metrics_path: /metrics
+
+  # LiteLLM
+  - job_name: litellm
+    static_configs:
+      - targets: ['litellm:4000']
+    metrics_path: /metrics
+
+  # Loki readiness (via /ready — Prometheus scrapes for health)
+  - job_name: loki
+    static_configs:
+      - targets: ['loki:3100']
+    metrics_path: /metrics
+
+  # Headscale
+  - job_name: headscale
+    static_configs:
+      - targets: ['headscale:9090']
+    metrics_path: /metrics

@@ -1,0 +1,42 @@
+name: Auto-request Copilot review
+
+# Walter-OS convention: every PR opens with a Copilot review automatically
+# requested. The reviewer subagent (`agents/reviewer.md`) is also invoked
+# from local /pr command, but Copilot is the second pair of eyes that
+# catches issues a fresh-context subagent misses.
+#
+# Requires: org-level "Allow Copilot to review" enabled, and a
+# repository secret COPILOT_REVIEW_TOKEN with `pull_requests:write` scope.
+# (Falls back to GITHUB_TOKEN if Copilot is enabled at org level — most
+# common case.)
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  request-copilot-review:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - name: Request Copilot PR review
+        run: |
+          gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
+            -X POST \
+            -f 'reviewers[]=copilot-pull-request-reviewer' \
+            || echo "Copilot review request failed (org may not have Copilot review enabled)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add reviewer-pending label
+        if: success()
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} \
+            --add-label "reviewer-pending" \
+            --repo ${{ github.repository }} || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

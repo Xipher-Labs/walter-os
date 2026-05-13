@@ -1,0 +1,17 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps
+!apps/control-tower
+!apps/control-tower/**
+
+apps/control-tower/.next
+apps/control-tower/node_modules
+apps/control-tower/.env
+apps/control-tower/.env.*
+!apps/control-tower/.env.example
+apps/control-tower/test-results
+apps/control-tower/playwright-report
+apps/control-tower/*.log
+.git

@@ -1,0 +1,97 @@
+{
+  "name": "Daily Standup Summarizer — Slack",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1-5" }]
+        }
+      },
+      "notes": "Runs at 09:00 Monday-Friday. Adjust to your timezone in n8n settings."
+    },
+    {
+      "id": "node-002",
+      "name": "Slack: Get Yesterday Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://slack.com/api/conversations.history?channel=REPLACE_WITH_SOURCE_CHANNEL_ID&oldest={{Math.floor((Date.now() - 86400000) / 1000)}}&inclusive=true&limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "notes": "Requires Authorization: Bearer xoxb-... header in credential"
+    },
+    {
+      "id": "node-003",
+      "name": "Filter and Format Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\nconst messages = items[0].json.messages || [];\n// Filter out bot messages\nconst humanMessages = messages.filter(m => !m.bot_id && m.text && m.text.trim());\n// Format each message as 'UserID: text'\nconst formatted = humanMessages\n  .reverse() // oldest first\n  .map(m => `<@${m.user}>: ${m.text.replace(/\\n+/g, ' ').trim()}`)\n  .join('\\n');\nreturn [{ json: { formattedMessages: formatted, messageCount: humanMessages.length } }];"
+      }
+    },
+    {
+      "id": "node-004",
+      "name": "LLM: Summarize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "REPLACE_WITH_LLM_ENDPOINT",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"REPLACE_WITH_MODEL\",\n  \"max_tokens\": 512,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Summarize these Slack messages from yesterday into a concise daily standup.\\nFormat with three sections: YESTERDAY (what was accomplished), TODAY (implied next steps), BLOCKERS (any issues or questions raised).\\nKeep each section to 3-5 bullet points maximum. Be specific, not generic.\\n\\nMessages:\\n{{$json.formattedMessages}}\"\n  }]\n}"
+      }
+    },
+    {
+      "id": "node-005",
+      "name": "Format Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\nconst raw = items[0].json.content ? items[0].json.content[0].text : items[0].json.choices[0].message.content;\nconst today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });\nconst summary = `:newspaper: *Daily Standup Summary — ${today}*\\n_Auto-generated from yesterday's activity_\\n\\n${raw}\\n\\n_Source: <#REPLACE_WITH_SOURCE_CHANNEL_ID> | ${items[0].json.messageCount} messages processed_`;\nreturn [{ json: { summary } }];"
+      }
+    },
+    {
+      "id": "node-006",
+      "name": "Slack: Post Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"channel\": \"REPLACE_WITH_TARGET_CHANNEL_ID\", \"text\": \"{{$json.summary}}\", \"mrkdwn\": true }"
+      },
+      "notes": "Posts to target channel. Can be the same as source or a dedicated #standups channel."
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[ { "node": "Slack: Get Yesterday Messages", "type": "main", "index": 0 } ]] },
+    "Slack: Get Yesterday Messages": { "main": [[ { "node": "Filter and Format Messages", "type": "main", "index": 0 } ]] },
+    "Filter and Format Messages": { "main": [[ { "node": "LLM: Summarize", "type": "main", "index": 0 } ]] },
+    "LLM: Summarize": { "main": [[ { "node": "Format Final Summary", "type": "main", "index": 0 } ]] },
+    "Format Final Summary": { "main": [[ { "node": "Slack: Post Summary", "type": "main", "index": 0 } ]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  }
+}

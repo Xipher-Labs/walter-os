@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# bash-denylist.sh
+# PreToolUse hook: blocks dangerous shell injection patterns NOT covered by
+# approval-gate.sh (which focuses on destructive ops and path protection).
+# This hook focuses on remote-code-execution via pipe-to-shell patterns.
+#
+# Registered in ~/.claude/settings.json PreToolUse hook chain.
+# See docs/specs/walter-os-oss-security-hardening.md AC-7.
+#
+# Bypass escape (two-factor): the hook allows a matched pattern only if BOTH
+#   1. the env var WALTER_DENYLIST_BYPASS=1 is set in the hook's environment, AND
+#   2. the command contains the literal string `--allow-denylist-pattern`.
+# Either signal alone is NOT enough. This addresses Codex R2 MEDIUM M1: a raw
+# substring bypass was too easy — any generated command could include the flag
+# and skip all checks. Requiring an explicit env var means the operator (or a
+# trusted wrapper) must opt in out-of-band, not via the agent-controlled
+# command string. Document the bypass in the task comment.
+#
+# Stdin: JSON {"tool_name":"Bash","tool_input":{"command":"..."}}
+# Stdout: JSON {"decision":"allow"} or {"decision":"block","reason":"..."}
+
+set -uo pipefail
+
+# Read the tool call from stdin
+INPUT="$(cat)"
+
+# Extract command (using jq if available, fail-closed otherwise)
+if ! command -v jq >/dev/null 2>&1; then
+  # Fail CLOSED — without jq we cannot parse the hook event.
+  # Allowing all ops when jq is missing would let an attacker bypass the hook
+  # by shadowing jq on PATH. See approval-gate.sh P0-03 for the same pattern.
+  printf '{"decision":"block","reason":"bash-denylist: jq missing — failing closed for safety. Install jq to proceed."}\n'
+  exit 0
+fi
+
+# Extract command. Fail CLOSED if jq cannot parse the input or the command
+# field is absent / empty — we cannot make a security decision about a
+# command we cannot read. Codex R2 MEDIUM M4: previously, malformed JSON or
+# jq parse failure was silently coerced to CMD="" via `// ""`, causing the
+# hook to fall through to "allow".
+if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
+  printf '{"decision":"block","reason":"bash-denylist: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety."}\n'
+  exit 0
+fi
+if [[ -z "$CMD" ]]; then
+  printf '{"decision":"block","reason":"bash-denylist: empty command in hook input — failing closed for safety."}\n'
+  exit 0
+fi
+
+# Two-factor bypass: requires WALTER_DENYLIST_BYPASS=1 (operator opt-in via env)
+# AND the literal flag `--allow-denylist-pattern` (acknowledgment in the command).
+# Either alone does NOT bypass. See header comment for rationale (Codex R2 M1).
+if [[ "${WALTER_DENYLIST_BYPASS:-0}" == "1" ]] \
+  && echo "$CMD" | grep -qF -- '--allow-denylist-pattern'; then
+  printf '{"decision":"allow","systemMessage":"bash-denylist: two-factor bypass used (WALTER_DENYLIST_BYPASS=1 + --allow-denylist-pattern). Command allowed with operator acknowledgment."}\n'
+  exit 0
+fi
+
+# ---------- denylist patterns ----------
+# Each entry is an extended regex (grep -E). Pattern names are used in the
+# block reason for operator clarity.
+#
+# These patterns target RCE injection vectors not covered by approval-gate.sh:
+# - pipe-to-shell (curl/wget piping to sh/bash)
+# - process substitution with remote fetch
+# - eval of variable (not literal strings)
+# - python -c with variable interpolation
+# - rm -rf / (root deletion, distinct from path-scoped rm in approval-gate.sh)
+
+declare -A DENYLIST_PATTERNS
+# curl|...|bash/sh, including absolute paths to bash/sh and sudo-wrapped form.
+# Matches: `curl X | bash`, `curl X | /bin/bash`, `curl X | sudo bash`,
+# `curl X | sudo sh`, `curl X | /usr/bin/sh`. The shell token is the LAST
+# part of the pipe so we anchor on `sh` or `bash` (with optional path prefix
+# and optional `sudo`) at the end of a pipe segment.
+# pipe-to-shell. Matches everything the M3 set caught PLUS Codex R2 P1#2:
+#   curl X | env bash                  (env wrapper)
+#   curl X | /usr/bin/env bash         (absolute env)
+#   curl X | sudo /usr/bin/env bash    (absolute env + sudo)
+#   curl X | bash${IFS}-x              (IFS-based parameter expansion)
+# Structure: optional (sudo + optional path), optional (env or absolute-path
+# env), then the shell token, then a "boundary" that includes shell
+# parameter expansion (`${...}` / `$...`) so `bash${IFS}` is caught.
+DENYLIST_PATTERNS[curl-pipe-shell]='curl[[:space:]]+.*\|[[:space:]]*(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(ba|z|d)?sh([[:space:]]|$|;|&|\||\$)'
+DENYLIST_PATTERNS[wget-pipe-shell]='wget[[:space:]]+.*\|[[:space:]]*(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(ba|z|d)?sh([[:space:]]|$|;|&|\||\$)'
+# Process substitution: <ANY_SHELL> <(curl ...) or <ANY_SHELL> <(wget ...)
+# Covers bash, sh, zsh, dash, ksh; also covers `source <(...)` and `. <(...)`.
+DENYLIST_PATTERNS[shell-process-sub-curl]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*curl'
+DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*wget'
+# bash -c / sh -c with command substitution: `bash -c "$(curl ...)"`, etc.
+# This also catches `bash -c "$(cat /tmp/payload)"`. Mirror of python-c-variable.
+DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(ba|z|d|k)?sh[[:space:]]+-c[[:space:]]+["'\'']?\$[{(]'
+# eval of a variable or command substitution.
+# Matches: the eval builtin followed by a shell-variable expansion (with or
+# without braces) OR a command-substitution `$(...)`. Deliberately does NOT
+# catch eval applied to a quoted literal string.
+# (Documentation uses words rather than the literal pattern so the
+# walter-os-eval-with-variable semgrep rule doesn't false-positive on this
+# file. The pattern itself is the regex on the next line.)
+DENYLIST_PATTERNS[eval-variable]='eval[[:space:]]+"?\$[{(]?[A-Za-z_(]'
+# python -c with variable or command substitution: python3 -c "$CMD", python -c "$(cat ...)"
+DENYLIST_PATTERNS[python-c-variable]='python3?[[:space:]]+-c[[:space:]]+["'\'']?\$'
+# rm -rf / or rm -r / targeting root (exact root, not subdirs)
+DENYLIST_PATTERNS[rm-rf-root]='(^|[;&|][[:space:]]*)rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f?[a-zA-Z]*[[:space:]]+\/$|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*[[:space:]]+\/$'
+
+for pattern_name in "${!DENYLIST_PATTERNS[@]}"; do
+  pattern="${DENYLIST_PATTERNS[$pattern_name]}"
+  if echo "$CMD" | grep -qE "$pattern"; then
+    # Truncate command to 120 chars for the reason string
+    truncated="${CMD:0:120}"
+    # Use jq to safely construct the JSON reason (handles special chars)
+    reason="bash-denylist: command matches blocked pattern '${pattern_name}': ${truncated}"
+    printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
+    exit 0
+  fi
+done
+
+# No pattern matched — allow
+printf '{"decision":"allow"}\n'
+exit 0

@@ -1,0 +1,22 @@
+# Walter-Bridge backend for Codex CLI
+# Routes all Codex requests through LiteLLM at llm.${WALTER_DOMAIN}
+# so any model registered in setup/litellm/config.yaml is callable.
+
+model_provider = "walter-bridge"
+model = "gpt"
+
+[model_providers.walter-bridge]
+name = "Walter-Bridge (LiteLLM)"
+base_url = "https://llm.${WALTER_DOMAIN}/v1"
+env_key = "LITELLM_MASTER_KEY"
+wire_api = "chat"
+
+# Aliases available via Walter-Bridge (mirrors setup/litellm/config.yaml):
+# - gpt, gpt-4o, gpt-4o-mini
+# - sonnet, haiku, opus, claude-3-5-sonnet
+# - gemini, gemini-2.5-pro, gemini-2.5-flash
+# - deepseek, deepseek-r1
+# - walter-llm-local, walter-llm-vllm
+
+[history]
+persistence = "save-all"

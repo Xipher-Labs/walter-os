@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+
+overrides:
+  postcss: 8.5.14
+
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+
+# Approved native build scripts (sharp = image processing for Next.js, unrs-resolver =
+# Rust-backed module resolver used by ESLint plugin imports). pnpm v10+ requires explicit
+# approval of postinstall scripts that compile native code.
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver

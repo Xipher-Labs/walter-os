@@ -1,0 +1,152 @@
+# Walter-VM observability stack
+#
+#   Grafana      — UI + dashboards     :3000 → grafana.${WALTER_DOMAIN}
+#   Prometheus   — metrics scraper      :9090 (internal)
+#   Loki         — log aggregation       :3100 (internal)
+#   Promtail     — log shipper           DaemonSet-style (reads docker logs)
+#   node-exporter — host metrics         :9100 (internal)
+#   cAdvisor     — container metrics    :8081 (internal)
+#
+# Storage: Loki + Prometheus persisted on /mnt/walter-vm-data (Cloud Volume).
+# Both have 30-day retention by default.
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v3.11.3
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=10GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /mnt/walter-vm-data/observability/prometheus:/prometheus:rw
+    expose:
+      - "9090"
+    networks: [obs_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  loki:
+    image: grafana/loki:3.7.1
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - /mnt/walter-vm-data/observability/loki:/loki:rw
+    expose:
+      - "3100"
+    networks: [obs_net]
+    # Loki 3.x is distroless — no shell, no wget. Healthcheck is best-effort
+    # via container lifecycle (Docker monitors process). External readiness
+    # at /ready endpoint is verified by Prometheus scrape job.
+    # No healthcheck block.
+
+  promtail:
+    image: grafana/promtail:3.6.10
+    container_name: promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [obs_net]
+    depends_on:
+      loki:
+        condition: service_started
+
+  node-exporter:
+    image: prom/node-exporter:v1.11.1
+    container_name: node-exporter
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|run|host|etc)($$|/)
+      # Walter Council metrics — written by scripts/agents/lib/metrics.sh to
+      # /var/lib/walter-council/metrics.prom and exposed via textfile_collector.
+      # The node-exporter user (nobody) must be able to read the .prom file;
+      # metrics.sh creates it world-readable (0644) by default.
+      - --collector.textfile.directory=/var/lib/walter-council
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      # Mount Walter Council metrics dir so textfile_collector can read metrics.prom.
+      # Read-only: node-exporter only needs to read, not write.
+      - /var/lib/walter-council:/var/lib/walter-council:ro
+    expose:
+      - "9100"
+    networks: [obs_net]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    expose:
+      - "8080"
+    networks: [obs_net]
+
+  grafana:
+    image: grafana/grafana:13.0.1
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: https://grafana.${WALTER_DOMAIN}
+      GF_SERVER_DOMAIN: grafana.${WALTER_DOMAIN}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      # Operator credentials, override via .env on first run, then change in UI
+      GF_SECURITY_ADMIN_USER: ${WALTER_INITIAL_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Telegram alerting (provisioned contactpoint reads these from env)
+      WALTER_TELEGRAM_BOT_TOKEN: ${WALTER_TELEGRAM_BOT_TOKEN}
+      WALTER_TELEGRAM_CHAT_ID: ${WALTER_TELEGRAM_CHAT_ID}
+      # Grafana Assistant — natural-language UI for queries, dashboard editing,
+      # alert tuning. Uses Grafana Cloud's LLM service by default; for fully
+      # self-hosted, configure to point at LiteLLM.
+      # https://grafana.com/grafana/plugins/grafana-assistant-app/
+      GF_INSTALL_PLUGINS: "grafana-assistant-app"
+      GF_PLUGINS_PREINSTALL: "grafana-assistant-app"
+    ports:
+      - "127.0.0.1:3030:3000"
+    volumes:
+      - /mnt/walter-vm-data/observability/grafana:/var/lib/grafana:rw
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [obs_net]
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started   # loki has no usable healthcheck (distroless)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  obs_net:
+    driver: bridge

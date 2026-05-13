@@ -1,0 +1,37 @@
+# Homepage settings
+# Refs: https://gethomepage.dev/configs/settings/
+
+title: Walter-OS
+favicon: https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/walter.png
+
+background:
+  opacity: 20
+
+theme: dark
+color: slate
+
+headerStyle: clean
+
+statusStyle: dot
+
+layout:
+  Project Management:
+    header: true
+    style: row
+    columns: 2
+  Developer Tools:
+    header: true
+    style: row
+    columns: 3
+  Security:
+    header: true
+  AI:
+    header: true
+  Observability:
+    header: true
+    style: row
+    columns: 2
+  Network:
+    header: true
+    style: row
+    columns: 3

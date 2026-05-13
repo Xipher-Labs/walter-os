@@ -1,0 +1,3 @@
+{
+  "mock_response": "# AGENTS.md\n\nThis is a mock AGENTS.md for a test project.\n\n## Problem\n\nMock spec charter for testing.\n\n## Stack\n\n- Language: TypeScript\n- Framework: Next.js\n\n## Acceptance Criteria\n\n- [AC-1] User can log in.\n\n## Plane Epic\n\n```bash\n# Run to create Plane epic:\nwalter plane create-epic --name \"Test Project\" --description \"Mock epic\"\n```\n"
+}

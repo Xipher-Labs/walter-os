@@ -1,0 +1,12 @@
+# Fixture: project-induction non-interactive answers — financial project
+# Used by tests/agents/project-induction.bats Fix 4
+
+project_name: fintech-test
+project_type: webapp
+description: "A payment processing webapp that handles financial transactions"
+stack: "Next.js 15 + Supabase + Vercel + Stripe"
+non_negotiable_rules: "PCI-DSS compliance required"
+critical_integrations: "Supabase, Stripe, banking-api"
+success_kpis: "1000 transactions/day within 3 months"
+phi_data: false
+financial_data: true

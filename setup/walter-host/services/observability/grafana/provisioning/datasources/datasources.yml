@@ -1,0 +1,44 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+
+  # Phase V: DevRel Analytics Postgres datasource
+  # Points to postgres-analytics service (custom Dockerfile with pg_partman + pg_cron)
+  # Port 5433 on host → 5432 in container (see setup/walter-host/services/postgres/compose.yml)
+  # V-prereq-7: Grafana datasource for analytics DB
+  # Refs: docs/specs/devrel-analytics-stack.md
+  - name: Walter DevRel Analytics
+    type: grafana-postgresql-datasource
+    uid: walter-devrel-analytics
+    access: proxy
+    # Within Grafana's Docker network, connect via service name
+    # (postgres-analytics must be on the same Docker network as obs_net,
+    # or use host.docker.internal / walter-vm IP)
+    url: postgres-analytics:5432
+    database: walter_devrel_analytics
+    user: analytics
+    secureJsonData:
+      password: ${ANALYTICS_PG_PASS}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1700
+      timescaledb: false
+    editable: false
+    isDefault: false

@@ -1,0 +1,53 @@
+name: semgrep
+
+# Walter-OS custom semgrep ruleset enforcement.
+# Rules live in `.semgrep/rules/` and target known-historical bug
+# patterns (python -c interpolation, eval with variables, curl|bash).
+# Fixture tests under `tests/semgrep/` validate the rules themselves.
+
+on:
+  push:
+    branches: [main, dev, staging]
+  pull_request:
+    branches: [main, dev, staging]
+  schedule:
+    # Weekly Monday 06:00 UTC — catches stragglers on branches that
+    # have not been pushed recently but still feed merge trains.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: semgrep custom rules
+    runs-on: ubuntu-latest
+    # Pinned semgrep image (tag-pinned, bumped via Renovate / quarterly
+    # cadence). Using the official `semgrep/semgrep` image because the
+    # GitHub Action `semgrep/semgrep-action` is archived upstream.
+    # TODO(supply-chain): pin to `@sha256:<digest>` once Renovate is
+    # configured to manage container digests (tracked separately).
+    container:
+      image: semgrep/semgrep:1.157.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run Walter-OS custom semgrep rules
+        # `--exclude tests/semgrep/fixtures` keeps the rule fixture files
+        # (which intentionally contain the bug patterns) from tripping
+        # CI. Those fixtures are validated separately by
+        # tests/semgrep/run-rules.bats.
+        run: |
+          semgrep \
+            --config .semgrep/rules/ \
+            --error \
+            --metrics off \
+            --disable-version-check \
+            --severity ERROR \
+            --severity WARNING \
+            --skip-unknown-extensions \
+            --exclude 'tests/semgrep/fixtures' \
+            .

@@ -1,0 +1,145 @@
+{
+  "name": "TikTok Analytics Pull (tiktok-pull)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-tiktok",
+      "name": "Schedule Trigger (6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://open.tiktokapis.com/v2/video/list/",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,title,cover_image_url,create_time,share_count,view_count,like_count,comment_count"
+            },
+            {
+              "name": "max_count",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "tiktok-video-list",
+      "name": "TikTok Video List API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tiktok-api-cred",
+          "name": "TikTok API Key"
+        }
+      },
+      "notes": "TikTok Content Posting API v2. Prereq: TikTok for Developers approval (1-7 days, AC-9). Requires TikTok app with video.list scope."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map TikTok API response \u2192 analytics_events rows\nconst data = $json.data || {};\nconst videos = data.videos || [];\nconst rows = [];\n\nfor (const video of videos) {\n  const contentId = `tiktok:${video.id}`;\n  const occurredAt = video.create_time\n    ? new Date(parseInt(video.create_time) * 1000).toISOString()\n    : new Date().toISOString();\n\n  if (video.view_count !== undefined) {\n    rows.push({\n      platform: 'tiktok',\n      content_id: contentId,\n      event_type: 'view',\n      occurred_at: occurredAt,\n      metric_value: video.view_count,\n      metadata: JSON.stringify({ title: video.title })\n    });\n  }\n  if (video.like_count !== undefined) {\n    rows.push({\n      platform: 'tiktok',\n      content_id: contentId,\n      event_type: 'like',\n      occurred_at: occurredAt,\n      metric_value: video.like_count,\n      metadata: JSON.stringify({ title: video.title })\n    });\n  }\n  if (video.comment_count !== undefined) {\n    rows.push({\n      platform: 'tiktok',\n      content_id: contentId,\n      event_type: 'engagement',\n      occurred_at: occurredAt,\n      metric_value: video.comment_count,\n      metadata: JSON.stringify({ metric: 'comment_count', title: video.title })\n    });\n  }\n  if (video.share_count !== undefined) {\n    rows.push({\n      platform: 'tiktok',\n      content_id: contentId,\n      event_type: 'engagement',\n      occurred_at: occurredAt,\n      metric_value: video.share_count,\n      metadata: JSON.stringify({ metric: 'share_count', title: video.title })\n    });\n  }\n}\n\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "map-tiktok-to-analytics",
+      "name": "Map \u2192 analytics_events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (occurred_at, platform, content_id, event_type, metric_value, metadata) VALUES ($1::timestamptz, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (platform, content_id, event_type, occurred_at) DO UPDATE SET metric_value = EXCLUDED.metric_value, ingested_at = NOW()",
+        "additionalFields": {
+          "queryParams": "={{ [$json.occurred_at, $json.platform, $json.content_id, $json.event_type, $json.metric_value, $json.metadata] }}"
+        }
+      },
+      "id": "upsert-tiktok-events",
+      "name": "Upsert analytics_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "analytics-pg-cred",
+          "name": "Analytics Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (6h)": {
+      "main": [
+        [
+          {
+            "node": "TikTok Video List API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok Video List API": {
+      "main": [
+        [
+          {
+            "node": "Map \u2192 analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map \u2192 analytics_events": {
+      "main": [
+        [
+          {
+            "node": "Upsert analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    "devrel-analytics",
+    "tier-2",
+    "tiktok"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part B \u2014 AC-9. INACTIVE until TikTok Developer approval (1-7 days). Uses TikTok Content Posting API v2 /video/list endpoint. Requires TikTok app with video.list scope. Credential: TikTok API Key (HTTP Header Auth with Authorization: Bearer <access_token>). See docs/specs/devrel-analytics-stack.md."
+}

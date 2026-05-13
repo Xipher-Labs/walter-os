@@ -1,0 +1,62 @@
+name: osv-scanner
+
+# Dependency CVE scanning via Google's OSV-scanner GitHub Action.
+# Runs on push/PR to main, dev, staging, and weekly.
+# Results are uploaded to GitHub Security tab via SARIF.
+#
+# CVSS threshold note (AC-5 open question resolved):
+# google/osv-scanner-action v2 does not expose a --fail-on-vuln-with-cvss-score
+# flag in its action interface; it fails on ANY finding by default (conservative).
+# To implement CVSS >= 7.0 threshold, pass scan_args with the osv-scanner
+# binary's --severity flag if available in the pinned version.
+# Current behavior: fails on any vulnerability finding (conservative default).
+# This is acceptable per the operator-confirmed answer: "fail on any high+ finding".
+#
+# All uses: lines are pinned to 40-char commit SHAs per AC-10.
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - staging
+  pull_request:
+    branches:
+      - main
+      - dev
+      - staging
+  schedule:
+    - cron: '15 4 * * 2'   # weekly Tuesday 04:15 UTC
+
+permissions:
+  # Required to upload SARIF results to Security tab
+  security-events: write
+  contents: read
+  actions: read
+
+# google/osv-scanner-action v2.x is published as a REUSABLE WORKFLOW, not a
+# composite action — the v2.3.8 commit has no `action.yml` at the repo root,
+# only `.github/workflows/osv-scanner-reusable.yml`. Invoking it as a step
+# fails with "Top level 'runs:' section is required". Call it via `uses:` at
+# the job level instead. The reusable workflow handles SARIF upload itself,
+# so the explicit upload-sarif step is no longer needed.
+
+jobs:
+  scan:
+    name: osv-scanner dependency scan
+    # Like CodeQL, the OSV reusable workflow uploads SARIF to Code Scanning,
+    # which is gated by GHAS on private repos. Gate on visibility so the job
+    # is a no-op while Walter-OS is private (pre v0.2.0) and activates as
+    # soon as the repo is published.
+    if: github.event.repository.visibility == 'public'
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2
+    # google/osv-scanner-action v2.3.8 (reusable workflow form)
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    with:
+      # Scope to the canonical monorepo JS lockfile.
+      # Add additional lockfiles here if new apps are added to the monorepo.
+      scan-args: |-
+        --lockfile=pnpm-lock.yaml

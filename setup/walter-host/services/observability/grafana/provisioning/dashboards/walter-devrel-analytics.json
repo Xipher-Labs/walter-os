@@ -1,0 +1,145 @@
+{
+  "uid": "walter-devrel-analytics",
+  "title": "Walter DevRel Analytics",
+  "description": "DevRel content performance: engagement, ad spend, ROI, optimal hours. Phase V.",
+  "tags": ["devrel", "analytics", "content", "phase-v"],
+  "timezone": "America/Argentina/Buenos_Aires",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1h",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Top Content Pieces — Engagement (Last 30d)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n  content_id,\n  COALESCE(title, content_id) AS title,\n  platform,\n  total_engagement,\n  CASE WHEN has_code THEN 'yes' ELSE 'no' END AS has_code,\n  CASE WHEN has_image THEN 'yes' ELSE 'no' END AS has_image\nFROM mv_top_content_pieces\nWHERE last_event_at >= NOW() - INTERVAL '30 days'\nORDER BY total_engagement DESC\nLIMIT 10",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "sortBy": [{ "displayName": "total_engagement", "desc": true }]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Engagement by Platform — Last 30 Days",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n  platform,\n  SUM(total_value) AS total_engagement\nFROM mv_engagement_by_platform_week\nWHERE week_start >= NOW() - INTERVAL '30 days'\n  AND event_type IN ('engagement', 'like', 'click', 'retweet', 'impression')\nGROUP BY platform\nORDER BY total_engagement DESC",
+          "format": "table",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Optimal Posting Hours — Twitter (ART)",
+      "description": "Hour-of-day engagement heatmap for Twitter, last 30 days (ART timezone)",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 8 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n  hour_of_day,\n  dow,\n  SUM(total_value) AS engagement\nFROM mv_hourly_heatmap\nWHERE platform = 'twitter'\n  AND event_type IN ('engagement', 'like', 'click', 'retweet')\nGROUP BY hour_of_day, dow\nORDER BY dow, hour_of_day",
+          "format": "table",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Ad Spend vs Engagement (Last 30d)",
+      "description": "ROI: engagement per dollar spent on promoted content",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n  content_id,\n  COALESCE(title, content_id) AS title,\n  ROUND(total_spend_usd::numeric, 2) AS spend_usd,\n  total_engagement,\n  ROUND(engagement_per_dollar::numeric, 1) AS eng_per_dollar\nFROM mv_roi_per_content\nWHERE total_spend_usd > 0\nORDER BY engagement_per_dollar DESC NULLS LAST\nLIMIT 10",
+          "format": "table",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Engagement Timeline — All Platforms",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n  date_trunc('day', occurred_at) AS time,\n  platform,\n  SUM(metric_value) AS total_engagement\nFROM analytics_events\nWHERE occurred_at >= NOW() - INTERVAL '30 days'\n  AND event_type IN ('engagement', 'like', 'click', 'retweet', 'impression')\nGROUP BY date_trunc('day', occurred_at), platform\nORDER BY time ASC",
+          "format": "time_series",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Ad Spend by Platform (Last 30d)",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 24 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT\n  platform,\n  ROUND(SUM(spend_usd)::numeric, 2) AS total_spend_usd\nFROM ad_spend_events\nWHERE occurred_at >= NOW() - INTERVAL '30 days'\nGROUP BY platform\nORDER BY total_spend_usd DESC",
+          "format": "table",
+          "refId": "F"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Total Events Ingested",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 8, "x": 8, "y": 24 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT COUNT(*) AS total_events FROM analytics_events WHERE occurred_at >= NOW() - INTERVAL '30 days'",
+          "format": "table",
+          "refId": "G"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Content Pieces Tracked",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 8, "x": 16, "y": 24 },
+      "datasource": { "uid": "walter-devrel-analytics", "type": "grafana-postgresql-datasource" },
+      "targets": [
+        {
+          "rawSql": "SELECT COUNT(*) AS content_pieces FROM content_pieces",
+          "format": "table",
+          "refId": "H"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "title": "Walter Council",
+      "url": "/d/walter-council/walter-council",
+      "type": "link"
+    }
+  ]
+}

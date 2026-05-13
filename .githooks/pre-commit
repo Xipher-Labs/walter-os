@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# walter-os: gitleaks pre-commit hook
+# Blocks commits containing secrets detected by gitleaks.
+#
+# Installed by: scripts/setup-githooks.sh
+# Config:       .gitleaks.toml (repo root)
+# Tests:        tests/hooks/gitleaks.bats, tests/hooks/install-pre-commit.bats
+#
+# To skip in emergencies (avoid -- fix the secret instead):
+#   git commit --no-verify
+# Note: --no-verify also skips other hooks (Walter-OS pre-commit-tests.sh).
+# Prefer fixing the root cause over skipping.
+
+set -euo pipefail
+
+# Locate gitleaks
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "walter-os: gitleaks not found on PATH." >&2
+  echo "  Install: brew install gitleaks  (macOS)" >&2
+  echo "           apt install gitleaks   (Debian/Ubuntu)" >&2
+  echo "           go install github.com/zricethezav/gitleaks/v8@latest" >&2
+  echo "  Or skip this check: git commit --no-verify (not recommended)" >&2
+  exit 1
+fi
+
+# Locate config (prefer repo-local .gitleaks.toml)
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+GITLEAKS_CONFIG=""
+if [[ -f "$REPO_ROOT/.gitleaks.toml" ]]; then
+  GITLEAKS_CONFIG="--config=$REPO_ROOT/.gitleaks.toml"
+fi
+
+# Run gitleaks on staged changes
+if ! gitleaks protect --staged --no-banner --redact ${GITLEAKS_CONFIG:+"$GITLEAKS_CONFIG"} >&2; then
+  echo "" >&2
+  echo "walter-os: gitleaks detected potential secrets in staged files." >&2
+  echo "  Remove the secret, then re-stage and commit." >&2
+  echo "  If this is a false positive, add an allowlist entry to .gitleaks.toml." >&2
+  echo "  See: docs/specs/secrets-runtime-architecture.md#12-gitleaks-integration" >&2
+  exit 1
+fi
+
+exit 0

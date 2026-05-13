@@ -1,0 +1,15 @@
+{
+  "name": "claude-sub-router",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible HTTP bridge wrapping Claude Code CLI (Claude Max subscription)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

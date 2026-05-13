@@ -1,0 +1,42 @@
+# ~/.config/walter-os/agent-approvals.yml — STANDING approvals for agents.
+#
+# Copy to ~/.config/walter-os/agent-approvals.yml and tune to taste.
+# Constraints listed here are HUMAN-readable; the actual constraint
+# enforcement is per-rule in hooks/approval-gate.sh.
+#
+# Audited weekly by the janitor agent: "you have N standing approvals,
+# are these still ok?"
+#
+# Spec: docs/specs/multi-agent-autonomy.md §7.5
+
+auto_approved:
+  # Allow the coder agent to commit + push lint-only diffs without
+  # per-PR operator approval. Constraint check: only files matching
+  # *.{ts,tsx,js,jsx,py,rs,go} AND only style-level changes per linter
+  # rules.
+  lint-fixes:
+    agent: coder
+    enabled: true
+    constraint: |
+      Files must match: *.ts, *.tsx, *.js, *.jsx, *.py, *.rs, *.go
+      Diff must be lint-only (no logic changes).
+      PR title must start with "style:" or "lint:".
+
+  # Allow the janitor to bump dep versions but only patch + minor.
+  # Major bumps still need approval.
+  dep-bumps:
+    agent: janitor
+    enabled: true
+    constraint: |
+      Lockfile or manifest only (package.json, Cargo.toml, requirements.txt,
+      pyproject.toml, go.mod). Version delta: patch or minor; NEVER major.
+      PR title must start with "chore(deps):".
+
+  # Allow the researcher to commit ingested wiki pages to the private
+  # wiki repo without per-commit approval.
+  wiki-content:
+    agent: researcher
+    enabled: true
+    constraint: |
+      Files must be under wiki/ in walter-os repo, OR in the private
+      walter-wiki Forgejo mirror. Never touches walter-os source code.

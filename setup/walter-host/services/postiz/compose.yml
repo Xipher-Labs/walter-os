@@ -1,0 +1,110 @@
+# Walter-VM — Postiz social media scheduling
+#
+# Postiz (AGPL-3.0, 30k+ stars, v2.21.7 as of 2026-05-11)
+# Replaces the evaluated-and-dropped Mixpost — covers all platforms
+# (YouTube, X, LinkedIn, Instagram, TikTok, Facebook, Threads, Bluesky,
+# Pinterest, Reddit, Mastodon) free under AGPL-3.0.
+#
+# URL: https://postiz.${WALTER_DOMAIN} (behind CF Tunnel + CF Access)
+#
+# AC-17: Postiz version verified >= v2.21.7
+# To upgrade: docker compose pull && docker compose up -d
+#
+# Refs: docs/specs/devrel-analytics-stack.md (AC-17, AC-18)
+# Refs: docs/operational/phase-v-tools-availability.md (Postiz section)
+
+services:
+  postiz:
+    # Pin to v2.21.7 (latest stable as of 2026-05-11).
+    # Upgrade: docker compose pull && docker compose up -d
+    # See UPGRADE.md for version verification steps.
+    image: ghcr.io/gitroomhq/postiz-app:v2.21.7
+    container_name: postiz
+    restart: unless-stopped
+    environment:
+      # ---- Server ----
+      MAIN_URL: https://${POSTIZ_HOST:-postiz.${WALTER_DOMAIN}}
+      FRONTEND_URL: https://${POSTIZ_HOST:-postiz.${WALTER_DOMAIN}}
+      NEXT_PUBLIC_BACKEND_URL: https://${POSTIZ_HOST:-postiz.${WALTER_DOMAIN}}/api
+
+      # ---- Storage (Postgres + Redis) ----
+      DATABASE_URL: postgresql://postiz:${POSTIZ_PG_PASS}@postiz-pg:5432/postiz
+      REDIS_URL: redis://postiz-redis:6379
+
+      # ---- Upload storage (local) ----
+      STORAGE_PROVIDER: local
+      UPLOAD_DIRECTORY: /uploads
+      NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY: /uploads
+
+      # ---- JWT ----
+      JWT_SECRET: ${POSTIZ_JWT_SECRET}
+
+      # ---- Timezone ----
+      TZ: ${WALTER_TIMEZONE:-UTC}
+
+      # ---- Analytics export webhook (AC-18) ----
+      # Postiz supports posting events to a webhook on publish/engagement.
+      # Set WEBHOOK_URL to point to n8n postiz-analytics-ingest workflow.
+      # See docs/operational/postiz-analytics-export.md
+      POSTIZ_WEBHOOK_URL: ${POSTIZ_WEBHOOK_URL:-}
+
+    ports:
+      - "127.0.0.1:5000:3000"
+
+    volumes:
+      - postiz_uploads:/uploads
+
+    depends_on:
+      postiz-pg:
+        condition: service_healthy
+      postiz-redis:
+        condition: service_healthy
+
+    networks: [postiz_net]
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  postiz-pg:
+    image: postgres:16-alpine
+    container_name: postiz-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postiz
+      POSTGRES_USER: postiz
+      POSTGRES_PASSWORD: ${POSTIZ_PG_PASS}
+    volumes:
+      - postiz_pg:/var/lib/postgresql/data
+    networks: [postiz_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postiz -d postiz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postiz-redis:
+    image: redis:7-alpine
+    container_name: postiz-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - postiz_redis:/data
+    networks: [postiz_net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postiz_uploads:
+  postiz_pg:
+  postiz_redis:
+
+networks:
+  postiz_net:
+    driver: bridge

@@ -1,0 +1,51 @@
+# LiteLLM gateway — unified OpenAI-compatible API in front of Anthropic, OpenAI,
+# Gemini, Ollama (local later), with virtual keys for per-client attribution
+# and Postgres for usage tracking.
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.83.14-stable
+    container_name: litellm
+    restart: unless-stopped
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASS}@litellm-db:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: "${WALTER_INITIAL_USER:-admin}"
+      UI_PASSWORD: ${LITELLM_UI_PASS}
+      # API keys for upstream providers — populate from secrets.env
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # claude-sub aliases (route via claude-code-router): config.yaml resolves
+      # `api_key: os.environ/CCR_APIKEY` for `claude-sub` + `claude-sub-opus`.
+      # Pass the same key the router uses so LiteLLM can authenticate.
+      CCR_APIKEY: ${CCR_APIKEY:-}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: litellm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASS}
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  litellm-db-data:

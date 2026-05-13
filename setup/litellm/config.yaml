@@ -1,0 +1,284 @@
+# LiteLLM Gateway Configuration
+#
+# Add your model routes below. The master key is set via LITELLM_MASTER_KEY env var.
+# UI is available at https://llm.${WALTER_DOMAIN}/ui
+#
+# Refs: https://docs.litellm.ai/docs/proxy/configs
+#
+# Provider tiers:
+#   Tier 1 — common public APIs (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, Cohere)
+#   Tier 2 — enterprise / specialized (Azure, Bedrock, Vertex, xAI, Perplexity, Together, DeepInfra, Replicate)
+#   Tier 3 — local (Ollama, vLLM, walter-embed)
+#
+# LiteLLM warns at startup for unconfigured providers; aliases become unavailable at call time (not at config load).
+
+model_list:
+
+  # ===========================================================================
+  # Tier 1 — Anthropic (requires ANTHROPIC_API_KEY)
+  # ===========================================================================
+  - model_name: sonnet
+    litellm_params:
+      model: claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: opus
+    litellm_params:
+      model: claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: haiku
+    litellm_params:
+      model: claude-haiku-3-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-3-5-sonnet
+    litellm_params:
+      model: claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ===========================================================================
+  # Tier 1 — OpenAI (requires OPENAI_API_KEY)
+  # ===========================================================================
+  - model_name: gpt
+    litellm_params:
+      model: gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4-turbo
+    litellm_params:
+      model: gpt-4-turbo
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: gpt-3.5-turbo
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: o1-preview
+    litellm_params:
+      model: o1-preview
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: o1-mini
+    litellm_params:
+      model: o1-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: o3-mini
+    litellm_params:
+      model: o3-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ===========================================================================
+  # Tier 1 — Google Gemini (requires GEMINI_API_KEY)
+  # ===========================================================================
+  - model_name: gemini
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro-preview-05-06
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-2.5-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash-preview-04-17
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ===========================================================================
+  # Tier 1 — Groq (requires GROQ_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/groq
+  # ===========================================================================
+  - model_name: llama-3.3-70b
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: mixtral-8x7b
+    litellm_params:
+      model: groq/mixtral-8x7b-32768
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: gemma-9b
+    litellm_params:
+      model: groq/gemma2-9b-it
+      api_key: os.environ/GROQ_API_KEY
+
+  # ===========================================================================
+  # Tier 1 — DeepSeek (requires DEEPSEEK_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/deepseek
+  # ===========================================================================
+  - model_name: deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  - model_name: deepseek-reasoner
+    litellm_params:
+      model: deepseek/deepseek-reasoner
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  # ===========================================================================
+  # Tier 1 — Mistral (requires MISTRAL_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/mistral
+  # ===========================================================================
+  - model_name: mistral-large
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  - model_name: mistral-medium
+    litellm_params:
+      model: mistral/mistral-medium-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  - model_name: codestral
+    litellm_params:
+      model: mistral/codestral-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  # ===========================================================================
+  # Tier 1 — Cohere (requires COHERE_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/cohere
+  # ===========================================================================
+  - model_name: command-r-plus
+    litellm_params:
+      model: cohere/command-r-plus
+      api_key: os.environ/COHERE_API_KEY
+
+  - model_name: command-r
+    litellm_params:
+      model: cohere/command-r
+      api_key: os.environ/COHERE_API_KEY
+
+  # ===========================================================================
+  # Tier 2 — Azure OpenAI (requires AZURE_API_KEY + AZURE_API_BASE + AZURE_API_VERSION)
+  # Docs: https://docs.litellm.ai/docs/providers/azure
+  # ===========================================================================
+  - model_name: azure-gpt-4
+    litellm_params:
+      model: azure/gpt-4
+      api_key: os.environ/AZURE_API_KEY
+      api_base: os.environ/AZURE_API_BASE
+      api_version: os.environ/AZURE_API_VERSION
+
+  # ===========================================================================
+  # Tier 2 — AWS Bedrock (requires AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_REGION_NAME)
+  # Docs: https://docs.litellm.ai/docs/providers/bedrock
+  # ===========================================================================
+  - model_name: bedrock-claude
+    litellm_params:
+      model: bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0
+      # Auth via boto3 env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION_NAME — do NOT set api_key
+
+  # ===========================================================================
+  # Tier 2 — Google Vertex AI (requires VERTEXAI_PROJECT + VERTEXAI_LOCATION)
+  # Docs: https://docs.litellm.ai/docs/providers/vertex
+  # ===========================================================================
+  - model_name: vertex-gemini
+    litellm_params:
+      model: vertex_ai/gemini-2.0-flash-001
+      vertex_project: os.environ/VERTEXAI_PROJECT
+      vertex_location: os.environ/VERTEXAI_LOCATION
+      # Auth via GOOGLE_APPLICATION_CREDENTIALS env (file path) read by ADC — do NOT set api_key
+
+  # ===========================================================================
+  # Tier 2 — xAI Grok (requires XAI_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/xai
+  # ===========================================================================
+  - model_name: grok-3
+    litellm_params:
+      model: xai/grok-3
+      api_key: os.environ/XAI_API_KEY
+
+  - model_name: grok-3-mini
+    litellm_params:
+      model: xai/grok-3-mini
+      api_key: os.environ/XAI_API_KEY
+
+  # ===========================================================================
+  # Tier 2 — Perplexity (requires PERPLEXITYAI_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/perplexity
+  # ===========================================================================
+  - model_name: sonar
+    litellm_params:
+      model: perplexity/sonar
+      api_key: os.environ/PERPLEXITYAI_API_KEY
+
+  - model_name: sonar-pro
+    litellm_params:
+      model: perplexity/sonar-pro
+      api_key: os.environ/PERPLEXITYAI_API_KEY
+
+  # ===========================================================================
+  # Tier 2 — Together AI (requires TOGETHERAI_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/togetherai
+  # ===========================================================================
+  - model_name: together-llama-70b
+    litellm_params:
+      model: together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+      api_key: os.environ/TOGETHERAI_API_KEY
+
+  # ===========================================================================
+  # Tier 2 — DeepInfra (requires DEEPINFRA_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/deepinfra
+  # ===========================================================================
+  - model_name: deepinfra-llama
+    litellm_params:
+      model: deepinfra/meta-llama/Meta-Llama-3.1-70B-Instruct
+      api_key: os.environ/DEEPINFRA_API_KEY
+
+  # ===========================================================================
+  # Tier 2 — Replicate (requires REPLICATE_API_KEY)
+  # Docs: https://docs.litellm.ai/docs/providers/replicate
+  # ===========================================================================
+  - model_name: replicate-llama
+    litellm_params:
+      model: replicate/meta/meta-llama-3-70b-instruct
+      api_key: os.environ/REPLICATE_API_KEY
+
+  # ===========================================================================
+  # Tier 3 — Local: Ollama (requires OLLAMA_BASE_URL)
+  # Model hardcoded to llama3.1. To change, edit this file and restart the
+  # LiteLLM container.
+  # Docs: https://docs.litellm.ai/docs/providers/ollama
+  # ===========================================================================
+  - model_name: walter-llm-local
+    litellm_params:
+      model: ollama/llama3.1
+      api_base: os.environ/OLLAMA_BASE_URL
+
+  # ===========================================================================
+  # Tier 3 — Local: vLLM (requires VLLM_BASE_URL)
+  # Model alias hardcoded to openai/walter-vllm. The actual model loaded by the
+  # vLLM server is configured on the vLLM process itself, not via LiteLLM.
+  # Docs: https://docs.litellm.ai/docs/providers/vllm
+  # ===========================================================================
+  - model_name: walter-llm-vllm
+    litellm_params:
+      model: openai/walter-vllm
+      api_base: os.environ/VLLM_BASE_URL
+      api_key: os.environ/VLLM_API_KEY
+
+  # ===========================================================================
+  # Tier 3 — walter-embed: Ollama nomic-embed-text (Phase M requirement)
+  # Required by RAG pipelines and the lessons DB embedding layer.
+  # Docs: https://docs.litellm.ai/docs/providers/ollama
+  # ===========================================================================
+  - model_name: walter-embed
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: os.environ/OLLAMA_BASE_URL
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true

@@ -1,0 +1,48 @@
+# Headscale config
+# Reference: https://github.com/juanfont/headscale/blob/main/config-example.yaml
+
+server_url: https://headscale.${WALTER_DOMAIN}
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+
+# Auto-assigned IPs in this range (Tailscale's CGNAT block)
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 24h
+
+# DB: SQLite is fine for personal use (sub-100 nodes)
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+
+# Logs
+log:
+  level: info
+
+# Don't use built-in OIDC for now — operator pre-creates users via CLI
+disable_check_updates: true
+
+# DNS for the mesh
+dns:
+  override_local_dns: false
+  magic_dns: true
+  base_domain: walter.local
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 1.0.0.1
+
+# Pre-auth keys generated via:  headscale preauthkeys create -u operator --reusable --expiration 90d
+
+# Required since headscale 0.23+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key

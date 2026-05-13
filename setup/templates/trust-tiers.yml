@@ -1,0 +1,46 @@
+# trust-tiers.yml — Walter Council agent trust tier configuration
+#
+# Defines the trust tier for each council agent and any per-agent category
+# overrides. Managed by install.sh (template → ~/.config/walter-os/trust-tiers.yml).
+#
+# Tiers: low | medium | high
+#
+# Tier determines which operation categories are auto-approved (no operator
+# intervention required). See docs/decisions/0009-agent-trust-tiers.md for
+# the full tier → category matrix.
+#
+# overrides: per-agent exceptions to tier defaults.
+#   allow: permit a category that would normally be blocked for this tier.
+#   block: deny a category that would normally be allowed for this tier.
+# NOTE: overrides cannot unlock the "blocked for ALL tiers" list — those
+# are hardcoded in hooks/approval-gate.sh and cannot be overridden.
+#
+# Spec: docs/specs/walter-council-v2.md — Improvement 7 (T-25)
+# ADR: docs/decisions/0009-agent-trust-tiers.md
+
+agents:
+  triage:
+    tier: medium
+    overrides: {}
+
+  researcher:
+    tier: medium
+    overrides: {}
+
+  coder:
+    tier: medium
+    overrides: {}
+
+  reviewer:
+    tier: high
+    overrides: {}
+
+  janitor:
+    tier: low
+    overrides:
+      write-wiki-pages: allow    # janitor can clean the wiki
+
+  liaison:
+    tier: low
+    overrides:
+      write-wiki-pages: allow    # liaison can write digests to the internal wiki

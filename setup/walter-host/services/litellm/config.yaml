@@ -1,0 +1,97 @@
+# LiteLLM proxy config
+# Routing strategy: cheap default → escalate explicitly when needed.
+# Fallback chain: API key (primary, budget-capped) → subscription proxy → cheap tier.
+
+model_list:
+  # ============================================================================
+  # PRIMARY (API key, budget-capped per virtual key)
+  # ============================================================================
+
+  # Cheap tier — default for scrapers, summarization, simple tasks.
+  - model_name: cheap
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Default tier — mid-complexity coding, content, OpenClaw routine.
+  - model_name: sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: gpt
+    litellm_params:
+      model: gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  # High tier — hard reasoning, security review, complex refactor.
+  - model_name: opus
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ============================================================================
+  # FALLBACK (operator's personal subscriptions via internal proxies)
+  # See setup/walter-host/services/llm-proxies/README.md for setup + ToS notes.
+  # ============================================================================
+
+  # claude-code-router exposes Claude.ai Pro session as OpenAI-compatible API.
+  - model_name: claude-sub
+    litellm_params:
+      model: openai/claude-sonnet-4-5
+      api_base: http://claude-code-router:3456/v1
+      api_key: os.environ/CCR_APIKEY
+
+  - model_name: claude-sub-opus
+    litellm_params:
+      model: openai/claude-opus-4-5
+      api_base: http://claude-code-router:3456/v1
+      api_key: os.environ/CCR_APIKEY
+
+  # gpt-sub: deferred. pandora-next went paid; alternatives evaluated but
+  # none rock-solid. ChatGPT Plus → use Codex CLI directly. When a stable
+  # free proxy lands, add it here. For now `gpt` (API key) is the only path.
+
+  # ---- Vision / image gen (nanobanana skill uses this) ----
+  - model_name: nanobanana
+    litellm_params:
+      model: gemini/gemini-2.5-flash-image
+      api_key: os.environ/GEMINI_API_KEY
+
+router_settings:
+  routing_strategy: usage-based-routing-v2
+  redis_host: os.environ/REDIS_HOST
+  # Fallback chain: when budget cap (or upstream rate-limit) hits primary,
+  # LiteLLM tries the next entry. Order = preference.
+  fallbacks:
+    # Opus path: API → claude-sub-opus → claude-sub → sonnet
+    - opus: ["claude-sub-opus", "claude-sub", "sonnet"]
+    # Sonnet path: API → claude-sub → haiku
+    - sonnet: ["claude-sub", "haiku"]
+    # GPT path: API → sonnet (cross-provider fallback)
+    - gpt: ["sonnet", "haiku"]
+    # Haiku tier: API → cheap (Gemini Flash)
+    - haiku: ["cheap"]
+  # Treat 429 + 401 from any upstream as "fall over" trigger
+  num_retries: 2
+  request_timeout: 60
+  retry_after: 5
+
+litellm_settings:
+  drop_params: True
+  set_verbose: False
+  cache: True
+  cache_params:
+    type: local
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  ui_access_mode: admin
+  # Alerting handled by Grafana (provisioned Telegram contact point) — keeping
+  # it out of LiteLLM avoids requiring an undefined webhook URL on boot.

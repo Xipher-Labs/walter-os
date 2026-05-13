@@ -1,0 +1,115 @@
+{
+  "name": "AI Cost Tracking — LiteLLM to Postgres",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+        }
+      }
+    },
+    {
+      "id": "node-002",
+      "name": "Fetch LiteLLM Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://REPLACE_WITH_LITELLM_HOST/usage?start_time={{$now.minus({minutes: 20}).toISO()}}&end_time={{$now.toISO()}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "notes": "Fetches usage for the last 20 minutes (overlaps with 15min schedule for safety)"
+    },
+    {
+      "id": "node-003",
+      "name": "Normalize Usage Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\n// Map LiteLLM response.usage_list to normalized rows\n// Each row: { model, provider, input_tokens, output_tokens, total_tokens, cost_usd, request_id, tags }\nconst usageList = items[0].json.usage_list || [];\nreturn usageList.map(u => ({\n  json: {\n    model: u.model || 'UNKNOWN',\n    provider: u.provider || null,\n    input_tokens: u.input_tokens || 0,\n    output_tokens: u.output_tokens || 0,\n    total_tokens: (u.input_tokens || 0) + (u.output_tokens || 0),\n    cost_usd: u.cost || 0,\n    request_id: u.request_id || null,\n    tags: u.metadata || null\n  }\n}));"
+      }
+    },
+    {
+      "id": "node-004",
+      "name": "Insert into Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "llm_usage",
+        "columns": "model, provider, input_tokens, output_tokens, total_tokens, cost_usd, request_id, tags",
+        "options": { "skipOnConflict": true }
+      },
+      "credentials": {
+        "postgres": { "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "REPLACE_WITH_CREDENTIAL_NAME" }
+      }
+    },
+    {
+      "id": "node-005",
+      "name": "Check Daily Spend",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(SUM(cost_usd), 0) AS daily_total FROM llm_usage WHERE recorded_at >= CURRENT_DATE",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": { "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "REPLACE_WITH_CREDENTIAL_NAME" }
+      }
+    },
+    {
+      "id": "node-006",
+      "name": "If Threshold Exceeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{$node['Check Daily Spend'].json.daily_total}}", "operation": "larger", "value2": "REPLACE_WITH_THRESHOLD_USD" }]
+        }
+      }
+    },
+    {
+      "id": "node-007",
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1450, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "REPLACE_WITH_SLACK_OR_TELEGRAM_WEBHOOK_URL",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "text", "value": "=AI spend alert: ${{$node['Check Daily Spend'].json.daily_total}} today (threshold: $REPLACE_WITH_THRESHOLD_USD)" }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[ { "node": "Fetch LiteLLM Usage", "type": "main", "index": 0 } ]] },
+    "Fetch LiteLLM Usage": { "main": [[ { "node": "Normalize Usage Records", "type": "main", "index": 0 } ]] },
+    "Normalize Usage Records": { "main": [[ { "node": "Insert into Postgres", "type": "main", "index": 0 } ]] },
+    "Insert into Postgres": { "main": [[ { "node": "Check Daily Spend", "type": "main", "index": 0 } ]] },
+    "Check Daily Spend": { "main": [[ { "node": "If Threshold Exceeded", "type": "main", "index": 0 } ]] },
+    "If Threshold Exceeded": { "main": [[ { "node": "Send Alert", "type": "main", "index": 0 } ], []] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  }
+}

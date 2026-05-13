@@ -1,0 +1,97 @@
+# Penpot — open source Figma alternative, self-hosted.
+# https://penpot.app — Figma + InVision-class. Component design, prototyping, dev handoff.
+#
+# Stack: 4 containers (frontend, backend, exporter, postgres + redis)
+# URL: penpot.${WALTER_DOMAIN} (CF Tunnel + CF Access @${WALTER_DOMAIN})
+# Listens 127.0.0.1:9001 internally.
+
+services:
+  penpot-frontend:
+    image: penpotapp/frontend:latest
+    container_name: penpot-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9001:8080"
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      - penpot-backend
+      - penpot-exporter
+    environment:
+      PENPOT_FLAGS: "enable-registration enable-login-with-password disable-email-verification disable-onboarding"
+    networks: [penpot_net]
+    # penpotapp/frontend (nginx-alpine) has no wget/curl, AND nginx writes
+    # its pid to /tmp/nginx.pid (not the usual /var/run/nginx.pid) because
+    # the container runs as non-root. PID file existing = master alive.
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/nginx.pid"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+
+  penpot-backend:
+    image: penpotapp/backend:latest
+    container_name: penpot-backend
+    restart: unless-stopped
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      penpot-postgres:
+        condition: service_healthy
+      penpot-redis:
+        condition: service_started
+    environment:
+      PENPOT_FLAGS: "enable-registration enable-login-with-password disable-email-verification disable-onboarding"
+      PENPOT_PUBLIC_URI: https://penpot.${WALTER_DOMAIN}
+      PENPOT_DATABASE_URI: postgresql://penpot-postgres/penpot
+      PENPOT_DATABASE_USERNAME: penpot
+      PENPOT_DATABASE_PASSWORD: ${PENPOT_DB_PASS}
+      PENPOT_REDIS_URI: redis://penpot-redis/0
+      PENPOT_ASSETS_STORAGE_BACKEND: assets-fs
+      PENPOT_STORAGE_ASSETS_FS_DIRECTORY: /opt/data/assets
+      PENPOT_TELEMETRY_ENABLED: "false"
+      PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY}
+    networks: [penpot_net]
+
+  penpot-exporter:
+    image: penpotapp/exporter:latest
+    container_name: penpot-exporter
+    restart: unless-stopped
+    environment:
+      PENPOT_PUBLIC_URI: http://penpot-frontend:8080
+      PENPOT_REDIS_URI: redis://penpot-redis/0
+      # Required by penpot >= 2.x config-validation schema. Missing this
+      # caused a restart loop with `:secret-key missing-key` until 2026-05-05.
+      PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:?required — set in .env}
+    networks: [penpot_net]
+
+  penpot-postgres:
+    image: postgres:16-alpine
+    container_name: penpot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: penpot
+      POSTGRES_USER: penpot
+      POSTGRES_PASSWORD: ${PENPOT_DB_PASS}
+    volumes:
+      - penpot_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penpot -d penpot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [penpot_net]
+
+  penpot-redis:
+    image: redis:7-alpine
+    container_name: penpot-redis
+    restart: unless-stopped
+    networks: [penpot_net]
+
+volumes:
+  penpot_assets:
+  penpot_pg:
+
+networks:
+  penpot_net:
+    driver: bridge

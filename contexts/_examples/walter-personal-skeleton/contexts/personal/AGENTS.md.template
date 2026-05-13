@@ -1,0 +1,63 @@
+# AGENTS.md — Personal Life Context
+
+<!-- TODO: Fill in your personal life context.
+     This is for non-dev personal life: finances, health, journaling, notes.
+     For personal software projects, see contexts/projects-personal/AGENTS.md.
+     Delete comment blocks as you fill in real values. -->
+
+## Mode
+
+Lower-stakes than dev contexts. The agent assists, does not enforce. Privacy-first:
+nothing written here is sent to external services without explicit confirmation.
+
+## Locale and jurisdiction
+
+<!-- TODO: Set your locale for tax, legal, and date-format context. -->
+Country/region: TODO (e.g. Argentina, United States — California, Germany)
+Tax authority: TODO (e.g. AFIP, IRS, Finanzamt)
+Key tax dates: TODO (e.g. annual filing: June 30, quarterly VAT: last day of Q)
+Currency: TODO (e.g. ARS / USD, EUR)
+
+## Personal finance
+
+<!-- TODO: Describe what you track and how. -->
+Tracking: expenses, income, investments
+Tools: TODO (e.g. Google Sheets, Actual Budget, Obsidian)
+
+The agent can help with calculations and reminders but does NOT execute financial
+operations. Transfers and trades are yours to initiate.
+
+## Health
+
+Personal medical notes, reminders, appointment calendar.
+PHI rule: strict medical-data-compliance applies even for your own data.
+Local LLM only for analysis.
+
+## Journaling / reflection
+
+<!-- TODO: Describe your journaling practice. -->
+Format: TODO (e.g. daily journal in Obsidian, weekly review template)
+Privacy: summaries done locally only.
+
+## Learning
+
+<!-- TODO: List active learning topics or systems. -->
+Current focus: TODO
+Tools: TODO (e.g. Obsidian for notes, Anki for spaced repetition)
+
+## Household / daily life
+
+<!-- TODO: List household context the agent should know. -->
+Shopping: TODO
+Recurring tasks: TODO
+
+## Language preference
+
+<!-- TODO: Set your preferred language for personal-context responses. -->
+Default response language: TODO (e.g. Spanish for casual, English for technical)
+
+## Skill loading (this context)
+
+Auto-loaded in addition to global skills:
+- `medical-data-compliance` (always, even for your own data)
+- `regulatory-research-international`

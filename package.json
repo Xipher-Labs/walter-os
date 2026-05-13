@@ -1,0 +1,14 @@
+{
+  "name": "walter-os",
+  "version": "0.0.1",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": "Xipher Labs",
+  "scripts": {
+    "dev": "pnpm --filter control-tower dev",
+    "build": "pnpm --filter control-tower build",
+    "lint": "pnpm --filter control-tower lint",
+    "typecheck": "pnpm --filter control-tower typecheck",
+    "test": "pnpm --filter control-tower test"
+  }
+}

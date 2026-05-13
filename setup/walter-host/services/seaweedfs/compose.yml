@@ -1,0 +1,49 @@
+# SeaweedFS — S3-compatible object storage
+# Vendored from operator VM container seaweedfs-main (2026-05-12).
+# Refs: setup/SERVICES-INVENTORY.md
+#
+# On the operator VM, SeaweedFS is deployed as part of the PostHog stack
+# (posthog_default network, posthog_seaweedfs volume) because PostHog uses
+# it for session recording V2 storage. This standalone compose is for
+# operators who want to run SeaweedFS independently of PostHog.
+#
+# Docker inspect source:
+#   docker inspect seaweedfs-main --format '{{json .Config}}'
+#   Image SHA: sha256:d24be3bc1d6e8e305c095c446cb9a00d40e3afdac82fb2a1cc96f2d42c4a8e80
+#
+# Ports:
+#   8333: S3-compatible API (HTTP)
+#   9333: Master server (management)
+# Not exposed externally — Caddy vhost TBD (see SUGGESTIONS.md).
+
+services:
+  seaweedfs:
+    # Pinned from :4.03 on 2026-05-12 via docker inspect
+    image: chrislusf/seaweedfs:4.03@sha256:d24be3bc1d6e8e305c095c446cb9a00d40e3afdac82fb2a1cc96f2d42c4a8e80
+    container_name: seaweedfs-main
+    restart: unless-stopped
+    command: server -s3 -s3.port=8333 -dir=/data
+    ports:
+      - "127.0.0.1:8333:8333"  # S3 API
+      - "127.0.0.1:9333:9333"  # Master server
+    volumes:
+      - seaweedfs_data:/data
+    networks:
+      - seaweedfs_net
+    healthcheck:
+      test:
+        - 'CMD'
+        - 'sh'
+        - '-c'
+        - "echo 's3.bucket.list' | /usr/bin/weed shell -master=localhost:9333 2>&1 | grep -q posthog || exit 1"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  seaweedfs_data:
+
+networks:
+  seaweedfs_net:
+    driver: bridge

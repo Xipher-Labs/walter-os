@@ -1,0 +1,175 @@
+{
+  "name": "GitHub Analytics Pull (github-pull)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-github",
+      "name": "Schedule Trigger (24h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "repository",
+        "operation": "get",
+        "owner": "={{ $env.GITHUB_ORG }}",
+        "repository": "={{ $env.GITHUB_REPO }}"
+      },
+      "id": "github-repo-stats",
+      "name": "GitHub Repository Stats",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        460,
+        200
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "github-pat-cred",
+          "name": "GitHub PAT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $env.GITHUB_ORG }}/{{ $env.GITHUB_REPO }}/traffic/views",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "github-traffic-views",
+      "name": "GitHub Traffic Views",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        400
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "github-pat-cred",
+          "name": "GitHub PAT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map GitHub stats \u2192 analytics_events rows\n// Refs: docs/specs/devrel-analytics-stack.md Decision 4\nconst repoData = $('GitHub Repository Stats').first().json;\nconst trafficData = $('GitHub Traffic Views').first().json;\nconst rows = [];\nconst occurredAt = new Date().toISOString();\nconst repo = `${$env.GITHUB_ORG}/${$env.GITHUB_REPO}`;\nconst contentId = `github:${repo}`;\n\n// Stars\nif (repoData.stargazers_count !== undefined) {\n  rows.push({\n    platform: 'github',\n    content_id: contentId,\n    event_type: 'star',\n    occurred_at: occurredAt,\n    metric_value: repoData.stargazers_count,\n    metadata: JSON.stringify({ repo, forks: repoData.forks_count })\n  });\n}\n\n// Traffic views (last 14 days, broken by day)\nconst views = trafficData.views || [];\nfor (const dayView of views) {\n  rows.push({\n    platform: 'github',\n    content_id: contentId,\n    event_type: 'view',\n    occurred_at: dayView.timestamp || occurredAt,\n    metric_value: dayView.count || 0,\n    metadata: JSON.stringify({ uniques: dayView.uniques, repo })\n  });\n}\n\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "map-github-to-analytics",
+      "name": "Map \u2192 analytics_events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (occurred_at, platform, content_id, event_type, metric_value, metadata) VALUES ($1::timestamptz, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (platform, content_id, event_type, occurred_at) DO UPDATE SET metric_value = EXCLUDED.metric_value, ingested_at = NOW()",
+        "additionalFields": {
+          "queryParams": "={{ [$json.occurred_at, $json.platform, $json.content_id, $json.event_type, $json.metric_value, $json.metadata] }}"
+        }
+      },
+      "id": "upsert-github-events",
+      "name": "Upsert analytics_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "analytics-pg-cred",
+          "name": "Analytics Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (24h)": {
+      "main": [
+        [
+          {
+            "node": "GitHub Repository Stats",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Traffic Views",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Repository Stats": {
+      "main": [
+        [
+          {
+            "node": "Map \u2192 analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Traffic Views": {
+      "main": [
+        [
+          {
+            "node": "Map \u2192 analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map \u2192 analytics_events": {
+      "main": [
+        [
+          {
+            "node": "Upsert analytics_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    "devrel-analytics",
+    "tier-1",
+    "github"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part A \u2014 AC-3. Pulls GitHub repo stats (stars, traffic views/clones) every 24h. Prereq: GITHUB_ORG + GITHUB_REPO env vars + GitHub PAT credential. The PAT needs repo:traffic scope."
+}

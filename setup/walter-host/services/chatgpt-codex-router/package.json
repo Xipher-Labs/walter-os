@@ -1,0 +1,16 @@
+{
+  "name": "chatgpt-codex-router",
+  "version": "1.0.0",
+  "description": "Thin HTTP bridge exposing Codex CLI as OpenAI-compatible API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test server.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

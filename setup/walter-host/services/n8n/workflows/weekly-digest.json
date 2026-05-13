@@ -1,0 +1,233 @@
+{
+  "name": "DevRel Weekly Digest (weekly-digest)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-weekly",
+      "name": "Schedule Monday 09:00 ART",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Cron: 0 9 * * 1 (ART, via GENERIC_TIMEZONE). Fires Monday 09:00 ART = 12:00 UTC."
+    },
+    {
+      "parameters": {
+        "command": "=python3 {{ $env.WALTER_OS_DIR || '/opt/walter-os' }}/skills/devrel-analyst/scripts/query.py weekly_digest 2>&1"
+      },
+      "id": "run-weekly-digest",
+      "name": "Run devrel-analyst weekly_digest",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "notes": "Invokes devrel-analyst skill (AC-13) to produce the weekly digest markdown. Uses ANALYTICS_DB_URL env var for DB connection."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute ISO week filename using Intl.DateTimeFormat (spec-compliant, ISO 8601 compliant)\nconst now = new Date();\nconst weekNum = parseInt(\n  new Intl.DateTimeFormat('en', { weekYear: 'numeric', week: 'numeric' })\n    .formatToParts(now)\n    .find(p => p.type === 'week').value,\n  10\n);\nconst year = parseInt(\n  new Intl.DateTimeFormat('en', { weekYear: 'numeric', week: 'numeric' })\n    .formatToParts(now)\n    .find(p => p.type === 'weekYear').value,\n  10\n);\nconst weekStr = String(weekNum).padStart(2, '0');\nconst isoWeek = `${year}-W${weekStr}`;\nconst filename = `weekly-${isoWeek}.md`;\n\nconst digestContent = $json.stdout || $json.output || '';\nconst exitCode = $json.exitCode || 0;\n\nif (exitCode !== 0) {\n  return [{ json: {\n    success: false,\n    error: $json.stderr || 'digest generation failed',\n    filename\n  }}];\n}\n\nreturn [{ json: { success: true, content: digestContent, filename, isoWeek } }];"
+      },
+      "id": "prepare-digest-file",
+      "name": "Prepare Digest File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "digest-success",
+      "name": "Digest OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Write digest to wiki via stdin pipe (no heredoc \u2014 avoids shell injection in content)\nconst content = $('Prepare Digest File').first().json.content;\nconst filename = $('Prepare Digest File').first().json.filename;\nconst wikiDir = process.env.WIKI_SYNC_DIR || '/files/wiki';\nconst fullPath = `${wikiDir}/devrel/insights/${filename}`;\nconst b64 = Buffer.from(content, 'utf8').toString('base64');\n\nreturn [{ json: {\n  write_command: `mkdir -p '${wikiDir}/devrel/insights' && echo '${b64}' | base64 -d > '${fullPath}'`,\n  fullPath,\n  filename\n} }];"
+      },
+      "id": "build-write-command",
+      "name": "Build Write Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.write_command }}"
+      },
+      "id": "write-to-wiki",
+      "name": "Write to Wiki Sync Dir",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.WALTER_TELEGRAM_CHAT_ID }}",
+        "text": "=\ud83d\udcca *DevRel Weekly Digest ready*\n\nWeek: {{ $('Prepare Digest File').first().json.isoWeek }}\nFile: `~/sync/wiki/devrel/insights/{{ $('Prepare Digest File').first().json.filename }}`\n\nHighlights available in the wiki digest.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-digest-notification",
+      "name": "Telegram Digest Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-cred",
+          "name": "Walter Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Sends Telegram notification with link to the weekly digest wiki page (AC-14)."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.WALTER_TELEGRAM_CHAT_ID }}",
+        "text": "=\u26a0\ufe0f DevRel Weekly Digest FAILED\n\nError: {{ $json.error }}\n\nCheck n8n execution log for details.",
+        "additionalFields": {}
+      },
+      "id": "telegram-digest-error",
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        420
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-cred",
+          "name": "Walter Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Monday 09:00 ART": {
+      "main": [
+        [
+          {
+            "node": "Run devrel-analyst weekly_digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run devrel-analyst weekly_digest": {
+      "main": [
+        [
+          {
+            "node": "Prepare Digest File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Digest File": {
+      "main": [
+        [
+          {
+            "node": "Digest OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Digest OK?": {
+      "main": [
+        [
+          {
+            "node": "Build Write Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Write Command": {
+      "main": [
+        [
+          {
+            "node": "Write to Wiki Sync Dir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Wiki Sync Dir": {
+      "main": [
+        [
+          {
+            "node": "Telegram Digest Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    "devrel-analytics",
+    "weekly-digest",
+    "automation"
+  ],
+  "versionId": "v1",
+  "notes": "Phase V Part D \u2014 AC-14. Runs Monday 09:00 ART. Invokes devrel-analyst weekly_digest skill \u2192 writes markdown to ~/sync/wiki/devrel/insights/weekly-<YYYY-WW>.md \u2192 Telegram notification. Activate after Tier 1 ingestion is running (need 7+ days of data). See docs/specs/devrel-analytics-stack.md."
+}

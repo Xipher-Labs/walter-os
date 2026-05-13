@@ -1,0 +1,29 @@
+# Secrets — never commit raw credentials
+.env
+.env.local
+.env.production
+.env.staging
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Allow template/example files explicitly
+!.env.template
+!.env.example
+!personal.env.template
+
+# macOS
+.DS_Store
+
+# Editor noise
+.idea/
+.vscode/
+*.swp
+*~
+
+# Walter-OS overlay cache (machine-local, not shareable)
+cache/

@@ -1,0 +1,10 @@
+.next
+node_modules
+.env
+.env.*
+!.env.example
+*.log
+README.md
+tests/
+.git
+.gitignore

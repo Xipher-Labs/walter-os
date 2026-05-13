@@ -1,0 +1,101 @@
+# OpenClaw — multi-channel personal assistant on Walter-VM.
+#
+# Phase 1 (now):  Telegram-bot-only mode (no Matrix bridges yet).
+#   Operator messages @${WALTER_OPENCLAW_BOT_HANDLE} → OpenClaw → LLM via LiteLLM
+#   → reply / Calendar event / digest.
+#
+# Phase 2 (when Beeper bridges ready):  reads Matrix events from
+#   the local Synapse homeserver too. WhatsApp/iMessage/IG/Signal/etc.
+#   surface as "channels" in OpenClaw alongside Telegram.
+#
+# URL: claw.${WALTER_DOMAIN} (Phase 2 — admin web UI).
+# Listens on 127.0.0.1:18789 internally for now (no public until Phase 2).
+
+services:
+  openclaw:
+    image: node:24-slim
+    container_name: openclaw
+    restart: unless-stopped
+    working_dir: /workspace
+    environment:
+      NPM_CONFIG_PREFIX: /workspace/.npm-global
+      PATH: /workspace/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      HOME: /workspace
+      # LLM via LiteLLM (Sonnet by default, fallback chain handled there)
+      OPENAI_API_BASE: http://litellm:4000
+      OPENAI_API_KEY: ${LITELLM_OPENCLAW_KEY}
+      ANTHROPIC_API_BASE: http://litellm:4000
+      ANTHROPIC_API_KEY: ${LITELLM_OPENCLAW_KEY}
+      # Telegram bot (separate from alerting bot)
+      TELEGRAM_BOT_TOKEN: ${OPENCLAW_TELEGRAM_BOT_TOKEN}
+      # Default model — Sonnet for routine, Opus for reasoning (router decides)
+      # Maps to LiteLLM's `sonnet` route (model_name in litellm/config.yaml).
+      # NOTE: per-instance overrides live in /workspace/.openclaw/openclaw.json
+      # (set during `openclaw onboard`). If that file references
+      # `claude-opus-4-6` or any other invented name, the gateway will
+      # fail every embedded call with FailoverError. Edit the JSON to use
+      # one of LiteLLM's actual route names: cheap | haiku | sonnet | opus | gpt
+      # AND set baseUrl to http://litellm:4000 (NOT localhost — it's a
+      # different container). See docs/operational/onboarding-checklist.md.
+      OPENCLAW_DEFAULT_MODEL: sonnet
+      # Operator's Telegram chat (only this chat is paired by default)
+      OPENCLAW_OPERATOR_CHAT_ID: ${OPENCLAW_OPERATOR_CHAT_ID}
+      # Strict DM pairing — unknown senders get pairing code, not auto-replied
+      OPENCLAW_DM_POLICY: pairing
+      # Auth token required when binding off-loopback. Bind mode is set via
+      # CLI flag below (--bind lan), since there's no env-var equivalent in
+      # OpenClaw v2026.5. FAIL LOUD if missing — silently binding 0.0.0.0
+      # with empty token would expose the gateway to anything on litellm_net
+      # / openclaw_net (security regression).
+      OPENCLAW_GATEWAY_TOKEN: "${OPENCLAW_GATEWAY_TOKEN:?required — set in .env or fetch from Infisical}"
+      # Control UI allowed origins — without this, browser → /api/* gets 403
+      # for cross-origin even though the UI itself loads from the same host.
+      OPENCLAW_GATEWAY_CONTROLUI_ALLOWED_ORIGINS: "https://${OPENCLAW_TUNNEL_HOSTNAME:-claw.${WALTER_DOMAIN}},http://127.0.0.1:18789"
+      # Timezone
+      TZ: America/Argentina/Buenos_Aires
+    volumes:
+      - openclaw_data:/workspace
+    ports:
+      # Local-only for Phase 1; will become tunnel-fronted in Phase 2.
+      - "127.0.0.1:18789:18789"
+    networks:
+      - litellm_net          # to reach LiteLLM
+      - openclaw_net         # for future Synapse + bridges
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
+          mkdir -p /workspace/.npm-global
+          npm install -g openclaw@2026.5.7
+        fi
+        # First boot: idle until onboard via `docker exec ... openclaw onboard`.
+        if [ ! -f /workspace/.openclaw/openclaw.json ]; then
+          echo "openclaw: not onboarded yet."
+          echo "Run: docker exec -it openclaw /workspace/.npm-global/bin/openclaw onboard"
+          exec sleep infinity
+        fi
+        # --bind lan = listen on 0.0.0.0 inside the container. Required for
+        # the host-side port mapping (127.0.0.1:18789:18789) to actually
+        # forward traffic; default loopback inside the container makes the
+        # mapping receive nothing on the container side.
+        exec /workspace/.npm-global/bin/openclaw gateway run --port 18789 --bind lan
+    # OpenClaw exposes /healthz + /readyz (NOT /health). node:24-slim has
+    # no curl/wget, so use node's HTTP module for the probe.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:18789/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  openclaw_data:
+
+networks:
+  litellm_net:
+    external: true
+    name: litellm_default
+  openclaw_net:
+    driver: bridge

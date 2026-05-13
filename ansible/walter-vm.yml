@@ -1,0 +1,124 @@
+---
+# walter-vm.yml — Master playbook for Walter-VM stack.
+#
+# Tag-based selective deployment:
+#   ansible-playbook walter-vm.yml --tags base       # OS-level (apt, ufw, docker, cloudflared)
+#   ansible-playbook walter-vm.yml --tags services   # All Docker services
+#   ansible-playbook walter-vm.yml --tags grafana    # Just Grafana
+#   ansible-playbook walter-vm.yml --tags alerting   # Watchdog + cron
+#   ansible-playbook walter-vm.yml                   # Everything
+#
+# Idempotent. Safe to re-run.
+
+- name: Walter-VM bootstrap + service deployment
+  hosts: walter_vm
+  become: yes
+  gather_facts: yes
+
+  vars:
+    walter_services_dir: /opt/walter-vm/services
+    walter_data_volume: /mnt/walter-vm-data
+
+  pre_tasks:
+    - name: Verify reaching VM via Cloudflare Access tunnel
+      ansible.builtin.ping:
+      tags: always
+
+  roles:
+    # ---- Base OS layer (apt, swap, fs, security, docker) ----
+    - role: base
+      tags: [base]
+
+    # ---- Cloudflare Tunnel ----
+    - role: cloudflared
+      tags: [base, cloudflared]
+
+    # ---- Each service runs as its own role with consistent contract ----
+    - role: service
+      vars:
+        service_name: plane
+      tags: [services, plane]
+    - role: service
+      vars:
+        service_name: forgejo
+      tags: [services, forgejo]
+    - role: service
+      vars:
+        service_name: infisical
+      tags: [services, infisical]
+    - role: service
+      vars:
+        service_name: litellm
+      tags: [services, litellm]
+    - role: service
+      vars:
+        service_name: n8n
+      tags: [services, n8n]
+    - role: service
+      vars:
+        service_name: uptime-kuma
+      tags: [services, monitoring, uptime-kuma]
+    - role: service
+      vars:
+        service_name: homepage
+      tags: [services, homepage]
+    - role: service
+      vars:
+        service_name: observability
+      tags: [services, monitoring, observability, grafana]
+    - role: service
+      vars:
+        service_name: penpot
+      tags: [services, design, penpot]
+    - role: service
+      vars:
+        service_name: drawio
+      tags: [services, design, drawio]
+    - role: service
+      vars:
+        service_name: rocketchat
+      tags: [services, comms, rocketchat]
+    - role: service
+      vars:
+        service_name: synapse
+      tags: [services, comms, synapse]
+    - role: service
+      vars:
+        service_name: openclaw
+      tags: [services, openclaw]
+    - role: service
+      vars:
+        service_name: llm-proxies
+      tags: [services, llm-proxies]
+    - role: service
+      vars:
+        service_name: wireguard
+      tags: [services, vpn, wireguard]
+    - role: service
+      vars:
+        service_name: headscale
+      tags: [services, vpn, headscale]
+    - role: service
+      vars:
+        service_name: syncthing
+      tags: [services, sync, syncthing]
+    - role: service
+      vars:
+        service_name: restic
+      tags: [services, backup, restic]
+
+    # ---- Cron-driven layer (alerting watchdogs) ----
+    - role: alerting
+      tags: [alerting, monitoring]
+
+  post_tasks:
+    - name: Print service health summary
+      ansible.builtin.command: docker ps --format '{{ "{{.Names}}\t{{.Status}}" }}'
+      register: ps_out
+      changed_when: false
+      tags: always
+
+    - name: Show
+      ansible.builtin.debug:
+        msg: "{{ ps_out.stdout_lines }}"
+      tags: always

@@ -1,0 +1,1070 @@
+#!/usr/bin/env bash
+# walter-os — CLI for Walter-OS operations
+#
+# Subcommands:
+#   audit                       Run supply-chain audit now (foreground)
+#   status                      Show audit + spend status
+#   ack <id> [--reason]         Acknowledge a finding so it stops blocking
+#   baseline <config>           Update baseline for a config file
+#   baseline-hooks              Refresh hook checksums after intentional change
+#   enable-hook <name>          Enable a hook in ~/.claude/settings.json
+#   disable-hook <name>         Disable a hook (without uninstalling)
+#   sync                        Pull + reinstall walter-os itself
+#   sync-repos                  Pull configured personal/work repos
+#   profile {default|high-risk} Switch MCP profile (settings.json swap)
+#   profile-bootstrap {init|status|sync-shared} [claude|codex|all]
+#                               Set up multi-account profile dirs (work + personal)
+#   secrets-keychain-init       Bootstrap macOS Keychain with Infisical Machine Identity (Yubikey-gated)
+#   secrets-status              Report current secrets session (age, expiry, Yubikey)
+#   secrets-clear               Clear session marker, force re-auth on next load
+#   secrets-pull [--list]       DEPRECATED — use `walter_secrets_load` shell fn instead
+#   secrets-bootstrap [--force] DEPRECATED — Bitwarden retired for walter-os
+#   syncthing-bootstrap         Register all expected folders on the VM hub
+#   agent-memory {setup|status} Wire ~/.claude memory dirs into Syncthing folder
+#   wiki {status|lint|ingest|query|commit}
+#                               LLM-maintained knowledge base ops (Karpathy pattern)
+#   spend report [--by-agent|--by-task] [--last <N>d]
+#                               LiteLLM cost attribution report by agent or task
+#   mode consensus {on|off|status} [--threshold N]
+#                               Walter Council consensus mode toggle
+#   agents {list|run-once|pause|resume|status}
+#                               Walter Council (multi-agent autonomy ops)
+#   lessons {list|query|rate|stats}
+#                               Cross-agent learning broker (lessons.db)
+#   new project <type> <name> [opts]
+#                               Start project induction interview (generates charter + AGENTS.md + Plane epic)
+#                               Types: webapp | service | solana | hackathon | personal
+#   bridge {install|status} [args]
+#                               Route CLI tools through Walter-Bridge (LiteLLM)
+#                               install {claude-code-router|gemini-cli|codex-cli|all}
+#                               status — check which CLIs are wired
+#   content {stats|analyst|prereqs} [opts]
+#                               DevRel analytics (Phase V) — content stats, analyst queries
+#   analyst <query> [opts]      Shorthand for: walter-os content analyst <query>
+#   pr-title <TYPE> <CATEGORY> <text>
+#                               Generate a valid [TYPE] -CATEGORY- title string
+#                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
+#   version                     Show current version + optional update check
+#   doctor                      Diagnose install state
+#   help                        Show this help
+
+set -euo pipefail
+
+# ---------- env ----------
+
+WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+
+# Load operator personal config from overlay (out-of-repo, persistent across checkouts).
+# Sourced before the per-install env so that the per-install env can override overlay values.
+_OVERLAY_PERSONAL_ENV="${HOME}/.config/walter-os/overlay/personal.env"
+if [[ -f "$_OVERLAY_PERSONAL_ENV" ]]; then
+  set +u
+  # shellcheck source=/dev/null
+  source "$_OVERLAY_PERSONAL_ENV"
+  set -u
+fi
+unset _OVERLAY_PERSONAL_ENV
+
+[[ -f "${WALTER_CONFIG}/env" ]] && source "${WALTER_CONFIG}/env"
+# Default Walter-OS checkout location.
+# Operators override via WALTER_OS_HOME env (in personal.env overlay or .env.local)
+# or by symlinking ~/walter-os to their preferred location.
+WALTER_OS_HOME="${WALTER_OS_HOME:-${HOME}/walter-os}"
+
+if [[ ! -d "$WALTER_OS_HOME" ]]; then
+  echo "walter-os: WALTER_OS_HOME does not exist: $WALTER_OS_HOME" >&2
+  echo "  Run install.sh from the repo root, or export WALTER_OS_HOME in" >&2
+  echo "  ~/.config/walter-os/overlay/personal.env" >&2
+  exit 2
+fi
+
+CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+ACK_FILE="${WALTER_CONFIG}/acks.json"
+STATUS="${WALTER_CONFIG}/audit-status.json"
+TODAY="$(date +%Y-%m-%d)"
+
+mkdir -p "$WALTER_CONFIG"
+
+# ---------- helpers ----------
+
+require_jq() {
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "walter-os: jq required for this command. Install: brew install jq" >&2
+    exit 3
+  fi
+}
+
+print_help() {
+  # Print the file's leading-comment block (title + Subcommands list).
+  # Stops at the first non-comment line (typically `set -euo pipefail`),
+  # so adding new subcommands above never breaks the help output.
+  awk '/^[^#]/ && NR > 1 { exit } /^#( |$)/ { sub(/^# ?/, ""); print }' "$0"
+}
+
+# ---------- audit ----------
+
+cmd_audit() {
+  exec "${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/audit.sh" "$@"
+}
+
+cmd_status() {
+  echo "Walter-OS status — ${TODAY}"
+  echo
+  echo "Repo: $WALTER_OS_HOME"
+  echo "Config: $WALTER_CONFIG"
+  echo
+  if [[ -f "$STATUS" ]]; then
+    require_jq
+    local sev date crit high info
+    sev="$(jq -r '.severity' "$STATUS")"
+    date="$(jq -r '.date' "$STATUS")"
+    crit="$(jq -r '.critical' "$STATUS")"
+    high="$(jq -r '.high' "$STATUS")"
+    info="$(jq -r '.info' "$STATUS")"
+    case "$sev" in
+      0) emoji="✅" label="clean" ;;
+      1) emoji="ℹ️ " label="info-only" ;;
+      2) emoji="⚠️ " label="HIGH findings" ;;
+      3) emoji="🚨" label="CRITICAL findings" ;;
+      *) emoji="?" label="unknown" ;;
+    esac
+    echo "Audit ${date}: ${emoji} ${label}"
+    echo "  critical=${crit}  high=${high}  info=${info}"
+    echo "  Report: ${WALTER_CONFIG}/audit-${date}.md"
+  else
+    echo "Audit: never run. Try: walter-os audit"
+  fi
+
+  if [[ -f "${WALTER_CONFIG}/spend-status.json" ]]; then
+    echo
+    echo "AI spend (today / month):"
+    require_jq
+    local today_spend month_spend budget
+    today_spend="$(jq -r '.today_usd // 0' "${WALTER_CONFIG}/spend-status.json")"
+    month_spend="$(jq -r '.this_month_usd // 0' "${WALTER_CONFIG}/spend-status.json")"
+    budget="$(jq -r '.monthly_budget_usd // 0' "${WALTER_CONFIG}/spend-status.json")"
+    echo "  today: \$${today_spend}"
+    echo "  this month: \$${month_spend} / \$${budget} budget"
+    # Budget warn: if month spend > budget and budget > 0, emit warning.
+    if command -v awk >/dev/null 2>&1 && [[ -n "$budget" && "$budget" != "0" ]]; then
+      if awk -v spend="$month_spend" -v budget="$budget" 'BEGIN{exit !(spend > budget)}'; then
+        echo "  WARN: monthly LLM spend \$${month_spend} exceeds budget \$${budget}"
+      fi
+    fi
+  fi
+
+  # Council metrics section — reads from the Prometheus textfile metrics file.
+  # Only shown when the file exists (skipped silently if no agent has run yet).
+  local metrics_file="${WALTER_METRICS_FILE:-/var/lib/walter-council/metrics.prom}"
+  if [[ -f "$metrics_file" ]]; then
+    echo
+    echo "Council (today):"
+    # tasks_completed: sum of all success result counters
+    local tasks_completed
+    tasks_completed="$(grep -E '^walter_council_tasks_total\{.*result="success".*\}' "$metrics_file" 2>/dev/null \
+      | awk '{sum += $NF} END {printf "%d", sum+0}' || echo 0)"
+    # tasks_failed: sum of all non-success result counters
+    local tasks_failed
+    tasks_failed="$(grep -E '^walter_council_tasks_total\{.*result="(failed|needs_operator)".*\}' "$metrics_file" 2>/dev/null \
+      | awk '{sum += $NF} END {printf "%d", sum+0}' || echo 0)"
+    # tokens_total: sum of all token counters
+    local tokens_total
+    tokens_total="$(grep -E '^walter_council_tokens_total\{' "$metrics_file" 2>/dev/null \
+      | awk '{sum += $NF} END {printf "%d", sum+0}' || echo 0)"
+    # agents_working: count of agent_state = 1
+    local agents_working
+    agents_working="$(grep -E '^walter_council_agent_state\{' "$metrics_file" 2>/dev/null \
+      | awk '$NF == 1 {count++} END {printf "%d", count+0}' || echo 0)"
+    echo "  tasks_completed:  ${tasks_completed:-0}"
+    echo "  tasks_failed:     ${tasks_failed:-0}"
+    echo "  tokens_total:     ${tokens_total:-0}"
+    echo "  agents_working:   ${agents_working:-0}"
+  fi
+}
+
+# ---------- ack ----------
+
+cmd_ack() {
+  require_jq
+  local id="${1:-}" reason=""
+  shift || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason) reason="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    echo "walter-os ack: finding id required" >&2
+    echo "Usage: walter-os ack <id> [--reason '...']" >&2
+    exit 2
+  fi
+
+  [[ -f "$ACK_FILE" ]] || echo '{"acks":[]}' > "$ACK_FILE"
+
+  local expires_at
+  expires_at="$(date -u -v+7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+7 days' +%Y-%m-%dT%H:%M:%SZ)"
+
+  local entry
+  entry="$(jq -n \
+    --arg id "$id" \
+    --arg reason "$reason" \
+    --arg expires "$expires_at" \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{id:$id, reason:$reason, expires_at:$expires, acked_at:$ts}')"
+
+  jq --argjson entry "$entry" '.acks = ((.acks // []) | map(select(.id != $entry.id)) + [$entry])' \
+    "$ACK_FILE" > "${ACK_FILE}.tmp"
+  mv "${ACK_FILE}.tmp" "$ACK_FILE"
+
+  echo "✓ Acknowledged '$id' until $expires_at"
+  [[ -n "$reason" ]] && echo "  Reason: $reason"
+}
+
+# ---------- baseline ----------
+
+cmd_baseline() {
+  local cfg="${1:-}"
+  if [[ -z "$cfg" ]]; then
+    echo "walter-os baseline: config path required" >&2
+    echo "Usage: walter-os baseline <path-to-config>" >&2
+    exit 2
+  fi
+  if [[ ! -f "$cfg" ]]; then
+    echo "walter-os baseline: file not found: $cfg" >&2
+    exit 2
+  fi
+
+  local baselines_dir="${WALTER_CONFIG}/baselines"
+  mkdir -p "$baselines_dir"
+  local name; name="$(basename "$cfg")"
+  local current; current="$(shasum -a 256 "$cfg" | awk '{print $1}')"
+  echo "$current" > "${baselines_dir}/${name}.sha256"
+  echo "✓ Baseline updated for $cfg"
+  echo "  sha256: $current"
+}
+
+cmd_baseline_hooks() {
+  require_jq
+  local settings="$CLAUDE_SETTINGS"
+  if [[ ! -f "$settings" ]]; then
+    echo "walter-os baseline-hooks: $settings not found" >&2
+    exit 2
+  fi
+  local checksums="${WALTER_CONFIG}/hook-checksums.json"
+  jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings" > "$checksums"
+  echo "✓ Hook checksums refreshed: $checksums"
+}
+
+# ---------- enable/disable hooks ----------
+
+cmd_enable_hook() {
+  echo "walter-os enable-hook: not yet implemented (Phase 2)" >&2
+  exit 1
+}
+
+cmd_disable_hook() {
+  echo "walter-os disable-hook: not yet implemented (Phase 2)" >&2
+  exit 1
+}
+
+# ---------- sync ----------
+
+cmd_sync() {
+  exec "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
+}
+
+cmd_sync_repos() {
+  exec "${WALTER_OS_HOME}/scripts/sync-repos.sh" "$@"
+}
+
+# ---------- profile (MCP load profile switcher) ----------
+
+cmd_profile() {
+  local target="${1:-}"
+  local claude_dir="${HOME}/.claude"
+  local active="${claude_dir}/settings.json"
+  local default="${claude_dir}/settings.default.json"
+  local high_risk="${claude_dir}/settings.high-risk.json"
+
+  if [[ -z "$target" ]]; then
+    # Report current profile.
+    if [[ -f "$default" && ! -f "$high_risk" ]]; then
+      echo "default (high-risk profile not staged)"
+    elif [[ -f "$high_risk" && ! -f "$default" ]]; then
+      echo "high-risk (default profile saved as backup)"
+    elif [[ -f "$default" && -f "$high_risk" ]]; then
+      echo "indeterminate — both backups present, manual cleanup needed"
+      echo "  ${default}"
+      echo "  ${high_risk}"
+      return 2
+    else
+      echo "unknown — no backups present, can't tell which profile is loaded"
+      return 0
+    fi
+    return 0
+  fi
+
+  local generator="${WALTER_OS_HOME}/scripts/generate-mcp-configs.sh"
+  if [[ ! -x "$generator" ]]; then
+    echo "walter-os: missing $generator. Run install.sh." >&2
+    exit 3
+  fi
+
+  case "$target" in
+    default)
+      if [[ -f "$high_risk" && ! -f "$default" ]]; then
+        echo "walter-os: already on high-risk profile? Looks like a stale state."
+        echo "  Restoring default would clobber high-risk backup. Aborting."
+        return 2
+      fi
+      # Regenerate from servers.json (default profile only)
+      require_jq
+      local generated; generated="$("$generator" claude all default 2>/dev/null || echo '{}')"
+      [[ -z "$generated" || "$generated" == "{}" ]] && {
+        echo "walter-os: generator emitted empty config, refusing to clobber settings.json" >&2
+        exit 3
+      }
+      cp "$active" "${active}.bak.$(date +%s)"
+      jq --argjson new "$generated" '.mcpServers = $new' "$active" > "${active}.tmp"
+      mv "${active}.tmp" "$active"
+      rm -f "$high_risk" "$default"
+      echo "✓ profile: default (mcpServers replaced from servers.json)"
+      ;;
+    high-risk)
+      if [[ -f "$high_risk" ]]; then
+        echo "walter-os: high-risk profile is already active."
+        return 0
+      fi
+      require_jq
+      local default_json; default_json="$("$generator" claude all default 2>/dev/null || echo '{}')"
+      local manual_json; manual_json="$("$generator" claude all manual 2>/dev/null || echo '{}')"
+      local merged; merged="$(jq -n --argjson d "$default_json" --argjson m "$manual_json" '$d + $m')"
+      cp "$active" "$default"  # save default as backup
+      jq --argjson new "$merged" '.mcpServers = $new' "$active" > "${active}.tmp"
+      mv "${active}.tmp" "$active"
+      touch "$high_risk"  # marker; content is the live settings.json
+      echo "✓ profile: high-risk (default + manual MCPs loaded)"
+      echo "  Switch back: walter-os profile default"
+      ;;
+    *)
+      echo "walter-os: unknown profile '$target'. Use: default | high-risk" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# ---------- secrets-pull (Vaultwarden → ~/.config/walter-os/secrets.env) ----------
+
+cmd_secrets_pull() {
+  local action="${1:-pull}"
+  local secrets="${WALTER_CONFIG}/secrets.env"
+
+  if ! command -v bw >/dev/null 2>&1; then
+    echo "walter-os: Bitwarden CLI 'bw' not found. Install: brew install bitwarden-cli" >&2
+    echo "  Then: bw login && bw unlock" >&2
+    exit 3
+  fi
+
+  # bw status returns "unlocked" / "locked" / "unauthenticated"
+  local status; status="$(bw status 2>/dev/null | jq -r '.status' 2>/dev/null || echo unauthenticated)"
+  if [[ "$status" != "unlocked" ]]; then
+    echo "walter-os: Bitwarden vault is $status. Unlock first:" >&2
+    echo "  export BW_SESSION=\$(bw unlock --raw)" >&2
+    exit 3
+  fi
+
+  if [[ "$action" == "--list" || "$action" == "list" ]]; then
+    echo "Items tagged 'walter-os':"
+    bw list items --search walter-os 2>/dev/null \
+      | jq -r '.[] | "  \(.name)"' \
+      | sort -u
+    return 0
+  fi
+
+  # Look for an item literally named "walter-os/secrets" — JSON envelope with
+  # all secrets. If found, decrypt + write atomically. If not, instruct the
+  # operator to create it.
+  local item_id; item_id="$(bw list items --search 'walter-os/secrets' 2>/dev/null \
+    | jq -r '.[] | select(.name == "walter-os/secrets") | .id' \
+    | head -1)"
+
+  if [[ -z "$item_id" ]]; then
+    cat >&2 <<EOF
+walter-os: no Bitwarden item named 'walter-os/secrets' found.
+
+Create one with the secret notes contents in dotenv format:
+  bw create item ...    (or via the web/desktop UI)
+
+Item shape:
+  name: walter-os/secrets
+  type: 2 (secure note)
+  notes: |
+    export ANTHROPIC_API_KEY="..."
+    export OPENAI_API_KEY="..."
+    ...
+
+Then re-run: walter-os secrets-pull
+EOF
+    exit 4
+  fi
+
+  local notes; notes="$(bw get notes "$item_id" 2>/dev/null)"
+  if [[ -z "$notes" ]]; then
+    echo "walter-os: item 'walter-os/secrets' has empty notes. Aborting." >&2
+    exit 4
+  fi
+
+  # Atomic write — preserves mode 600.
+  local tmp; tmp="$(mktemp "${secrets}.XXXXXX")"
+  printf '%s\n' "$notes" > "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$secrets"
+  echo "✓ wrote $(wc -l < "$secrets" | tr -d ' ') lines to $secrets"
+  echo "  Source it: source $secrets"
+}
+
+# ---------- profile-bootstrap (multi-account work + personal) ----------
+
+cmd_profile_bootstrap() {
+  exec "${WALTER_OS_HOME}/scripts/profile-bootstrap.sh" "$@"
+}
+
+# ---------- secrets-bootstrap (initial Bitwarden 'walter-os/secrets' note) ----
+
+cmd_secrets_bootstrap() {
+  echo "walter-os: secrets-bootstrap is DEPRECATED." >&2
+  echo "  Bitwarden retired for walter-os (operator decision 2026-05-05)." >&2
+  echo "  Use the runtime flow instead:" >&2
+  echo "    walter-os secrets-keychain-init   # one-time setup" >&2
+  echo "    walter_secrets_load               # in-shell, every 12h" >&2
+  exit 1
+}
+
+# ---------- secrets-keychain-init (one-time Keychain bootstrap) ----------
+
+cmd_secrets_keychain_init() {
+  exec "${WALTER_OS_HOME}/scripts/secrets-keychain-init.sh" "$@"
+}
+
+# ---------- secrets-status / secrets-clear (delegate to shell fns) ----------
+
+cmd_secrets_status() {
+  echo "walter-os: 'secrets-status' is a shell function, not a CLI subcommand."
+  echo "  Run from your zsh: walter_secrets_status"
+  echo "  (the runtime is in-shell; CLI can't introspect another shell's env)"
+  exit 2
+}
+
+cmd_secrets_clear() {
+  echo "walter-os: 'secrets-clear' is a shell function, not a CLI subcommand."
+  echo "  Run from your zsh: walter_secrets_clear"
+  exit 2
+}
+
+# ---------- syncthing-bootstrap (pre-register folders on the VM hub) ----------
+
+cmd_syncthing_bootstrap() {
+  exec "${WALTER_OS_HOME}/scripts/syncthing-bootstrap.sh" "$@"
+}
+
+# ---------- agent-memory ----------
+
+cmd_agent_memory() {
+  exec "${WALTER_OS_HOME}/scripts/agent-memory-setup.sh" "$@"
+}
+
+# ---------- wiki (LLM-maintained KB) ----------
+
+cmd_wiki() {
+  exec "${WALTER_OS_HOME}/scripts/wiki.sh" "$@"
+}
+
+# ---------- spend (LiteLLM cost attribution reports) ----------
+
+cmd_spend_report() {
+  require_jq
+  local mode="" last="7d" start_date end_date
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --by-agent) mode="agent"; shift ;;
+      --by-task)  mode="task";  shift ;;
+      --last)     last="${2:-7d}"; shift 2 ;;
+      -h|--help|help)
+        cat <<SPEND_USAGE
+Usage: walter-os spend report --by-agent --last 7d
+       walter-os spend report --by-task  --last 7d
+
+Options:
+  --by-agent   Group spend by agent (default if no mode given)
+  --by-task    Group spend by task (top-20 most expensive)
+               Note: AGENT column shows '-' — LiteLLM group_by=task_id
+               does not expose agent_id in the same response. Use
+               --by-agent for per-agent breakdowns.
+  --last <N>d  Reporting window in days (default: 7d)
+
+Requires: LITELLM_BASE_URL and LITELLM_API_KEY env vars.
+SPEND_USAGE
+        return 0
+        ;;
+      *) shift ;;
+    esac
+  done
+
+  # Default mode
+  [[ -z "$mode" ]] && mode="agent"
+
+  # Compute date range
+  local spend_lib="${WALTER_OS_HOME}/scripts/agents/lib/spend.sh"
+  if [[ ! -f "$spend_lib" ]]; then
+    echo "walter-os spend: spend.sh library not found at $spend_lib" >&2
+    exit 3
+  fi
+
+  # shellcheck disable=SC1090
+  source "$spend_lib"
+
+  local days; days=$(_spend_parse_last_flag "$last")
+  end_date="$(_spend_date_offset 0)"
+  start_date="$(_spend_date_offset "$days")"
+
+  echo "Spend report: ${start_date} → ${end_date} (by ${mode})"
+  echo
+
+  case "$mode" in
+    agent) spend_report_by_agent "$start_date" "$end_date" ;;
+    task)  spend_report_by_task  "$start_date" "$end_date" ;;
+  esac
+}
+
+cmd_spend() {
+  local sub="${1:-report}"
+  shift || true
+  case "$sub" in
+    report) cmd_spend_report "$@" ;;
+    -h|--help|help)
+      echo "Usage: walter-os spend <subcommand>"
+      echo "  report  Print spend report (see: walter-os spend report --help)"
+      ;;
+    *) echo "walter-os spend: unknown subcommand '$sub'" >&2; exit 2 ;;
+  esac
+}
+
+# ---------- lessons (cross-agent learning broker) ----------
+
+cmd_lessons() {
+  local sub="${1:-list}"
+  shift || true
+
+  local lessons_lib="${WALTER_OS_HOME}/scripts/agents/lib/lessons.sh"
+  if [[ ! -f "$lessons_lib" ]]; then
+    echo "walter-os lessons: lessons.sh not found at $lessons_lib" >&2
+    echo "  Run install.sh to reinstall walter-os." >&2
+    exit 3
+  fi
+  # shellcheck disable=SC1090
+  source "$lessons_lib"
+
+  case "$sub" in
+    list)
+      lessons_list "$@"
+      ;;
+    query)
+      local query_text="${1:-}"
+      shift || true
+      if [[ -z "$query_text" ]]; then
+        echo "walter-os lessons query: query text required" >&2
+        echo "Usage: walter-os lessons query <text> [--limit N]" >&2
+        exit 2
+      fi
+      local limit=5
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --limit) limit="${2:-5}"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+      # shellcheck disable=SC2034
+      _LESSON_TOP_K="$limit"
+      lesson_query "$query_text" ""
+      ;;
+    rate)
+      local id="${1:-}"
+      local score="${2:-}"
+      if [[ -z "$id" || -z "$score" ]]; then
+        echo "walter-os lessons rate: id and score required" >&2
+        echo "Usage: walter-os lessons rate <id> <0.0..1.0>" >&2
+        exit 2
+      fi
+      lessons_rate "$id" "$score"
+      ;;
+    prune)
+      local dry_run=0 older_than="30d"
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --dry-run) dry_run=1; shift ;;
+          --older-than) older_than="$2"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+      local days="${older_than//d/}"
+      lessons_init || return 1
+      local where="WHERE created_at < datetime('now', '-${days} days')"
+      local count
+      count="$("${_LESSONS_SQLITE3:-sqlite3}" "$LESSONS_DB" "SELECT COUNT(*) FROM lessons ${where};" 2>/dev/null || echo 0)"
+      echo "Lessons older than ${older_than}: ${count}"
+      if [[ "$dry_run" -eq 0 && "$count" -gt 0 ]]; then
+        "${_LESSONS_SQLITE3:-sqlite3}" "$LESSONS_DB" "DELETE FROM lessons ${where};" 2>/dev/null
+        echo "Pruned $count lessons."
+      else
+        [[ "$dry_run" -eq 1 ]] && echo "(dry-run — no changes made)"
+      fi
+      ;;
+    stats)
+      lessons_init || return 1
+      local total oldest most_accessed
+      total="$("${_LESSONS_SQLITE3:-sqlite3}" "$LESSONS_DB" "SELECT COUNT(*) FROM lessons;" 2>/dev/null || echo 0)"
+      echo "Lessons stats:"
+      echo "  Total: $total"
+      if [[ "$total" -gt 0 ]]; then
+        echo "  Per agent:"
+        "${_LESSONS_SQLITE3:-sqlite3}" -separator '|' "$LESSONS_DB" \
+          "SELECT source_agent, COUNT(*) FROM lessons GROUP BY source_agent ORDER BY 2 DESC;" \
+          2>/dev/null | while IFS='|' read -r agent cnt; do
+            printf "    %-14s %s\n" "$agent" "$cnt"
+          done
+        oldest="$("${_LESSONS_SQLITE3:-sqlite3}" "$LESSONS_DB" "SELECT created_at FROM lessons ORDER BY created_at ASC LIMIT 1;" 2>/dev/null || echo '-')"
+        most_accessed="$("${_LESSONS_SQLITE3:-sqlite3}" "$LESSONS_DB" "SELECT headline FROM lessons ORDER BY created_at DESC LIMIT 1;" 2>/dev/null || echo '-')"
+        echo "  Oldest: $oldest"
+        echo "  Latest: $most_accessed"
+      fi
+      ;;
+    -h|--help|help)
+      cat <<LESSONS_USAGE
+Usage: walter-os lessons <subcommand>
+
+Subcommands:
+  list [--agent <name>] [--last <Nd>] [--tag <tag>]
+                  List lessons (table view)
+  query <text> [--limit N]
+                  Embed query and return top-N similar lessons (JSON)
+  rate <id> <score>
+                  Update confidence for a lesson (0.0–1.0)
+  prune [--older-than <Nd>] [--dry-run]
+                  Delete old lessons
+  stats           Total count + per-agent breakdown
+
+DB: \${LESSONS_DB:-~/.config/walter-os/lessons.db}
+Spec: docs/specs/walter-council-v2.md — T-14, Improvement 4
+LESSONS_USAGE
+      ;;
+    *)
+      echo "walter-os lessons: unknown subcommand '$sub'" >&2
+      echo "  Run: walter-os lessons help" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# ---------- mode (Walter Council operating mode: consensus, etc.) ----------
+
+cmd_mode() {
+  require_jq
+  local mode_lib="${WALTER_OS_HOME}/scripts/agents/lib/mode.sh"
+  if [[ ! -f "$mode_lib" ]]; then
+    echo "walter-os mode: mode.sh library not found at $mode_lib" >&2
+    exit 3
+  fi
+  # shellcheck disable=SC1090
+  source "$mode_lib"
+
+  local sub="${1:-status}"
+  shift || true
+
+  case "$sub" in
+    consensus)
+      local action="${1:-status}"
+      shift || true
+      case "$action" in
+        on)
+          mode_consensus_set on "$@"
+          echo "Consensus mode: ON"
+          local threshold
+          threshold=$(jq -r '.voting_threshold // 3' "$MODE_FILE" 2>/dev/null || echo 3)
+          local since
+          since=$(jq -r '.since // ""' "$MODE_FILE" 2>/dev/null || echo "")
+          echo "  since: ${since}"
+          echo "  voting_threshold: ${threshold}"
+          ;;
+        off)
+          mode_consensus_set off
+          echo "Consensus mode: OFF"
+          ;;
+        status)
+          if mode_consensus_is_on 2>/dev/null; then
+            local threshold since
+            threshold=$(jq -r '.voting_threshold // 3' "$MODE_FILE" 2>/dev/null || echo 3)
+            since=$(jq -r '.since // ""' "$MODE_FILE" 2>/dev/null || echo "")
+            echo "Consensus mode: ON (since ${since}, threshold: ${threshold})"
+          else
+            echo "Consensus mode: OFF"
+          fi
+          ;;
+        *)
+          echo "walter-os mode consensus: unknown action '$action'" >&2
+          echo "  Usage: walter-os mode consensus on|off|status [--threshold N]" >&2
+          exit 2
+          ;;
+      esac
+      ;;
+    -h|--help|help)
+      cat <<MODE_USAGE
+Usage: walter-os mode <subcommand>
+
+Subcommands:
+  consensus on [--threshold N]  Enable consensus mode (threshold=3 default)
+  consensus off                 Disable consensus mode
+  consensus status              Show current consensus mode status
+
+Spec: docs/specs/walter-council-v2.md — Improvement 9 (T-32)
+MODE_USAGE
+      ;;
+    *)
+      echo "walter-os mode: unknown subcommand '$sub'" >&2
+      echo "  Run: walter-os mode help" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# ---------- agents (Walter Council multi-agent autonomy) ----------
+
+cmd_agents() {
+  exec "${WALTER_OS_HOME}/scripts/agents/main.sh" "$@"
+}
+
+# ---------- new (project induction) ----------
+
+cmd_new() {
+  local subcmd="${1:-}"
+  shift || true
+
+  if [[ "$subcmd" != "project" ]]; then
+    if [[ "$subcmd" =~ ^(-h|--help|help)$ ]]; then
+      cat <<NEW_USAGE
+Usage: walter-os new <subcommand> [options]
+
+Subcommands:
+  project <type> <name> [opts]    Start project induction interview
+                                  Types: webapp | service | solana | hackathon | personal
+
+Project options:
+  --output-dir <path>             Write charter + AGENTS.md here (default: docs/specs/)
+  --skip-plane                    Skip Plane epic creation
+  --non-interactive               Non-interactive mode; requires --answers-file
+  --answers-file <path>           YAML with pre-filled answers (for scripted use)
+
+Examples:
+  walter-os new project webapp my-app
+  walter-os new project solana anchor-staking --output-dir /tmp/test
+
+Spec: docs/specs/walter-council-v2.md — Improvement 6 (T-24)
+NEW_USAGE
+      exit 0
+    fi
+    echo "Usage: walter-os new project <type> <name> [options]" >&2
+    echo "  Types: webapp | service | solana | hackathon | personal" >&2
+    [[ -z "$subcmd" ]] || echo "  Unknown subcommand: $subcmd" >&2
+    exit 2
+  fi
+
+  # `new project <type> <name> [opts...]`
+  local project_type="${1:-}"
+  local project_name="${2:-}"
+
+  # Handle --help before validation
+  if [[ "$project_type" =~ ^(-h|--help|help)$ ]]; then
+    cmd_new --help
+    exit 0
+  fi
+
+  if [[ -z "$project_type" || -z "$project_name" ]]; then
+    echo "Usage: walter-os new project <type> <name> [options]" >&2
+    echo "  Types: webapp | service | solana | hackathon | personal" >&2
+    exit 2
+  fi
+
+  # Validate type (same list as induction.sh)
+  local valid_types=("webapp" "service" "solana" "hackathon" "personal")
+  local type_ok=0
+  for t in "${valid_types[@]}"; do
+    [[ "$project_type" == "$t" ]] && type_ok=1 && break
+  done
+  if [[ "$type_ok" -eq 0 ]]; then
+    echo "walter-os new project: invalid type '$project_type'." >&2
+    echo "  Valid types: ${valid_types[*]}" >&2
+    exit 2
+  fi
+
+  # Validate name: alphanumeric+hyphens, 1-50 chars
+  if ! echo "$project_name" | grep -qE '^[a-zA-Z0-9][a-zA-Z0-9-]{0,49}$'; then
+    echo "walter-os new project: invalid name '$project_name'." >&2
+    echo "  Name must be alphanumeric+hyphens, ≤ 50 chars." >&2
+    exit 2
+  fi
+
+  shift 2 || true  # remove type and name; pass remaining opts to induction.sh
+
+  local induction="${WALTER_OS_HOME}/skills/project-induction/scripts/induction.sh"
+  if [[ ! -x "$induction" ]]; then
+    echo "walter-os new project: induction.sh not found at $induction" >&2
+    echo "  Run install.sh to ensure skills are installed." >&2
+    exit 3
+  fi
+
+  exec "$induction" \
+    --project-type "$project_type" \
+    --project-name "$project_name" \
+    "$@"
+}
+
+# ---------- content analytics (Phase V — devrel-analyst) ----------
+
+cmd_content() {
+  local sub="${1:-stats}"
+  shift || true
+  case "$sub" in
+    stats)
+      # walter-os content stats [--since 30d] [--dry-run]
+      # Delegates to devrel-analyst skill query.py
+      local query_py="${WALTER_OS_HOME}/skills/devrel-analyst/scripts/query.py"
+      if [[ ! -f "$query_py" ]]; then
+        echo "walter-os content: devrel-analyst skill not found at $query_py" >&2
+        exit 3
+      fi
+      python3 "$query_py" top_threads "$@"
+      ;;
+    analyst)
+      # walter-os content analyst <query> [args]
+      # Direct passthrough to devrel-analyst query.py
+      local query_py="${WALTER_OS_HOME}/skills/devrel-analyst/scripts/query.py"
+      if [[ ! -f "$query_py" ]]; then
+        echo "walter-os content: devrel-analyst skill not found at $query_py" >&2
+        exit 3
+      fi
+      python3 "$query_py" "$@"
+      ;;
+    prereqs)
+      # walter-os content prereqs — check Singer + API prereqs
+      local check="${WALTER_OS_HOME}/setup/walter-host/singer/check-prereqs.sh"
+      if [[ ! -x "$check" ]]; then
+        echo "walter-os content: check-prereqs.sh not found" >&2
+        exit 3
+      fi
+      bash "$check" "$@"
+      ;;
+    -h|--help|help)
+      echo "Usage: walter-os content <subcommand>"
+      echo "  stats [--since 30d] [--dry-run]    Top threads by engagement"
+      echo "  analyst <query> [args]              Run any devrel-analyst query"
+      echo "    Queries: top_threads, optimal_hours, pattern_match,"
+      echo "             roi_per_content_piece, weekly_digest"
+      echo "  prereqs                             Check Singer tap + API prereqs"
+      echo ""
+      echo "Examples:"
+      echo "  walter-os content stats --since 7d --limit 10"
+      echo "  walter-os content analyst pattern_match --topic solana-rpc"
+      echo "  walter-os content analyst weekly_digest --dry-run"
+      ;;
+    *)
+      echo "walter-os content: unknown subcommand '$sub'" >&2
+      echo "  Run: walter-os content help" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# ---------- version ----------
+
+cmd_version() {
+  # Source _version_is_newer from the shared lib on first use (lazy).
+  # Keeps the blast radius small: only 'version' fails if the lib is absent.
+  # shellcheck source=scripts/walter/lib/version-compare.sh
+  source "${WALTER_OS_HOME}/scripts/walter/lib/version-compare.sh" 2>/dev/null \
+    || { echo "walter-os: missing scripts/walter/lib/version-compare.sh" >&2; exit 1; }
+
+  local version_file="${WALTER_OS_HOME}/VERSION"
+  if [[ ! -f "$version_file" ]]; then
+    echo "walter-os: VERSION file not found at $version_file" >&2
+    exit 3
+  fi
+  local current
+  current="$(cat "$version_file")"
+  current="${current//[$'\r\n\t ']/}"  # strip any whitespace
+
+  echo "Walter-OS v${current}"
+
+  # Update check: skip if WALTER_OS_SKIP_UPDATE_CHECK is set (e.g., tests),
+  # or if curl is unavailable.
+  if [[ "${WALTER_OS_SKIP_UPDATE_CHECK:-}" == "1" ]]; then
+    return 0
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local update_repo="${WALTER_OS_UPDATE_REPO:-xipher-labs/walter-os}"
+  if [[ ! "$update_repo" =~ ^[^/]+/[^/]+$ ]]; then
+    echo "WARN: WALTER_OS_UPDATE_REPO must be 'owner/repo' format, got: ${update_repo}. Update check skipped." >&2
+    return 0
+  fi
+  local owner="${update_repo%/*}"
+  local repo="${update_repo#*/}"
+  local api_url="https://api.github.com/repos/${owner}/${repo}/releases/latest"
+  local auth_header=""
+  [[ -n "${GITHUB_TOKEN:-}" ]] && auth_header="Authorization: Bearer ${GITHUB_TOKEN}"
+
+  local latest_tag
+  if [[ -n "$auth_header" ]]; then
+    latest_tag="$(curl -fsSL --max-time 5 --connect-timeout 3 -H "$auth_header" "$api_url" 2>/dev/null \
+      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')"
+  else
+    latest_tag="$(curl -fsSL --max-time 5 --connect-timeout 3 "$api_url" 2>/dev/null \
+      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')"
+  fi
+
+  if [[ -z "$latest_tag" ]]; then
+    return 0  # network unavailable or API rate-limited — silent
+  fi
+
+  local latest_version="${latest_tag#v}"  # strip leading 'v' if present
+
+  if _version_is_newer "$latest_version" "$current"; then
+    echo "(update available: v${latest_version} — https://github.com/${owner}/${repo}/releases/tag/${latest_tag})"
+  else
+    echo "(up to date)"
+  fi
+}
+
+# ---------- doctor ----------
+
+cmd_doctor() {
+  echo "Walter-OS doctor"
+  echo
+
+  local ok=0 issues=0
+
+  check() {
+    local label="$1"; shift
+    if "$@" >/dev/null 2>&1; then
+      printf "  ✓ %s\n" "$label"
+      ok=$((ok + 1))
+    else
+      printf "  ✗ %s\n" "$label"
+      issues=$((issues + 1))
+    fi
+  }
+
+  echo "Walter-OS config:"
+  check "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
+  check "env file present" test -f "${WALTER_CONFIG}/env"
+  check "secrets template present" test -f "${WALTER_CONFIG}/secrets.env"
+  # shellcheck disable=SC2088 # tildes here are labels, not paths
+  check '~/.claude/settings.json present' test -f "$CLAUDE_SETTINGS"
+  # shellcheck disable=SC2088
+  check '~/.claude/CLAUDE.md symlinked to walter-os' \
+    bash -c "[[ -L \"\$HOME/.claude/CLAUDE.md\" ]] && [[ \"\$(readlink \"\$HOME/.claude/CLAUDE.md\")\" == \"$WALTER_OS_HOME\"* ]]"
+  # shellcheck disable=SC2088
+  check '~/.codex/AGENTS.md symlinked to walter-os' \
+    bash -c "[[ -L \"\$HOME/.codex/AGENTS.md\" ]] && [[ \"\$(readlink \"\$HOME/.codex/AGENTS.md\")\" == \"$WALTER_OS_HOME\"* ]]"
+  # shellcheck disable=SC2088
+  check 'skills symlinked into ~/.claude/skills' \
+    bash -c "ls -1 \"\$HOME/.claude/skills\" 2>/dev/null | grep -q ."
+  check "audit ran today" test -f "${WALTER_CONFIG}/audit-${TODAY}.md"
+
+  echo
+  echo "Required CLIs:"
+  check "claude CLI in PATH" command -v claude
+  check "codex CLI in PATH" command -v codex
+  check "jq installed" command -v jq
+  check "git installed" command -v git
+  check "gh (GitHub CLI) installed" command -v gh
+
+  echo
+  echo "Bootstrap tooling (optional but expected):"
+  check "Homebrew installed" command -v brew
+  check "mise (runtime version manager)" command -v mise
+  check "OrbStack / docker daemon" command -v docker
+  check "ripgrep (rg)" command -v rg
+  check "shellcheck" command -v shellcheck
+  check "bats-core" command -v bats
+  check "gitleaks (secret scan)" command -v gitleaks
+  check "uvx (Python runner)" command -v uvx
+  check "Solana CLI" command -v solana
+  check "Anchor (Solana programs)" command -v anchor
+  check "Maestro (mobile testing)" command -v maestro
+  check "Tailscale" command -v tailscale
+
+  echo
+  echo "${ok} ok / ${issues} issues"
+  [[ "$issues" -eq 0 ]] || exit 1
+}
+
+# ---------- dispatch ----------
+
+cmd="${1:-help}"
+shift || true
+
+# Universal help: `walter-os <subcommand> -h|--help|help` → show top-level help
+# (delegating subcommand-specific help to the subcommand's own dispatcher
+# when it has one; otherwise the global help is the right answer since
+# walter-os subcommand args are documented in the leading-comment block).
+if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
+  case "$cmd" in
+    # Subcommands that delegate to scripts with their own help support:
+    sync|sync-repos|profile-bootstrap|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge)
+      ;; # let the subcommand handle it (passes through "$@")
+    *)
+      print_help; exit 0 ;;
+  esac
+fi
+
+case "$cmd" in
+  audit)          cmd_audit "$@" ;;
+  status)         cmd_status "$@" ;;
+  ack)            cmd_ack "$@" ;;
+  baseline)       cmd_baseline "$@" ;;
+  baseline-hooks) cmd_baseline_hooks "$@" ;;
+  enable-hook)    cmd_enable_hook "$@" ;;
+  disable-hook)   cmd_disable_hook "$@" ;;
+  sync)               cmd_sync "$@" ;;
+  sync-repos)         cmd_sync_repos "$@" ;;
+  profile)            cmd_profile "$@" ;;
+  profile-bootstrap)  cmd_profile_bootstrap "$@" ;;
+  secrets-pull)         cmd_secrets_pull "$@" ;;
+  secrets-bootstrap)    cmd_secrets_bootstrap "$@" ;;
+  secrets-keychain-init) cmd_secrets_keychain_init "$@" ;;
+  secrets-status)       cmd_secrets_status "$@" ;;
+  secrets-clear)        cmd_secrets_clear "$@" ;;
+  syncthing-bootstrap) cmd_syncthing_bootstrap "$@" ;;
+  agent-memory)       cmd_agent_memory "$@" ;;
+  wiki)               cmd_wiki "$@" ;;
+  spend)              cmd_spend "$@" ;;
+  lessons)            cmd_lessons "$@" ;;
+  mode)               cmd_mode "$@" ;;
+  agents)             cmd_agents "$@" ;;
+  new)                cmd_new "$@" ;;
+  bridge)             exec "${WALTER_OS_HOME}/scripts/walter/subcommands/bridge.sh" "$@" ;;
+  content)            cmd_content "$@" ;;
+  analyst)            cmd_content analyst "$@" ;;
+  pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
+  version)            cmd_version "$@" ;;
+  doctor)             cmd_doctor "$@" ;;
+  -h|--help|help) print_help ;;
+  *)
+    echo "walter-os: unknown command: $cmd" >&2
+    print_help
+    exit 2
+    ;;
+esac

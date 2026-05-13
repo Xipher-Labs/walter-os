@@ -1,0 +1,107 @@
+---
+# Base OS layer for Walter-VM. Idempotent — only changes what's needed.
+# Most of this was originally in setup/walter-host/bootstrap-vm.sh; Ansible role
+# captures the same intent declaratively.
+
+- name: APT update
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - git
+      - jq
+      - vim
+      - tmux
+      - htop
+      - ripgrep
+      - age
+      - restic
+      - rclone
+      - python3-pip
+      - python3-venv
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+    state: present
+
+- name: Ensure 4GB swap exists
+  ansible.builtin.shell: |
+    if ! swapon --show | grep -q swapfile; then
+      fallocate -l 4G /swapfile
+      chmod 600 /swapfile
+      mkswap /swapfile
+      swapon /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+  register: swap_check
+  changed_when: "'mkswap' in swap_check.stdout"
+
+- name: UFW default policies
+  community.general.ufw:
+    state: enabled
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: UFW allow rules
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: 22, proto: tcp, comment: "ssh (CF Access path)" }
+    - { port: 80, proto: tcp, comment: "http (legacy)" }
+    - { port: 443, proto: tcp, comment: "https (legacy)" }
+    - { port: 22000, proto: tcp, comment: "Syncthing TCP" }
+    - { port: 22000, proto: udp, comment: "Syncthing QUIC" }
+    - { port: 51820, proto: udp, comment: "WireGuard" }
+
+- name: Ensure walter user exists
+  ansible.builtin.user:
+    name: walter
+    shell: /bin/bash
+    groups: docker,sudo
+    append: yes
+    state: present
+
+- name: Walter sudoers (NOPASSWD)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/walter
+    content: "walter ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Cloud Volume mount point
+  ansible.builtin.file:
+    path: /mnt/walter-vm-data
+    state: directory
+    owner: walter
+    group: walter
+    mode: "0755"
+
+- name: Subdirs on Cloud Volume
+  ansible.builtin.file:
+    path: "/mnt/walter-vm-data/{{ item }}"
+    state: directory
+    owner: walter
+    group: walter
+    mode: "0755"
+  loop:
+    - restic-cache
+    - restic-local
+    - sync
+    - sync/obsidian-vault
+    - sync/projects-personal
+    - sync/personal
+    - sync/screenshots
+    - observability
+    - observability/prometheus
+    - observability/loki
+    - observability/grafana

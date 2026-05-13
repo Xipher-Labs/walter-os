@@ -1,0 +1,1158 @@
+# Walter-OS All-In-One Docker Compose
+#
+# Single-command deployment of all Walter-OS services.
+#
+# Usage:
+#   cp templates/env.all.template .env
+#   $EDITOR .env                           # fill required vars
+#   docker compose up -d                   # core services (includes Postiz, Metabase, PostHog, Control Tower)
+#   docker compose --profile design up -d  # + Penpot + Drawio
+#   docker compose --profile assistant up -d # + OpenClaw
+#   scripts/bootstrap.sh                   # first-run API bootstrap
+#
+# Startup order (dependency graph):
+#   Layer 0: postgres, caddy
+#   Layer 1: plane-db, plane-redis, plane-mq, plane-minio
+#   Layer 2: plane-migrator, plane-api
+#   Layer 3: plane-web, plane-worker, plane-beat-worker, plane-proxy
+#   Layer 4: forgejo, infisical, litellm, n8n, prometheus, loki, grafana
+#   Layer 4: postiz, postiz-redis, metabase, posthog-clickhouse, posthog-redis,
+#             posthog, posthog-worker, posthog-plugin-server, posthog-asyncmigrationscheck,
+#             control-tower
+#   Layer 5: promtail, node-exporter, cadvisor, uptime-kuma, syncthing
+#   Layer 6: headscale, headscale-admin, wg-easy, homepage
+#   Profiles: penpot (design), drawio (design),
+#             openclaw (assistant), synapse (comms), rocketchat (comms)
+#
+# Refs: docs/specs/phase-w-1-docker-compose.md
+# Refs: setup/SERVICES-INVENTORY.md
+
+# ---------------------------------------------------------------------------
+# PostHog — product analytics (full hobby stack, 6 services for all-in-one)
+# Docker Compose include: requires Compose plugin v2.20+.
+# The included file is a flat (no extends:) version that uses the shared
+# postgres service defined below. Full 27-service standalone deploy lives at
+# setup/walter-host/services/posthog/compose.yml (uses extends:, separate postgres).
+# ---------------------------------------------------------------------------
+include:
+  - path: setup/walter-host/services/posthog/compose.root-include.yml
+
+# ---------------------------------------------------------------------------
+# Shared environment anchors
+# ---------------------------------------------------------------------------
+
+x-walter-common: &walter-common
+  restart: unless-stopped
+  networks:
+    - walter_net
+
+# ---------------------------------------------------------------------------
+# SERVICES
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ==========================================================================
+  # LAYER 0: INFRASTRUCTURE
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # Postgres — shared instance (one DB per service)
+  # --------------------------------------------------------------------------
+  postgres:
+    <<: *walter-common
+    image: postgres:16-alpine
+    container_name: walter-postgres
+    environment:
+      POSTGRES_USER: walter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: walter
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./setup/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U walter"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Caddy — reverse proxy (TLS via ACME, subdomains per service)
+  # --------------------------------------------------------------------------
+  caddy:
+    <<: *walter-common
+    image: caddy:2-alpine
+    container_name: walter-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./setup/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      WALTER_DOMAIN: ${WALTER_DOMAIN:?required}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:2019/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ==========================================================================
+  # LAYER 1-3: PLANE (project management)
+  # ==========================================================================
+
+  plane-db:
+    <<: *walter-common
+    image: postgres:16-alpine
+    container_name: plane-db
+    environment:
+      POSTGRES_USER: ${PLANE_POSTGRES_USER:-plane}
+      POSTGRES_PASSWORD: ${PLANE_POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${PLANE_POSTGRES_DB:-plane}
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - plane_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PLANE_POSTGRES_USER:-plane}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  plane-redis:
+    <<: *walter-common
+    image: redis:7-alpine
+    container_name: plane-redis
+    volumes:
+      - plane_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  plane-mq:
+    <<: *walter-common
+    image: rabbitmq:3-management-alpine
+    container_name: plane-mq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${PLANE_RABBITMQ_USER:-plane}
+      RABBITMQ_DEFAULT_PASS: ${PLANE_RABBITMQ_PASSWORD:?required}
+      RABBITMQ_DEFAULT_VHOST: ${PLANE_RABBITMQ_VHOST:-plane}
+    volumes:
+      - plane_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  plane-minio:
+    <<: *walter-common
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: plane-minio
+    command: server /export --console-address ":9090"
+    environment:
+      MINIO_ROOT_USER: ${PLANE_AWS_ACCESS_KEY_ID:?required}
+      MINIO_ROOT_PASSWORD: ${PLANE_AWS_SECRET_ACCESS_KEY:?required}
+    volumes:
+      - plane_uploads:/export
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local 2>/dev/null || wget -qO- http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  plane-migrator:
+    <<: *walter-common
+    image: makeplane/plane-backend:v0.27.0
+    container_name: plane-migrator
+    restart: "no"
+    command: ./bin/docker-entrypoint-migrator.sh
+    environment:
+      DATABASE_URL: postgresql://${PLANE_POSTGRES_USER:-plane}:${PLANE_POSTGRES_PASSWORD}@plane-db:5432/${PLANE_POSTGRES_DB:-plane}
+      REDIS_URL: redis://plane-redis:6379/
+      AMQP_URL: amqp://${PLANE_RABBITMQ_USER:-plane}:${PLANE_RABBITMQ_PASSWORD}@plane-mq:5672/${PLANE_RABBITMQ_VHOST:-plane}
+      SECRET_KEY: ${PLANE_SECRET_KEY:?required}
+      USE_MINIO: "1"
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+      plane-mq:
+        condition: service_healthy
+
+  plane-api:
+    <<: *walter-common
+    image: makeplane/plane-backend:v0.27.0
+    container_name: plane-api
+    command: ./bin/docker-entrypoint-api.sh
+    environment:
+      DATABASE_URL: postgresql://${PLANE_POSTGRES_USER:-plane}:${PLANE_POSTGRES_PASSWORD}@plane-db:5432/${PLANE_POSTGRES_DB:-plane}
+      REDIS_URL: redis://plane-redis:6379/
+      AMQP_URL: amqp://${PLANE_RABBITMQ_USER:-plane}:${PLANE_RABBITMQ_PASSWORD}@plane-mq:5672/${PLANE_RABBITMQ_VHOST:-plane}
+      SECRET_KEY: ${PLANE_SECRET_KEY:?required}
+      USE_MINIO: "1"
+      FILE_SIZE_LIMIT: ${PLANE_FILE_SIZE_LIMIT:-5242880}
+      AWS_ACCESS_KEY_ID: ${PLANE_AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${PLANE_AWS_SECRET_ACCESS_KEY}
+      AWS_S3_ENDPOINT_URL: http://plane-minio:9000
+      AWS_S3_BUCKET_NAME: ${PLANE_S3_BUCKET_NAME:-uploads}
+      WEB_URL: https://plane.${WALTER_DOMAIN}
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+      plane-mq:
+        condition: service_healthy
+      plane-migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/health/ | grep -q ok || wget -qO- http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  plane-worker:
+    <<: *walter-common
+    image: makeplane/plane-backend:v0.27.0
+    container_name: plane-worker
+    command: ./bin/docker-entrypoint-worker.sh
+    environment:
+      DATABASE_URL: postgresql://${PLANE_POSTGRES_USER:-plane}:${PLANE_POSTGRES_PASSWORD}@plane-db:5432/${PLANE_POSTGRES_DB:-plane}
+      REDIS_URL: redis://plane-redis:6379/
+      AMQP_URL: amqp://${PLANE_RABBITMQ_USER:-plane}:${PLANE_RABBITMQ_PASSWORD}@plane-mq:5672/${PLANE_RABBITMQ_VHOST:-plane}
+      SECRET_KEY: ${PLANE_SECRET_KEY:?required}
+      USE_MINIO: "1"
+    depends_on:
+      plane-api:
+        condition: service_started
+
+  plane-beat-worker:
+    <<: *walter-common
+    image: makeplane/plane-backend:v0.27.0
+    container_name: plane-beat-worker
+    command: ./bin/docker-entrypoint-beat.sh
+    environment:
+      DATABASE_URL: postgresql://${PLANE_POSTGRES_USER:-plane}:${PLANE_POSTGRES_PASSWORD}@plane-db:5432/${PLANE_POSTGRES_DB:-plane}
+      REDIS_URL: redis://plane-redis:6379/
+      AMQP_URL: amqp://${PLANE_RABBITMQ_USER:-plane}:${PLANE_RABBITMQ_PASSWORD}@plane-mq:5672/${PLANE_RABBITMQ_VHOST:-plane}
+      SECRET_KEY: ${PLANE_SECRET_KEY:?required}
+      USE_MINIO: "1"
+    depends_on:
+      plane-api:
+        condition: service_started
+
+  plane-web:
+    <<: *walter-common
+    image: makeplane/plane-frontend:v0.27.0
+    container_name: plane-web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: https://plane.${WALTER_DOMAIN}
+    depends_on:
+      plane-api:
+        condition: service_started
+
+  plane-admin:
+    <<: *walter-common
+    image: makeplane/plane-admin:v0.27.0
+    container_name: plane-admin
+    depends_on:
+      plane-api:
+        condition: service_started
+
+  plane-space:
+    <<: *walter-common
+    image: makeplane/plane-space:v0.27.0
+    container_name: plane-space
+    depends_on:
+      plane-api:
+        condition: service_started
+
+  plane-live:
+    <<: *walter-common
+    image: makeplane/plane-live:v0.27.0
+    container_name: plane-live
+    depends_on:
+      plane-api:
+        condition: service_started
+
+  plane-proxy:
+    <<: *walter-common
+    image: makeplane/plane-proxy:v0.27.0
+    container_name: plane-proxy
+    environment:
+      FILE_SIZE_LIMIT: ${PLANE_FILE_SIZE_LIMIT:-5242880}
+      BUCKET_NAME: ${PLANE_S3_BUCKET_NAME:-uploads}
+    depends_on:
+      - plane-web
+      - plane-api
+      - plane-admin
+      - plane-space
+      - plane-live
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==========================================================================
+  # LAYER 4: FORGEJO (git hosting)
+  # ==========================================================================
+
+  forgejo:
+    <<: *walter-common
+    image: codeberg.org/forgejo/forgejo:15
+    container_name: forgejo
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: postgres:5432
+      FORGEJO__database__NAME: forgejo
+      FORGEJO__database__USER: forgejo
+      FORGEJO__database__PASSWD: ${FORGEJO_DB_PASS:?required}
+      FORGEJO__server__DOMAIN: git.${WALTER_DOMAIN}
+      FORGEJO__server__ROOT_URL: https://git.${WALTER_DOMAIN}/
+      FORGEJO__server__SSH_DOMAIN: git.${WALTER_DOMAIN}
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__security__ADMIN_USER: ${WALTER_INITIAL_USER:-admin}
+      FORGEJO__security__ADMIN_PASSWD: ${WALTER_INITIAL_PASSWORD:?required}
+      FORGEJO__security__ADMIN_EMAIL: ${WALTER_ADMIN_EMAIL:?required}
+    volumes:
+      - forgejo_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ | grep -q Forgejo || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================================================
+  # LAYER 4: INFISICAL (secrets manager)
+  # ==========================================================================
+
+  infisical-redis:
+    <<: *walter-common
+    image: redis:7-alpine
+    container_name: infisical-redis
+    command: redis-server --requirepass "${INFISICAL_REDIS_PASS:?required}"
+    environment:
+      INFISICAL_REDIS_PASS: "${INFISICAL_REDIS_PASS}"
+    volumes:
+      - infisical_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$INFISICAL_REDIS_PASS ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  infisical:
+    <<: *walter-common
+    image: infisical/infisical:v0.159.25
+    container_name: infisical
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "npm run migration:latest && node /backend/dist/main.mjs"]
+    environment:
+      ENCRYPTION_KEY: "${INFISICAL_ENCRYPTION_KEY:?required — generate: openssl rand -hex 16}"
+      AUTH_SECRET: "${INFISICAL_AUTH_SECRET:?required — generate: openssl rand -base64 32}"
+      DB_CONNECTION_URI: "postgresql://infisical:${INFISICAL_DB_PASS:?required}@postgres:5432/infisical"
+      REDIS_URL: "redis://default:${INFISICAL_REDIS_PASS}@infisical-redis:6379"
+      SITE_URL: "https://secrets.${WALTER_DOMAIN}"
+      TELEMETRY_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      infisical-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================================================
+  # LAYER 4: LITELLM (LLM gateway)
+  # ==========================================================================
+
+  litellm:
+    <<: *walter-common
+    image: ghcr.io/berriai/litellm:v1.83.14-stable
+    container_name: litellm
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?required}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?required}
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASS:?required}@postgres:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: "${WALTER_INITIAL_USER:-admin}"
+      UI_PASSWORD: ${LITELLM_UI_PASS:?required}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - ./setup/litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health | grep -qi healthy || wget -qO- http://localhost:4000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================================================
+  # LAYER 4: OBSERVABILITY (Prometheus + Loki + Grafana)
+  # ==========================================================================
+
+  prometheus:
+    <<: *walter-common
+    image: prom/prometheus:v3.11.3
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=10GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./setup/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  loki:
+    <<: *walter-common
+    image: grafana/loki:3.7.1
+    container_name: loki
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./setup/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    # Loki 3.x is distroless — no shell. No healthcheck possible via CMD.
+    # Readiness verified by Prometheus scrape job (/ready endpoint).
+
+  promtail:
+    <<: *walter-common
+    image: grafana/promtail:3.6.10
+    container_name: promtail
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./setup/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+
+  node-exporter:
+    <<: *walter-common
+    image: prom/node-exporter:v1.11.1
+    container_name: node-exporter
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|run|host|etc)($$|/)
+      - --collector.textfile.directory=/var/lib/walter-council
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /var/lib/walter-council:/var/lib/walter-council:ro
+
+  cadvisor:
+    <<: *walter-common
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+
+  grafana:
+    <<: *walter-common
+    image: grafana/grafana:13.0.1
+    container_name: grafana
+    environment:
+      GF_SERVER_ROOT_URL: https://grafana.${WALTER_DOMAIN}
+      GF_SERVER_DOMAIN: grafana.${WALTER_DOMAIN}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_ADMIN_USER: ${WALTER_INITIAL_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:?required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      WALTER_TELEGRAM_BOT_TOKEN: ${WALTER_TELEGRAM_BOT_TOKEN:-}
+      WALTER_TELEGRAM_CHAT_ID: ${WALTER_TELEGRAM_CHAT_ID:-}
+      GF_INSTALL_PLUGINS: "grafana-assistant-app"
+      GF_PLUGINS_PREINSTALL: "grafana-assistant-app"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./setup/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ==========================================================================
+  # LAYER 4: N8N (workflow automation)
+  # ==========================================================================
+
+  n8n:
+    <<: *walter-common
+    image: n8nio/n8n:2.18.7
+    container_name: n8n
+    environment:
+      N8N_HOST: n8n.${WALTER_DOMAIN}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.${WALTER_DOMAIN}/
+      N8N_EDITOR_BASE_URL: https://n8n.${WALTER_DOMAIN}/
+      GENERIC_TIMEZONE: ${WALTER_TIMEZONE:-UTC}
+      TZ: ${WALTER_TIMEZONE:-UTC}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_PG_PASS:?required}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?required}
+      N8N_BASIC_AUTH_ACTIVE: "false"
+      N8N_USER_MANAGEMENT_DISABLED: "false"
+      N8N_PROXY_HOPS: 1
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 720
+      EXECUTIONS_DATA_PRUNE_TIMEOUT: 3600
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_RUNNERS_ENABLED: "true"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - n8n_files:/files
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================================================
+  # LAYER 5: NETWORK / VPN
+  # ==========================================================================
+
+  wg-easy:
+    <<: *walter-common
+    image: ghcr.io/wg-easy/wg-easy:14
+    container_name: wg-easy
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      WG_HOST: vpn.${WALTER_DOMAIN}
+      WG_PORT: 51820
+      WG_DEFAULT_DNS: "1.1.1.1, 1.0.0.1"
+      WG_ALLOWED_IPS: "0.0.0.0/0, ::/0"
+      PASSWORD_HASH: ${WG_PASSWORD_HASH:?required}
+      PORT: 51821
+      WG_MTU: 1420
+      WG_PERSISTENT_KEEPALIVE: 25
+      LANG: en
+      UI_TRAFFIC_STATS: "true"
+      UI_CHART_TYPE: 1
+    ports:
+      - "51820:51820/udp"
+    volumes:
+      - wg_config:/etc/wireguard
+    healthcheck:
+      test: ["CMD-SHELL", "wg show 2>/dev/null | grep -q 'interface: wg0' || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  headscale:
+    <<: *walter-common
+    image: headscale/headscale:0.26.0
+    container_name: headscale
+    command: serve
+    volumes:
+      - ./setup/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - headscale_data:/var/lib/headscale
+    healthcheck:
+      test: ["CMD", "headscale", "version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  headscale-admin:
+    <<: *walter-common
+    image: goodieshq/headscale-admin:0.25.6
+    container_name: headscale-admin
+    volumes:
+      - ./setup/headscale/patch-honey.sh:/usr/local/bin/patch-honey.sh:ro
+    entrypoint: ["/usr/local/bin/patch-honey.sh"]
+    depends_on:
+      - headscale
+
+  syncthing:
+    <<: *walter-common
+    image: lscr.io/linuxserver/syncthing:2.0.16
+    container_name: syncthing
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${WALTER_TIMEZONE:-UTC}
+    ports:
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+    volumes:
+      - syncthing_config:/config
+      - syncthing_data:/sync
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8384/rest/noauth/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # LAYER 6: MONITORING
+  # ==========================================================================
+
+  uptime-kuma:
+    <<: *walter-common
+    image: louislam/uptime-kuma:2.3.2
+    container_name: uptime-kuma
+    volumes:
+      - uptime_kuma_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/ | grep -qi kuma || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==========================================================================
+  # LAYER 7: META
+  # ==========================================================================
+
+  homepage:
+    <<: *walter-common
+    image: ghcr.io/gethomepage/homepage:v1.13.1
+    container_name: homepage
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: "home.${WALTER_DOMAIN},localhost,127.0.0.1"
+    volumes:
+      - ./setup/homepage/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # ==========================================================================
+  # LAYER 4: MARKETING & ANALYTICS (Postiz, Metabase, PostHog, Control Tower)
+  #
+  # PostHog — product analytics (6-service simplified stack for all-in-one deploy).
+  # Full 27-service hobby stack vendored in setup/walter-host/services/posthog/compose.yml.
+  # The include: directive below pulls from a flat (no extends:) version that works
+  # with the shared postgres container in this root compose.
+  # Docker Compose include: requires plugin v2.20+.
+  # Refs: docs/specs/devrel-analytics-stack.md, setup/walter-host/services/posthog/SUGGESTIONS.md
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # Postiz — social media scheduling (core, always-on as of v0.2.0)
+  # --------------------------------------------------------------------------
+
+  postiz:
+    <<: *walter-common
+    image: ghcr.io/gitroomhq/postiz-app:v2.21.7
+    container_name: postiz
+    environment:
+      MAIN_URL: https://postiz.${WALTER_DOMAIN}
+      FRONTEND_URL: https://postiz.${WALTER_DOMAIN}
+      NEXT_PUBLIC_BACKEND_URL: https://postiz.${WALTER_DOMAIN}/api
+      DATABASE_URL: postgresql://postiz:${POSTIZ_PG_PASS:?required}@postgres:5432/postiz
+      REDIS_URL: redis://postiz-redis:6379
+      STORAGE_PROVIDER: local
+      UPLOAD_DIRECTORY: /uploads
+      NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY: /uploads
+      JWT_SECRET: ${POSTIZ_JWT_SECRET:?required}
+      TZ: ${WALTER_TIMEZONE:-UTC}
+      POSTIZ_WEBHOOK_URL: ${POSTIZ_WEBHOOK_URL:-}
+    volumes:
+      - postiz_uploads:/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postiz-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  postiz-redis:
+    <<: *walter-common
+    image: redis:7-alpine
+    container_name: postiz-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - postiz_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # Metabase — analytics / BI dashboards (core, always-on as of v0.2.0)
+  # Note: v0.53.11 pinned; v0.59.x upgrade is a separate concern (migration risk)
+  # --------------------------------------------------------------------------
+
+  metabase:
+    <<: *walter-common
+    image: metabase/metabase:v0.53.11
+    container_name: walter-metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_HOST: postgres
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase
+      MB_DB_PASS: ${METABASE_DB_PASS:?required}
+      JAVA_TIMEZONE: ${WALTER_TIMEZONE:-UTC}
+    networks: [walter_net]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # --------------------------------------------------------------------------
+  # Control Tower — Walter Council UI (always-on as of v0.2.0)
+  # Inlined from setup/walter-host/services/control-tower/compose.yml (standalone kept).
+  # No host ports: Caddy proxies tower.${WALTER_DOMAIN} → control-tower:3000.
+  # Access is Tailscale-only (TAILSCALE_ENFORCE=true at app layer).
+  # --------------------------------------------------------------------------
+  control-tower:
+    <<: *walter-common
+    build:
+      context: .
+      dockerfile: apps/control-tower/Dockerfile
+    image: walter-control-tower:latest
+    container_name: control-tower
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      LITELLM_BASE_URL: "${LITELLM_BASE_URL:-http://litellm:4000}"
+      LITELLM_API_KEY: "${LITELLM_API_KEY:?required}"
+      PLANE_API_URL: "${PLANE_API_URL:?required}"
+      PLANE_API_TOKEN: "${PLANE_API_TOKEN:?required}"
+      PLANE_WORKSPACE_SLUG: "${PLANE_WORKSPACE_SLUG:?required}"
+      PLANE_PROJECT_ID: "${PLANE_PROJECT_ID:?required}"
+      GRAFANA_URL: "${GRAFANA_URL:-http://grafana:3000}"
+      GRAFANA_SA_TOKEN: "${GRAFANA_SA_TOKEN:?required}"
+      CONTROL_TOWER_ADMIN_TOKEN: "${CONTROL_TOWER_ADMIN_TOKEN:?required}"
+      CONTROL_TOWER_AUTH_DISABLED: "${CONTROL_TOWER_AUTH_DISABLED:-false}"
+      TAILSCALE_ENFORCE: "${TAILSCALE_ENFORCE:-true}"
+      TAILSCALE_CGNAT_CIDR: "${TAILSCALE_CGNAT_CIDR:-100.64.0.0/10}"
+    volumes:
+      - /var/lib/walter-council:/var/lib/walter-council:ro
+      - /var/log/walter-council:/var/log/walter-council:ro
+      - /root/.config/walter-os:/root/.config/walter-os:ro
+    depends_on:
+      litellm:
+        condition: service_healthy
+      grafana:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ==========================================================================
+  # PROFILE: design — Penpot (design tool) + Drawio (diagrams)
+  # ==========================================================================
+
+  penpot-postgres:
+    <<: *walter-common
+    image: postgres:16-alpine
+    container_name: penpot-postgres
+    profiles: [design]
+    environment:
+      POSTGRES_DB: penpot
+      POSTGRES_USER: penpot
+      POSTGRES_PASSWORD: "${PENPOT_DB_PASS}"
+    volumes:
+      - penpot_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penpot -d penpot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  penpot-redis:
+    <<: *walter-common
+    image: redis:7-alpine
+    container_name: penpot-redis
+    profiles: [design]
+
+  penpot-backend:
+    <<: *walter-common
+    image: penpotapp/backend:2.14.5
+    container_name: penpot-backend
+    profiles: [design]
+    volumes:
+      - penpot_assets:/opt/data/assets
+    environment:
+      PENPOT_FLAGS: "enable-registration enable-login-with-password disable-email-verification disable-onboarding"
+      PENPOT_PUBLIC_URI: https://penpot.${WALTER_DOMAIN}
+      PENPOT_DATABASE_URI: postgresql://penpot-postgres/penpot
+      PENPOT_DATABASE_USERNAME: penpot
+      PENPOT_DATABASE_PASSWORD: "${PENPOT_DB_PASS}"
+      PENPOT_REDIS_URI: redis://penpot-redis/0
+      PENPOT_ASSETS_STORAGE_BACKEND: assets-fs
+      PENPOT_STORAGE_ASSETS_FS_DIRECTORY: /opt/data/assets
+      PENPOT_TELEMETRY_ENABLED: "false"
+      PENPOT_SECRET_KEY: "${PENPOT_SECRET_KEY}"
+    depends_on:
+      penpot-postgres:
+        condition: service_healthy
+      penpot-redis:
+        condition: service_started
+
+  penpot-exporter:
+    <<: *walter-common
+    image: penpotapp/exporter:2.14.5
+    container_name: penpot-exporter
+    profiles: [design]
+    environment:
+      PENPOT_PUBLIC_URI: http://penpot-frontend:8080
+      PENPOT_REDIS_URI: redis://penpot-redis/0
+      PENPOT_SECRET_KEY: "${PENPOT_SECRET_KEY}"
+
+  penpot-frontend:
+    <<: *walter-common
+    image: penpotapp/frontend:2.14.5
+    container_name: penpot-frontend
+    profiles: [design]
+    environment:
+      PENPOT_FLAGS: "enable-registration enable-login-with-password disable-email-verification disable-onboarding"
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      - penpot-backend
+      - penpot-exporter
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/nginx.pid"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+
+  drawio:
+    <<: *walter-common
+    image: jgraph/drawio:30.0.1
+    container_name: drawio
+    profiles: [design]
+    environment:
+      DRAWIO_PLUGINS_ENABLED: "true"
+      DRAWIO_GOOGLE_CLIENT_ID: ""
+      DRAWIO_GOOGLE_VIEWER_CLIENT_ID: ""
+      DRAWIO_GITLAB_ID: ""
+      DRAWIO_DROPBOX_APPKEY: ""
+      DRAWIO_ONEDRIVE_CLIENT_ID: ""
+      DRAWIO_BASE_URL: https://draw.${WALTER_DOMAIN}
+      DRAWIO_VIEWER_URL: https://draw.${WALTER_DOMAIN}/js/viewer-static.min.js
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080 | grep -q drawio || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  # ==========================================================================
+  # PROFILE: assistant — OpenClaw (personal AI assistant)
+  # ==========================================================================
+
+  openclaw:
+    <<: *walter-common
+    image: node:24-slim
+    container_name: openclaw
+    profiles: [assistant]
+    working_dir: /workspace
+    environment:
+      NPM_CONFIG_PREFIX: /workspace/.npm-global
+      PATH: /workspace/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      HOME: /workspace
+      OPENAI_API_BASE: http://litellm:4000
+      OPENAI_API_KEY: ${LITELLM_OPENCLAW_KEY:-}
+      ANTHROPIC_API_BASE: http://litellm:4000
+      ANTHROPIC_API_KEY: ${LITELLM_OPENCLAW_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${OPENCLAW_TELEGRAM_BOT_TOKEN:-}
+      OPENCLAW_DEFAULT_MODEL: sonnet
+      OPENCLAW_OPERATOR_CHAT_ID: ${OPENCLAW_OPERATOR_CHAT_ID:-}
+      OPENCLAW_DM_POLICY: pairing
+      OPENCLAW_GATEWAY_TOKEN: "${OPENCLAW_GATEWAY_TOKEN}"
+      OPENCLAW_GATEWAY_CONTROLUI_ALLOWED_ORIGINS: "https://claw.${WALTER_DOMAIN},http://127.0.0.1:18789"
+      TZ: ${WALTER_TIMEZONE:-UTC}
+    volumes:
+      - openclaw_data:/workspace
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        # Runtime guard: fail closed when OPENCLAW_GATEWAY_TOKEN is empty.
+        # The root compose uses ${OPENCLAW_GATEWAY_TOKEN} (no :?required) so
+        # 'docker compose --profile core up' does NOT block on this var
+        # (Codex R2 P1.1 fix). But the ASSISTANT profile MUST NOT start
+        # with empty token — would expose the gateway on litellm_net /
+        # openclaw_net. Codex R3 caught this gap. Per-service compose
+        # already enforces :?required at compose-parse time.
+        if [ -z "${OPENCLAW_GATEWAY_TOKEN}" ]; then
+          echo "openclaw: OPENCLAW_GATEWAY_TOKEN is empty." >&2
+          echo "  Set it in personal.env (openssl rand -hex 32) before enabling assistant profile." >&2
+          exit 1
+        fi
+        if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
+          mkdir -p /workspace/.npm-global
+          npm install -g openclaw@2026.5.7
+        fi
+        if [ ! -f /workspace/.openclaw/openclaw.json ]; then
+          echo "openclaw: not onboarded yet."
+          echo "Run: docker exec -it openclaw /workspace/.npm-global/bin/openclaw onboard"
+          exec sleep infinity
+        fi
+        exec /workspace/.npm-global/bin/openclaw gateway run --port 18789 --bind lan
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:18789/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      - litellm
+
+  # ==========================================================================
+  # PROFILE: comms — Synapse (Matrix) + Rocketchat
+  # ==========================================================================
+
+  synapse-db:
+    <<: *walter-common
+    image: postgres:16-alpine
+    container_name: synapse-db
+    profiles: [comms]
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: "${SYNAPSE_DB_PASS}"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - synapse_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  synapse:
+    <<: *walter-common
+    image: matrixdotorg/synapse:v1.119.0
+    container_name: synapse
+    profiles: [comms]
+    environment:
+      SYNAPSE_SERVER_NAME: ${WALTER_DOMAIN}
+      SYNAPSE_REPORT_STATS: "no"
+      UID: "991"
+      GID: "991"
+      TZ: ${WALTER_TIMEZONE:-UTC}
+    volumes:
+      - synapse_data:/data
+      - ./setup/synapse/config:/data/config:ro
+    depends_on:
+      synapse-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8008/health | grep -q OK || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  element-web:
+    <<: *walter-common
+    image: vectorim/element-web:v1.11.95
+    container_name: element-web
+    profiles: [comms]
+    volumes:
+      - ./setup/synapse/element/config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/config.json || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - synapse
+
+  rocketchat-mongo:
+    <<: *walter-common
+    image: mongo:7-jammy
+    container_name: rocketchat-mongo
+    profiles: [comms]
+    command: ["--replSet", "rs0", "--oplogSize", "128"]
+    volumes:
+      - rocketchat_mongo:/data/db
+      - rocketchat_mongo_config:/data/configdb
+    healthcheck:
+      test: |
+        echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'rocketchat-mongo:27017'}]}) }" | mongosh --quiet
+      interval: 10s
+      timeout: 30s
+      retries: 30
+      start_period: 30s
+
+  rocketchat:
+    <<: *walter-common
+    image: rocket.chat:7.10.4
+    container_name: rocketchat
+    profiles: [comms]
+    environment:
+      ROOT_URL: https://chat.${WALTER_DOMAIN}
+      MONGO_URL: mongodb://rocketchat-mongo:27017/rocketchat?replicaSet=rs0
+      MONGO_OPLOG_URL: mongodb://rocketchat-mongo:27017/local?replicaSet=rs0
+      PORT: 3000
+      DEPLOY_METHOD: docker
+      OVERWRITE_SETTING_Show_Setup_Wizard: completed
+      MAIL_URL: smtp://resend:${RESEND_API_KEY:-}@smtp.resend.com:587
+    depends_on:
+      rocketchat-mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/info',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+# ---------------------------------------------------------------------------
+# NETWORKS
+# ---------------------------------------------------------------------------
+
+networks:
+  walter_net:
+    name: walter_net
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# VOLUMES
+# ---------------------------------------------------------------------------
+
+volumes:
+  # Postgres
+  postgres_data:
+
+  # Caddy
+  caddy_data:
+  caddy_config:
+
+  # Plane
+  plane_pgdata:
+  plane_redisdata:
+  plane_uploads:
+  plane_rabbitmq_data:
+
+  # Forgejo
+  forgejo_data:
+
+  # Infisical
+  infisical_redis_data:
+
+  # LiteLLM (uses shared postgres, no extra volume)
+
+  # Observability
+  prometheus_data:
+  loki_data:
+  grafana_data:
+
+  # n8n
+  n8n_data:
+  n8n_files:
+
+  # WireGuard
+  wg_config:
+
+  # Headscale
+  headscale_data:
+
+  # Syncthing
+  syncthing_config:
+  syncthing_data:
+
+  # Uptime Kuma
+  uptime_kuma_data:
+
+  # PostHog volumes are declared in setup/walter-host/services/posthog/compose.root-include.yml
+
+  # Postiz (marketing core — promoted from devrel profile)
+  postiz_uploads:
+  postiz_redis:
+
+  # Penpot [profile: design]
+  penpot_pg:
+  penpot_assets:
+
+  # OpenClaw [profile: assistant]
+  openclaw_data:
+
+  # Synapse [profile: comms]
+  synapse_data:
+  synapse_pg:
+
+  # Rocketchat [profile: comms]
+  rocketchat_mongo:
+  rocketchat_mongo_config:

@@ -1,0 +1,75 @@
+# Infisical with migration-on-startup pattern
+# Override command so backend runs migration before starting server.
+
+services:
+  infisical-backend:
+    image: infisical/infisical:v0.159.25
+    container_name: infisical-backend
+    restart: unless-stopped
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      infisical-redis:
+        condition: service_healthy
+    environment:
+      ENCRYPTION_KEY: "${INFISICAL_ENCRYPTION_KEY}"
+      AUTH_SECRET: "${INFISICAL_AUTH_SECRET}"
+      DB_CONNECTION_URI: "postgresql://infisical:${INFISICAL_DB_PASS}@infisical-db:5432/infisical"
+      REDIS_URL: "redis://default:${INFISICAL_REDIS_PASS}@infisical-redis:6379"
+      SITE_URL: "https://secrets.${WALTER_DOMAIN}"
+      TELEMETRY_ENABLED: "false"
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "npm run migration:latest && node /backend/dist/main.mjs"]
+    ports:
+      - "127.0.0.1:8800:8080"
+    networks:
+      - infisical
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  infisical-db:
+    image: postgres:16-alpine
+    container_name: infisical-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: "${INFISICAL_DB_PASS}"
+      POSTGRES_DB: infisical
+    volumes:
+      - infisical-db-data:/var/lib/postgresql/data
+    networks:
+      - infisical
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  infisical-redis:
+    image: redis:7-alpine
+    container_name: infisical-redis
+    restart: unless-stopped
+    command: redis-server --requirepass "${INFISICAL_REDIS_PASS}"
+    volumes:
+      - infisical-redis-data:/data
+    networks:
+      - infisical
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$INFISICAL_REDIS_PASS ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      INFISICAL_REDIS_PASS: "${INFISICAL_REDIS_PASS}"
+
+volumes:
+  infisical-db-data:
+  infisical-redis-data:
+
+networks:
+  infisical:
+    name: infisical

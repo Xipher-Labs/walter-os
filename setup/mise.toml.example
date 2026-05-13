@@ -1,0 +1,34 @@
+# Walter-OS mise defaults — copy to ~/.config/mise/config.toml or to a project's
+# mise.toml file. mise auto-installs the right versions when you cd into a dir.
+#
+# Re-run `mise install` after changes.
+
+[tools]
+# JS/TS
+node    = "22"        # LTS as of 2026
+pnpm    = "9"
+bun     = "1.1"
+
+# Python
+python  = "3.12"
+uv      = "latest"    # for fast pip-equivalent + uvx (used by ElevenLabs MCP)
+
+# Rust (systems work + Solana programs)
+rust    = "1.83"
+
+# Go (occasional, e.g., Forgejo from source)
+# go    = "1.23"
+
+# Solana toolchain
+# solana = "stable"   # via mise solana plugin if available, else use sh.solana
+
+# Anchor (Solana programs)
+# anchor = "0.30"
+
+[env]
+EDITOR  = "cursor"
+VISUAL  = "cursor"
+
+# Source Walter-OS env automatically when entering any dir
+# (alternative to .zshrc — use one or the other)
+_.file  = "{{ env.HOME }}/.config/walter-os/env"

@@ -1,0 +1,30 @@
+{
+  "PROXY_URL": "",
+  "LOG": true,
+  "LOG_LEVEL": "info",
+  "APIKEY": "${LITELLM_MASTER_KEY}",
+  "HOST": "127.0.0.1",
+  "Providers": [
+    {
+      "name": "walter-bridge",
+      "api_base_url": "https://llm.${WALTER_DOMAIN}/v1/chat/completions",
+      "api_key": "${LITELLM_MASTER_KEY}",
+      "models": [
+        "sonnet",
+        "haiku",
+        "opus",
+        "gpt",
+        "gemini",
+        "deepseek",
+        "walter-llm-local"
+      ]
+    }
+  ],
+  "Router": {
+    "default": "walter-bridge,sonnet",
+    "background": "walter-bridge,haiku",
+    "think": "walter-bridge,sonnet",
+    "longContext": "walter-bridge,claude-3-5-sonnet",
+    "webSearch": "walter-bridge,sonnet"
+  }
+}

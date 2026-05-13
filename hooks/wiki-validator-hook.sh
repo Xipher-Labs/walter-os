@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# hooks/wiki-validator-hook.sh — PreToolUse JSON wrapper for wiki-validator.sh.
+#
+# Claude Code PreToolUse hooks receive JSON on stdin and must emit JSON:
+#   {"decision": "allow"} or {"decision": "block", "reason": "..."}
+#
+# This wrapper:
+#   1. Reads PreToolUse JSON from stdin
+#   2. Extracts .tool_input.file_path
+#   3. Only validates paths under wiki/ (others pass through immediately)
+#   4. Runs scripts/wiki/wiki-validator.sh <path>
+#   5. Emits JSON decision
+#
+# The bare wiki-validator.sh exits 0/1 with plain text errors — not a valid
+# PreToolUse hook response format. This wrapper translates between the two.
+#
+# Refs: docs/specs/walter-council-v2.md — R7
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VALIDATOR="${SCRIPT_DIR}/../scripts/wiki/wiki-validator.sh"
+
+# Read stdin JSON (may be empty if not invoked as hook)
+input="$(cat 2>/dev/null || echo '')"
+
+# Fast-path: no input → allow
+if [[ -z "$input" ]]; then
+  echo '{"decision":"allow"}'
+  exit 0
+fi
+
+# Extract file_path from hook JSON
+if ! command -v jq >/dev/null 2>&1; then
+  # No jq means we cannot determine whether the write targets ~/sync/wiki.
+  # Fail closed so missing tooling cannot bypass the wiki integrity gate.
+  echo '{"decision":"block","reason":"wiki-validator-hook: jq missing, failing closed"}'
+  exit 0
+fi
+
+file_path="$(echo "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null || echo "")"
+
+# Only validate files under wiki/ paths; everything else passes through.
+if [[ -z "$file_path" ]] || ! [[ "$file_path" =~ /wiki/|^wiki/ ]]; then
+  echo '{"decision":"allow"}'
+  exit 0
+fi
+
+# Run the validator
+if [[ ! -x "$VALIDATOR" ]]; then
+  echo '{"decision":"block","reason":"wiki-validator-hook: validator not found, failing closed"}'
+  exit 0
+fi
+
+validator_output="$("$VALIDATOR" "$file_path" 2>&1)"
+validator_rc=$?
+
+if [[ "$validator_rc" -eq 0 ]]; then
+  echo '{"decision":"allow"}'
+else
+  # Encode reason as JSON string via python3 json.dumps for full RFC 8259 compliance.
+  # Covers backslashes, quotes, newlines, tabs, control chars — anything sed misses.
+  raw_reason=""
+  raw_reason="$(echo "$validator_output" | head -3 | tr '\n' ' ')"
+  reason_escaped=""
+  if command -v python3 >/dev/null 2>&1; then
+    reason_escaped=$(printf '%s' "wiki-validator: ${raw_reason}" | \
+      python3 -c "import json,sys; print(json.dumps(sys.stdin.read().rstrip()))")
+  else
+    # Bash fallback: escape the critical chars
+    s="wiki-validator: ${raw_reason}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    s=$(printf '%s' "$s" | LC_ALL=C tr -d '\000-\010\013\014\016-\037')
+    reason_escaped="\"${s}\""
+  fi
+  echo "{\"decision\":\"block\",\"reason\":${reason_escaped}}"
+fi

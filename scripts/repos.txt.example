@@ -1,0 +1,22 @@
+# Walter-OS repos.txt — list of repos for `walter-os sync-repos`.
+# Copy this to ~/.config/walter-os/repos.txt and edit.
+#
+# Format: <path>[:<branch>]   (default branch: main)
+# Tilde expansion (~) is supported. Lines starting with # are comments.
+#
+# `walter-os sync-repos` will:
+# - SKIP repos with uncommitted changes
+# - SKIP repos on a different branch than configured
+# - Pull --ff-only (never merges, never rebases)
+# - Never auto-resolve conflicts
+
+# Work repos (track dev branch — main usually has gates)
+# ~/work/my-company-api:dev
+# ~/work/my-company-frontend:dev
+
+# Personal dev projects
+# ~/Projects-Personal/MyApp:dev
+# ~/Projects-Personal/MyOtherApp:dev
+
+# Walter-OS itself (rare to need this — use `walter-os sync` instead)
+# ~/Projects-Personal/walter-os:main

@@ -1,0 +1,121 @@
+{
+  "name": "GitHub Issue Triage — LLM Classification",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Webhook: GitHub Issue",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "REPLACE_WITH_WEBHOOK_PATH",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {
+          "allowedOrigins": "https://github.com"
+        }
+      },
+      "notes": "Register this URL in GitHub repo Settings → Webhooks → Issues event"
+    },
+    {
+      "id": "node-002",
+      "name": "IF: Issue Opened",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json.action}}", "operation": "equals", "value2": "opened" }]
+        }
+      }
+    },
+    {
+      "id": "node-003",
+      "name": "LLM: Classify Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 250],
+      "parameters": {
+        "method": "POST",
+        "url": "REPLACE_WITH_LLM_ENDPOINT",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"REPLACE_WITH_MODEL\",\n  \"max_tokens\": 256,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Classify this GitHub issue.\\nTitle: {{$node['Webhook: GitHub Issue'].json.issue.title}}\\nBody: {{$node['Webhook: GitHub Issue'].json.issue.body}}\\n\\nReturn JSON: { \\\"severity\\\": \\\"P0|P1|P2|P3\\\", \\\"type\\\": \\\"bug|feature|question|docs\\\", \\\"summary\\\": \\\"one sentence\\\", \\\"labels\\\": [\\\"label1\\\", \\\"label2\\\"] }\"\n  }]\n}"
+      },
+      "notes": "Use your LLM endpoint (Anthropic, OpenAI, or LiteLLM proxy)"
+    },
+    {
+      "id": "node-004",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 250],
+      "parameters": {
+        "jsCode": "// REPLACE WITH ACTUAL IMPLEMENTATION\n// Parse LLM response JSON from items[0].json.content[0].text (Anthropic)\n// or items[0].json.choices[0].message.content (OpenAI)\nconst raw = items[0].json.content ? items[0].json.content[0].text : items[0].json.choices[0].message.content;\nconst parsed = JSON.parse(raw);\nreturn [{ json: { severity: parsed.severity, type: parsed.type, summary: parsed.summary, labels: parsed.labels || [] } }];"
+      }
+    },
+    {
+      "id": "node-005",
+      "name": "GitHub: Add Labels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 200],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.github.com/repos/REPLACE_WITH_REPO_OWNER/REPLACE_WITH_REPO_NAME/issues/{{$node['Webhook: GitHub Issue'].json.issue.number}}/labels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"labels\": [\"REPLACE_WITH_SEVERITY_PREFIX_{{$node['Parse LLM Response'].json.severity}}\", \"REPLACE_WITH_TYPE_PREFIX_{{$node['Parse LLM Response'].json.type}}\", \"auto-triaged\"] }"
+      },
+      "notes": "Requires GitHub PAT with repo scope in credential store"
+    },
+    {
+      "id": "node-006",
+      "name": "GitHub: Post Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 350],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/REPLACE_WITH_REPO_OWNER/REPLACE_WITH_REPO_NAME/issues/{{$node['Webhook: GitHub Issue'].json.issue.number}}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"body\": \"**Auto-triage result**\\n\\nSeverity: {{$node['Parse LLM Response'].json.severity}} | Type: {{$node['Parse LLM Response'].json.type}}\\n\\nSummary: {{$node['Parse LLM Response'].json.summary}}\\n\\n_This triage was performed automatically. A human will confirm before escalation._\" }"
+      }
+    },
+    {
+      "id": "node-007",
+      "name": "Plane: Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.plane.so/api/v1/workspaces/REPLACE_WITH_WORKSPACE_SLUG/projects/REPLACE_WITH_PROJECT_ID/issues/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"[GH-{{$node['Webhook: GitHub Issue'].json.issue.number}}] {{$node['Webhook: GitHub Issue'].json.issue.title}}\",\n  \"description\": \"GitHub issue: {{$node['Webhook: GitHub Issue'].json.issue.html_url}}\\n\\n{{$node['Parse LLM Response'].json.summary}}\",\n  \"priority\": \"REPLACE_WITH_PRIORITY_MAP\"\n}"
+      },
+      "notes": "Priority mapping: P0 → urgent, P1 → high, P2 → medium, P3 → low"
+    }
+  ],
+  "connections": {
+    "Webhook: GitHub Issue": { "main": [[ { "node": "IF: Issue Opened", "type": "main", "index": 0 } ]] },
+    "IF: Issue Opened": { "main": [[ { "node": "LLM: Classify Issue", "type": "main", "index": 0 } ], []] },
+    "LLM: Classify Issue": { "main": [[ { "node": "Parse LLM Response", "type": "main", "index": 0 } ]] },
+    "Parse LLM Response": { "main": [[ { "node": "GitHub: Add Labels", "type": "main", "index": 0 }, { "node": "GitHub: Post Comment", "type": "main", "index": 0 } ]] },
+    "GitHub: Post Comment": { "main": [[ { "node": "Plane: Create Task", "type": "main", "index": 0 } ]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  }
+}
