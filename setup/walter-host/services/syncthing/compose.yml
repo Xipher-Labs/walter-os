@@ -7,7 +7,7 @@
 # Folders managed here:
 #   /mnt/walter-vm-data/sync/obsidian-vault   — operator's Obsidian vault
 #   /mnt/walter-vm-data/sync/projects-personal — selective dev projects
-#   /mnt/walter-vm-data/sync/personal          — finanzas/salud/journaling notes
+#   /mnt/walter-vm-data/sync/personal          — finance/health/journaling notes
 #   /mnt/walter-vm-data/sync/screenshots       — Shottr/CleanShot drop folder
 #
 # Web UI: https://sync.${WALTER_DOMAIN} (CF Tunnel + CF Access, Google IdP).

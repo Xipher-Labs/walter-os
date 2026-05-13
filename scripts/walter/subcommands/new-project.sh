@@ -56,11 +56,11 @@ What this command does (idempotent steps, each can be skipped):
   8. Telegram ping if WALTER_TELEGRAM_BOT_TOKEN is set
 
 Examples:
-  walter new project projects wiht
-  walter new project hackaton afip-categorizer
+  walter new project projects my-app
+  walter new project hackaton grant-categorizer
   walter new project work [company]-grpc-bench
 
-Aliases: proyecto/proyectos/project → projects; projects-personal → projects;
+Aliases: project → projects; projects-personal → projects;
          hackathon → hackaton.
 NP_USAGE
   exit 0
@@ -74,7 +74,7 @@ fi
 # for the operator's own use go in `projects` (= ~/Projects-Personal).
 case "$type" in
   # Common typos / alternate names
-  proyecto|proyectos|project) type="projects" ;;
+  project)                    type="projects" ;;
   projects-personal)          type="projects" ;;
   hackathon)                  type="hackaton" ;;
 esac

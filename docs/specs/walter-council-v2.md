@@ -3,298 +3,309 @@
 **Status**: Draft
 **Owner**: Xipher Labs
 **Created**: 2026-05-11
-**Plane**: (ticket to be filed)
+**Plane**: ticket to be filed
 
 ## Problem
 
-El Walter Council (v1) es funcional pero ciego, sordo a sus propias fallas, y desconectado entre sus partes móviles. Los seis agentes ejecutan tareas en Plane, escriben en el wiki, y postean al Telegram, pero no hay forma de ver en un solo lugar qué están haciendo, cuánto gastan, ni qué aprendió uno que el otro debería saber.
+Walter Council v1 works, but it is blind to its own health, slow to recover from failures, and disconnected across its moving parts. The six agents execute tasks in Plane, write to the wiki, and post to Telegram, but there is no single place to see what they are doing, how much they spend, or what one agent learned that another agent should know.
 
-Cuando un agente muere a mitad de una tarea, la issue queda `claimed` para siempre. No hay heartbeat, no hay watchdog, no hay re-encole. El operator se entera cuando no llega el digest matutino. El gasto en tokens se puede ver en el dashboard de LiteLLM, pero no hay forma de saber qué agente gastó qué en qué contexto. La memoria de cada agente vive en silos — el reviewer no sabe lo que aprendió el coder la semana pasada.
+When an agent dies mid-task, the Plane issue stays `claimed` indefinitely. There is no heartbeat, no watchdog, and no re-enqueue path. The operator usually discovers the problem only when the morning digest never arrives. Token spend is visible in LiteLLM, but there is no attribution by agent or task. Agent memory is siloed: the reviewer may learn that an auth pattern is unsafe, while the coder repeats it in the next issue.
 
-El resultado práctico: el operator sigue teniendo que babysit el Council de una manera distinta a la de v1 pero igual de costosa en atención. La promesa de autonomía real requiere observabilidad real, recuperación ante fallas, y un canal conversacional donde el operator pueda hablar CON el Council, no solo recibir notificaciones de él.
+The practical result is that the operator still has to babysit the Council. The burden is different from v1, but the attention cost remains high. Real autonomy requires real observability, failure recovery, and a conversational channel where the operator can talk with the Council, not only receive notifications from it.
 
-## Proposed solution
+## Proposed Solution
 
-Walter Council v2 es un conjunto de nueve mejoras de infraestructura al Council existente, más una nueva interfaz visual y conversacional llamada **Control Tower**. Las nueve mejoras se agrupan en cuatro capas: observabilidad y costos (mejoras 1-2), memoria e inteligencia colectiva (mejoras 3-4), resiliencia operacional (mejoras 5-6), y controles de autonomía (mejoras 7-9). Control Tower es la superficie de operación que reune todo esto en un solo lugar.
+Walter Council v2 is a set of nine infrastructure improvements to the existing Council, plus a new visual and conversational interface named **Control Tower**. The improvements are grouped into four layers:
 
-Las mejoras son incrementales y no breaking: cada una se puede implementar y desplegar independientemente. El orden de la implementación sigue el critical path que maximiza el valor observable más rápido.
+- Observability and cost: Improvements 1-2.
+- Memory and collective intelligence: Improvements 3-4.
+- Operational resilience: Improvements 5-6.
+- Autonomy controls: Improvements 7-9.
+
+Control Tower is the operations surface that brings those layers together in one place.
+
+The improvements are incremental and non-breaking. Each can be implemented and deployed independently. Implementation order follows the critical path that produces observable value fastest.
 
 ---
 
 ## Improvement 1: Council Observability (Prometheus + Grafana)
 
-### Problem statement
+### Problem Statement
 
-No hay telemetría de primer nivel sobre el trabajo del Council. El operator puede abrir el dashboard de LiteLLM o grepar el audit log, pero no hay un panel unificado que muestre en tiempo real cuántas tasks se ejecutaron hoy, cuánto se gastó por agente, cuántos bloqueos del approval-gate se activaron, ni cuál agente está en qué estado.
+There is no first-class telemetry for Council work. The operator can open the LiteLLM dashboard or grep the audit log, but there is no unified panel showing how many tasks ran today, spend by agent, approval-gate blocks, or which agent is in which state.
 
-### Proposed solution
+### Proposed Solution
 
-Exponer métricas Prometheus desde el agent runner (`scripts/agents/`) y crear un dashboard Grafana que consolide estas métricas con los paneles existentes de LiteLLM.
+Expose Prometheus metrics from the agent runner (`scripts/agents/`) and create a Grafana dashboard that combines these metrics with existing LiteLLM panels.
 
-**Métricas nuevas** (namespace `walter_council_`):
+New metrics under the `walter_council_` namespace:
 
-| Métrica | Labels | Descripción |
+| Metric | Labels | Description |
 |---|---|---|
-| `walter_council_tasks_total` | `agent`, `result` (success/failed/needs_operator) | Counter. Tasks terminadas por agente y resultado. |
-| `walter_council_tokens_total` | `agent`, `model` | Counter. Tokens consumidos (sum input + output). |
-| `walter_council_approvals_total` | `agent`, `category`, `outcome` (blocked/allowed_operator/allowed_standing) | Counter. Eventos del approval-gate. |
-| `walter_council_task_duration_seconds` | `agent` | Histogram. Duración de cada task desde claim hasta done/failed. |
-| `walter_council_agent_state` | `agent`, `state` (idle/working/blocked) | Gauge. Estado actual de cada agente. |
-| `walter_council_heartbeat_age_seconds` | `agent` | Gauge. Segundos desde el último heartbeat (para detección de zombies, ver Improvement 5). |
+| `walter_council_tasks_total` | `agent`, `result` (`success`, `failed`, `needs_operator`) | Counter for completed tasks by agent and result |
+| `walter_council_tokens_total` | `agent`, `model` | Counter for consumed tokens, input plus output |
+| `walter_council_approvals_total` | `agent`, `category`, `outcome` (`blocked`, `allowed_operator`, `allowed_standing`) | Counter for approval-gate events |
+| `walter_council_task_duration_seconds` | `agent` | Histogram for task duration from claim to done or failed |
+| `walter_council_agent_state` | `agent`, `state` (`idle`, `working`, `blocked`) | Gauge for each agent's current state |
+| `walter_council_heartbeat_age_seconds` | `agent` | Gauge for seconds since last heartbeat; used by Improvement 5 |
 
-El agent runner escribe estas métricas a un archivo de texto en formato Prometheus (`/var/lib/walter-council/metrics.prom`) y un proceso `textfile_collector` de Node Exporter las expone. No se agrega un servidor HTTP nuevo al runner.
+The agent runner writes metrics to a Prometheus textfile at `/var/lib/walter-council/metrics.prom`. Node Exporter's `textfile_collector` exposes it. The runner does not gain a new HTTP server.
 
 ### Acceptance Criteria
 
-- [AC-1] `curl walter-vm:9100/metrics | grep walter_council_tasks_total` retorna la métrica con labels correctos después de ejecutar cualquier task.
-- [AC-2] Dashboard Grafana "Walter Council" existe en el Grafana de walter-vm con al menos 6 paneles: tasks/day, tokens/agent, task success rate, approval-gate heatmap, agent state, task duration P95.
-- [AC-3] Métricas persisten a través de reinicios del agent runner (el archivo `.prom` sobrevive al proceso).
-- [AC-4] `walter-os agents status` muestra las métricas del día actual en formato texto (sin requerir acceso a Grafana).
+- [AC-1] `curl walter-vm:9100/metrics | grep walter_council_tasks_total` returns the metric with correct labels after any task runs.
+- [AC-2] Grafana dashboard "Walter Council" exists on walter-vm Grafana with at least six panels: tasks/day, tokens/agent, task success rate, approval-gate heatmap, agent state, task duration P95.
+- [AC-3] Metrics survive agent-runner restarts because the `.prom` file persists.
+- [AC-4] `walter-os agents status` shows current-day metrics in text format without requiring Grafana access.
 
 ---
 
 ## Improvement 2: Cost Attribution per Agent
 
-### Problem statement
+### Problem Statement
 
-LiteLLM registra spend, pero los tags actuales no incluyen `agent_id` ni `task_id`. El operator no puede saber si el costo del mes lo generó el coder o el researcher, ni qué task específica quemó $8 en un solo run.
+LiteLLM records spend, but current tags do not include `agent_id` or `task_id`. The operator cannot tell whether monthly cost came from coder or researcher, nor which specific task burned through a large amount in one run.
 
-### Proposed solution
+### Proposed Solution
 
-Agregar tags `agent_id`, `task_id`, y `context` en cada llamada LLM via la metadata field de LiteLLM (ya soportada en `llm.sh` pero sin todos los tags). Conectar el endpoint `/spend/tags` de LiteLLM al nuevo comando `walter-os spend report`.
+Add `agent_id`, `task_id`, and `context` tags to every LLM call through LiteLLM metadata. `llm.sh` already supports metadata, but not all tags. Connect LiteLLM's `/spend/tags` endpoint to a new `walter-os spend report` command.
 
-El campo `metadata` en cada llamada se expande de `{agent: $agent}` a `{agent_id: $agent, task_id: $task_id, context: $context, model_alias: $model_tag}`.
+Each call expands metadata from `{agent: $agent}` to `{agent_id: $agent, task_id: $task_id, context: $context, model_alias: $model_tag}`.
 
-LiteLLM ya agrupa spend por tags via su tabla `LiteLLM_SpendLogs`. El reporte los query directamente vía la LiteLLM API (`GET /spend/tags?start_date=...&end_date=...&tags=agent_id`).
+LiteLLM already groups spend by tags through `LiteLLM_SpendLogs`. The report queries it through the LiteLLM API: `GET /spend/tags?start_date=...&end_date=...&tags=agent_id`.
 
 ### Acceptance Criteria
 
-- [AC-1] Cada llamada en `llm.sh` incluye `task_id` (proveniente de `$WALTER_AGENT_PLANE_ISSUE`) y `context` (proveniente de `$WALTER_AGENT_CONTEXT`) en el campo `metadata`.
-- [AC-2] `walter-os spend report --by-agent --last 7d` imprime una tabla: agente | modelo | tokens_input | tokens_output | costo_usd, ordenado por costo desc.
-- [AC-3] `walter-os spend report --by-task --last 7d` imprime las top 20 tasks más costosas con issue ID, agente, modelo, y costo.
-- [AC-4] Si el gasto de cualquier agente en las últimas 24h supera su daily budget, aparece una advertencia en el output de `status` y se dispara una alerta `warn` (ver Improvement 8).
+- [AC-1] Every call in `llm.sh` includes `task_id` from `$WALTER_AGENT_PLANE_ISSUE` and `context` from `$WALTER_AGENT_CONTEXT` in metadata.
+- [AC-2] `walter-os spend report --by-agent --last 7d` prints a table: agent, model, input tokens, output tokens, cost USD, sorted by descending cost.
+- [AC-3] `walter-os spend report --by-task --last 7d` prints the top 20 most expensive tasks with issue ID, agent, model, and cost.
+- [AC-4] If any agent exceeds its daily budget in the last 24 hours, `status` output shows a warning and emits a `warn` alert, as defined in Improvement 8.
 
 ---
 
 ## Improvement 3: Memory Consolidation — Wiki Weekly Job
 
-### Problem statement
+### Problem Statement
 
-El wiki crece sin poda. Páginas similares se crean sobre el mismo tema (dos páginas sobre LiteLLM config, tres sobre el bootstrap de la VM). Algunas definen el mismo concepto de forma contradictoria. Muchas páginas obsoletas (last-modified > 6 meses y sin links entrantes) ocupan espacio y agregan ruido al contexto que se inyecta en prompts.
+The wiki grows without pruning. Similar pages are created about the same topic, definitions conflict, and old pages with no inbound links add noise to prompt context.
 
-### Proposed solution
+### Proposed Solution
 
-Un job semanal (cron en walter-vm, domingos 02:00) que corre el agente janitor con una skill específica de consolidación. El job hace tres cosas en orden:
+A weekly job runs on walter-vm every Sunday at 02:00. It invokes the janitor agent with a consolidation skill. The job does three things in order:
 
-1. **Dedupe**: usa embeddings (`bge-small-en-v1.5` vía standby homelab node Ollama o Z440 vLLM) para detectar páginas con similitud coseno > 0.92. Propone merges, no los ejecuta — produce un reporte JSON con los candidatos y lo postea como Plane issue `wiki:consolidation` para que el operator lo apruebe.
-2. **Contradicciones**: usa un LLM (cheap/haiku) para revisar pares de páginas sobre el mismo concepto y detectar definiciones conflictivas. Las marca con un comment `[CONTRADICTION]` en la página más antigua.
-3. **Pruning**: marca páginas con `last-modified > 180 days AND no inbound links` como `[STALE]` en el frontmatter. No las borra — el operator confirma el borrado.
+1. **Dedupe**: uses embeddings (`bge-small-en-v1.5` through standby homelab node Ollama or GPU inference node vLLM) to detect pages with cosine similarity above 0.92. It proposes merges but never executes them. It outputs JSON candidate reports and posts them to Plane issue `wiki:consolidation`.
+2. **Contradictions**: uses a cheap LLM to review pairs of pages about the same concept and detect conflicting definitions. It marks the oldest page with a `[CONTRADICTION]` comment.
+3. **Pruning**: marks pages with `last-modified > 180 days AND no inbound links` as `[STALE]` in frontmatter. It never deletes pages; the operator confirms deletion.
 
-El output del job es siempre propuestas, nunca acciones irreversibles.
+The job always produces proposals, never irreversible actions.
 
 ### Acceptance Criteria
 
-- [AC-1] El job corre sin errores en walter-vm a las 02:00 los domingos. Log en `/var/log/walter-council/wiki-consolidation.log`.
-- [AC-2] Después de correr en un wiki con ≥ 20 páginas, genera al menos un reporte de candidatos (aunque sea vacío si no hay similitud > 0.92).
-- [AC-3] El reporte JSON de candidatos de dedupe incluye: `page_a`, `page_b`, `similarity_score`, `reason`. Se postea como Plane issue con label `wiki:consolidation`.
-- [AC-4] Páginas marcadas `[STALE]` NO se borran automáticamente. Requieren acción explícita del operator (`walter-os wiki prune --confirm`).
-- [AC-5] El job completa en ≤ 10 minutos en un wiki de hasta 200 páginas (medido en prueba manual).
+- [AC-1] The job runs without errors on walter-vm at 02:00 on Sundays. Logs land at `/var/log/walter-council/wiki-consolidation.log`.
+- [AC-2] After running on a wiki with at least 20 pages, it generates at least one candidate report, even if empty.
+- [AC-3] The dedupe candidate JSON includes `page_a`, `page_b`, `similarity_score`, and `reason`. It is posted as a Plane issue with label `wiki:consolidation`.
+- [AC-4] Pages marked `[STALE]` are not deleted automatically. They require explicit operator action: `walter-os wiki prune --confirm`.
+- [AC-5] The job completes within 10 minutes on a wiki with up to 200 pages, measured in a manual test.
 
 ---
 
 ## Improvement 4: Cross-Agent Learning Broker
 
-### Problem statement
+### Problem Statement
 
-Cada agente guarda lessons en `~/sync/agent-memory/<agent>/`. El reviewer aprendió que cierto patrón de auth es inseguro; el coder sigue usándolo en la siguiente issue porque no tiene acceso a las lessons del reviewer. Cada agente aprende en un silo.
+Each agent stores lessons in `~/sync/agent-memory/<agent>/`. If reviewer learns that an auth pattern is unsafe, coder may still repeat it because it cannot access reviewer's lessons. Agents learn in silos.
 
-### Proposed solution
+### Proposed Solution
 
-Un broker de lessons centralizado: un índice SQLite (`~/.config/walter-os/lessons.db`) con schema:
+Create a centralized lessons broker: a SQLite index at `~/.config/walter-os/lessons.db` with this schema:
 
 ```sql
 CREATE TABLE lessons (
-  id          TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
   source_agent TEXT NOT NULL,
-  tags        TEXT,           -- JSON array de strings
-  headline    TEXT NOT NULL,  -- frase corta (≤ 120 chars)
-  body        TEXT,           -- detail completo
-  embedding   BLOB,           -- vector float32[], 384-dim (bge-small)
-  context     TEXT,           -- context:work / context:projects-personal / etc.
-  created_at  TEXT NOT NULL,
-  confidence  REAL DEFAULT 1.0
+  tags         TEXT,           -- JSON array of strings
+  headline     TEXT NOT NULL,  -- short phrase, <= 120 chars
+  body         TEXT,           -- full detail
+  embedding    BLOB,           -- float32[] vector, 384-dim (bge-small)
+  context      TEXT,           -- context:work / context:projects-personal / etc.
+  created_at   TEXT NOT NULL,
+  confidence   REAL DEFAULT 1.0
 );
 ```
 
-**Escritura**: cuando un agente termina una task y encuentra algo que vale la pena recordar, llama `lesson_write <headline> <body> <tags>` (nueva función en `scripts/agents/lib/lessons.sh`). El script computa el embedding local y lo escribe al DB.
+**Write path**: when an agent finishes a task and finds something worth remembering, it calls `lesson_write <headline> <body> <tags>` from a new `scripts/agents/lib/lessons.sh`. The script computes the local embedding and writes to the DB.
 
-**Lectura (injection)**: antes de que cualquier agente invoque el LLM para una task, `lesson_query <task_description> <agent_name>` busca las top-5 lessons por similitud coseno (filtrado por context si corresponde). Las lessons relevantes se inyectan en el system prompt del agente bajo un header `## Lessons from the Council`.
+**Read path**: before any agent invokes an LLM for a task, `lesson_query <task_description> <agent_name>` retrieves the top five lessons by cosine similarity, filtered by context when relevant. Relevant lessons are injected into the agent system prompt under `## Lessons from the Council`.
 
-**Embedding — arquitectura dual peer**:
-- **Cuando el agente corre en standby homelab node** (operator cerca del peer local activo): embedding service local (`nomic-embed-text` via Ollama), ~10ms, sin cache necesaria.
-- **Cuando el agente corre en Walter-VM** (operator remoto o failover): embedding service CPU-based en Walter-VM (`bge-small-en-v1.5` o `nomic-embed-text`) + Redis cache para requests frecuentes. Latencia esperada ≤ 500ms — aceptada por el operator.
+**Embedding architecture across peers**:
 
-El standby homelab node no es un backup pasivo — es un **peer activo** que corre el Council cuando el operator está cerca del nodo local. La sincronización standby homelab node ↔ Walter-VM de lessons DB, wiki, y Plane state usa **eventual consistency con Last-Write-Wins**: Syncthing para archivos, Postgres logical replication para state. Ver `docs/specs/archive/standby-node-replication.md` para la arquitectura de replicación — no se duplica aquí.
+- When the agent runs on the standby homelab node, because the operator is near the active local peer, embeddings use the local Ollama `nomic-embed-text` service. Expected latency is about 10 ms, with no cache needed.
+- When the agent runs on Walter-VM, because the operator is remote or during failover, embeddings use CPU-based service on Walter-VM plus Redis cache for frequent requests. Expected latency is up to 500 ms, accepted by the operator.
 
-No depende de la API de Anthropic.
+The standby homelab node is not a passive backup. It is an **active peer** that runs the Council when the operator is near the local node. Synchronization between standby homelab node and Walter-VM for lessons DB, wiki, and Plane state uses **eventual consistency with Last-Write-Wins**: Syncthing for files, Postgres logical replication for state. See `docs/specs/archive/standby-node-replication.md`.
 
-**Límite**: máximo 5 lessons por invocación, máximo 800 tokens. Lessons con confidence < 0.5 no se inyectan (mecanismo de feedback: el operator puede bajar confidence de lessons que resulten incorrectas via `walter-os lessons rate <id> <score>`).
+This does not depend on Anthropic APIs.
+
+**Limit**: maximum five lessons per invocation, maximum 800 tokens. Lessons with confidence below 0.5 are not injected. Feedback mechanism: the operator can lower confidence on incorrect lessons through `walter-os lessons rate <id> <score>`.
 
 ### Acceptance Criteria
 
-- [AC-1] `lessons.db` existe en `~/.config/walter-os/` después de la primera ejecución de cualquier agente con la nueva lib.
-- [AC-2] Después de que el reviewer escribe una lesson sobre un patrón de auth, el coder la recibe (como parte de su system prompt) en la siguiente task con tags relevantes. Verificable via `--dry-run` que imprime el system prompt resultante.
-- [AC-3] `walter-os lessons list --agent reviewer --last 30d` lista las lessons del reviewer con headline, tags, y fecha.
-- [AC-4] `walter-os lessons rate <id> 0.0` baja la confidence a 0; la lesson deja de inyectarse. Verificable via el mismo `--dry-run`.
-- [AC-5] El query de lessons agrega ≤ 500ms al tiempo de inicio de cualquier task. En standby homelab node (embedding local, operator cerca del nodo local): target ≤ 50ms. En Walter-VM (CPU-based + Redis cache): target ≤ 500ms. La diferencia es aceptada — latencia adicional en el path remoto no es problema operacional.
+- [AC-1] `lessons.db` exists in `~/.config/walter-os/` after the first execution of any agent with the new library.
+- [AC-2] After reviewer writes a lesson about an auth pattern, coder receives it in the next relevant task as part of the system prompt. Verification: `--dry-run` prints the resulting system prompt.
+- [AC-3] `walter-os lessons list --agent reviewer --last 30d` lists reviewer lessons with headline, tags, and date.
+- [AC-4] `walter-os lessons rate <id> 0.0` lowers confidence to zero; the lesson stops being injected. Verification uses the same `--dry-run`.
+- [AC-5] Lesson query adds no more than 500 ms to any task startup. On standby homelab node, target is no more than 50 ms. On Walter-VM, target is no more than 500 ms. The remote latency is operationally acceptable.
 
 ---
 
 ## Improvement 5: Failure Recovery — Heartbeat + Zombie Watchdog
 
-### Problem statement
+### Problem Statement
 
-Cuando un agente muere mid-task (OOM, red caída, timeout del LLM, crash del proceso), la issue Plane queda en estado `claimed` indefinidamente. No hay mecanismo que detecte esto. El operator se entera manualmente, días después, cuando ve que la issue nunca avanzó.
+When an agent dies mid-task, because of OOM, network drop, LLM timeout, or process crash, the Plane issue stays `claimed` indefinitely. Nothing detects it. The operator discovers it manually days later.
 
-### Proposed solution
+### Proposed Solution
 
-Tres piezas coordinadas:
+Three coordinated pieces:
 
-**A — Heartbeat**: el agent runner (`scripts/agents/run.sh`) escribe un heartbeat cada 60 segundos al archivo `/var/lib/walter-council/heartbeats/<agent>/<issue_id>.heartbeat` con timestamp ISO-8601 y checkpoint de progreso (qué archivos tocó, qué tests corrió). El heartbeat es un append-only JSONL.
+**A — Heartbeat**: the agent runner (`scripts/agents/run.sh`) writes a heartbeat every 60 seconds to `/var/lib/walter-council/heartbeats/<agent>/<issue_id>.heartbeat` with ISO-8601 timestamp and progress checkpoint. The heartbeat is append-only JSONL.
 
-**B — Zombie watchdog**: un cron en walter-vm cada 5 minutos corre `scripts/agents/watchdog.sh`. Este script:
-1. Lista todas las issues en estado `claimed` en Plane.
-2. Para cada una, busca el heartbeat file correspondiente.
-3. Si el heartbeat file no existe O si `now - last_heartbeat_ts > 30min`, la issue se declara zombie.
-4. El watchdog postea un comment en la issue ("Agent declared zombie after 30min without heartbeat. Re-enqueueing.") y hace la transición de estado a `ready`, limpiando el assignee.
+**B — Zombie watchdog**: a walter-vm cron runs `scripts/agents/watchdog.sh` every 5 minutes. The script:
 
-**C — Checkpoint serialization**: el heartbeat JSONL actúa como checkpoint. Cuando el watchdog re-encola una issue, el próximo agente que la tome lee el heartbeat más reciente para saber desde dónde continuar (qué archivos ya se modificaron, qué tests ya pasaron). El checkpoint usa una clave simple `completed_steps: [...]` donde cada step es el nombre de la subtask del plan.
+1. Lists all Plane issues in `claimed`.
+2. Finds the corresponding heartbeat file for each.
+3. Declares the issue zombie if the heartbeat file is missing or if `now - last_heartbeat_ts > 30min`.
+4. Posts a Plane comment: "Agent declared zombie after 30min without heartbeat. Re-enqueueing."
+5. Transitions the issue back to `ready` and clears the assignee.
+
+**C — Checkpoint serialization**: heartbeat JSONL acts as a checkpoint. When the watchdog re-enqueues an issue, the next agent reads the latest heartbeat to know where to resume. The checkpoint uses a simple `completed_steps: [...]` key where each item is a plan subtask name.
 
 ### Acceptance Criteria
 
-- [AC-1] Mientras un agente corre una task, el archivo de heartbeat se actualiza cada 60s. Verificable con `watch -n 5 cat /var/lib/walter-council/heartbeats/<agent>/<issue_id>.heartbeat`.
-- [AC-2] Matar el proceso del agente a mitad de una task resulta en: dentro de 35 minutos, el watchdog detecta el zombie, postea el comment en Plane, y retorna la issue a `ready`.
-- [AC-3] El log del watchdog (`/var/log/walter-council/watchdog.log`) registra cada detección de zombie con timestamp, agente, y issue ID.
-- [AC-4] Cuando un segundo agente toma la re-encolada issue, puede leer el checkpoint y sabe qué steps ya estaban completos (mensaje en el comment de claim: "Resuming from checkpoint: steps [X, Y] already done."). El heartbeat persiste qué steps completó (`completed_steps`). `files_touched` y `tests_run` quedan como stub fields (siempre `[]` y `0`) hasta que Phase U agregue tool-call instrumentation hooks. **PARTIAL** — `completed_steps` implementado, file/test tracking deferred.
-- [AC-5] `walter-os agents status` incluye una sección "Zombies detected (last 7d): N".
+- [AC-1] While an agent runs a task, the heartbeat file updates every 60 seconds. Verify with `watch -n 5 cat /var/lib/walter-council/heartbeats/<agent>/<issue_id>.heartbeat`.
+- [AC-2] Killing an agent process mid-task results in watchdog detection within 35 minutes, a Plane comment, and issue transition back to `ready`.
+- [AC-3] Watchdog log at `/var/log/walter-council/watchdog.log` records every zombie detection with timestamp, agent, and issue ID.
+- [AC-4] When a second agent takes the re-enqueued issue, it can read the checkpoint and knows which steps were already completed. The claim comment says: "Resuming from checkpoint: steps [X, Y] already done." The heartbeat persists `completed_steps`. `files_touched` and `tests_run` remain stub fields (`[]` and `0`) until Phase U adds tool-call instrumentation hooks. **PARTIAL**: `completed_steps` implemented; file and test tracking deferred.
+- [AC-5] `walter-os agents status` includes a "Zombies detected (last 7d): N" section.
 
 ---
 
 ## Improvement 6: Project Induction Skill
 
-### Problem statement
+### Problem Statement
 
-Cuando se crea un proyecto nuevo, el operator tiene que poblar manualmente el contexto: escribir el `AGENTS.md` del repo, el primer spec, el primer epic en Plane, y configurar las reglas no-negociables. Este proceso es inconsistente — a veces falta el `AGENTS.md`, a veces el spec es incompleto, a veces el primer epic nunca se crea. El resultado es que los agentes que trabajan en el proyecto nuevo no tienen el contexto necesario para trabajar bien desde el día uno.
+When a new project is created, the operator must manually populate context: repo `AGENTS.md`, first spec, first Plane epic, and non-negotiable rules. The process is inconsistent. Sometimes `AGENTS.md` is missing, the spec is incomplete, or the first epic is never created. Agents working in the new project lack context from day one.
 
-### Proposed solution
+### Proposed Solution
 
-Una nueva skill `project-induction` que se invoca via `walter new project <type> <name>`. La skill guía al operator a través de una entrevista de ~7-9 minutos con 7-9 preguntas estructuradas:
+Add a `project-induction` skill invoked through `walter new project <type> <name>`. It guides the operator through a 7-9 minute interview with structured questions:
 
-1. ¿Qué hace este proyecto? (2-3 oraciones, lenguaje de usuario)
-2. ¿Cuál es el stack técnico principal?
-3. ¿Qué reglas son no-negociables? (seguridad, compliance, performance)
-4. ¿Cuáles son los 3 KPIs que definen el éxito en 6 meses?
-5. ¿Qué integraciones externas son críticas? (APIs, MCPs, servicios)
-6. ¿Quiénes son los usuarios? (perfil, volumen esperado)
-7. ¿Qué es lo que más podría salir mal?
-8. ¿Hay PHI, datos financieros, o datos legalmente sensibles?
-9. ¿Cuál es el path al mercado? (deploy, distribución)
-10. ¿Qué agentes del Council van a trabajar aquí? ¿Alguno restringido?
-11. ¿Branching strategy? ¿Feature flags? ¿Environments?
-12. ¿Hay un deadline hard o milestone crítico pronto?
+1. What does this project do? Answer in two or three user-language sentences.
+2. What is the primary technical stack?
+3. What rules are non-negotiable, such as security, compliance, or performance?
+4. Which three KPIs define success in six months?
+5. Which external integrations are critical, such as APIs, MCPs, or services?
+6. Who are the users? Include profile and expected volume.
+7. What is most likely to go wrong?
+8. Does the project involve PHI, financial data, or legally sensitive data?
+9. What is the path to market: deploy, distribution, sales, or adoption?
+10. Which Council agents will work here? Are any restricted?
+11. What is the branching strategy? Are there feature flags or environments?
+12. Is there a hard deadline or critical milestone soon?
 
-Output de la inducción:
-- `docs/specs/<slug>-project-charter.md` (problem + stack + KPIs + constraints)
-- `AGENTS.md` del repo con las reglas específicas del proyecto
-- Primer Plane epic con 5-8 tasks de bootstrap (setup del repo, CI, primera feature, primer spec)
-- Entry en `wiki/projects/<name>.md` con el resumen del charter
+Induction output:
+
+- `docs/specs/<slug>-project-charter.md` with problem, stack, KPIs, and constraints.
+- Repo `AGENTS.md` with project-specific rules.
+- First Plane epic with 5-8 bootstrap tasks: repo setup, CI, first feature, first spec.
+- `wiki/projects/<name>.md` entry with charter summary.
 
 ### Acceptance Criteria
 
-- [AC-1] `walter new project webapp my-app` inicia la entrevista interactiva en la terminal. Si se pasa `--non-interactive`, lee las respuestas de un archivo YAML.
-- [AC-2] Al finalizar la entrevista, existe `docs/specs/my-app-project-charter.md` con todos los campos del charter poblados desde las respuestas.
-- [AC-3] Al finalizar, existe `AGENTS.md` en el root del repo nuevo con al menos: stack, reglas no-negociables, agentes habilitados/restringidos, y KPIs.
-- [AC-4] Se crea un Plane epic "Bootstrap: my-app" con al menos 5 tasks. Verificable via `walter-os agents status` o la Plane UI.
-- [AC-5] Si el operator responde "sí" a PHI, el `AGENTS.md` generado incluye automáticamente las reglas de `medical-data-compliance`. Si el operator responde "sí" a datos financieros, el `AGENTS.md` incluye un bloque TODO marcando que `financial-data-compliance` skill está pending. Hasta su creación, el operator debe confirmar manualmente operaciones financieras. La skill `financial-data-compliance` en sí está deferred — ver `docs/specs/financial-data-compliance.md` (TBD).
+- [AC-1] `walter new project webapp my-app` starts the interactive terminal interview. With `--non-interactive`, it reads answers from YAML.
+- [AC-2] After the interview, `docs/specs/my-app-project-charter.md` exists and contains every charter field populated from answers.
+- [AC-3] After completion, the new repo root contains `AGENTS.md` with at least stack, non-negotiable rules, enabled/restricted agents, and KPIs.
+- [AC-4] Plane epic "Bootstrap: my-app" is created with at least five tasks. Verify through `walter-os agents status` or the Plane UI.
+- [AC-5] If the operator answers yes to PHI, generated `AGENTS.md` includes `medical-data-compliance` rules automatically. If the operator answers yes to financial data, generated `AGENTS.md` includes a TODO block noting that the `financial-data-compliance` skill is pending. Until that skill exists, the operator must manually confirm financial operations. The skill itself is deferred; see `docs/specs/financial-data-compliance.md` (TBD).
 
 ---
 
 ## Improvement 7: Trust Calibration per Agent
 
-### Problem statement
+### Problem Statement
 
-Hoy el approval-gate es binario: bloqueado o no. No hay distinción entre un reviewer (que es read-only y de bajo riesgo) y un janitor (que toca archivos de configuración y puede causar daño real si se equivoca). Esto lleva a dos problemas: el operator recibe aprobaciones innecesarias para operaciones de bajo riesgo del reviewer, y el janitor tiene el mismo nivel de autonomía que el reviewer en categorías donde debería tener menos.
+The approval gate is currently binary. It does not distinguish between a read-only, low-risk reviewer and a janitor that edits config and can cause real damage. This creates two problems: the operator receives unnecessary approvals for low-risk reviewer actions, and janitor receives the same autonomy as reviewer in categories where it should have less.
 
-### Proposed solution
+### Proposed Solution
 
-Introducir `trust_tier` por agente (low/medium/high) y una tabla de override que define qué categorías del approval-gate se auto-aprueban por tier. Ver ADR `0009-agent-trust-tiers.md` para la decisión completa.
+Introduce `trust_tier` per agent (`low`, `medium`, `high`) and an override table defining which approval-gate categories each tier can auto-approve. See ADR `0009-agent-trust-tiers.md` for the complete decision.
 
-La tabla de trust se persiste en `~/.config/walter-os/trust-tiers.yml` y es leída por `approval-gate.sh` antes de decidir block/allow.
+The trust table persists in `~/.config/walter-os/trust-tiers.yml` and is read by `approval-gate.sh` before deciding block or allow.
 
 ### Acceptance Criteria
 
-- [AC-1] Cada agente tiene un `trust_tier` asignado en `trust-tiers.yml`. Los valores iniciales coinciden con la tabla definida en ADR-0009.
-- [AC-2] El reviewer (high trust) puede ejecutar `git push origin feature/*` sin approval del operator. Verificable via `approval-gate.sh check "git push origin feature/test" --tool Bash` con `WALTER_AGENT_NAME=reviewer`.
-- [AC-3] El janitor (low trust) sigue requiriendo approval para `rm -rf` en paths fuera de `/tmp`. Verificable con el mismo check.
-- [AC-4] `walter-os agents trust <agent>` muestra el tier y la lista de categorías auto-aprobadas para ese agente.
-- [AC-5] Cambiar el `trust_tier` de un agente en `trust-tiers.yml` se refleja inmediatamente en las decisiones del gate (sin reinicio requerido).
+- [AC-1] Every agent has a `trust_tier` in `trust-tiers.yml`. Initial values match ADR-0009.
+- [AC-2] Reviewer, with high trust, can run `git push origin feature/*` without operator approval. Verify through `approval-gate.sh check "git push origin feature/test" --tool Bash` with `WALTER_AGENT_NAME=reviewer`.
+- [AC-3] Janitor, with low trust, still requires approval for `rm -rf` outside `/tmp`. Verify with the same check.
+- [AC-4] `walter-os agents trust <agent>` shows the tier and list of auto-approved categories for that agent.
+- [AC-5] Changing an agent's `trust_tier` in `trust-tiers.yml` immediately changes gate decisions without restart.
 
 ---
 
 ## Improvement 8: Hierarchical Failure Mode Signaling
 
-### Problem statement
+### Problem Statement
 
-Hoy todas las alertas del Council van al mismo Telegram bot con el mismo formato. Un aviso de "dep bump disponible" tiene la misma presencia visual que "runaway LLM spend detectado" o "CVE crítico en MCP". El operator tiene que leer todo para no perderse lo crítico.
+All Council alerts currently go to the same Telegram bot with the same format. A dependency bump notice looks as urgent as runaway LLM spend or a critical MCP CVE. The operator must read everything to avoid missing critical events.
 
-### Proposed solution
+### Proposed Solution
 
-Cuatro tiers de señalización, con rutas de notificación distintas:
+Four signaling tiers with different notification paths:
 
-| Tier | Descripción | Canal | Efecto sobre el Council |
+| Tier | Description | Channel | Effect on Council |
 |---|---|---|---|
-| `info` | Operación rutinaria, sin acción requerida. | Solo log local en `/var/log/walter-council/events.log` | Ninguno |
-| `warn` | Algo anómalo pero tolerable. Operator debería saberlo. | Telegram (sin interrupción) | Ninguno |
-| `critical` | Falla real o gasto excepcional. Requiere atención pronto. | Telegram con formato especial + bandera en Control Tower | Ninguno |
-| `panic` | Evento de seguridad o runaway. Requiere intervención humana inmediata. | Telegram + email + bandera roja en Control Tower + **pause automático del Council** + **lock del approval-gate hasta `/unlock` del operator** | Council pausado, gate bloqueado |
+| `info` | Routine operation, no action required | Local log only at `/var/log/walter-council/events.log` | None |
+| `warn` | Something anomalous but tolerable; operator should know | Telegram without interruption | None |
+| `critical` | Real failure or exceptional spend; requires prompt attention | Telegram with special format + Control Tower flag | None |
+| `panic` | Security event or runaway condition; requires immediate human intervention | Telegram + email + red Control Tower flag + automatic Council pause + approval-gate lock until operator `/unlock` | Council paused, gate blocked |
 
-**Eventos y sus tiers**:
+Events and tiers:
 
-| Evento | Tier |
+| Event | Tier |
 |---|---|
-| Task completada exitosamente | `info` |
-| Dep bump disponible | `info` |
-| Tarea re-encolada por watchdog | `warn` |
-| Daily budget de un agente superado en 80% | `warn` |
-| Approval-gate bloqueó una operación | `warn` |
-| Task fallida después de 2 retries | `critical` |
-| Daily budget de un agente superado (100%) | `critical` |
-| CVE CVSS ≥ 7 detectado por supply-chain audit | `panic` |
-| MCP con tool-name shadowing detectado | `panic` |
-| Runaway spend: gasto mensual > 200% del baseline | `panic` |
-| Agente intentó modificar hooks o AGENTS.md | `panic` |
+| Task completed successfully | `info` |
+| Dependency bump available | `info` |
+| Task re-enqueued by watchdog | `warn` |
+| Agent daily budget 80% consumed | `warn` |
+| Approval gate blocked an operation | `warn` |
+| Task failed after two retries | `critical` |
+| Agent daily budget exceeded | `critical` |
+| CVE CVSS >= 7 detected by supply-chain audit | `panic` |
+| MCP tool-name shadowing detected | `panic` |
+| Runaway spend: monthly spend > 200% of baseline | `panic` |
+| Agent attempted to modify hooks or AGENTS.md | `panic` |
 
-La función `alert_emit <tier> <message> <context_json>` en `scripts/agents/lib/alerts.sh` es el punto de entrada único para todos los eventos. Los agents y scripts existentes la llaman en lugar de postear directamente a Telegram.
+The function `alert_emit <tier> <message> <context_json>` in `scripts/agents/lib/alerts.sh` is the single entrypoint for all events. Agents and scripts call it instead of posting directly to Telegram.
 
 ### Acceptance Criteria
 
-- [AC-1] `alert_emit info "task completed" '{}'` solo escribe al log local. No llega a Telegram.
-- [AC-2] `alert_emit warn "budget 80% consumed" '{}'` envía mensaje Telegram con prefijo `[WARN]` y no pausa el Council.
-- [AC-3] `alert_emit panic "CVE detected" '{}'` envía Telegram + email al operator, pausa el Council (crea el pause flag), y hace que `approval-gate.sh` bloquee TODAS las operaciones hasta que el operator corra `walter-os agents unlock --reason "..."`.
-- [AC-4] El log de eventos (`/var/log/walter-council/events.log`) es un JSONL append-only con timestamp, tier, message, y context.
-- [AC-5] `walter-os agents unlock --reason "CVE triaged, not exploitable in our setup"` levanta el panic lock y registra el reason en el log de eventos.
+- [AC-1] `alert_emit info "task completed" '{}'` writes only to the local log and does not reach Telegram.
+- [AC-2] `alert_emit warn "budget 80% consumed" '{}'` sends a Telegram message prefixed with `[WARN]` and does not pause the Council.
+- [AC-3] `alert_emit panic "CVE detected" '{}'` sends Telegram + email to the operator, pauses the Council by creating the pause flag, and makes `approval-gate.sh` block all operations until the operator runs `walter-os agents unlock --reason "..."`.
+- [AC-4] Event log at `/var/log/walter-council/events.log` is append-only JSONL with timestamp, tier, message, and context.
+- [AC-5] `walter-os agents unlock --reason "CVE triaged, not exploitable in our setup"` lifts the panic lock and records the reason in the event log.
 
 ---
 
 ## Improvement 9: Council Consensus Mode
 
-### Problem statement
+### Problem Statement
 
-Cuando el operator no está disponible (vacaciones, viaje, fin de semana), las tasks que requieren approval humano se acumulan en estado `needs-operator`. El Council puede evaluar si muchas de estas tasks son suficientemente rutinarias como para auto-aprobarse — pero no tiene un mecanismo formal para hacerlo. El operator regresa a una cola larga de aprobaciones pendientes que pudo haber sido reducida automáticamente sin riesgo.
+When the operator is unavailable, tasks requiring human approval accumulate in `needs-operator`. The Council can often determine that routine tasks are safe to approve, but there is no formal mechanism. The operator returns to a large approval queue that could have been reduced automatically without meaningful risk.
 
-### Proposed solution
+### Proposed Solution
 
-Un modo global `consensus` activable via `walter-os mode consensus on` o `walter-os mode consensus off`. Se persiste en `~/.config/walter-os/mode.json`:
+Add a global `consensus` mode enabled with `walter-os mode consensus on` and disabled with `walter-os mode consensus off`. It persists in `~/.config/walter-os/mode.json`:
 
 ```json
 {
@@ -304,104 +315,107 @@ Un modo global `consensus` activable via `walter-os mode consensus on` o `walter
 }
 ```
 
-**Cuando consensus mode está ON**:
+When consensus mode is on:
 
-Tasks que normalmente requerirían approval humano para tiers `info` o `warn` (lint fixes, dep bumps non-major, doc updates, wiki edits, refactor small, formatting, comment changes, tests-only PRs) pasan a un **Council Vote** automático.
+Tasks that normally require human approval for `info` or `warn` tiers move to an automatic **Council Vote**. Eligible examples include lint fixes, non-major dependency bumps, doc updates, wiki edits, small refactors, formatting, comment changes, and tests-only PRs.
 
-**Voting flow**:
-1. Task entra a estado `awaiting-consensus` en Plane.
-2. Los 3 agentes más relevantes para la task (selección por tags del Plane issue) son invocados con prompt: "should this task be auto-approved? respond yes/no with 1-sentence reason".
-3. Si ≥ 2/3 dicen yes → la task se ejecuta. Si ≤ 1/3 dicen yes → escala a `awaiting-human` con los comments del Council adjuntos.
-4. Audit trail explícito: cada consensus-approved action lleva un comment en Plane: `approved by council consensus 3/3 (researcher, reviewer, coder) at <timestamp>. dissent: none.`
+Voting flow:
 
-**Tasks NUNCA elegibles para consensus** (siempre van a humano sin importar el modo):
-- Cualquier operación de tier `critical` del approval-gate (auth, money, PHI, schema changes, prod deploys, security).
-- Cualquier categoría de la lista "Bloqueado para TODOS" del ADR-0009.
-- Dep bumps major (solo minor y patch son elegibles).
-- Cambios a `hooks/`, `AGENTS.md`, `install.sh`, `mcp/servers.json`.
+1. Task enters `awaiting-consensus` in Plane.
+2. The three most relevant agents for the task, selected from Plane issue tags, receive this prompt: "Should this task be auto-approved? Respond yes/no with a one-sentence reason."
+3. If at least two of three vote yes, the task executes. If one or fewer vote yes, it escalates to `awaiting-human` with Council comments attached.
+4. Explicit audit trail: each consensus-approved action receives a Plane comment: `approved by council consensus 3/3 (researcher, reviewer, coder) at <timestamp>. dissent: none.`
 
-**Cuando consensus mode está OFF (default)**:
-- Comportamiento actual: todo lo que requiera approval humano espera al humano.
+Tasks that are never eligible for consensus:
 
-**Experiencia del operator al volver**:
-- `walter-os mode consensus off`
-- `walter-os agents summary --since <last-checkin>` → muestra: cuántas tasks aprobó el Council por consenso (links), cuántas esperan approval humano, cuántas fallaron en consensus con links a la discusión.
+- Any `critical` approval-gate operation: auth, money, PHI, schema changes, production deploys, or security work.
+- Any category in the ADR-0009 "blocked for all tiers" list.
+- Major dependency bumps. Only minor and patch bumps are eligible.
+- Changes to `hooks/`, `AGENTS.md`, `install.sh`, or `mcp/servers.json`.
+
+When consensus mode is off, the current behavior remains: anything requiring human approval waits for the human.
+
+Operator experience on return:
+
+- Run `walter-os mode consensus off`.
+- Run `walter-os agents summary --since <last-checkin>`.
+- The summary shows how many tasks Council approved by consensus, how many wait for human approval, and how many failed consensus, with links to Plane discussions.
 
 ### Acceptance Criteria
 
-- [AC-1] `walter-os mode consensus on` crea/actualiza `~/.config/walter-os/mode.json` con `consensus: true` y timestamp. `walter-os mode consensus status` lo muestra. `walter-os mode consensus off` revierte.
-- [AC-2] En consensus mode, una task de lint fix (tier `info`) en Plane no va a `needs-operator` sino a `awaiting-consensus`. Verificable via dry-run: el runner imprime "entering consensus voting" en lugar de "escalating to operator".
-- [AC-3] Con ≥ 2/3 votos yes del Council, la task pasa de `awaiting-consensus` a `ready` (y luego a ejecución). El comment de Plane adjunto incluye los votos individuales con razón.
-- [AC-4] Una task de schema migration (prod DB) en consensus mode va directamente a `awaiting-human`, nunca a `awaiting-consensus`. Verificable via `approval-gate.sh check "psql migration" --tool Bash` — retorna block con reason "consensus-ineligible: prod-db-migration".
-- [AC-5] `walter-os agents summary --since 2026-05-10` imprime: total tasks auto-aprobadas por consenso, total en awaiting-human, total que fallaron consensus, con links a Plane issues.
-- [AC-6] El toggle de consensus mode es visible en Control Tower (Mode Indicator) con indicación del número de tasks auto-aprobadas desde que se activó.
+- [AC-1] `walter-os mode consensus on` creates or updates `~/.config/walter-os/mode.json` with `consensus: true` and timestamp. `walter-os mode consensus status` displays it. `walter-os mode consensus off` reverts it.
+- [AC-2] In consensus mode, a lint-fix task with tier `info` in Plane goes to `awaiting-consensus` instead of `needs-operator`. Dry-run prints "entering consensus voting" instead of "escalating to operator".
+- [AC-3] With at least two of three yes votes, the task moves from `awaiting-consensus` to `ready`, then execution. Attached Plane comment includes individual votes and reasons.
+- [AC-4] A production DB schema migration in consensus mode goes directly to `awaiting-human`, never `awaiting-consensus`. Verify through `approval-gate.sh check "psql migration" --tool Bash`, which returns block reason `consensus-ineligible: prod-db-migration`.
+- [AC-5] `walter-os agents summary --since 2026-05-10` prints total consensus-approved tasks, total `awaiting-human`, total consensus failures, and links to Plane issues.
+- [AC-6] The consensus-mode toggle is visible in Control Tower's Mode Indicator with the number of auto-approved tasks since activation.
 
 ---
 
 ## Part B: Control Tower
 
-### Problem statement
+### Problem Statement
 
-El Walter Council opera en la oscuridad desde la perspectiva del operator. Las alertas llegan a Telegram, el estado del sistema está repartido entre Plane, Grafana, el audit log, y el dashboard de LiteLLM. Para saber qué está pasando ahora mismo, el operator tiene que abrir cuatro ventanas distintas. No hay un lugar donde "ver el Council" y "hablar con el Council" sean la misma superficie.
+Walter Council operates in the dark from the operator's perspective. Alerts arrive in Telegram, while system state is spread across Plane, Grafana, the audit log, and the LiteLLM dashboard. To know what is happening right now, the operator must open four separate windows. There is no single surface where "see the Council" and "talk with the Council" happen together.
 
-Control Tower es la interfaz operacional del Council: un dashboard web que vive en Walter-VM (Tailscale-only, 1 usuario), que muestra el estado en tiempo real de todos los agentes, las métricas embebidas, los costos, el estado del HA, y las alertas activas — y que además tiene un modo conversacional donde el operator puede pedirle al Council que piense sobre un tema juntos.
+Control Tower is the Council's operational interface: a web dashboard on Walter-VM, Tailscale-only, single user. It shows realtime agent state, embedded metrics, costs, HA state, active alerts, and also provides a conversational mode where the operator can ask the Council to think through a topic together.
 
-### Proposed solution
+### Proposed Solution
 
-Una aplicación web Next.js 15 (App Router) desplegada en walter-vm como container Docker. Ver ADR `0008-control-tower-stack.md` para la justificación del stack.
+A Next.js 15 App Router web app deployed on walter-vm as a Docker container. See ADR `0008-control-tower-stack.md` for stack rationale.
 
-**Módulos visuales**:
-- **Agent Status Board**: estado en tiempo real de los 6 agentes (idle/working/blocked + task actual + tiempo en estado). Actualización via WebSocket.
-- **Decision Timeline**: log de las decisiones del Council (qué se ejecutó, qué se bloqueó, qué se aprobó) con links a Plane issues y commits.
-- **Metrics Dashboard**: paneles Grafana embebidos via iframe (Improvement 1). No se duplica la UI de métricas.
-- **Cost Dashboard**: vista del reporte de spend del Improvement 2, con sparklines por agente.
-- **HA Status**: estado de walter-vm vs standby homelab node (basado en el spec `standby-node-hetzner-replication.md`). Verde/rojo por servicio.
-- **Alert Feed**: alertas activas con su tier (info/warn/critical/panic) y botón de acknowledge.
-- **Mode Indicator**: estado del consensus mode (ON/OFF) con toggle y count de tasks auto-aprobadas desde la última activación.
+Visual modules:
 
-**Módulo conversacional**:
-- **Council Chat**: el operator escribe un tema o pregunta. El Council responde en un **flow híbrido de 3 fases**:
-  1. **Round 1 — parallel groupthink**: los 6 agentes reciben el prompt del operator y responden de forma independiente, sin ver las respuestas de los demás. Outputs son cortos (≤ 300 tokens cada uno). El objetivo es capturar perspectivas sin contaminación cruzada.
-  2. **Round 2 — sequential deliberation**: cada agente recibe las 6 respuestas de Round 1 y produce una respuesta más larga que (a) refina su posición, (b) cita o refuta a otros agentes por nombre, (c) propone trade-offs explícitos. El orden de Round 2 va por trust tier descendente (high → medium → low) para evitar que agentes de baja confianza dominen el discurso temprano.
-  3. **Synthesis**: el agente `liaison` lee las 12 respuestas (6 de R1 + 6 de R2) y produce un summary con: posiciones convergentes, disagreements abiertos, recommended path forward, y próximos pasos accionables. El summary incluye un botón "Spin this as spec + plan" que invoca al architect agent.
-  No es un chat general-purpose — es específicamente para deliberación estructurada del Council.
-- **Ideation Session**: modo de brainstorm asistido. El operator propone una idea, el Council delibera usando el mismo flow de 3 fases, y al final hay un summary + botón "Spin this as spec + plan" que invoca al architect agent para crear el spec formal.
-- **Conversation History**: searchable por fecha, topic, y agente.
+- **Agent Status Board**: realtime state of the six agents (`idle`, `working`, `blocked`), current task, and time in state. Updates through WebSocket.
+- **Decision Timeline**: log of Council decisions, including what executed, what blocked, what approved, with links to Plane issues and commits.
+- **Metrics Dashboard**: embedded Grafana panels from Improvement 1. Metric UI is not duplicated.
+- **Cost Dashboard**: spend report from Improvement 2, with sparklines by agent.
+- **HA Status**: walter-vm vs standby homelab node state, based on `standby-node-hetzner-replication.md`. Green/red by service.
+- **Alert Feed**: active alerts with tier (`info`, `warn`, `critical`, `panic`) and acknowledge button.
+- **Mode Indicator**: consensus mode state, ON/OFF toggle, and count of auto-approved tasks since last activation.
+
+Conversational modules:
+
+- **Council Chat**: the operator enters a topic or question. The Council responds with a three-phase hybrid flow:
+  1. **Round 1 — parallel groupthink**: all six agents receive the operator prompt and respond independently, without seeing each other's answers. Outputs are short, up to 300 tokens each. Goal: capture perspectives without cross-contamination.
+  2. **Round 2 — sequential deliberation**: each agent receives all six Round 1 responses and produces a longer answer that refines its position, cites or refutes other agents by name, and proposes explicit trade-offs. Round 2 order is descending trust tier (`high` → `medium` → `low`) so lower-trust agents do not dominate early discourse.
+  3. **Synthesis**: `liaison` reads all twelve responses and produces a summary with convergent positions, open disagreements, recommended path forward, and actionable next steps. The summary includes a "Spin this as spec + plan" button that invokes the architect agent.
+  Council Chat is not a general-purpose chat. It is specifically for structured Council deliberation.
+- **Ideation Session**: assisted brainstorm mode. The operator proposes an idea, the Council deliberates with the same three-phase flow, and the final summary includes a "Spin this as spec + plan" button to invoke architect for formal spec creation.
+- **Conversation History**: searchable by date, topic, and agent.
 
 ### Acceptance Criteria
 
-- [AC-1] Control Tower es accesible en `https://tower.${WALTER_DOMAIN}` (Tailscale-only). Sin acceso al tailnet → 403.
-- [AC-2] El Agent Status Board se actualiza en ≤ 2 segundos cuando un agente cambia de estado (idle → working). Verificable iniciando un `run-once` y observando el board.
-- [AC-3] El Decision Timeline muestra los últimos 50 eventos del audit log con links a Plane funcionando.
-- [AC-4] Los paneles Grafana del Improvement 1 son visibles en la sección Metrics sin login adicional (auth via Grafana anonymous embed o API key hardcodeada en el backend).
-- [AC-5] El Cost Dashboard muestra el spend de los últimos 7 días por agente en ≤ 3 segundos de carga.
-- [AC-6] El HA Status refleja correctamente si walter-vm o standby homelab node están healthy (verde) o degraded (rojo), consultando la misma health check que usa CF Load Balancer.
-- [AC-7] En Council Chat, el operator escribe un mensaje y el flow de 3 fases completa en ≤ 90 segundos: Round 1 (6 respuestas ≤ 300 tokens) visible en ≤ 30s; Round 2 (6 respuestas deliberativas en orden de trust tier) visible en ≤ 75s; Synthesis del liaison visible en ≤ 90s. La UI muestra cada fase con un indicador de progreso visible.
-- [AC-8] En Ideation Session, al hacer click en "Spin as spec + plan", se crea un Plane issue en `lane:code` con el summary de la sesión como descripción, y el architect agent lo toma en el próximo polling cycle.
-- [AC-9] Control Tower arranca en < 5 segundos de cold start (contenedor ya corriendo). No hay dependencia de cold start del contenedor en el happy path.
-- [AC-10] Todas las llamadas al Council Chat pasan por LiteLLM (no directo a Anthropic API). Verificable en los logs de LiteLLM.
+- [AC-1] Control Tower is accessible at `https://tower.${WALTER_DOMAIN}` through Tailscale only. No tailnet access returns 403.
+- [AC-2] Agent Status Board updates within 2 seconds when an agent changes state, for example `idle` to `working`. Verify by starting a `run-once` and observing the board.
+- [AC-3] Decision Timeline shows the last 50 audit-log events with working Plane links.
+- [AC-4] Grafana panels from Improvement 1 are visible in Metrics without additional login, through Grafana anonymous embed or backend API key.
+- [AC-5] Cost Dashboard loads last-seven-day spend by agent within 3 seconds.
+- [AC-6] HA Status correctly reflects whether walter-vm and standby homelab node are healthy or degraded, using the same health check as Cloudflare Load Balancer.
+- [AC-7] In Council Chat, the operator sends a message and the three-phase flow completes within 90 seconds: Round 1 visible within 30 seconds, Round 2 visible within 75 seconds, liaison synthesis visible within 90 seconds. UI shows visible progress for each phase.
+- [AC-8] In Ideation Session, clicking "Spin as spec + plan" creates a Plane issue in `lane:code` with session summary as description, and architect takes it in the next polling cycle.
+- [AC-9] Control Tower starts in under 5 seconds from cold app start when the container is already running.
+- [AC-10] All Council Chat calls go through LiteLLM, not directly to Anthropic API. Verify in LiteLLM logs.
 
 ---
 
----
+## Wiki Normalization (Prerequisite for Phase M)
 
-## Wiki Normalization (pre-requisite for Phase M)
+### Problem Statement
 
-### Problem statement
+Wiki pages are growing without a consistent frontmatter schema. Some lack `type`, some use free-form strings for `last-modified`, and some omit fields required by the cross-agent learning broker. The broker uses frontmatter to filter by context; broken frontmatter produces incorrect queries.
 
-Las páginas del wiki crecen sin un esquema de frontmatter consistente. Algunas no tienen `type`, otras tienen `last-modified` como string libre, otras omiten campos requeridos para el cross-agent learning broker (Improvement 4). El broker de lessons usa el frontmatter para filtrar por context — frontmatter roto produce queries incorrectos.
+### Proposed Solution
 
-### Proposed solution
+Add `scripts/wiki/normalize-frontmatter.sh` as a prerequisite before Phase M. The script scans `~/sync/wiki/**/*.md`, validates YAML frontmatter against `wiki/SCHEMA.md`, and applies automatic fixes where safe: default fields and type inference from path, such as `people/*` → `type: person` and `projects/*` → `type: project`. Pages that cannot be auto-normalized are reported for human review and are not silently modified.
 
-Un script `scripts/wiki/normalize-frontmatter.sh` que corre como pre-requisito antes de la fase M. El script recorre `~/sync/wiki/**/*.md`, valida el frontmatter YAML contra `wiki/SCHEMA.md`, y aplica fixes automáticos donde es posible (campos default, type inference por path: `people/*` → `type: person`, `projects/*` → `type: project`). Páginas que no pueden auto-normalizarse se reportan para revisión humana — no se modifican silenciosamente.
-
-El script también se instala como hook para escrituras futuras al wiki (ver Required AGENTS.md amendments más abajo): ninguna escritura al wiki puede ocurrir sin pasar validación de frontmatter.
+The script is also installed as a hook for future wiki writes. See the required `AGENTS.md` amendment below: no wiki write may occur without frontmatter validation.
 
 ---
 
-## Required AGENTS.md amendments
+## Required AGENTS.md Amendments
 
-El implementer debe agregar el siguiente bloque al `<operator-home>/Projects/walter-os/AGENTS.md` global, en la sección "Universal disciplines", como subsección nueva entre "Wiki integrity" y la siguiente sección existente:
+The implementer must add this block to the global `<operator-home>/Projects/walter-os/AGENTS.md`, in "Universal disciplines", as a new subsection between "Wiki integrity" and the next existing section:
 
 ```markdown
 ### Wiki integrity (mandatory)
@@ -415,32 +429,32 @@ El implementer debe agregar el siguiente bloque al `<operator-home>/Projects/wal
   must be made explicit in frontmatter, not implicit.
 ```
 
-Esta amendment es parte de la implementación — no es opcional. Task `T-M-1` en el plan la cubre.
+This amendment is part of implementation and is not optional. Task `T-M-1` in the plan covers it.
 
 ---
 
-## Non-goals
+## Non-Goals
 
-- Voz, wake-word, TTS, STT — eso es Jarvis en standby homelab node, Phase L. Control Tower es texto-only.
-- Nuevos MCPs — v2 no agrega ningún MCP al stack.
-- Nuevos agentes — los 6 actuales se mantienen. Control Tower puede expandirse para soportar más en v3 si se necesita.
-- Auto-merge de PRs — sigue siendo operador-only. El botón no existe en Control Tower.
-- Acceso multi-usuario — 1 operador, 1 instancia, sin auth multi-tenant.
-- Mobile app — Telegram sigue siendo el canal mobile. Control Tower es desktop browser.
-- Alertas a canales distintos de Telegram + email — no se agrega Slack, PagerDuty, ni otros.
+- Voice, wake-word, TTS, and STT. Those belong to local voice assistant on standby homelab node in Phase L. Control Tower is text-only.
+- New MCPs. v2 does not add MCPs to the stack.
+- New agents. The current six remain. Control Tower can expand to support more agents in v3 if needed.
+- Auto-merge for PRs. Merge remains operator-only. Control Tower does not include a merge button.
+- Multi-user access. One operator, one instance, no multi-tenant auth.
+- Mobile app. Telegram remains the mobile channel. Control Tower is desktop browser.
+- Alerts to channels other than Telegram + email. No Slack, PagerDuty, or others are added.
 
-## Open questions
+## Open Questions
 
-- Para el embedding del broker de lessons (Improvement 4): ¿`bge-small-en-v1.5` o `nomic-embed-text`? El primero es más pequeño (33M params); el segundo está ya configurado en LiteLLM como `local-embed` en standby homelab node. Recomendar nomic-embed-text por ya estar deployado, pero requiere que standby homelab node esté up.
-- ¿La Ideation Session guarda la transcripción completa en el wiki automáticamente, o solo el summary que el operator aprueba? Recomendar solo-summary por defecto para evitar wiki pollution.
+- For the lessons broker embedding model, use `bge-small-en-v1.5` or `nomic-embed-text`? The first is smaller at 33M parameters; the second is already configured in LiteLLM as `local-embed` on standby homelab node. Recommendation: use `nomic-embed-text` because it is already deployed, but it requires standby homelab node to be up.
+- Should Ideation Session automatically save the full transcript to the wiki, or only the operator-approved summary? Recommendation: summary only by default to avoid wiki pollution.
 
 ## References
 
-- `docs/specs/multi-agent-autonomy.md` — v1 del Walter Council (base de este spec)
-- `docs/specs/homelab-topology.md` — arquitectura de 4 nodos (contexto de dónde corre cada cosa)
-- `docs/specs/archive/standby-node-replication.md` — HA status que se muestra en Control Tower
-- `docs/decisions/0008-control-tower-stack.md` — ADR de stack de Control Tower
-- `docs/decisions/0009-agent-trust-tiers.md` — ADR de trust tiers
-- `hooks/approval-gate.sh` — gate que se extiende en Improvements 7 y 8
-- `scripts/agents/lib/llm.sh` — LLM invocation que se extiende en Improvement 2
-- `scripts/agents/main.sh` — CLI que se extiende con nuevos subcomandos
+- `docs/specs/multi-agent-autonomy.md`: Walter Council v1, base for this spec.
+- `docs/specs/homelab-topology.md`: four-node architecture and where each component runs.
+- `docs/specs/archive/standby-node-replication.md`: HA status displayed in Control Tower.
+- `docs/decisions/0008-control-tower-stack.md`: Control Tower stack ADR.
+- `docs/decisions/0009-agent-trust-tiers.md`: trust-tier ADR.
+- `hooks/approval-gate.sh`: gate extended by Improvements 7 and 8.
+- `scripts/agents/lib/llm.sh`: LLM invocation extended by Improvement 2.
+- `scripts/agents/main.sh`: CLI extended with new subcommands.

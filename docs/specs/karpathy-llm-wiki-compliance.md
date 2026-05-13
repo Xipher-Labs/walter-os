@@ -1,7 +1,7 @@
 # SPEC: Walter-OS compliance with Karpathy's "LLM Wiki" pattern
 
 **Status:** Approved (2026-05-05). Decisions locked, implementation in progress.
-**Triggered by:** Operator: *"Asegurate de que todo el spec de walter-os Cumpla con lo que dice este articulo."*
+**Triggered by:** Operator request to ensure the Walter-OS spec complies with the referenced article.
 **Source:** https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f — *"LLM Wiki"* (April 2026).
 
 ## Operator decisions (locked 2026-05-05)
@@ -194,7 +194,7 @@ Total: ~4-5 days of work.
 
 **Should you do this?** Yes if you want compound learning across the projects you run. **Skip** if your knowledge management is fine as-is (Obsidian + memory only).
 
-Operator's hint: *"walter-os va a ser un sistema que me ayude no solo en lo laboral, si no tambien en lo personal"* — the wiki is **exactly** the cross-context compounding layer that delivers on this. Recommend proceeding.
+Operator's hint: Walter-OS should help across both work and personal contexts. The wiki is **exactly** the cross-context compounding layer that delivers on this. Recommend proceeding.
 
 ---
 

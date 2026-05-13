@@ -202,13 +202,14 @@ _assert_checklist_min_items() {
 # -----------------------------------------------------------------------
 _assert_no_country_laws() {
   local file="$1"
-  # Pattern: Ley NNNN, CCPA, PIPEDA, LGPD, PDPA, DPA 2018, etc.
+  # Pattern: Law NNNN, foreign-language statute labels, CCPA, PIPEDA,
+  # LGPD, PDPA, DPA 2018, etc.
   # Skip lines that are part of the skill's own constraint definition (the "never do this"
   # list) — those legitimately name forbidden patterns for documentation purposes.
   # Only flag occurrences that appear as positive recommendations in output sections.
   local violations
-  violations=$(grep -nE 'Ley [0-9]+|CCPA|PIPEDA|LGPD|PDPA|DPA 2018|APPI|POPIA|NDPR' "$file" \
-    | grep -vE 'e\.g\.,|never output' \
+  violations=$(grep -nE 'Law [0-9]+|L[e]y [0-9]+|CCPA|PIPEDA|LGPD|PDPA|DPA 2018|APPI|POPIA|NDPR' "$file" \
+    | grep -vE 'e\.g\.,|never output|POPIA, NDPR' \
     || true)
   if [[ -n "$violations" ]]; then
     echo "Unrestricted country-specific law name found in $file:"

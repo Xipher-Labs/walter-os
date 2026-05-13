@@ -100,7 +100,7 @@ I (the agent) repeatedly described "Bitwarden `walter-os/secrets`" and `~/.confi
 
 ## 3. Bootstrap problem & solution
 
-> "Para fetchear de Infisical via API necesitás creds que no pueden vivir en Infisical mismo. Donde van?"
+> "To fetch from Infisical through the API, you need credentials that cannot live in Infisical itself. Where do they go?"
 
 **Answer: macOS Keychain, gated by Yubikey/Touch ID.**
 

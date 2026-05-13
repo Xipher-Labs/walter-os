@@ -64,13 +64,13 @@ Headline rules:
 Examples:
 - ❌ "Powerful infrastructure for modern apps"
 - ✅ "Solana RPC infrastructure with sub-50ms p99"
-- ❌ "Plataforma transparente para licitaciones"
-- ✅ "Participá de licitaciones públicas en 10 minutos"
+- ❌ "Transparent platform for public tenders"
+- ✅ "Join public tenders in 10 minutes"
 
 ## Project-specific defaults
 
 ### [Project A] landing
-- **Spanish primario**, English at `/en`.
+- **Primary localized market**, English at `/en` when a second locale is needed.
 - Hero: dashboard screenshot with one tender card highlighted.
 - Trust signals: legal references (relevant compliance badges), audit logo,
   regulatory certifications if applicable.
@@ -79,14 +79,15 @@ Examples:
 - Form capture: WhatsApp + email (WhatsApp is huge in AR for SMB).
 
 ### [Project B] landing
-- **Spanish primario**, English at `/en`.
+- **Primary localized market**, English at `/en` when a second locale is needed.
 - Trust trust trust. Compliance badges, encryption visualization,
   patient-control messaging.
 - Photographic style: warm, human, NOT techy/cold.
 - Color: warmer palette than [Project A] (terracotta, sage, cream).
 - Forms minimal — just email + "I'm a [patient | doctor | clinic]"
   selector.
-- Privacy disclosure prominent (ley 25.326 + 26.529 references).
+- Privacy disclosure prominent (applicable local patient-rights and
+  personal-data-protection law references).
 
 ### [Company] product page
 - **English-first**, no localization.
@@ -191,7 +192,7 @@ For technical product ([Company]):
 - Show > tell: code snippet, screenshot, real numbers.
 - One CTA, repeated.
 
-For consumer / Spanish ([Project A], [Project B]):
+For consumer / localized markets ([Project A], [Project B]):
 - Plain words, short sentences.
 - Lead with the question the user is asking themselves.
 - Trust signals (compliance, security badges) more visible.

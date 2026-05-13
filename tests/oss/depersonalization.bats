@@ -118,13 +118,27 @@ count_matches() {
   [ "$count" -eq 0 ]
 }
 
+@test "AC-2: no private homelab codenames anywhere public" {
+  local count
+  count="$(grep -r -i -l -E 'jarvis|z440|dell r730|r730|walter-box|walter box' "$REPO_ROOT" \
+    --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' \
+    --include='*.json' --include='*.toml' --include='*.ts' --include='*.tsx' \
+    2>/dev/null \
+    | grep -v "$REPO_ROOT/tests/oss/" \
+    | grep -v "$REPO_ROOT/.claude/" \
+    | grep -v "$REPO_ROOT/.git/" \
+    | wc -l \
+    | tr -d ' ')"
+  [ "$count" -eq 0 ]
+}
+
 # ---------------------------------------------------------------------------
 # AC-3: No country-specific regulatory refs outside exempt paths
 # ---------------------------------------------------------------------------
 
 @test "AC-3: no Argentine regulatory law refs outside _examples" {
   local count
-  count="$(grep -rlE 'Ley [0-9]|AFIP|ARCA|Monotributo|IIBB|MEP-CCL|ANMAT' "$REPO_ROOT" \
+  count="$(grep -rliE 'argentine law [0-9]|Law [0-9]{1,3}\.[0-9]{3}|L[e]y [0-9]+|AFIP|ARCA|small-taxpayer|gross-receipts|MEP-CCL|ANMAT' "$REPO_ROOT" \
     --include='*.md' \
     2>/dev/null \
     | grep -v "$REPO_ROOT/docs/specs/" \
@@ -216,7 +230,7 @@ count_matches() {
 
 @test "AC-6: international skill does not mention Argentine laws" {
   local match_count
-  match_count="$(grep -cE 'Ley 13\.064|Ley 26\.529|Ley 25\.326|AFIP|ANMAT|Monotributo|IIBB' \
+  match_count="$(grep -cE 'Law 13\.064|Law 26\.529|Law 25\.326|AFIP|ANMAT|small-taxpayer|gross-receipts' \
     "$REPO_ROOT/skills/regulatory-research-international/SKILL.md" 2>/dev/null; true)"
   [ "${match_count:-0}" -eq 0 ]
 }

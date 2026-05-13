@@ -27,7 +27,7 @@ Also: any `CREATE TABLE`, `ALTER TABLE`, `DROP`, `CREATE INDEX`,
 Every migration has an `up` AND a `down`. Without `down`:
 
 - BLOCKER for staging.
-- Even harder rule for production (Argentine financial audits expect
+- Even harder rule for production (regulated financial audits expect
   reversibility evidence).
 
 `down` should leave the database in the state it was BEFORE `up` ran.
@@ -193,7 +193,7 @@ For [Project A] (procurement audit trail):
   the policy level.
 - Tender history immutable once awarded.
 - Any migration that could lose audit information is BLOCKER without
-  explicit operator + counsel sign-off (Argentine ley 13.064 audit
+  explicit operator + counsel sign-off (public-procurement audit
   requirements).
 
 For [Project B] (PHI):

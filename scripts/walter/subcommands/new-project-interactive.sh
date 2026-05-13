@@ -102,7 +102,7 @@ BANNER
 read -r -p "1. Project name (slug, kebab-case): " answer_name
 read -r -p "2. Domain (e.g. fintech, devtools, health, gaming): " answer_domain
 read -r -p "3. Stack (e.g. Next.js + Supabase, Rust + Solana, React Native): " answer_stack
-read -r -p "4. Compliance/regulatory constraints (e.g. HIPAA, GDPR, Argentine Ley 26.529, none): " answer_compliance
+read -r -p "4. Compliance/regulatory constraints (e.g. HIPAA, GDPR, local patient-rights law, none): " answer_compliance
 read -r -p "5. Project type (projects/hackaton/work/personal): " answer_type
 
 user_content="Project name: ${answer_name}

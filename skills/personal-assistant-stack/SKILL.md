@@ -39,8 +39,8 @@ when you authorize, it summarizes when you ask, it pings you on what matters.
 Pattern: **pairing + pre-approved auto-reply rules**.
 
 - New WhatsApp arrives → OpenClaw scores priority (urgent / can-wait / ignore)
-- For "can-wait": auto-reply "Hey, recibí tu mensaje, te respondo en X horas"
-  using a template you defined (Spanish for AR contacts, English for work, etc.)
+- For "can-wait": auto-reply "Hey, I got your message and will answer in X hours"
+  using a template you defined for the contact's locale and context.
 - For "urgent": ping you on Telegram with summary + suggested reply, you
   approve via inline button → assistant sends.
 - For "ignore" (newsletters, chain forwards): silent, queued for end-of-day
@@ -57,7 +57,7 @@ Daily digest format (you can ask anytime, or schedule):
 Daily — May 4, 2026
 
 🔥 Urgent (action needed today)
-  • Maria (WhatsApp): asks for the licitación proposal by Friday 6pm
+  • Maria (WhatsApp): asks for the public-tender proposal by Friday 6pm
   • Marcos (Slack #[company]-eng): Geyser plugin crashed in mainnet, needs review
 
 📬 Worth seeing (no action)
@@ -77,14 +77,14 @@ Daily — May 4, 2026
 
 OpenClaw + Calendar API integration:
 
-1. You: "OpenClaw, agendá café con Maria jueves 5pm"
-2. OpenClaw extracts: title="Café con Maria", when="next Thursday 17:00 BA"
-3. Confirms: "Agendo en tu Calendar 'Personal' jueves 8 may 17:00, ¿OK?"
+1. You: "OpenClaw, schedule coffee with Maria Thursday at 5pm"
+2. OpenClaw extracts: title="Coffee with Maria", when="next Thursday 17:00 BA"
+3. Confirms: "I will add 'Coffee with Maria' to your Personal calendar for Thursday, May 8 at 17:00. OK?"
 4. You: 👍
 5. Inserts event via Google Calendar API.
 
 Or fully passive: OpenClaw watches your Telegram chat with Maria, sees
-"dale, jueves 5pm en Lattente?" → drafts the event → asks you to approve.
+"sure, Thursday at 5pm at Lattente?" → drafts the event → asks you to approve.
 
 The calendar integration uses a Google Service Account scoped to a single
 calendar (Personal), not your full account. Limits blast radius.
@@ -144,7 +144,7 @@ on either tier.
 |---|---|---|
 | Auto-reply scoring (urgent/can-wait/ignore) | Sonnet | Pattern recognition, no deep reasoning |
 | Summarize a chat | Sonnet | Compression, no deep reasoning |
-| Draft a reply in Spanish casual | Sonnet | Style, no deep reasoning |
+| Draft a reply in casual localized style | Sonnet | Style, no deep reasoning |
 | Calendar event extraction | Sonnet | Structured extraction |
 | Write a long-form blog draft | Opus | Long context, quality matters |
 | Plan complex multi-step task | Opus / Opus-thinking | Reasoning |

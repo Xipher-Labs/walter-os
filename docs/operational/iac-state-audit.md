@@ -19,10 +19,10 @@ still live as runbook prose or one-shot operator UI clicks. The remaining
    manage as code (Hetzner VM provisioning, Backblaze B2 buckets, Google
    Drive rclone remote, Cloudflare Access apps after initial create).
 3. **Out-of-scope nodes** that exist on paper but have zero IaC yet
-   (standby homelab node, Z440, M2 Studio LiteLLM-router companion).
+   (standby homelab node, GPU inference node, M2 Studio LiteLLM-router companion).
 
 Five of the seven gaps are 1-3 hours of work each. The other two (standby homelab node
-Proxmox, Z440 vLLM) are larger but explicitly future.
+Proxmox, GPU inference node vLLM) are larger but explicitly future.
 
 ---
 
@@ -307,7 +307,7 @@ another branch, audit will need a re-run after merge.
 pipeline docs; Metabase is unmentioned. Same caveat as above — likely on
 a feature branch not yet merged.
 
-### standby homelab node (Proxmox + HomeAssistant + Jarvis)
+### standby homelab node (Proxmox + HomeAssistant + local voice assistant)
 
 **Status:** Spec exists at `docs/specs/archive/local-llm-node.md` +
 `docs/specs/archive/standby-node-replication.md`. **Zero IaC.** No Ansible
@@ -317,7 +317,7 @@ repo.
 mirroring `walter-vm.yml` pattern (base role + service role). HA config
 is YAML-native so it's IaC by file existence — just commit it.
 
-### Z440 (vLLM, dual RTX 3090)
+### GPU inference node (vLLM, dual RTX 3090)
 
 **Status:** Mentioned in `docs/specs/homelab-topology.md`. **Zero IaC.**
 **Recommendation when active:** Same Ansible pattern. vLLM is
@@ -360,7 +360,7 @@ the migration is straightforward.
 | **P3** | MCP version verification job | 1 h | npm + diff | Per `feedback_mcp_versions.md` — versions may be invented |
 | **P4** | Backblaze B2 provisioning | 2 h | `b2-cli` | Only when offsite-2 actually configured |
 | **P4** | standby homelab node Ansible inventory + playbook | 8 h | Ansible | When standby homelab node comes online |
-| **P4** | Z440 Ansible playbook | 6 h | Ansible | When Z440 comes online |
+| **P4** | GPU inference node Ansible playbook | 6 h | Ansible | When GPU inference node comes online |
 | **P4** | M2 Studio CCR launchd plists | 4 h | `launchd` + bash | When subscription pool goes live |
 
 ---

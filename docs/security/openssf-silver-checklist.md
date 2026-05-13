@@ -55,7 +55,7 @@ Legend:
 | ID | Description | Status | Evidence / TODO |
 |---|---|---|---|
 | `accessibility_best_practices` | A11y best practices. | 🚧 | CLI tool — limited surface. Control Tower UI follows `frontend-quality` skill (WCAG 2.2 AA). |
-| `internationalization` | Supports localization. | 🚧 | CLI tool, English-only by design. Casual chat is Spanish but output channel is English. |
+| `internationalization` | Supports localization. | 🚧 | CLI tool, English-only by design for repo output. Casual chat can follow operator preference. |
 
 ### Other
 

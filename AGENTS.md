@@ -506,7 +506,8 @@ in any language — they are private and out-of-repo.
 - File paths: absolute when referring to system, relative when in repo context.
 - Long answers: tight prose, headers only when there are 3+ distinct sections.
 - No emojis in code, commits, or technical docs. Casual chat is fine.
-- Spanish for casual conversation, English for code/docs/commits/specs.
+- Use the operator's preferred language for casual conversation. Keep
+  code, docs, commits, and specs in English.
 
 ## Loaded skills (auto-trigger by description match)
 

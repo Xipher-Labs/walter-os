@@ -219,7 +219,7 @@ Hard rules, no exceptions:
   encryption) may be referenced by hash but never stored.
 - **Audit log**: every read of a patient record emits an event with the
   reader's pubkey. Patients can audit who accessed their records.
-- **Argentine ley 26.529 alignment**: patient is the data owner. Contract
+- **Patient-rights alignment**: patient is the data owner. Contract
   enforces this even against the platform operator.
 
 ## [Project A]-specific (procurement on-chain)

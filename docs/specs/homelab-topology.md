@@ -28,7 +28,7 @@ and syncing them with the hosted Walter-VM control plane.
    │  macOS Apple Silicon│                │  Linux + Proxmox VE │
    │                     │                │                     │
    │  • 7× CCR proxies   │                │  • HomeAssistant    │
-   │    (subscription    │                │  • Jarvis (HA Conv) │
+   │    (subscription    │                │  • local voice assistant (HA Conv) │
    │    pool — Pro/Plus) │                │  • Whisper / Piper  │
    │  • Small Ollama     │                │  • Restic primary   │
    │    (7-13B models    │                │  • Syncthing client │
@@ -43,7 +43,7 @@ and syncing them with the hosted Walter-VM control plane.
                               │
                               ▼
              ┌────────────────────────────────────────┐
-             │  Z440 (workstation, GPU box)           │
+             │  GPU inference node (workstation, GPU box)           │
              │  Linux + Ubuntu/Debian + vLLM          │
              │                                        │
              │  • 2× RTX 3090 (48 GB VRAM total)      │
@@ -64,7 +64,7 @@ and syncing them with the hosted Walter-VM control plane.
 | Walter-VM | Internet-facing static IP. CF Access. Cross-device hub. Survives local-site power outage. |
 | M2 Studio | Anthropic Pro / ChatGPT Plus auth (locked to macOS binary + Keychain). |
 | standby homelab node | 24/7 light-compute Linux, ZFS, IoT integration via HA, easy LXC sandboxing. |
-| Z440 | 48 GB VRAM, real-time 70B inference, vision/multimodal at speed. |
+| GPU inference node | 48 GB VRAM, real-time 70B inference, vision/multimodal at speed. |
 
 Lose any one → degraded slice, not total failure.
 
@@ -109,18 +109,18 @@ model_list:
     # ... ccr-4, ccr-5, ccr-6
 
   # ====================================================
-  # LOCAL GPU pool (Z440 — fast inference, on-demand)
+  # LOCAL GPU pool (GPU inference node — fast inference, on-demand)
   # ====================================================
   - model_name: local-fast
     litellm_params:
       model: ollama_chat/llama3.3:70b   # served by vLLM OpenAI-compat endpoint
-      api_base: http://z440.tailnet.ts.net:8000
+      api_base: http://gpu-node.tailnet.ts.net:8000
       timeout: 30      # 70B is 5-10 tok/s, requests respond in <30s for typical chat
 
   - model_name: local-coder
     litellm_params:
       model: ollama_chat/qwen2.5-coder:32b
-      api_base: http://z440.tailnet.ts.net:8000
+      api_base: http://gpu-node.tailnet.ts.net:8000
 
   # ====================================================
   # LOCAL CPU pool (standby homelab node — always-on, light loads)
@@ -148,7 +148,7 @@ model_list:
   # ====================================================
   # Agents call "sonnet" → LiteLLM tries pools in order:
   #   1. anthropic-pool (subscription, free)
-  #   2. local-fast     (Z440, no quota)
+  #   2. local-fast     (GPU inference node, no quota)
   #   3. api-fallback   (capped budget)
 
 router_settings:
@@ -178,7 +178,7 @@ router_settings:
 | janitor | `cheap` | lint, audit |
 | researcher | `sonnet` | needs reasoning + ingestion quality |
 | reviewer | `sonnet` | security/perf judgment |
-| coder | `coder` (Z440 first, then Anthropic) | code-completion-grade output |
+| coder | `coder` (GPU inference node first, then Anthropic) | code-completion-grade output |
 
 **On compliance / context**:
 - `context:work` → never use subscription pool (enterprise account billing required); routes directly to `api-fallback` with `ANTHROPIC_ENTERPRISE_KEY`.
@@ -194,7 +194,7 @@ router_settings:
 Each node pulls models independently from Ollama / HuggingFace registries. Why:
 
 - Models are big (Llama 70B = 40GB; 405B = 230GB).
-- Each node has different storage layout (standby homelab node ZFS, Z440 ext4, M2 APFS).
+- Each node has different storage layout (standby homelab node ZFS, GPU inference node ext4, M2 APFS).
 - Models DON'T change once pulled (immutable artifacts).
 - Bandwidth: pulling once per node from registry is cheaper than syncing across nodes.
 
@@ -246,13 +246,13 @@ LiteLLM picks it up via `cache.type: redis` in config. Hits = free repeated answ
 
 ---
 
-## 4. Hardware sizing — Z440 specifics
+## 4. Hardware sizing — GPU inference node specifics
 
-The standby homelab node spec covers standby homelab node. Adding Z440:
+The standby homelab node spec covers standby homelab node. Adding GPU inference node:
 
 | Spec | Value | Notes |
 |---|---|---|
-| Chassis | HP Z440 workstation | accepts 1× Xeon E5-2600 v3/v4 |
+| Chassis | generic GPU workstation | accepts a workstation/server CPU platform with enough PCIe lanes |
 | CPU | 1× Xeon (operator picks; E5-2680v4 fine, or v3 cheaper) | single-socket |
 | RAM | 64-128 GB DDR4 ECC | 64 GB enough; 128 GB if running multiple models concurrent |
 | GPU | **2× RTX 3090** (24 GB each = 48 GB total) | NVLink bridge optional |
@@ -264,7 +264,7 @@ The standby homelab node spec covers standby homelab node. Adding Z440:
 | Load power | ~700 W | both GPUs at full TDP |
 | Headscale agent | yes — same mesh as standby homelab node/M2 | LAN to standby homelab node/M2, WAN to walter-vm |
 
-**vLLM > Ollama for Z440** because:
+**vLLM > Ollama for GPU inference node** because:
 - vLLM serves OpenAI-compatible API natively → drops into LiteLLM config.
 - Tensor parallelism across `--tensor-parallel-size 2` actually uses both GPUs for one big model.
 - Continuous batching (multiple requests in flight) → higher throughput.
@@ -282,7 +282,7 @@ The standby homelab node spec covers standby homelab node. Adding Z440:
 | Llama 3.1 405B | INT4 | ~230 GB | NO |
 | **Multiple smaller concurrent**: Coder-32B-AWQ + Llama-8B + Whisper + nomic-embed | mixed | ~35 GB | YES — best mode for daily use |
 
-**Recommendation**: run 2 servers concurrent on Z440:
+**Recommendation**: run 2 servers concurrent on GPU inference node:
 - vLLM tenant 1: `qwen2.5-coder:32b` (AWQ) on GPU 0 — for `coder` agent
 - vLLM tenant 2: `llama3.3:70b-instruct` (AWQ, tensor-parallel 2) when needed — but takes BOTH GPUs
 
@@ -299,35 +299,35 @@ Headscale already meshes everything. With 4 nodes:
 | Walter-VM | `walter-vm.tailnet.ts.net` | services hub |
 | M2 Studio | `m2-studio.tailnet.ts.net` | subscription proxies |
 | standby homelab node | `standby-node.tailnet.ts.net` | Proxmox + HA + Ollama-CPU |
-| Z440 | `z440.tailnet.ts.net` | vLLM heavy GPU |
+| GPU inference node | `gpu-node.tailnet.ts.net` | vLLM heavy GPU |
 
-LiteLLM config uses these hostnames directly. **No public exposure of M2/standby homelab node/Z440** — they're mesh-internal only.
+LiteLLM config uses these hostnames directly. **No public exposure of M2/standby homelab node/GPU inference node** — they're mesh-internal only.
 
 **LAN vs WAN**:
-- Walter-VM → standby homelab node/Z440/M2: WAN (latency depends on home and cloud regions)
-- standby homelab node ↔ Z440 ↔ M2: LAN (sub-1ms)
+- Walter-VM → standby homelab node/GPU inference node/M2: WAN (latency depends on home and cloud regions)
+- standby homelab node ↔ GPU inference node ↔ M2: LAN (sub-1ms)
 
 This means:
-- Agents running on walter-vm calling Z440 vLLM = 150ms RTT per call. Fine for chat (< 1% of total response time).
-- Agent CODER running on operator workstation calling Z440 = LAN fast. Better.
-- Voice (Jarvis) on standby homelab node calling Z440 vLLM = LAN. <1ms RTT, <100ms total response.
+- Agents running on walter-vm calling GPU inference node vLLM = 150ms RTT per call. Fine for chat (< 1% of total response time).
+- Agent CODER running on operator workstation calling GPU inference node = LAN fast. Better.
+- Voice (local voice assistant) on standby homelab node calling GPU inference node vLLM = LAN. <1ms RTT, <100ms total response.
 
-**Topology decision**: agents don't move. Walter-VM still hosts triage/researcher/reviewer/janitor/liaison; the operator workstation hosts coder. Z440/standby homelab node/M2 are MODEL BACKENDS only. Walter-VM is the orchestration plane.
+**Topology decision**: agents don't move. Walter-VM still hosts triage/researcher/reviewer/janitor/liaison; the operator workstation hosts coder. GPU inference node/standby homelab node/M2 are MODEL BACKENDS only. Walter-VM is the orchestration plane.
 
 ---
 
-## 6. Phase plan (Z440)
+## 6. Phase plan (GPU inference node)
 
-Build on top of standby homelab node phases. Z440 is independent — can be added before, during, or after standby homelab node rollout.
+Build on top of standby homelab node phases. GPU inference node is independent — can be added before, during, or after standby homelab node rollout.
 
 | Phase | Output | Time |
 |---|---|---|
-| **Z1 Hardware** | Z440 + 2× 3090 + 1200W PSU + 64-128GB RAM + NVMe storage | (operator-driven, depends on parts) |
-| **Z2 OS + drivers** | Ubuntu 22.04 LTS + NVIDIA 550+ driver + CUDA 12.4 + Tailscale agent | ~half day |
-| **Z3 vLLM + first model** | vLLM serving Qwen-Coder-32B AWQ; OpenAI-compat API on `:8000`; bench: ~80-100 tok/s | ~2 hours |
-| **Z4 LiteLLM integration** | walter-vm LiteLLM routes `coder` + `local-fast` to Z440; verified via curl + agent test | ~1 hour |
-| **Z5 Multi-tenant** | Two vLLM systemd units (coder-32B + llama-70B-on-demand); LiteLLM uses both | ~2 hours |
-| **Z6 Redis cache** | LiteLLM caching backend → repeated agent prompts hit cache | ~30 min |
+| **G1 Hardware** | GPU inference node + 2× 3090 + 1200W PSU + 64-128GB RAM + NVMe storage | (operator-driven, depends on parts) |
+| **G2 OS + drivers** | Ubuntu 22.04 LTS + NVIDIA 550+ driver + CUDA 12.4 + Tailscale agent | ~half day |
+| **G3 vLLM + first model** | vLLM serving Qwen-Coder-32B AWQ; OpenAI-compat API on `:8000`; bench: ~80-100 tok/s | ~2 hours |
+| **G4 LiteLLM integration** | walter-vm LiteLLM routes `coder` + `local-fast` to GPU inference node; verified via curl + agent test | ~1 hour |
+| **G5 Multi-tenant** | Two vLLM systemd units (coder-32B + llama-70B-on-demand); LiteLLM uses both | ~2 hours |
+| **G6 Redis cache** | LiteLLM caching backend → repeated agent prompts hit cache | ~30 min |
 
 Total active work: ~1 day after parts arrive. Operator-decision points: which models, which quantization.
 
@@ -335,7 +335,7 @@ Total active work: ~1 day after parts arrive. Operator-decision points: which mo
 
 ## 7. Cost tracking (4 nodes)
 
-| Cost type | Walter-VM | M2 Studio | standby homelab node | Z440 | Total |
+| Cost type | Walter-VM | M2 Studio | standby homelab node | GPU inference node | Total |
 |---|---|---|---|---|---|
 | Hardware (one-time) | n/a | ~€2500 | ~€600-800 used | ~€1500-2500 (chassis + 2× used 3090) | ~€5000 |
 | Power /year | n/a | ~€50 | ~€300 | ~€300-450 | ~€650-800 |
@@ -351,10 +351,10 @@ Total active work: ~1 day after parts arrive. Operator-decision points: which mo
 
 ## 8. Open questions for operator
 
-1. **Z440 PSU**: stock 700W will throttle 2× 3090 under load. Plan to upgrade to 1200W (or 1000W if undervolting GPUs). Decide before parts arrive.
+1. **GPU inference node PSU**: an undersized stock PSU will throttle 2× 3090 under load. Plan for 1200W (or 1000W if undervolting GPUs). Decide before parts arrive.
 2. **Used vs new 3090**: used 3090s are €700-900 each on local market; new 4090 is €1800. 4090 is 30-50% faster but 2× cost; 3090 NVLink-able. Operator's call (recommend used 3090 — better $/perf).
 3. **NVLink bridge**: ~€200-300 used. Helps tensor-parallel inference for very large models. NOT needed for 70B with `--tensor-parallel-size 2` over PCIe (works fine). Skip unless going for 100B+ models.
-4. **Z440 always-on or wake-on-demand**: 150W idle × 24/7 = ~€220/yr just to be reachable. Operator can wake-on-LAN from standby homelab node when needed; add ~5s latency. Decide based on usage pattern.
+4. **GPU inference node always-on or wake-on-demand**: 150W idle × 24/7 = ~€220/yr just to be reachable. Operator can wake-on-LAN from standby homelab node when needed; add ~5s latency. Decide based on usage pattern.
 5. **vLLM tenant count**: 1 (one big model) or 2 (smaller concurrent)? Tradeoff: 1 big = better quality on hard tasks; 2 small = better latency on common tasks. Recommend **2** for daily use.
 6. **Sync strategy for "blessed model set"**: store list in `wiki/tools/ollama-models.md` + setup script that pulls them. Per-node `ollama pull <list>`. Or skip — pull on demand.
 
@@ -362,11 +362,11 @@ Total active work: ~1 day after parts arrive. Operator-decision points: which mo
 
 ## 9. Acceptance criteria
 
-- [ ] 4 nodes visible in Headscale: `walter-vm`, `m2-studio`, `standby-node`, `z440`. All reachable from each other via tailnet hostname.
-- [ ] LiteLLM config has all 4 backend categories (subscription pool, local-fast Z440, local-bg standby homelab node, api-fallback) with fallback chains.
-- [ ] `curl litellm/v1/chat/completions -d '{"model":"sonnet","messages":[...]}'` succeeds with response from anthropic-pool (M2) when subscriptions have quota; transparently falls back to Z440 when pool exhausts.
-- [ ] `coder` agent run-once on a `context:projects-personal` issue uses Z440 (`local-coder`). Latency < 5s for typical 200-token completion.
-- [ ] `context:medical` issue routes EXCLUSIVELY to local backends (Z440 + standby homelab node), never reaches Anthropic/OpenAI. Verified via LiteLLM access logs.
+- [ ] 4 nodes visible in Headscale: `walter-vm`, `m2-studio`, `standby-node`, `gpu-node`. All reachable from each other via tailnet hostname.
+- [ ] LiteLLM config has all 4 backend categories (subscription pool, local-fast GPU inference node, local-bg standby homelab node, api-fallback) with fallback chains.
+- [ ] `curl litellm/v1/chat/completions -d '{"model":"sonnet","messages":[...]}'` succeeds with response from anthropic-pool (M2) when subscriptions have quota; transparently falls back to GPU inference node when pool exhausts.
+- [ ] `coder` agent run-once on a `context:projects-personal` issue uses GPU inference node (`local-coder`). Latency < 5s for typical 200-token completion.
+- [ ] `context:medical` issue routes EXCLUSIVELY to local backends (GPU inference node + standby homelab node), never reaches Anthropic/OpenAI. Verified via LiteLLM access logs.
 - [ ] Redis cache hit-rate > 20% after a week of agent activity (measured via Redis MONITOR + LiteLLM telemetry).
 - [ ] DR: kill any one node → degraded but functional system. Documented in DR runbook.
 - [ ] Annual electricity cost ≤ €800 measured (4 nodes combined, excluding M2 portable laptop).
@@ -377,8 +377,8 @@ Total active work: ~1 day after parts arrive. Operator-decision points: which mo
 
 - ❌ Not a replacement for Walter-VM. Cloud node stays — it's the public face + cross-device hub.
 - ❌ Not a Kubernetes cluster. Each node is independent. Coordination via LiteLLM (model routing) + Plane (task queue) + Syncthing (data) + GitOps (config).
-- ❌ Not a "high availability" setup in the enterprise sense. Single instance per node. Acceptable because: walter-vm = backup-able; M2/standby homelab node/Z440 = local-recoverable; degraded mode is well-defined per node.
-- ❌ Not always-on for Z440. Wake-on-LAN saves ~€220/yr if usage is bursty.
+- ❌ Not a "high availability" setup in the enterprise sense. Single instance per node. Acceptable because: walter-vm = backup-able; M2/standby homelab node/GPU inference node = local-recoverable; degraded mode is well-defined per node.
+- ❌ Not always-on for GPU inference node. Wake-on-LAN saves ~€220/yr if usage is bursty.
 
 ---
 

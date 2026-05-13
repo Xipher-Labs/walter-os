@@ -151,9 +151,9 @@ Walter-OS.
 
 **Category**: DIRECT FIT — new skill `differentiation-positioning`
 
-**Rationale**: The wedge framework (specific / doloroso / accesible /
-monetizable / defendible / expandible) and the positioning statement template
-(`Para [ICP] que sufren [problema]...`) are immediately actionable. The
+**Rationale**: The wedge framework (specific / painful / accessible /
+monetizable / defensible / expandable) and the positioning statement template
+(`For [ICP] who suffer from [problem]...`) are immediately actionable. The
 differentiator taxonomy (strong vs weak) directly addresses the
 "more AI-powered" anti-pattern that Walter-OS's philosophy already flags.
 The positioning stress test (10 questions) acts as a DoD validator for
@@ -462,9 +462,9 @@ Session B (4.5h): merges, templates, docs, AGENTS.md.
    `brand-creation` reference it.
 
 4. **Language policy for skill content** — current skills are English.
-   The pack content is Spanish (operational) + English (technical). Recommend
-   translating the SKILL.md content to English for consistency with existing
-   skills, but keeping the "estilo de respuesta" guidance as Spanish commentary.
+   Source pack content is mixed-language. Recommend translating SKILL.md content
+   to English for consistency with existing skills, while preserving the
+   response-style guidance as English commentary.
    Operator approval needed.
 
 5. **Trigger for `idea-triage`** — should it fire automatically when a new

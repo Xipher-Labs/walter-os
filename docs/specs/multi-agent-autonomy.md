@@ -1,14 +1,14 @@
 # SPEC: Multi-agent autonomy
 
 **Status:** Approved (2026-05-05). Decisions locked, implementation pending.
-**Triggered by:** Operator: *"Para gestionar multiples agentes y darle la completa autonomia, que puedo hacer para que eso suceda?"*
+**Triggered by:** Operator request for full autonomy across multiple agents.
 **Related:** `agents/`, `skills/daily-supply-chain-audit/`, `setup/vm/services/{n8n,plane,openclaw,litellm}/`.
 
 ## Operator decisions (locked 2026-05-05)
 
 | Question | Decision |
 |---|---|
-| Where do agents run? | **Walter-VM (default — orchestration plane) + macOS subscription host (subscription pool, see §6.1) + operator workstation (coder agent only) + standby homelab node (Phase L, local-LLM PHI + Jarvis, see `docs/specs/archive/local-llm-node.md`) + Z440-class GPU host (Phase Z, GPU inference, see `docs/specs/homelab-topology.md`)**. Agent WORKERS stay on walter-vm/operator workstation; standby homelab node/GPU host/subscription host are MODEL BACKENDS routed through LiteLLM. The macOS subscription host is critical path for O1 (subscription auth, macOS-only). standby homelab node = critical path for L3 (PHI compliance + Jarvis). GPU host = perf upgrade for `coder` + `local-fast` agent traffic. |
+| Where do agents run? | **Walter-VM (default — orchestration plane) + macOS subscription host (subscription pool, see §6.1) + operator workstation (coder agent only) + standby homelab node (Phase L, local-LLM PHI + local voice assistant, see `docs/specs/archive/local-llm-node.md`) + optional GPU inference node (Phase G, GPU inference, see `docs/specs/homelab-topology.md`)**. Agent WORKERS stay on walter-vm/operator workstation; standby homelab node/GPU host/subscription host are MODEL BACKENDS routed through LiteLLM. The macOS subscription host is critical path for O1 (subscription auth, macOS-only). standby homelab node = critical path for L3 (PHI compliance + local voice assistant). GPU host = perf upgrade for `coder` + `local-fast` agent traffic. |
 | Plane workspace structure | **Single workspace `agents`**, with TWO label dimensions: `context:{work,projects-personal,personal,medical}` (drives auth/quota selection) and `lane:{research,code,review,janitor,digest,triage}` (drives which agent claims it). Cross-context links stay visible. |
 | Quota model | **Subscription-first.** 4 personal + 3 corporate subscriptions form the quota pool. API keys are FALLBACK only when subscription quotas exhaust. See §6 for the pool architecture. |
 | Approval-gate scope | **Confirmed + expanded** — see §7 for the full taxonomy and detection logic. |
