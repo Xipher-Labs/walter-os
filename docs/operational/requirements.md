@@ -20,11 +20,30 @@ Run this first from a clean clone:
 | `jq` | Installer, hooks, MCP config generation | `brew install jq` or `sudo apt-get install -y jq` |
 | `docker` | Full walter-host stack | OrbStack/Docker Desktop on macOS, Docker Engine on Linux |
 
+## Secrets Bootstrap Tools
+
+Walter-OS stores the Infisical Machine Identity in the local OS credential
+store. Hardware security keys are optional hardening; they are not required by
+the default bootstrap path.
+
+| Platform | Required backend | Install hint |
+|---|---|---|
+| macOS | Keychain via `security` | Built in |
+| Linux | Secret Service via `secret-tool` | `sudo apt-get install -y libsecret-tools gnome-keyring` |
+| Linux fallback | `pass` + `gpg` | `sudo apt-get install -y pass gnupg` |
+
+Canonical setup command:
+
+```bash
+walter-os secrets-identity-init
+```
+
 ## Recommended Local Tools
 
 | Tool | Why |
 |---|---|
 | `gh` | GitHub PR, issue, and release workflows |
+| `infisical` | Runtime secret fetch from the configured Infisical server |
 | `rg` | Fast repo search used by agents and scripts |
 | `bats` | Shell test runner |
 | `shellcheck` | Shell lint parity with CI |

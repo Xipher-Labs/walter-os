@@ -9,7 +9,7 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | Spec | Purpose |
 |---|---|
 | [`walter-council-v2.md`](walter-council-v2.md) | Council runtime, observability, trust tiers, consensus mode, and Control Tower. |
-| [`secrets-runtime-architecture.md`](secrets-runtime-architecture.md) | Runtime secret loading with Infisical and local keychain/Yubikey unlock. |
+| [`secrets-runtime-architecture.md`](secrets-runtime-architecture.md) | Runtime secret loading with Infisical and local OS credential stores. |
 | [`walter-os-protection-levels.md`](walter-os-protection-levels.md) | Release-age policy and protection levels for dependency changes. |
 | [`walter-os-oss-security-hardening.md`](walter-os-oss-security-hardening.md) | OSS security hardening gates and supply-chain controls. |
 | [`walter-bridge-litellm-expansion.md`](walter-bridge-litellm-expansion.md) | LiteLLM/provider expansion for the Walter bridge. |
