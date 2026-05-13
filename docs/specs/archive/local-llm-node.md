@@ -42,9 +42,9 @@ Each plays a non-substitutable role:
 
 | Node | Role | Why it specifically |
 |---|---|---|
-| **Walter-VM** (Hetzner CX53, cloud) | Internet-facing services hub: Plane, Forgejo, Infisical, LiteLLM, Synapse, Headscale, Syncthing, OpenClaw, etc. | Static public IP via CF Tunnel. Always-up. Outside-in DNS. Independent of operator's home power/network. |
-| **M2 Studio** (operator's home, macOS, ARM) | Subscription pool: 7 CCR-style proxies, one per Anthropic/ChatGPT subscription | Native `claude` / `codex` binaries with macOS Keychain OAuth. **Cannot be replaced by Linux** — Anthropic Pro auth is locked to the macOS binary. |
-| **standby homelab node** (operator's home, Linux, x86) | Heavy compute: HomeAssistant, Jarvis (local LLM), Ollama, Whisper, restic local target, dev VMs | 256 GB RAM (M2 maxes at 192 GB), 28 cores, easy GPU upgrade path, ZFS at the OS level, runs Linux containers natively. |
+| **Walter-VM** (Hetzner CX53, cloud) | Internet-facing services hub: Plane, Forgejo, Infisical, LiteLLM, Synapse, Headscale, Syncthing, OpenClaw, etc. | Static public IP via CF Tunnel. Always-up. Outside-in DNS. Independent of local-site power/network. |
+| **macOS subscription host** (local, ARM) | Subscription pool: 7 CCR-style proxies, one per Anthropic/ChatGPT subscription | Native `claude` / `codex` binaries with macOS Keychain OAuth. **Cannot be replaced by Linux** — Anthropic Pro auth is locked to the macOS binary. |
+| **standby homelab node** (local site, Linux, x86) | Heavy compute: HomeAssistant, Jarvis (local LLM), Ollama, Whisper, restic local target, dev VMs | 256 GB RAM (M2 maxes at 192 GB), 28 cores, easy GPU upgrade path, ZFS at the OS level, runs Linux containers natively. |
 
 **Failure isolation**: each node going down degrades a slice of capability, not the whole stack:
 

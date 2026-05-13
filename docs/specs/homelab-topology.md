@@ -1,7 +1,8 @@
 # SPEC: Walter homelab topology — 4-node architecture + LiteLLM routing
 
 **Status:** Draft (2026-05-06).
-**Triggered by:** Operator: *"sumo Z440 con 2× RTX 3090 además del standby homelab node + M2 Ultra. Necesito un load balancer entre instancias locales y Hetzner. ¿Sumamos sync?"*
+**Scope:** Optional advanced homelab profile for adding local GPU/LLM backends
+and syncing them with the hosted Walter-VM control plane.
 **Related:** `docs/specs/archive/local-llm-node.md` (standby homelab node role), `docs/specs/multi-agent-autonomy.md` §6 (subscription pool on M2), `docs/specs/secrets-runtime-architecture.md` (cross-device secrets).
 
 ---
@@ -19,7 +20,7 @@
 │                                                                  │
 └──────────┬──────────────────────────────────────────────────────┘
            │  Tailscale via Headscale (mesh, encrypted)
-           │  Argentina ↔ Falkenstein: ~150ms latency
+           │  Home site ↔ cloud region: latency varies
            ▼
 ═══════════════════ HOME LAN (sub-millisecond) ════════════════════
    ┌─────────────────────┐                ┌─────────────────────┐
@@ -60,7 +61,7 @@
 
 | Node | What it can do that no other can |
 |---|---|
-| Walter-VM | Internet-facing static IP. CF Access. Cross-device hub. Survives operator's home power outage. |
+| Walter-VM | Internet-facing static IP. CF Access. Cross-device hub. Survives local-site power outage. |
 | M2 Studio | Anthropic Pro / ChatGPT Plus auth (locked to macOS binary + Keychain). |
 | standby homelab node | 24/7 light-compute Linux, ZFS, IoT integration via HA, easy LXC sandboxing. |
 | Z440 | 48 GB VRAM, real-time 70B inference, vision/multimodal at speed. |
@@ -214,7 +215,7 @@ Exception: if you want a curated "blessed model set" version-pinned, store SHA25
 | `setup/vm/services/*/compose.yml` | every node | `git pull && docker compose up -d` |
 | `hooks/`, `agents/`, `skills/`, `commands/` | every node | symlinked via install.sh |
 | LiteLLM `config.yaml` | walter-vm only | versioned in repo |
-| local LLM node ansible playbooks | applied from operator's Mac via SSH | walter-os repo |
+| local LLM node ansible playbooks | applied from operator workstation via SSH | walter-os repo |
 
 ### ✅ Centralized (single source of truth — read on demand)
 
@@ -303,15 +304,15 @@ Headscale already meshes everything. With 4 nodes:
 LiteLLM config uses these hostnames directly. **No public exposure of M2/standby homelab node/Z440** — they're mesh-internal only.
 
 **LAN vs WAN**:
-- Walter-VM → standby homelab node/Z440/M2: WAN (~150ms Argentina ↔ Falkenstein)
+- Walter-VM → standby homelab node/Z440/M2: WAN (latency depends on home and cloud regions)
 - standby homelab node ↔ Z440 ↔ M2: LAN (sub-1ms)
 
 This means:
 - Agents running on walter-vm calling Z440 vLLM = 150ms RTT per call. Fine for chat (< 1% of total response time).
-- Agent CODER running on operator's Mac calling Z440 = LAN fast. Better.
+- Agent CODER running on operator workstation calling Z440 = LAN fast. Better.
 - Voice (Jarvis) on standby homelab node calling Z440 vLLM = LAN. <1ms RTT, <100ms total response.
 
-**Topology decision**: agents don't move. Walter-VM still hosts triage/researcher/reviewer/janitor/liaison; Mac hosts coder. Z440/standby homelab node/M2 are MODEL BACKENDS only. Walter-VM is the orchestration plane.
+**Topology decision**: agents don't move. Walter-VM still hosts triage/researcher/reviewer/janitor/liaison; the operator workstation hosts coder. Z440/standby homelab node/M2 are MODEL BACKENDS only. Walter-VM is the orchestration plane.
 
 ---
 

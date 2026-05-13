@@ -61,7 +61,7 @@ curl -sS -X PUT \
 
 ```bash
 source ~/.config/walter-os/secrets.env
-cd ~/Projects-Personal/walter-os
+cd /path/to/walter-os
 bash setup/walter-host/cloudflare/04-create-access.sh ${WALTER_DOMAIN} ${WALTER_DOMAIN} otp+google
 ```
 

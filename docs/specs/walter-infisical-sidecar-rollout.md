@@ -147,7 +147,7 @@ already present in `main`.
   already in place: client-secret stored root-600, 30d TTL. Re-evaluate when/if a Pro
   license is justified.
 
-- **Mac-side machine identity (`walter-mac-prod`).** The operator's Mac still uses
+- **Workstation-side machine identity (`walter-workstation-prod`).** The operator workstation still uses
   interactive Infisical session. Per-device identity is recommended but not in scope here.
 
 - **Vercel/CI Infisical integration** for hosted projects. Deferred to

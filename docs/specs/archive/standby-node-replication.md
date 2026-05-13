@@ -322,7 +322,7 @@ Cost delta:
 
 ## 11. Open questions for operator
 
-1. **NVLink bridge for the Z440 GPUs**: operator confirmed they're buying it. Affects this spec only indirectly (faster vLLM throughput → standby homelab node inference fallback faster too). No change here.
+1. **NVLink bridge for the Z440 GPUs**: optional. Affects this spec only indirectly (faster vLLM throughput → standby homelab node inference fallback faster too). No change here.
 2. **Should standby homelab node's standby Postgres serve READ traffic to agents** (e.g., janitor's nightly stale-PR sweep reads via standby to offload primary)? Recommend YES — easy win with logical replication; physical replication standbys also serve reads natively.
 3. **Tier-B services priority**: Synapse first, OpenClaw second, LiteLLM third? Recommend Synapse last (Matrix HA is involved); LiteLLM first (it's nearly stateless).
 4. **CF LB cost cap**: $25/mo is fine. Hard ceiling at $50/mo (would require simplification before then — Tier-B services share an LB with path routing instead of per-service LBs).

@@ -53,3 +53,15 @@ teardown() {
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "import sys, json; json.load(sys.stdin)"
 }
+
+@test "generate-mcp-configs.sh expands HOME templates in filesystem args" {
+  run bash "$SCRIPT" claude
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e --arg home "$HOME" '
+    .filesystem.args
+    | index($home + "/work")
+    and index($home + "/Projects-Personal")
+    and index($home + "/personal")
+    and (index("${HOME}/work") | not)
+  '
+}

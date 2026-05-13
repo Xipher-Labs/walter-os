@@ -15,7 +15,7 @@ setup() {
   mkdir -p "$TMPDIR/.claude"
   mkdir -p "$TMPDIR/.codex"
 
-  # Point audit.sh at THIS worktree, not $HOME/Projects-Personal/walter-os
+  # Point audit.sh at THIS worktree, not any operator-specific checkout path
   # (which doesn't exist under the overridden HOME).
   export WALTER_OS_HOME="$REPO_ROOT"
 
@@ -33,6 +33,17 @@ EOF
 
   # Create empty settings.json (no MCP servers by default)
   echo '{"mcpServers":{}}' > "$TMPDIR/.claude/settings.json"
+}
+
+@test "audit.sh fallback resolves walter home relative to the script" {
+  unset WALTER_OS_HOME
+  cat > "$WALTER_AUDIT_REPO_DIR/walter-os.toml" <<'EOF'
+[walter]
+protection = "production"
+EOF
+  run bash -c "WA_SKIP_NETWORK=1 WALTER_AUDIT_REPO_DIR=\"$WALTER_AUDIT_REPO_DIR\" bash \"$AUDIT_SCRIPT\""
+  [ "$status" -ne 3 ]
+  [[ "$output" != *"Projects-Personal/walter-os"* ]]
 }
 
 teardown() {

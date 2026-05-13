@@ -22,9 +22,9 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem@2026.1.14",
-        "/Users/${USER}/work",
-        "/Users/${USER}/Projects-Personal",
-        "/Users/${USER}/personal"
+        "${HOME}/work",
+        "${HOME}/Projects-Personal",
+        "${HOME}/personal"
       ],
       "contexts": [
         "all"

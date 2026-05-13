@@ -131,10 +131,10 @@ CREATE TABLE lessons (
 **Lectura (injection)**: antes de que cualquier agente invoque el LLM para una task, `lesson_query <task_description> <agent_name>` busca las top-5 lessons por similitud coseno (filtrado por context si corresponde). Las lessons relevantes se inyectan en el system prompt del agente bajo un header `## Lessons from the Council`.
 
 **Embedding — arquitectura dual peer**:
-- **Cuando el agente corre en standby homelab node** (operator en BA, peer local activo): embedding service local (`nomic-embed-text` via Ollama), ~10ms, sin cache necesaria.
+- **Cuando el agente corre en standby homelab node** (operator cerca del peer local activo): embedding service local (`nomic-embed-text` via Ollama), ~10ms, sin cache necesaria.
 - **Cuando el agente corre en Walter-VM** (operator remoto o failover): embedding service CPU-based en Walter-VM (`bge-small-en-v1.5` o `nomic-embed-text`) + Redis cache para requests frecuentes. Latencia esperada ≤ 500ms — aceptada por el operator.
 
-El standby homelab node no es un backup pasivo — es un **peer activo** que corre el Council cuando el operator está en BA. La sincronización standby homelab node ↔ Walter-VM de lessons DB, wiki, y Plane state usa **eventual consistency con Last-Write-Wins**: Syncthing para archivos, Postgres logical replication para state. Ver `docs/specs/archive/standby-node-replication.md` para la arquitectura de replicación — no se duplica aquí.
+El standby homelab node no es un backup pasivo — es un **peer activo** que corre el Council cuando el operator está cerca del nodo local. La sincronización standby homelab node ↔ Walter-VM de lessons DB, wiki, y Plane state usa **eventual consistency con Last-Write-Wins**: Syncthing para archivos, Postgres logical replication para state. Ver `docs/specs/archive/standby-node-replication.md` para la arquitectura de replicación — no se duplica aquí.
 
 No depende de la API de Anthropic.
 
@@ -146,7 +146,7 @@ No depende de la API de Anthropic.
 - [AC-2] Después de que el reviewer escribe una lesson sobre un patrón de auth, el coder la recibe (como parte de su system prompt) en la siguiente task con tags relevantes. Verificable via `--dry-run` que imprime el system prompt resultante.
 - [AC-3] `walter-os lessons list --agent reviewer --last 30d` lista las lessons del reviewer con headline, tags, y fecha.
 - [AC-4] `walter-os lessons rate <id> 0.0` baja la confidence a 0; la lesson deja de inyectarse. Verificable via el mismo `--dry-run`.
-- [AC-5] El query de lessons agrega ≤ 500ms al tiempo de inicio de cualquier task. En standby homelab node (embedding local, operator en BA): target ≤ 50ms. En Walter-VM (CPU-based + Redis cache): target ≤ 500ms. La diferencia es aceptada — latencia adicional en el path remoto no es problema operacional.
+- [AC-5] El query de lessons agrega ≤ 500ms al tiempo de inicio de cualquier task. En standby homelab node (embedding local, operator cerca del nodo local): target ≤ 50ms. En Walter-VM (CPU-based + Redis cache): target ≤ 500ms. La diferencia es aceptada — latencia adicional en el path remoto no es problema operacional.
 
 ---
 

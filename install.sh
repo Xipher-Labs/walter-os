@@ -268,7 +268,7 @@ check_preflight() {
   fi
 
   local missing=()
-  for t in mise gh ripgrep; do
+  for t in mise gh rg; do
     command -v "$t" >/dev/null 2>&1 || missing+=("$t")
   done
   if [[ ${#missing[@]} -gt 0 ]]; then

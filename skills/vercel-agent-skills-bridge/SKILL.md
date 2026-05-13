@@ -30,7 +30,7 @@ For "Install" decisions:
 
 ```bash
 # One-time: clone Vercel skills as a git submodule for tracked updates
-cd ~/Projects-Personal/walter-os
+cd /path/to/walter-os
 git submodule add https://github.com/vercel-labs/agent-skills.git \
   external/vercel-agent-skills
 

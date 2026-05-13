@@ -67,7 +67,10 @@ emit_claude() {
   # Two shapes:
   #   - stdio (local process): {command, args, env}
   #   - http/sse (remote): {type, url, headers}
-  filtered | jq '
+  filtered | jq --arg home "$HOME" '
+    def expand_home:
+      if type == "string" then gsub("\\$\\{HOME\\}|\\$HOME"; $home) else . end;
+
     to_entries
     | map({
         key: .key,
@@ -81,8 +84,8 @@ emit_claude() {
           else
             {
               command: .value.command,
-              args: .value.args,
-              env: (.value.env // {})
+              args: (.value.args | map(expand_home)),
+              env: ((.value.env // {}) | with_entries(.value |= expand_home))
             }
           end
         )
@@ -96,18 +99,19 @@ emit_codex() {
   # Codex (as of 2026-05) supports stdio MCPs natively. Remote (http/sse)
   # MCPs are emitted as comments with instructions, since Codex doesn't
   # consume them yet — operator runs `claude mcp add` for those.
-  filtered | jq -r '
+  filtered | jq -r --arg home "$HOME" '
+    def expand_home:
+      if type == "string" then gsub("\\$\\{HOME\\}|\\$HOME"; $home) else . end;
+
     to_entries[] |
     if .value.type == "http" or .value.type == "sse" then
       "# [mcp_servers.\(.key)] — REMOTE \(.value.type | ascii_upcase) (Codex does not consume remote MCPs yet)\n" +
       "# url: \(.value.url)\n" +
-      "# Add to Claude Code via: claude mcp add-json \(.key) ''{\"type\":\"\(.value.type)\",\"url\":\"\(.value.url)\"" +
-      (if .value.headers then ",\"headers\":" + (.value.headers | tostring) else "" end) +
-      "}''\n\n"
+      "# Add to Claude Code via settings.json or claude mcp add-json using the URL and headers above.\n\n"
     else
       "[mcp_servers.\(.key)]\n" +
       "command = \"\(.value.command)\"\n" +
-      "args = " + (.value.args | tostring) + "\n" +
+      "args = " + ((.value.args | map(expand_home)) | tostring) + "\n" +
       (if (.value.env // {} | length) > 0 then
         "[mcp_servers.\(.key).env]\n" +
         # SECURITY/CORRECTNESS: emit each env value via `tojson` so internal
@@ -117,7 +121,7 @@ emit_codex() {
         # containing a literal `"` — left codex CLI unable to load its
         # config until manually patched. JSON string escapes are a subset
         # of TOML basic-string escapes, so `tojson` output is valid TOML.
-        (.value.env | to_entries | map("\(.key) = \(.value | tojson)") | join("\n")) + "\n"
+        (.value.env | with_entries(.value |= expand_home) | to_entries | map("\(.key) = \(.value | tojson)") | join("\n")) + "\n"
       else "" end) +
       "\n"
     end

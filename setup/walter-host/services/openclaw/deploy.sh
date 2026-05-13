@@ -8,7 +8,7 @@
 # documented separately and should not be assumed by this deploy helper until
 # setup/walter-host/services/openclaw/compose.yml includes that sidecar.
 #
-# Usage (from operator's Mac):
+# Usage (from operator workstation):
 #   scp -r setup/walter-host/services/openclaw walter-vm:/tmp/openclaw-deploy
 #   ssh walter-vm "sudo rsync -a --delete /tmp/openclaw-deploy/ /opt/walter-vm/services/openclaw/ && \
 #                  cd /opt/walter-vm/services/openclaw && bash deploy.sh"

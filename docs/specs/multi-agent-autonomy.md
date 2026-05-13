@@ -8,7 +8,7 @@
 
 | Question | Decision |
 |---|---|
-| Where do agents run? | **Walter-VM (default — orchestration plane) + M2 Studio (subscription pool, see §6.1) + Mac (coder agent only) + standby homelab node (Phase L, local-LLM PHI + Jarvis, see `docs/specs/archive/local-llm-node.md`) + Z440 (Phase Z, GPU inference, see `docs/specs/homelab-topology.md`)**. Agent WORKERS stay on walter-vm/Mac; standby homelab node/Z440/M2 are MODEL BACKENDS routed through LiteLLM. M2 = critical path for O1 (subscription auth, macOS-only). standby homelab node = critical path for L3 (PHI compliance + Jarvis). Z440 = perf upgrade for `coder` + `local-fast` agent traffic. |
+| Where do agents run? | **Walter-VM (default — orchestration plane) + macOS subscription host (subscription pool, see §6.1) + operator workstation (coder agent only) + standby homelab node (Phase L, local-LLM PHI + Jarvis, see `docs/specs/archive/local-llm-node.md`) + Z440-class GPU host (Phase Z, GPU inference, see `docs/specs/homelab-topology.md`)**. Agent WORKERS stay on walter-vm/operator workstation; standby homelab node/GPU host/subscription host are MODEL BACKENDS routed through LiteLLM. The macOS subscription host is critical path for O1 (subscription auth, macOS-only). standby homelab node = critical path for L3 (PHI compliance + Jarvis). GPU host = perf upgrade for `coder` + `local-fast` agent traffic. |
 | Plane workspace structure | **Single workspace `agents`**, with TWO label dimensions: `context:{work,projects-personal,personal,medical}` (drives auth/quota selection) and `lane:{research,code,review,janitor,digest,triage}` (drives which agent claims it). Cross-context links stay visible. |
 | Quota model | **Subscription-first.** 4 personal + 3 corporate subscriptions form the quota pool. API keys are FALLBACK only when subscription quotas exhaust. See §6 for the pool architecture. |
 | Approval-gate scope | **Confirmed + expanded** — see §7 for the full taxonomy and detection logic. |
@@ -72,7 +72,7 @@ We need an **agent orchestrator** that the operator doesn't have to babysit.
 
 ## 3. Target architecture — "Walter Council"
 
-A small set of always-on, single-purpose agents on walter-vm + the operator's Mac, coordinated through Plane as the durable task queue, OpenClaw + Telegram as the operator-facing voice, and Infisical as the secret/audit substrate.
+A small set of always-on, single-purpose agents on walter-vm + the operator workstation, coordinated through Plane as the durable task queue, OpenClaw + Telegram as the operator-facing voice, and Infisical as the secret/audit substrate.
 
 ```
                       EVENTS

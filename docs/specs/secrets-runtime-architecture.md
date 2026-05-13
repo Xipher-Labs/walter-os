@@ -24,7 +24,7 @@ I (the agent) repeatedly described "Bitwarden `walter-os/secrets`" and `~/.confi
 | Thing | Claim | Reality |
 |---|---|---|
 | Bitwarden `walter-os/secrets` item | "Source of truth, cross-device" | **Doesn't exist.** `walter-os secrets-bootstrap` was written but never run. Only the script + template. |
-| `~/.config/walter-os/secrets.env` | "Local cache, mode 600, gitignored" | Exists, mode 600, but **plain text on disk.** Anyone with read access to operator's home dir reads every API key. Doesn't survive snapshot/backup-leak threat. |
+| `~/.config/walter-os/secrets.env` | "Local cache, mode 600, gitignored" | Exists, mode 600, but **plain text on disk.** Anyone with read access to the host home directory reads every API key. Doesn't survive snapshot/backup-leak threat. |
 | `walter-os secrets-pull` | "Fetches Bitwarden → secrets.env" | Implemented but useless until the BW item exists. |
 | `secrets-yubikey-unlock` skill | "Touch ID / Yubikey unlocks Infisical CLI" | **Documented only.** No `secrets_load()` zsh function, no Keychain-backed wrapper, no walter-os subcommand. |
 | Multi-account ANTHROPIC_ENTERPRISE_KEY | "In secrets.env, picked up by claude wrapper" | Wrapper reads it; it's empty in operator's secrets.env. Wrapper fails-loud, which is correct, but no workflow to populate it. |
@@ -39,7 +39,7 @@ I (the agent) repeatedly described "Bitwarden `walter-os/secrets`" and `~/.confi
 
 | Threat | Status today | Goal |
 |---|---|---|
-| Disk imaging of operator's Mac (stolen, repaired, decommissioned) | ❌ secrets.env readable | ✅ no secrets on disk except OS-encrypted Keychain (FileVault layer + Keychain encryption + Yubikey gate) |
+| Disk imaging of operator workstation (stolen, repaired, decommissioned) | ❌ secrets.env readable | ✅ no secrets on disk except OS-encrypted keychain storage (FileVault layer + Keychain encryption + Yubikey gate) |
 | Malicious Mac process running as operator | ❌ reads secrets.env directly | ⚠️ partially mitigated — Keychain ACL requires Touch ID/Yubikey; ephemeral env vars in shell still readable from process tree |
 | Backup leak (Time Machine, restic, iCloud) | ❌ secrets.env in `~/.config` may not be excluded | ✅ Keychain doesn't go to backups by default; backup integrations explicitly exclude operator dotfiles with secrets |
 | Walter-VM compromise | ⚠️ Infisical compromised → operator AI keys leaked | ⚠️ unchanged at this layer; mitigate via #3 (HA) and audit logs |

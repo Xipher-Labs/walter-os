@@ -354,7 +354,7 @@ Layer 7 — meta:
 | Image | Built from `setup/walter-host/services/chatgpt-codex-router/Dockerfile` |
 | Port | 127.0.0.1:1456 (OpenAI-compatible API) |
 | RAM | ~80–250 MB (Node.js + Codex CLI subprocess) |
-| Volumes | `${HOME}/.codex:/home/appuser/.codex:rw` (OAuth creds from host; `${HOME}` is operator's home on the host) |
+| Volumes | `${HOME}/.codex:/home/appuser/.codex:rw` (OAuth creds from host; `${HOME}` is the host home directory) |
 | Network | LiteLLM's Docker network (internal only — no Caddy vhost) |
 | Startup deps | none |
 | Env vars required | `CCR_APIKEY` (Bearer token for LiteLLM auth; generate: `openssl rand -hex 32`) |
@@ -368,7 +368,7 @@ Layer 7 — meta:
 | Image | Built from `setup/walter-host/services/claude-sub-router/Dockerfile` |
 | Port | 127.0.0.1:1457 (OpenAI-compatible API) |
 | RAM | ~80–250 MB (Node.js + Claude Code CLI subprocess) |
-| Volumes | `${HOME}/.claude:/home/appuser/.claude:rw` (OAuth tokens from host; `${HOME}` is operator's home on the host) |
+| Volumes | `${HOME}/.claude:/home/appuser/.claude:rw` (OAuth tokens from host; `${HOME}` is the host home directory) |
 | Network | LiteLLM's Docker network (internal only — no Caddy vhost) |
 | Startup deps | none |
 | Env vars required | `CSR_APIKEY` (Bearer token for LiteLLM auth; generate: `openssl rand -hex 32`) |
@@ -382,7 +382,7 @@ Layer 7 — meta:
 | Image | Built from `setup/walter-host/services/gemini-sub-router/Dockerfile` |
 | Port | 127.0.0.1:1458 (OpenAI-compatible API) |
 | RAM | ~80–250 MB (Node.js + Gemini CLI subprocess) |
-| Volumes | `${HOME}/.gemini:/home/appuser/.gemini:rw` (OAuth creds from host; `${HOME}` is operator's home on the host) |
+| Volumes | `${HOME}/.gemini:/home/appuser/.gemini:rw` (OAuth creds from host; `${HOME}` is the host home directory) |
 | Network | LiteLLM's Docker network (internal only — no Caddy vhost) |
 | Startup deps | none |
 | Env vars required | `GSR_APIKEY` (Bearer token for LiteLLM auth; generate: `openssl rand -hex 32`) |

@@ -257,7 +257,7 @@ already stored (per onboarding) — entered by hand.
 in 11 steps of `operator-setup-runbook.md` step 1a.
 **Recommendation:** `scripts/infisical-bootstrap.sh` that, given an
 already-authenticated admin, provisions: projects, environments,
-default RBAC policies, baseline Machine Identity for the operator's Mac.
+default RBAC policies, baseline Machine Identity for the operator workstation.
 Secrets values stay operator-entered.
 
 ### Backblaze B2 (offsite backup)

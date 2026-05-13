@@ -75,7 +75,7 @@ Spec: `docs/specs/multi-agent-autonomy.md`. Status: Approved, decisions locked. 
 | **O2** — Specialists | `triage`, `researcher`, `coder`, `reviewer` agents as SKILL.md + wrapper scripts; label-driven dispatch | 3–5 days | O1 done |
 | **O3** — Triggers | n8n workflows: cron, GitHub webhook, email, Telegram, Plane webhook; janitor cron | 3–5 days | n8n first-run (operator, 5 min); GitHub webhook secrets (operator, 10 min/repo) |
 | **O4** — Operator UX | `liaison` agent + daily 08:30 digest; Telegram interactive reply routing; `walter-os agents status` dashboard | 3 days | O3 done |
-| **O5** — Cross-machine + M2 subscription pool | Mac-side coder in worktree loop; M2 Studio CCR containers (7 proxies); per-context auth selection; [Project B] → local Ollama routing | 1 week | M2 Studio on Headscale (operator, 15 min); browser sessions per subscription (operator, 35 min total); ToS acknowledgement doc |
+| **O5** — Cross-machine + subscription pool | Workstation-side coder in worktree loop; macOS subscription host CCR containers (7 proxies); per-context auth selection; sensitive projects → local Ollama routing | 1 week | Subscription host on Headscale; browser sessions per subscription; ToS acknowledgement doc |
 
 **Effort total**: ~4 weeks implementer. Operator overhead: ~1.5h one-time setup.
 
@@ -148,7 +148,7 @@ Spec: `docs/specs/karpathy-llm-wiki-compliance.md`. Status: Approved. Implementa
 
 ## 6. Hardware deployments
 
-### standby homelab node — rack server (hardware acquired, no Proxmox install)
+### standby homelab node — optional rack server profile
 
 Spec: `docs/specs/archive/local-llm-node.md`.
 
@@ -159,15 +159,15 @@ Spec: `docs/specs/archive/local-llm-node.md`.
 | **L3** | Ollama LXC (models: llama3.3:70b, qwen2.5-coder:32b, nomic-embed-text); HA Ollama integration; Jarvis tool palette | ~4h + 4h implementer | 4h |
 | **L4** | Restic primary repo + cron; DR drill (restore walter-vm from standby homelab node to fresh CX53) | ~3h | 2h |
 
-**Total**: ~15h operator + 6h implementer. Open questions: GPU-now-or-later (standby homelab node has slot for RTX 4070/4080); physical location for the rack unit.
+**Total**: ~15h operator + 6h implementer. Open questions: GPU-now-or-later; deployment location for the rack unit.
 
-### Z440 — GPU inference box (hardware NOT yet acquired)
+### Z440-class GPU inference box
 
 Spec: `docs/specs/homelab-topology.md` §4–6.
 
 | Phase | What | Effort |
 |---|---|---|
-| **Z1** | Parts acquisition: Z440 chassis (~€500), 2× RTX 3090 (~€700–900 each used), 1200W PSU (~€200), 64–128 GB DDR4 ECC, 2× NVMe 2TB | ~€2000–2500 spend + operator sourcing time |
+| **Z1** | Parts acquisition: Z440-class chassis (~€500), 2× RTX 3090 (~€700–900 each used), 1200W PSU (~€200), 64–128 GB DDR4 ECC, 2× NVMe 2TB | ~€2000–2500 spend + sourcing time |
 | **Z2** | Ubuntu 22.04 LTS + NVIDIA 550+ driver + CUDA 12.4 + Tailscale | ~4h operator |
 | **Z3** | vLLM serving Qwen-Coder-32B AWQ; OpenAI-compat API on :8000; benchmark ~80–100 tok/s | ~2h |
 | **Z4** | LiteLLM integration: `coder` + `local-fast` routes to Z440 | ~1h |
@@ -316,4 +316,4 @@ The agent runner, approval gate, LiteLLM virtual keys, and Plane workspace setup
 - "Pin all MCP server versions" chip: the skill file `skills/web-security-baseline/SKILL.md` references this as a best practice, but there is no open chip or TODO in the current `main` codebase. Likely already in the backlog memory context — no active blocker found.
 - `walter-council-v2.md` and `devrel-analytics-stack.md` exist only in worktrees (`pr-31-fixes`) — they are not on `main` yet. If those PRs stall or get abandoned, the specs disappear from the repo. They should be merged to `main` as draft specs regardless of implementation status.
 - The backlog lists `landing-page-fast` as "deferred" but `skills/landing-page-fast/SKILL.md` already exists (it was written). The backlog is stale on this entry.
-- standby homelab node is described as "hardware acquired" in the spec but has 0 phases implemented. It's the single most valuable unblocked hardware item since it unlocks: local Ollama for PHI, Jarvis, Restic primary, and the HA replication spec.
+- standby homelab node is described as optional future hardware and has 0 phases implemented. It's the single most valuable unblocked hardware item since it unlocks: local Ollama for PHI, Jarvis, Restic primary, and the HA replication spec.

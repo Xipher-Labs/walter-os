@@ -228,7 +228,7 @@ Or `vercel.json`:
 
 - Switch heavy routes to `runtime: "edge"` in route handlers.
 - Or deploy to multiple regions: `vercel.json` → `regions: ["iad1", "gru1"]`
-  (Buenos Aires latency-friendly).
+  (choose regions close to your users).
 
 ## Integration with other Walter-OS skills
 

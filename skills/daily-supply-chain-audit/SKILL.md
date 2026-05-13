@@ -155,7 +155,7 @@ and a one-line summary to stderr. On findings ≥ severity 2, it also:
 Manually:
 
 ```bash
-~/Projects-Personal/walter-os/skills/daily-supply-chain-audit/scripts/audit.sh
+${WALTER_OS_HOME:-/path/to/walter-os}/skills/daily-supply-chain-audit/scripts/audit.sh
 ```
 
 Or via slash command:

@@ -19,4 +19,4 @@
 # ~/Projects-Personal/MyOtherApp:dev
 
 # Walter-OS itself (rare to need this — use `walter-os sync` instead)
-# ~/Projects-Personal/walter-os:main
+# ~/Projects-Personal/my-project:main

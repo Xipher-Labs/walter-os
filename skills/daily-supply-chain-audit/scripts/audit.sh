@@ -166,7 +166,9 @@ check_min_release_age() {
   # Resolve protection level for the current repo.
   # Respects WALTER_AUDIT_REPO_DIR env var; falls back to cwd.
   local repo_dir="${WALTER_AUDIT_REPO_DIR:-$(pwd)}"
-  local walter_home="${WALTER_OS_HOME:-${HOME}/Projects-Personal/walter-os}"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local walter_home="${WALTER_OS_HOME:-$(cd "$script_dir/../../.." && pwd)}"
   local parser="${walter_home}/scripts/parse-manifest.py"
   local age_checker="${walter_home}/skills/daily-supply-chain-audit/scripts/check-release-age.py"
   local justify_log="${WALTER_CONFIG}/justify-log.jsonl"

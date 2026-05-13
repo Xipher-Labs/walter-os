@@ -52,7 +52,7 @@ Usamos **Next.js 15 App Router** con:
 
 **Nota sobre la arquitectura dual peer (standby homelab node ↔ Walter-VM)**:
 
-El standby homelab node es un peer activo del Council, no solo un standby. Cuando el operator está en BA, el Council corre en standby homelab node con embeddings locales (~10ms). Cuando el operator está remoto, el Council corre en Walter-VM con embeddings CPU-based + Redis cache (≤ 500ms, aceptado). Control Tower siempre corre en Walter-VM independientemente de dónde corra el Council — es la única instancia de la UI.
+El standby homelab node es un peer activo del Council, no solo un standby. Cuando el operator está cerca del nodo local, el Council corre en standby homelab node con embeddings locales (~10ms). Cuando el operator está remoto, el Council corre en Walter-VM con embeddings CPU-based + Redis cache (≤ 500ms, aceptado). Control Tower siempre corre en Walter-VM independientemente de dónde corra el Council — es la única instancia de la UI.
 
 La sincronización de datos entre peers usa **eventual consistency con Last-Write-Wins**:
 - Syncthing para archivos (lessons DB, wiki, heartbeats, logs).
@@ -64,7 +64,7 @@ Esta arquitectura está documentada en `docs/specs/archive/standby-node-replicat
 
 **Tauri (Rust + web frontend)**:
 - Pro: desktop app nativa, zero latency, no browser, mejor para developer experience.
-- Contra: requiere que el operator tenga la app instalada en el Mac. Si accede desde standby homelab node o cualquier otra máquina, no funciona. El Control Tower necesita ser accesible desde cualquier browser en el tailnet, no solo desde la Mac del operator.
+- Contra: requiere que el operator tenga la app instalada en una workstation específica. Si accede desde standby homelab node o cualquier otra máquina, no funciona. El Control Tower necesita ser accesible desde cualquier browser en el tailnet, no solo desde una workstation del operator.
 - Contra: compilar Tauri para macOS ARM desde walter-vm (Linux x86) requiere cross-compilation o CI remoto — complejidad innecesaria.
 - **Rechazado**: la portabilidad browser > la experiencia desktop.
 
