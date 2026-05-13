@@ -307,7 +307,7 @@ CHARTER_EOF
     echo "- PHI NEVER leaves the local environment. No external LLM APIs with medical content."
     echo "- Use local Ollama (local LLM node) for any AI assistance on real records."
     echo "- Hashes and ZK proofs are fine. Raw records are not."
-    echo "- Argentine Ley 26.529 + Ley 25.326 compliance required."
+    echo "- Local patient-rights and personal-data-protection compliance required."
   fi
 
   if [[ "$FINANCIAL_DATA" == "true" ]]; then

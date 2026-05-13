@@ -121,7 +121,7 @@ Acceptance: voice command "lights on" via local microphone → HA acts within 1 
   - `infisical secrets get <key>` (read-only operator vault)
 - Wake word: HA's local wake word detection (openWakeWord / Wyoming).
 
-Acceptance: operator says "Hey Jarvis, ¿que hay pendiente en Plane hoy?" → response within 5 s, citing the actual issues.
+Acceptance: operator says "Hey Jarvis, what is pending in Plane today?" → response within 5 s, citing the actual issues.
 
 ### L4 — Pool extension + DR (~2 days)
 
@@ -203,8 +203,8 @@ Total: ~6-7 working days, plus initial Proxmox install. Distributed over weekend
 
 - [ ] **L1**: `ssh standby-node.<tailnet>.ts.net` from operator Mac succeeds. ZFS pool `tank` showing 4 disks ONLINE in RAIDZ2. Restic target LXC reachable from walter-vm.
 - [ ] **L2**: Local microphone → "lights on" → smart bulb responds within 1 second. No cloud roundtrip detectable in HA logs.
-- [ ] **L3**: "Hey Jarvis, ¿que hay pendiente en Plane hoy?" → answer with real Plane issue titles, response in <5 s.
-- [ ] **L3**: "Hey Jarvis, ingeri el último paper del NEJM sobre biomarcadores" → creates a Plane issue with `lane:research, context:medical` → researcher agent picks it up overnight → wiki gets the new pages.
+- [ ] **L3**: "Hey Jarvis, what is pending in Plane today?" → answer with real Plane issue titles, response in <5 s.
+- [ ] **L3**: "Hey Jarvis, ingest the latest NEJM paper on biomarkers" → creates a Plane issue with `lane:research, context:medical` → researcher agent picks it up overnight → wiki gets the new pages.
 - [ ] **L4**: DR drill: `walter-os agents pause`; pretend walter-vm is dead; restore latest snapshot from standby homelab node's restic-target to a fresh CX53; bring services back; resume agents. Total: < 30 min.
 - [ ] Power consumption: idle ≤ 200 W, load ≤ 600 W. Annual electricity ≤ €400 measured.
 - [ ] No PHI / example medical app content reaches Anthropic or OpenAI. Audit log review at end of L4.

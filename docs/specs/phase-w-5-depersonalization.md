@@ -18,10 +18,10 @@ search-and-replace across a dozen files they do not fully understand yet:
   gRPC, Solana, baremetal Ansible, Linear org), custom Solana reasoning rules,
   and example work org-specific branch flow exceptions.
 - `contexts/projects-personal/AGENTS.md` names example civic app and example medical app explicitly,
-  includes Argentine legal framework references (Ley 13.064, decreto 1023/2001,
-  Ley 26.529, Ley 25.326, ANMAT).
+  includes Argentine legal framework references (Law 13.064, Decree 1023/2001,
+  Law 26.529, Law 25.326, ANMAT).
 - `contexts/personal/AGENTS.md` includes Argentina-specific tax/legal references
-  (AFIP, ARCA, Monotributo, IIBB, MEP-CCL).
+  (AFIP, ARCA, small-taxpayer regime, gross-receipts tax, MEP-CCL).
 - `skills/regulatory-research-argentina/` is a skill scoped to a single country.
 - Operator profile in `AGENTS.md` (root) names "the operator", "example work org",
   and a private operator location.
@@ -67,7 +67,7 @@ personal content to the overlay at their own pace.
   on all files outside `docs/specs/` and `contexts/_examples/` returns zero
   matches. (Case-insensitive. Historical spec references inside `docs/specs/`
   are exempt — they are a record, not active config.)
-- [AC-3] `grep -r "Ley [0-9]\|AFIP\|ARCA\|Monotributo\|IIBB\|MEP-CCL\|ANMAT"
+- [AC-3] `grep -r "Argentine Law [0-9]\|AFIP\|ARCA\|small-taxpayer\|gross-receipts\|MEP-CCL\|ANMAT"
   --include="*.md"` on all files outside `contexts/_examples/` returns zero
   matches. Country-specific law references removed from OSS core.
 - [AC-4] `contexts/_examples/` directory exists and contains:
@@ -130,7 +130,7 @@ personal content to the overlay at their own pace.
 ### Task 1: Grep audit — catalogue all personal references [AC-1, AC-2, AC-3]
 - File: Audit only (no file writes in this task)
 - Change: Run grep for maintainer domains and project-specific names,
-  `Ley [0-9]`, `AFIP`, `ARCA`, `Monotributo`, `IIBB`, `MEP-CCL`, `ANMAT`.
+  `Argentine Law [0-9]`, `AFIP`, `ARCA`, `small-taxpayer`, `gross-receipts`, `MEP-CCL`, `ANMAT`.
   Produce an annotated list of every file and line that needs changing.
   Output: comment in commit body, not a file.
 - Verify: Audit list is non-empty (confirming the grep patterns work).
@@ -171,7 +171,7 @@ personal content to the overlay at their own pace.
 
 ### Task 6: Genericize `contexts/personal/AGENTS.md` [AC-3]
 - File: `contexts/personal/AGENTS.md` (modify)
-- Change: Remove AFIP/ARCA/Monotributo/IIBB/MEP-CCL references. Replace
+- Change: Remove AFIP/ARCA/small-taxpayer/gross-receipts/MEP-CCL references. Replace
   Argentina-specific financial section with generic personal finance placeholder.
   Keep the spirit (privacy-first, PHI rules, journaling) — remove the
   jurisdiction-specific details.

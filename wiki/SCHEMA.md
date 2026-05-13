@@ -67,7 +67,7 @@ Org / company / institution. Slug = `kebab-case-name`.
 
 ### `concepts/<slug>.md`
 An abstract idea, definition, theorem, technique. Slug describes the
-concept (`geyser-plugin`, `eip-7702`, `argentine-monotributo`).
+concept (`geyser-plugin`, `eip-7702`, `local-tax-regime`).
 
 ### `decisions/<slug>.md` (ADR)
 A decision the operator made (or made jointly with the agent), with

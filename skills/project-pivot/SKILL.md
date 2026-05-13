@@ -21,7 +21,7 @@ the right defaults from four orthogonal axes: domain, compliance, data handling,
 and project nature.
 
 **Constraint (hard, non-negotiable)**: Never output country-specific law names
-(e.g., Ley NNNN, CCPA, PIPEDA, LGPD, PDPA, DPA 2018, APPI, POPIA, NDPR).
+(e.g., Law NNNN, CCPA, PIPEDA, LGPD, PDPA, DPA 2018, APPI, POPIA, NDPR).
 If the operator's answers imply a jurisdiction, output:
 > "Consult the `regulatory-research-<jurisdiction>` skill family and insert the
 > applicable statute name here as a placeholder."

@@ -47,7 +47,7 @@ overlay before it does anything useful for you.
 > corrected on the fly while other work is in flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
-> (me @f0x1777) and is in the process of being generalized for OSS adoption.
+> and is in the process of being generalized for OSS adoption.
 > v0.2.0 is the first release intended for third parties; v0.3.0 will fill
 > founder-toolkit gaps; v0.4.0+ stabilizes APIs.
 >
@@ -1326,7 +1326,7 @@ personal projects vs homelab tasks — without manually switching configurations
 |---|---|---|---|
 | `work` | `contexts/work/` | `~/work/*` | Work projects: stricter rigor, no auto-PR, Linear integration |
 | `projects-personal` | `contexts/projects-personal/` | `~/Projects-Personal/*` | Personal dev: higher autonomy, auto-PR enabled, Plane integration |
-| `personal` | `contexts/personal/` | `~/personal/*` | Life tasks: Spanish, no branch flow, privacy-first |
+| `personal` | `contexts/personal/` | `~/personal/*` | Life tasks: operator-preferred language, no branch flow, privacy-first |
 | `hackathons` | `contexts/hackathons/` | `~/hackathons/*` | 48h sprint mode: brand → landing → MVP → demo |
 
 **Cascade order**: global `AGENTS.md` → context `AGENTS.md` → repo-level

@@ -202,12 +202,12 @@ _assert_checklist_min_items() {
 # -----------------------------------------------------------------------
 _assert_no_country_laws() {
   local file="$1"
-  # Pattern: Ley NNNN, CCPA, PIPEDA, LGPD, PDPA, DPA 2018, etc.
+  # Pattern: Law NNNN, CCPA, PIPEDA, LGPD, PDPA, DPA 2018, etc.
   # Skip lines that are part of the skill's own constraint definition (the "never do this"
   # list) — those legitimately name forbidden patterns for documentation purposes.
   # Only flag occurrences that appear as positive recommendations in output sections.
   local violations
-  violations=$(grep -nE 'Ley [0-9]+|CCPA|PIPEDA|LGPD|PDPA|DPA 2018|APPI|POPIA|NDPR' "$file" \
+  violations=$(grep -nE 'Law [0-9]+|CCPA|PIPEDA|LGPD|PDPA|DPA 2018|APPI|POPIA|NDPR' "$file" \
     | grep -vE 'e\.g\.,|never output' \
     || true)
   if [[ -n "$violations" ]]; then

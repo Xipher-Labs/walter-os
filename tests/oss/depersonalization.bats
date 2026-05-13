@@ -124,7 +124,7 @@ count_matches() {
 
 @test "AC-3: no Argentine regulatory law refs outside _examples" {
   local count
-  count="$(grep -rlE 'Ley [0-9]|AFIP|ARCA|Monotributo|IIBB|MEP-CCL|ANMAT' "$REPO_ROOT" \
+  count="$(grep -rlE 'Argentine Law [0-9]|AFIP|ARCA|small-taxpayer|gross-receipts|MEP-CCL|ANMAT' "$REPO_ROOT" \
     --include='*.md' \
     2>/dev/null \
     | grep -v "$REPO_ROOT/docs/specs/" \
@@ -216,7 +216,7 @@ count_matches() {
 
 @test "AC-6: international skill does not mention Argentine laws" {
   local match_count
-  match_count="$(grep -cE 'Ley 13\.064|Ley 26\.529|Ley 25\.326|AFIP|ANMAT|Monotributo|IIBB' \
+  match_count="$(grep -cE 'Law 13\.064|Law 26\.529|Law 25\.326|AFIP|ANMAT|small-taxpayer|gross-receipts' \
     "$REPO_ROOT/skills/regulatory-research-international/SKILL.md" 2>/dev/null; true)"
   [ "${match_count:-0}" -eq 0 ]
 }

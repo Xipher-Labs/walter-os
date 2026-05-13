@@ -1,7 +1,7 @@
 # SPEC: Multi-agent autonomy
 
 **Status:** Approved (2026-05-05). Decisions locked, implementation pending.
-**Triggered by:** Operator: *"Para gestionar multiples agentes y darle la completa autonomia, que puedo hacer para que eso suceda?"*
+**Triggered by:** Operator request for full autonomy across multiple agents.
 **Related:** `agents/`, `skills/daily-supply-chain-audit/`, `setup/vm/services/{n8n,plane,openclaw,litellm}/`.
 
 ## Operator decisions (locked 2026-05-05)

@@ -264,8 +264,8 @@ prefixed_key() {
   [ "$output" = "$raw" ]
 }
 
-@test "Spanish prose with accents passes through unchanged" {
-  raw="La integración funcionó después del último despliegue."
+@test "normal prose with punctuation passes through unchanged" {
+  raw="The integration worked after the latest deployment; cafe stayed open."
   run_redact "$raw"
   [ "$status" -eq 0 ]
   [ "$output" = "$raw" ]

@@ -56,7 +56,7 @@ does not pretend to know Argentine law.
   `## Skill loading` sections, (b) a non-empty recommended hooks list, (c) a
   non-empty MCP recommendations section, (d) a compliance checklist with at
   least 3 items.
-- [AC-4] The skill never outputs any country-specific law name (e.g., "Ley 26.529",
+- [AC-4] The skill never outputs any country-specific law name (e.g., "Law 26.529",
   "CCPA", "PIPEDA"). If an operator's answer implies a specific jurisdiction,
   the skill outputs a recommendation to consult the `regulatory-research-*` skill
   family and leaves the specific legal text as a placeholder.
@@ -129,7 +129,7 @@ does not pretend to know Argentine law.
 ### Task 5: Verify no country-specific law names in skill output [AC-4]
 - File: `tests/skills/pivot.bats` (modify)
 - Change: Add assertion that fixtures and skill SKILL.md do not contain
-  country-specific law name patterns (regex: `Ley \d+|CCPA|PIPEDA|LGPD` etc.).
+  country-specific law name patterns (regex: `Law \d+|CCPA|PIPEDA|LGPD` etc.).
   This is a static grep test, not an LLM test.
 - Verify: Test passes on the committed SKILL.md.
 

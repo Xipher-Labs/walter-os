@@ -5,83 +5,87 @@
 
 ## Context
 
-El `approval-gate.sh` (spec §7, `docs/specs/multi-agent-autonomy.md`) es hoy binario: o se bloquea una operación y se escala al operator, o se permite. No hay distinción de riesgo por agente.
+`approval-gate.sh` (spec section 7, `docs/specs/multi-agent-autonomy.md`) is currently binary: an operation is either blocked and escalated to the operator, or it is allowed. It does not distinguish risk by agent.
 
-Los 6 agentes del Council tienen perfiles de riesgo muy distintos:
+The six Council agents have very different risk profiles:
 
-| Agente | Qué hace | Blast radius |
+| Agent | What it does | Blast radius |
 |---|---|---|
-| **triage** | Clasifica eventos, crea issues en Plane | Mínimo — solo escribe issues, no toca código ni infra |
-| **researcher** | Lee web, ingesta wiki, crea páginas de wiki | Bajo — el wiki es privado y reversible |
-| **coder** | Escribe código en feature/*, abre PRs | Medio — PRs son visibles, diff es reversible, no puede mergear |
-| **reviewer** | Lee diffs, postea review comments | Bajo — read-only sobre código; write sobre PR comments |
-| **janitor** | Lint, dep bumps, stale-PR sweep, DR drill | Medio-alto — puede tocar archivos de configuración, puede abrir PRs con cambios que parecen mecánicos pero tienen impacto |
-| **liaison** | Lee actividad del Council, escribe digest | Bajo — no toca código, no toca infra, solo lee y escribe texto |
+| **triage** | Classifies events and creates Plane issues | Minimal: writes issues only, no code or infrastructure |
+| **researcher** | Reads the web, ingests wiki sources, creates wiki pages | Low: the wiki is private and reversible |
+| **coder** | Writes code on feature branches and opens PRs | Medium: PRs are visible, diffs are reversible, and it cannot merge |
+| **reviewer** | Reads diffs and posts review comments | Low: read-only over code; write access only to PR comments |
+| **janitor** | Runs lint, dependency bumps, stale-PR sweeps, and DR drills | Medium-high: can touch config files and open PRs that look mechanical but have real impact |
+| **liaison** | Reads Council activity and writes digests | Low on infrastructure, high on information exposure: reads and writes text only |
 
-Con un approval-gate binario, el operator recibe el mismo nivel de ruido (aprobaciones manuales) para el reviewer leyendo un diff que para el janitor haciendo un `rm` de archivos temporales. Esto erosiona la atención del operator en los bloqueos que realmente importan.
+With a binary approval gate, the operator receives the same amount of manual approval noise for a reviewer reading a diff as for a janitor deleting temporary files. That erodes attention on the blocks that actually matter.
 
-El objetivo de los trust tiers es **reducir el ruido en aprobaciones de bajo riesgo sin debilitar las protecciones en operaciones de alto riesgo**. El trust tier NO reemplaza el approval-gate — lo complementa con un filtro de "¿este agente, para esta categoría de operación, merece una standing approval implícita?".
+The goal of trust tiers is to **reduce low-risk approval noise without weakening protections for high-risk operations**. A trust tier does not replace `approval-gate.sh`; it complements the gate with a question: "For this agent and operation category, is an implicit standing approval appropriate?"
 
 ## Decision
 
-Definimos tres tiers — `low`, `medium`, `high` — y los asignamos a los 6 agentes. La tabla de trust define qué categorías del approval-gate (§7.1 del spec de autonomía) se auto-aprueban por tier:
+Define three tiers: `low`, `medium`, and `high`. Assign them to the six agents. The trust table defines which approval-gate categories, from section 7.1 of the autonomy spec, can be auto-approved by tier.
 
-### Tier assignments
+### Tier Assignments
 
-| Agente | Trust Tier | Justificación |
+| Agent | Trust tier | Rationale |
 |---|---|---|
-| triage | `medium` | Crea issues (write a Plane) pero nunca toca código ni infra. No destructivo por naturaleza. |
-| researcher | `medium` | Escribe wiki (texto privado, reversible con git). Nunca toca código fuente. |
-| coder | `medium` | Escribe código en feature/* y abre PRs. No puede mergear. El blast radius está contenido al branch. |
-| reviewer | `high` | Read-only sobre código. Write solo sobre PR comments y review approvals. El daño máximo que puede hacer es aprobar un PR malo — y el merge sigue siendo operador-only. |
-| janitor | `low` | Toca archivos de configuración, puede hacer rm de archivos "temporales" (que pueden no serlo), hace dep bumps que rompen builds. El nombre "janitor" suena inocuo pero el blast radius real es medio-alto. |
-| liaison | `low` | El liaison tiene la mayor superficie de exfiltración de todos los agentes: escribe summaries hacia canales externos (Telegram, email drafts, status reports). Un compromise del liaison es estratégicamente peor que un compromise del coder — el coder solo puede pushear código a un feature branch, mientras que el liaison puede filtrar síntesis completa de la actividad del Council hacia canales no controlados. Por eso `low` trust requiere approval explícita del operator para cualquier output que salga del homelab. La baja autonomía operacional es el precio por el alto privilegio de información. |
+| triage | `medium` | Creates issues in Plane but never touches code or infrastructure. Non-destructive by design. |
+| researcher | `medium` | Writes private, reversible wiki text. Never touches source code. |
+| coder | `medium` | Writes code on feature branches and opens PRs. It cannot merge, so the blast radius is contained to the branch. |
+| reviewer | `high` | Read-only over code; writes only PR comments and review approvals. The worst direct damage is approving a bad PR, and merge remains operator-only. |
+| janitor | `low` | Touches config files, may remove files that only look temporary, and performs dependency bumps that can break builds. The name sounds harmless, but its real blast radius is medium-high. |
+| liaison | `low` | The liaison has the largest exfiltration surface: it writes summaries to external channels such as Telegram, email drafts, and status reports. A compromised liaison is strategically worse than a compromised coder. The coder can only push to a feature branch, while the liaison can leak full Council activity summaries to uncontrolled channels. Low trust requires explicit operator approval for anything leaving the homelab. |
 
-### Override table by tier
+### Override Table by Tier
 
-Las categorías vienen del §7.1 del spec de autonomía. Los tiers definen un conjunto de **auto-allow overrides** — categorías que el tier puede ejecutar sin label `approved-by-operator`:
+The categories come from section 7.1 of the autonomy spec. Tiers define **auto-allow overrides**: categories the tier may execute without an `approved-by-operator` label.
 
-**Tier `high` — auto-allows** (además de todo lo que `medium` permite):
-- `git-push-feature-branch` — push a `feature/*` (NO a main/staging/release)
-- `gh-pr-create` — abrir PRs (no merge)
-- `gh-pr-comment` — comentar en PRs
-- `gh-pr-review-approve` — aprobar un PR (el merge sigue siendo operador-only)
-- `read-any-file` — lectura de cualquier archivo (siempre permitido para todos, pero high lo tiene explícito)
-- `run-tests-linters` — ejecutar tests, linters, formatters
+**Tier `high` auto-allows**, in addition to everything `medium` allows:
 
-**Tier `medium` — auto-allows** (además de todo lo que `low` permite):
-- `git-push-feature-branch` — push a `feature/*`
-- `gh-pr-create` — abrir PRs
-- `gh-pr-comment` — comentar en PRs
-- `run-tests-linters` — tests y linters
-- `write-source-files-feature-branch` — editar código fuente en feature/* (no en main/staging)
-- `write-wiki-pages` — crear/editar páginas del wiki privado
-- `create-plane-issue` — crear issues en Plane
+- `git-push-feature-branch`: push to `feature/*`, never to main, staging, or release.
+- `gh-pr-create`: open PRs, but not merge them.
+- `gh-pr-comment`: comment on PRs.
+- `gh-pr-review-approve`: approve a PR. Merge remains operator-only.
+- `read-any-file`: read any file. This is already allowed for all tiers, but high makes it explicit.
+- `run-tests-linters`: run tests, linters, and formatters.
 
-**Tier `low` — auto-allows** (base mínima):
+**Tier `medium` auto-allows**, in addition to everything `low` allows:
+
+- `git-push-feature-branch`: push to `feature/*`.
+- `gh-pr-create`: open PRs.
+- `gh-pr-comment`: comment on PRs.
+- `run-tests-linters`: run tests and linters.
+- `write-source-files-feature-branch`: edit source files on feature branches, not main or staging.
+- `write-wiki-pages`: create or edit private wiki pages.
+- `create-plane-issue`: create Plane issues.
+
+**Tier `low` auto-allows**:
+
 - `read-any-file`
 - `run-tests-linters`
 - `gh-pr-comment`
 - `create-plane-issue`
 
-**Bloqueado para TODOS los tiers** (ni siquiera `high` puede auto-aprobar):
-- `push-to-main-staging-release` — push a branches protegidas
-- `gh-pr-merge` — merge de PRs
-- `force-push-any-branch` — force push
-- `modify-hooks` — editar hooks/, AGENTS.md, install.sh, mcp/servers.json
-- `modify-agent-definitions` — editar agents/*.md o skills/*/SKILL.md
-- `destructive-shell` — rm -rf, dd, mkfs, truncate
-- `sql-destructive` — DROP, TRUNCATE, DELETE FROM
-- `http-delete-managed-services` — DELETE en Hetzner, CF, Stripe, Forgejo, Vercel
-- `money-spending` — cualquier provisioning o gasto
-- `public-communication` — tweets, blog posts, emails enviados
-- `auth-crypto-phi-files` — auth/*, crypto/*, [Project B]/*, *.key, *.pem
-- `env-file-writes` — cualquier *.env*
-- `production-db-migrations` — migraciones contra staging o prod
+**Blocked for all tiers**, including `high`:
+
+- `push-to-main-staging-release`: push to protected branches.
+- `gh-pr-merge`: merge PRs.
+- `force-push-any-branch`: force-push any branch.
+- `modify-hooks`: edit `hooks/`, `AGENTS.md`, `install.sh`, or `mcp/servers.json`.
+- `modify-agent-definitions`: edit `agents/*.md` or `skills/*/SKILL.md`.
+- `destructive-shell`: `rm -rf`, `dd`, `mkfs`, `truncate`.
+- `sql-destructive`: `DROP`, `TRUNCATE`, `DELETE FROM`.
+- `http-delete-managed-services`: DELETE calls against Hetzner, Cloudflare, Stripe, Forgejo, or Vercel.
+- `money-spending`: any provisioning or spending.
+- `public-communication`: tweets, blog posts, or sent emails.
+- `auth-crypto-phi-files`: `auth/*`, `crypto/*`, medical-data projects, `*.key`, `*.pem`.
+- `env-file-writes`: any `*.env*` write.
+- `production-db-migrations`: migrations against staging or production.
 
 ### Persistence
 
-El trust tier de cada agente vive en `~/.config/walter-os/trust-tiers.yml`:
+Each agent's trust tier lives in `~/.config/walter-os/trust-tiers.yml`:
 
 ```yaml
 agents:
@@ -104,50 +108,57 @@ agents:
   janitor:
     tier: low
     overrides:
-      write-wiki-pages: allow    # janitor puede limpiar el wiki
+      write-wiki-pages: allow    # janitor may clean up the wiki
 
   liaison:
     tier: low
     overrides:
-      write-wiki-pages: allow    # liaison puede escribir digests al wiki interno
+      write-wiki-pages: allow    # liaison may write internal wiki digests
 ```
 
-El campo `overrides` permite ajustes por agente sin cambiar el tier. Un override `allow` sobre una categoría normalmente bloqueada-por-tier la permite; un override `block` sobre una categoría normalmente permitida-por-tier la bloquea. Los overrides NO pueden desbloquear la lista "Bloqueado para TODOS" — esa lista es hardcoded en `approval-gate.sh`.
+The `overrides` field allows agent-specific tuning without changing the tier. An `allow` override permits a category that the tier would normally block; a `block` override blocks a category the tier would normally allow. Overrides cannot unblock the "blocked for all tiers" list; that list is hardcoded in `approval-gate.sh`.
 
-### Hot-reload
+### Hot Reload
 
-`approval-gate.sh` es un proceso de corta duración (se invoca por PreToolUse hook, no es un daemon). Por lo tanto, lee `trust-tiers.yml` en cada invocación. Cambios al archivo tienen efecto inmediato sin reinicio.
+`approval-gate.sh` is a short-lived process invoked by the PreToolUse hook, not a daemon. It reads `trust-tiers.yml` on every invocation. Changes to the file take effect immediately without restart.
 
 ## Consequences
 
-**Lo que se hace más fácil**:
-- El reviewer puede trabajar sin requerir aprobaciones para operaciones que ya son su función normal (push a feature/*, abrir PRs). El operator recibe menos interrupciones.
-- El modelo de trust es auditable: un YAML legible que el operator puede revisar y modificar.
-- Los overrides permiten ajustar trust a nivel de agente individual sin rediseñar el sistema de tiers.
-- La lista "bloqueado para todos" mantiene las garantías de seguridad intactas independientemente de los tiers.
+**What becomes easier**:
 
-**Lo que se hace más difícil**:
-- El janitor con tier `low` puede necesitar más aprobaciones manuales que antes. Si el operator agrega `write-source-files-feature-branch: allow` en el override del janitor, reduce el ruido pero aumenta el riesgo de que el janitor modifique archivos fuera de su rol esperado.
-- La tabla override puede crecer a lo largo del tiempo y convertirse en un sistema complejo de excepciones. Mitigación: revisión trimestral del janitor agent (ya contemplado en el spec de autonomía §7.5).
+- The reviewer can work without approvals for operations that are already part of its normal function, such as pushing to feature branches and opening PRs. The operator receives fewer interruptions.
+- The trust model is auditable: a readable YAML file the operator can review and modify.
+- Overrides allow per-agent trust tuning without redesigning the tier system.
+- The "blocked for all tiers" list keeps core security guarantees intact regardless of tier.
 
-**Riesgos aceptados**:
-- Tier `high` del reviewer le permite push a feature/* sin aprobación. Si el reviewer tiene un bug que lo hace escribir código en lugar de solo revisar (un escenario improbable dado su system prompt, pero no imposible), puede pushear código a un branch del operator. El riesgo es bajo porque: (a) el reviewer no tiene acceso de merge, (b) el PR sigue siendo review-by-operator antes de merge, (c) el audit log registra todos los pushes.
-- Los tiers son estáticos (no aprenden con el tiempo). No hay mecanismo de downgrade automático de trust si un agente hace algo malo. Downgrade es una acción manual del operator via edición del YAML. Esto es intencional — el trust debe ser una decisión consciente del operator, no un output de un algoritmo.
+**What becomes harder**:
 
-## Alternatives considered
+- The low-trust janitor may need more manual approvals than before. If the operator adds `write-source-files-feature-branch: allow` to the janitor override, it reduces noise but raises the risk that janitor modifies files outside its expected role.
+- The override table can grow over time and become a complex exception system. Mitigation: quarterly review of the janitor agent, already covered in autonomy spec section 7.5.
 
-**Trust basado en historial de comportamiento (dinámico)**:
-- Idea: el trust tier sube automáticamente cuando el agente completa N tasks sin incidentes; baja cuando hay un bloqueo del approval-gate.
-- Rechazado: introduce un loop de feedback que puede ser explotado (agente hace muchas tasks simples para subir trust, luego ejecuta la operación riesgosa). El trust debe ser una propiedad declarativa del rol del agente, no un producto de su comportamiento pasado. Los humanos asignamos roles, no los dejamos emerger.
+**Accepted risks**:
 
-**Trust por operación individual (no por tier)**:
-- Idea: cada agente tiene una lista explícita de operaciones permitidas, sin noción de tier.
-- Rechazado: demasiado granular para mantener. Con 6 agentes y 14 categorías, son hasta 84 combinaciones. El tier colapsa esto a 3 defaults + overrides por excepción. La complejidad extra no justifica la granularidad.
+- The reviewer's `high` tier allows feature-branch pushes without approval. If the reviewer has a bug and writes code instead of only reviewing, it can push code to an operator branch. Risk is low because the reviewer cannot merge, PRs still require operator review before merge, and the audit log records all pushes.
+- Tiers are static. There is no automatic trust downgrade if an agent behaves badly. Downgrade is a manual operator action through YAML edits. This is intentional: trust should be a conscious operator decision, not an algorithmic output.
 
-**Trust delegado al Plane issue**:
-- Idea: el nivel de trust de una operación se determina por los labels del Plane issue (e.g., `trust:high` en el issue le da al agente más permisos para esa tarea).
-- Rechazado: este mecanismo ya existe (el label `approved-by-operator`). El trust tier es un complemento orthogonal — define el rol del agente independientemente de la tarea específica. Mezclar ambos crea ambigüedad sobre qué tiene precedencia.
+## Alternatives Considered
 
-**Sin tiers, solo ampliar las standing approvals**:
-- Idea: usar el mecanismo de standing approvals existente (§7.5 del spec de autonomía) en lugar de agregar una nueva abstracción.
-- Rechazado: las standing approvals son globales (se aplican a todos los agentes). No hay forma de decir "standing approval de push a feature/* solo para el reviewer". Los tiers resuelven exactamente este problema de scoping por agente.
+**Trust based on behavior history**:
+
+- Idea: an agent's trust tier automatically increases after N incident-free tasks and decreases after approval-gate blocks.
+- Rejected: this creates an exploitable feedback loop. An agent could complete many simple tasks to increase trust, then attempt a risky operation. Trust should be a declarative property of the agent role, not a product of past behavior.
+
+**Trust per individual operation, not by tier**:
+
+- Idea: each agent has an explicit list of allowed operations, with no tier concept.
+- Rejected: too granular to maintain. With six agents and fourteen categories, this creates up to eighty-four combinations. Tiers collapse this into three defaults plus exception overrides. The extra complexity does not justify the granularity.
+
+**Trust delegated to the Plane issue**:
+
+- Idea: an operation's trust level is determined by Plane issue labels, for example `trust:high`.
+- Rejected: this mechanism already exists as the `approved-by-operator` label. Trust tiers are orthogonal: they define the agent role independently of the specific task. Mixing both creates precedence ambiguity.
+
+**No tiers; expand existing standing approvals only**:
+
+- Idea: use the existing standing approvals mechanism from autonomy spec section 7.5 instead of adding a new abstraction.
+- Rejected: standing approvals are global and apply to all agents. They cannot express "standing approval for feature-branch pushes only for the reviewer." Tiers solve exactly this per-agent scoping problem.

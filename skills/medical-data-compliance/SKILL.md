@@ -8,7 +8,8 @@ description: Enforce strict handling of Protected Health Information (PHI) for [
 Hard rules for any code, content, or workflow that touches PHI in
 [Project B], affiliated medical projects, or the operator's own personal
 health data. These rules are not suggestions; they are the floor of
-legal and ethical operation in Argentina under ley 25.326 + ley 26.529.
+legal and ethical operation under the applicable local health-data and
+patient-rights laws.
 
 ## Definitions
 
@@ -86,7 +87,7 @@ patient-controlled system.
 
 ### Rule 5: Consent is granular, revocable, and durable
 
-- Consent for a specific use (e.g., "share with Dr. Pérez for
+- Consent for a specific use (e.g., "share with a named physician for
   consultation") is recorded with timestamp, scope, and method of
   consent (written, video-confirmed, on-platform).
 - Consent revocation is immediate and effective. Cached / replicated
@@ -96,7 +97,7 @@ patient-controlled system.
 
 ### Rule 6: Patient rights are respected by default, code-enforced
 
-Per ley 26.529 + ley 25.326:
+Per applicable patient-rights and personal-data-protection law:
 
 - **Right of access**: patient can export their full record on demand,
   in a portable format.
@@ -104,8 +105,8 @@ Per ley 26.529 + ley 25.326:
   erroneous data. Rectification creates a new record entry; never
   destroys history.
 - **Right of deletion**: patient can request deletion subject to legal
-  retention requirements (specific medical records have minimum
-  retention periods under Argentine law). Deletion is hard-deletion
+  retention requirements. Some medical records have minimum retention
+  periods. Deletion is hard-deletion
   for non-statutory data; soft-flagging for statutory-retained data
   with no further use.
 - **Right to know who accessed**: patient sees the audit log.
@@ -115,9 +116,9 @@ Per ley 26.529 + ley 25.326:
 These rights are not buried in settings menus; they're first-class
 flows in the product.
 
-### Rule 7: Cross-border data transfer follows ley 25.326 art. 12
+### Rule 7: Cross-border data transfer follows local data-transfer rules
 
-- Argentine patient data stored in Argentina by default.
+- Patient data is stored in the project's declared primary jurisdiction by default.
 - Transfers to "adequate protection level" countries (per current
   AAIP determination) are permitted with notice.
 - Transfers to other jurisdictions require: explicit patient consent,
@@ -275,9 +276,9 @@ Verify specifics with counsel before relying on this skill for compliance decisi
   this. It's day-1.
 - **"It's just test data"**: any test data that's real-derived is
   PHI. Treat it as PHI or don't use it.
-- **"The vendor said they're HIPAA-compliant"**: HIPAA is US, doesn't
-  apply here. Argentine compliance is what matters; ask the vendor
-  about ley 25.326 specifically.
+- **"The vendor said they're HIPAA-compliant"**: HIPAA may not be the
+  relevant framework. Ask the vendor about the project's actual
+  jurisdiction and patient-rights obligations.
 - **"Patient won't notice"**: assume every patient will read the audit
   log of who accessed their record. Build for that audience.
 - **"Just for debugging"**: never. Debug in production with audit, or
