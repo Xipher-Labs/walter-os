@@ -10,7 +10,7 @@
 - `docs/specs/multi-agent-autonomy.md` (Phase O1–O5)
 - `docs/specs/secrets-runtime-architecture.md` (Phase A–D)
 - `docs/specs/karpathy-llm-wiki-compliance.md` (Phase WK1–WK4)
-- `docs/specs/homelab-topology.md` (Phase Z1–Z6)
+- `docs/specs/homelab-topology.md` (Phase G1-G6)
 - `docs/specs/archive/local-llm-node.md` (Phase L1–L4)
 - `docs/specs/archive/standby-node-replication.md` (Phase R1–R8)
 - `.claude/worktrees/pr-31-fixes/docs/specs/walter-council-v2.md` (Improvements 1–9 + Control Tower) — **in-flight, not merged**
@@ -59,7 +59,7 @@ Spec: `docs/specs/secrets-runtime-architecture.md`. Status: Approved. Implementa
 | **B** | Add `walter_secrets_load` zsh function + `85-secrets-runtime.zsh` template; deprecate `80-secrets.zsh` direct source; add `walter-os secrets-status` / `secrets-clear` subcommands | 3h |
 | **C** | Cutover: `srm secrets.env`; update `install.sh` to stop generating the template | 1h |
 | **D** | Second device (future second Mac): per-device Machine Identity | 1h (when device exists) |
-| Linux equivalence | `pass` + GPG smartcard on standby homelab node/Z440; out of scope for v1 | deferred |
+| Linux equivalence | `pass` + GPG smartcard on standby homelab node/GPU inference node; out of scope for v1 | deferred |
 
 **Effort total (A–C)**: ~6h implementer + 30min operator.
 
@@ -156,23 +156,23 @@ Spec: `docs/specs/archive/local-llm-node.md`.
 |---|---|---|---|
 | **L1** | Proxmox VE 8 install; ZFS RAIDZ2 pool; Headscale join; restic-target LXC | ~3h | 0 |
 | **L2** | HomeAssistant OS VM; Whisper/Piper add-ons; Zigbee dongle migration | ~5h | 0 |
-| **L3** | Ollama LXC (models: llama3.3:70b, qwen2.5-coder:32b, nomic-embed-text); HA Ollama integration; Jarvis tool palette | ~4h + 4h implementer | 4h |
+| **L3** | Ollama LXC (models: llama3.3:70b, qwen2.5-coder:32b, nomic-embed-text); HA Ollama integration; local voice assistant tool palette | ~4h + 4h implementer | 4h |
 | **L4** | Restic primary repo + cron; DR drill (restore walter-vm from standby homelab node to fresh CX53) | ~3h | 2h |
 
 **Total**: ~15h operator + 6h implementer. Open questions: GPU-now-or-later; deployment location for the rack unit.
 
-### Z440-class GPU inference box
+### GPU inference node
 
 Spec: `docs/specs/homelab-topology.md` §4–6.
 
 | Phase | What | Effort |
 |---|---|---|
-| **Z1** | Parts acquisition: Z440-class chassis (~€500), 2× RTX 3090 (~€700–900 each used), 1200W PSU (~€200), 64–128 GB DDR4 ECC, 2× NVMe 2TB | ~€2000–2500 spend + sourcing time |
-| **Z2** | Ubuntu 22.04 LTS + NVIDIA 550+ driver + CUDA 12.4 + Tailscale | ~4h operator |
-| **Z3** | vLLM serving Qwen-Coder-32B AWQ; OpenAI-compat API on :8000; benchmark ~80–100 tok/s | ~2h |
-| **Z4** | LiteLLM integration: `coder` + `local-fast` routes to Z440 | ~1h |
-| **Z5** | Two vLLM systemd units (coder-32B + llama-70B-on-demand) | ~2h |
-| **Z6** | Redis cache on walter-vm for LiteLLM response deduplication | ~30 min |
+| **G1** | Parts acquisition: generic GPU workstation chassis (~€500), 2× RTX 3090 (~€700–900 each used), 1200W PSU (~€200), 64–128 GB DDR4 ECC, 2× NVMe 2TB | ~€2000–2500 spend + sourcing time |
+| **G2** | Ubuntu 22.04 LTS + NVIDIA 550+ driver + CUDA 12.4 + Tailscale | ~4h operator |
+| **G3** | vLLM serving Qwen-Coder-32B AWQ; OpenAI-compat API on :8000; benchmark ~80–100 tok/s | ~2h |
+| **G4** | LiteLLM integration: `coder` + `local-fast` routes to GPU inference node | ~1h |
+| **G5** | Two vLLM systemd units (coder-32B + llama-70B-on-demand) | ~2h |
+| **G6** | Redis cache on walter-vm for LiteLLM response deduplication | ~30 min |
 
 **Total**: ~€2000–2500 hardware + ~10h operator. **Blocker**: hardware acquisition (operator decision on used 3090 vs new 4090; PSU wattage; NVLink bridge).
 
@@ -273,7 +273,7 @@ Spec: `.claude/worktrees/pr-31-fixes/docs/specs/devrel-analytics-stack.md`. Stat
 | **P0** (blocking release or security) | Operator setup steps 1–4 (secrets, enterprise key, Codex login, Headscale); CCR TCP:3456 bug | 5 | Everything downstream depends on secrets runtime being secure |
 | **P1** (next 4 weeks) | Secrets runtime implementation (phases A–C); Wiki WK1–WK4; Walter Council O1–O2; `deepsec` audit-deep.sh; DR runbook doc | ~12 | Foundation layer for all agentic work |
 | **P2** (next quarter) | Council O3–O5; standby homelab node L1–L4; standby homelab node replication R1–R7; Council v2 improvements 1–5 | ~25 | Requires standby homelab node physical setup + O1 running |
-| **P3** (next 6 months) | Z440 hardware + Z1–Z6; Council v2 improvements 6–9; Control Tower; DevRel analytics (post-approval) | ~15 | Hardware acquisition + O5 subscription pool |
+| **P3** (next 6 months) | GPU inference node hardware + G1-G6; Council v2 improvements 6–9; Control Tower; DevRel analytics (post-approval) | ~15 | Hardware acquisition + O5 subscription pool |
 | **P4** (backlog, trigger-driven) | 27 deferred skills; infrastructure stubs; LinkedIn tap | ~20 | Write when needed |
 
 ---
@@ -289,7 +289,7 @@ Spec: `.claude/worktrees/pr-31-fixes/docs/specs/devrel-analytics-stack.md`. Stat
 | Council v2 (all improvements + Control Tower) | ~280h (7 weeks) | ~1h | $0 |
 | standby homelab node L1–L4 (hardware in hand) | 6h | ~15h | $0 |
 | standby homelab node replication R1–R8 | 18h | ~1h | ~$25/mo CF LB |
-| Z440 hardware + Z1–Z6 | 10h | ~10h | €2000–2500 hardware |
+| GPU inference node hardware + G1-G6 | 10h | ~10h | €2000–2500 hardware |
 | DevRel analytics Phase 1 (post-approval) | ~80h (2 weeks) | 1h | $0–$200/mo Twitter API |
 | **Total** | **~600h (~15 weeks)** | **~33h** | **€2000–2500 + $25–225/mo recurring** |
 
@@ -316,4 +316,4 @@ The agent runner, approval gate, LiteLLM virtual keys, and Plane workspace setup
 - "Pin all MCP server versions" chip: the skill file `skills/web-security-baseline/SKILL.md` references this as a best practice, but there is no open chip or TODO in the current `main` codebase. Likely already in the backlog memory context — no active blocker found.
 - `walter-council-v2.md` and `devrel-analytics-stack.md` exist only in worktrees (`pr-31-fixes`) — they are not on `main` yet. If those PRs stall or get abandoned, the specs disappear from the repo. They should be merged to `main` as draft specs regardless of implementation status.
 - The backlog lists `landing-page-fast` as "deferred" but `skills/landing-page-fast/SKILL.md` already exists (it was written). The backlog is stale on this entry.
-- standby homelab node is described as optional future hardware and has 0 phases implemented. It's the single most valuable unblocked hardware item since it unlocks: local Ollama for PHI, Jarvis, Restic primary, and the HA replication spec.
+- standby homelab node is described as optional future hardware and has 0 phases implemented. It's the single most valuable unblocked hardware item since it unlocks: local Ollama for PHI, local voice assistant, Restic primary, and the HA replication spec.

@@ -32,7 +32,7 @@ These are independent. LiteLLM doesn't replicate Plane data; CF Load Balancer do
 What we're NOT doing here:
 - ❌ Multi-master writes. Plane does not tolerate concurrent primaries; nor does Forgejo. Stay primary/standby.
 - ❌ Geo-replication for users in different regions. There's one operator. One region of latency-relevance.
-- ❌ Fully replicating LLM inference across both nodes. That's `homelab-topology.md`'s LiteLLM + Z440 story.
+- ❌ Fully replicating LLM inference across both nodes. That's `homelab-topology.md`'s LiteLLM + GPU inference node story.
 
 ---
 
@@ -315,14 +315,14 @@ Total active work: ~18 h spread over a weekend or two evenings/week.
 
 Cost delta:
 - CF Load Balancer: $25/mo for 5 services
-- Electricity (standby homelab node already on for HA + Jarvis): $0 marginal
+- Electricity (standby homelab node already on for HA + local voice assistant): $0 marginal
 - Hetzner unchanged
 
 ---
 
 ## 11. Open questions for operator
 
-1. **NVLink bridge for the Z440 GPUs**: optional. Affects this spec only indirectly (faster vLLM throughput → standby homelab node inference fallback faster too). No change here.
+1. **NVLink bridge for the GPU inference node GPUs**: optional. Affects this spec only indirectly (faster vLLM throughput → standby homelab node inference fallback faster too). No change here.
 2. **Should standby homelab node's standby Postgres serve READ traffic to agents** (e.g., janitor's nightly stale-PR sweep reads via standby to offload primary)? Recommend YES — easy win with logical replication; physical replication standbys also serve reads natively.
 3. **Tier-B services priority**: Synapse first, OpenClaw second, LiteLLM third? Recommend Synapse last (Matrix HA is involved); LiteLLM first (it's nearly stateless).
 4. **CF LB cost cap**: $25/mo is fine. Hard ceiling at $50/mo (would require simplification before then — Tier-B services share an LB with path routing instead of per-service LBs).

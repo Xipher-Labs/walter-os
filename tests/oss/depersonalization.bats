@@ -118,6 +118,20 @@ count_matches() {
   [ "$count" -eq 0 ]
 }
 
+@test "AC-2: no private homelab codenames anywhere public" {
+  local count
+  count="$(grep -r -i -l -E 'jarvis|z440|dell r730|r730|walter-box|walter box' "$REPO_ROOT" \
+    --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' \
+    --include='*.json' --include='*.toml' --include='*.ts' --include='*.tsx' \
+    2>/dev/null \
+    | grep -v "$REPO_ROOT/tests/oss/" \
+    | grep -v "$REPO_ROOT/.claude/" \
+    | grep -v "$REPO_ROOT/.git/" \
+    | wc -l \
+    | tr -d ' ')"
+  [ "$count" -eq 0 ]
+}
+
 # ---------------------------------------------------------------------------
 # AC-3: No country-specific regulatory refs outside exempt paths
 # ---------------------------------------------------------------------------

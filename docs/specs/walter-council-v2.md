@@ -93,7 +93,7 @@ The wiki grows without pruning. Similar pages are created about the same topic, 
 
 A weekly job runs on walter-vm every Sunday at 02:00. It invokes the janitor agent with a consolidation skill. The job does three things in order:
 
-1. **Dedupe**: uses embeddings (`bge-small-en-v1.5` through standby homelab node Ollama or Z440 vLLM) to detect pages with cosine similarity above 0.92. It proposes merges but never executes them. It outputs JSON candidate reports and posts them to Plane issue `wiki:consolidation`.
+1. **Dedupe**: uses embeddings (`bge-small-en-v1.5` through standby homelab node Ollama or GPU inference node vLLM) to detect pages with cosine similarity above 0.92. It proposes merges but never executes them. It outputs JSON candidate reports and posts them to Plane issue `wiki:consolidation`.
 2. **Contradictions**: uses a cheap LLM to review pairs of pages about the same concept and detect conflicting definitions. It marks the oldest page with a `[CONTRADICTION]` comment.
 3. **Pruning**: marks pages with `last-modified > 180 days AND no inbound links` as `[STALE]` in frontmatter. It never deletes pages; the operator confirms deletion.
 
@@ -435,7 +435,7 @@ This amendment is part of implementation and is not optional. Task `T-M-1` in th
 
 ## Non-Goals
 
-- Voice, wake-word, TTS, and STT. Those belong to Jarvis on standby homelab node in Phase L. Control Tower is text-only.
+- Voice, wake-word, TTS, and STT. Those belong to local voice assistant on standby homelab node in Phase L. Control Tower is text-only.
 - New MCPs. v2 does not add MCPs to the stack.
 - New agents. The current six remain. Control Tower can expand to support more agents in v3 if needed.
 - Auto-merge for PRs. Merge remains operator-only. Control Tower does not include a merge button.
