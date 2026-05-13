@@ -106,9 +106,8 @@ Per applicable patient-rights and personal-data-protection law:
   destroys history.
 - **Right of deletion**: patient can request deletion subject to legal
   retention requirements. Some medical records have minimum retention
-  periods. Deletion is hard-deletion
-  for non-statutory data; soft-flagging for statutory-retained data
-  with no further use.
+  periods. Deletion is hard-deletion for non-statutory data; statutory-
+  retained data is soft-flagged and blocked from further use.
 - **Right to know who accessed**: patient sees the audit log.
 - **Right to data portability**: standard format export (HL7 FHIR
   preferred where applicable).
@@ -119,8 +118,8 @@ flows in the product.
 ### Rule 7: Cross-border data transfer follows local data-transfer rules
 
 - Patient data is stored in the project's declared primary jurisdiction by default.
-- Transfers to "adequate protection level" countries (per current
-  AAIP determination) are permitted with notice.
+- Transfers to countries with an adequate protection level, as determined
+  by the applicable data protection authority, are permitted with notice.
 - Transfers to other jurisdictions require: explicit patient consent,
   contractual safeguards (SCC equivalent), or a specific legal
   exception.
