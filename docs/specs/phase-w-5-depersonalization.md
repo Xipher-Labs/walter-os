@@ -23,7 +23,8 @@ search-and-replace across a dozen files they do not fully understand yet:
 - `contexts/personal/AGENTS.md` includes Argentina-specific tax/legal references
   (AFIP, ARCA, Monotributo, IIBB, MEP-CCL).
 - `skills/regulatory-research-argentina/` is a skill scoped to a single country.
-- Operator profile in `AGENTS.md` (root) names "the operator", "example work org", "Buenos Aires".
+- Operator profile in `AGENTS.md` (root) names "the operator", "example work org",
+  and a private operator location.
 
 Anyone reading these files gets a rich view of one operator's setup. Anyone trying
 to adopt the patterns has to surgically remove all of this before the repo is safe
@@ -89,9 +90,9 @@ personal content to the overlay at their own pace.
   with a pointer to the international version. T3 honored: kept in place with
   @deprecated frontmatter.
 - [AC-7] `AGENTS.md` root operator profile section is replaced with a generic
-  description that does not name the operator, example work org, or Buenos Aires. A comment
-  block in the file explains where to put the operator-specific profile (in the
-  personal overlay).
+  description that does not name the operator, example work org, or private
+  operator location. A comment block in the file explains where to put the
+  operator-specific profile (in the personal overlay).
 - [AC-8] All compose files, `.env.example`, and service templates use
   `${WALTER_DOMAIN}` (for domain) and `${WALTER_ADMIN_EMAIL}`, `${WALTER_INITIAL_USER}`,
   `${WALTER_TIMEZONE}` (for bootstrap vars). No hardcoded hostnames.
@@ -178,9 +179,8 @@ personal content to the overlay at their own pace.
 
 ### Task 7: Genericize `AGENTS.md` root operator profile [AC-7]
 - File: `AGENTS.md` (modify)
-- Change: Replace "You are working with the operator, founding engineer at example work org,
-  based in Buenos Aires..." with generic operator profile template. Add comment
-  explaining the overlay path for personalization.
+- Change: Replace the private operator profile with a generic operator profile
+  template. Add comment explaining the overlay path for personalization.
 - Verify: `grep -i "operator-name\|project-name\|private-location" AGENTS.md` returns zero matches.
 
 ### Task 8: Create `regulatory-research-international` skill [AC-6]

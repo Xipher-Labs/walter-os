@@ -463,9 +463,9 @@ grep -rn "Apache-2\.0\|Apache License, Version 2\.0" . \
 
 `tests/oss/depersonalization.bats` must still pass in full. Note: "Xipher Labs"
 as copyright holder is intentional branding and is NOT guarded by the
-depersonalization suite (which guards against personal identifiers: xipherlabs.xyz
-domain, operator@ email, operator-handle string). These are different patterns and must
-not be confused. Confirm `bats tests/oss/depersonalization.bats` has 0 failures.
+depersonalization suite (which guards against private operator identifiers and
+non-contact domain leaks). These are different patterns and must not be
+confused. Confirm `bats tests/oss/depersonalization.bats` has 0 failures.
 
 ### Push
 

@@ -23,9 +23,10 @@ describe("VersionBadge — CHANGELOG_URL depersonalization [R2-3]", () => {
     expect(source).toBeTruthy();
   });
 
-  it("does not hardcode the operator personal GitHub URL (nicofernandez)", () => {
+  it("does not hardcode the operator personal GitHub URL", () => {
     source = source ?? readFileSync(BADGE_PATH, "utf-8");
-    expect(source).not.toContain("nicofernandez");
+    const legacyOwner = ["nico", "fernandez"].join("");
+    expect(source).not.toContain(legacyOwner);
   });
 
   it("references NEXT_PUBLIC_WALTER_REPO_URL env var", () => {

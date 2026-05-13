@@ -124,7 +124,7 @@ setup() {
 
 @test "WALTER_OS_UPDATE_REPO override controls API endpoint [AC-2]" {
   # When WALTER_OS_UPDATE_REPO is set to a custom org/repo, the update-check
-  # curl call must use that repo, not the hardcoded nicofernandez/walter-os.
+  # curl call must use that repo, not a legacy hardcoded upstream owner.
   # We verify by capturing which URL the mock curl received.
   local mock_dir
   mock_dir="$(mktemp -d)"
@@ -148,7 +148,7 @@ MOCK
   rm -rf "${mock_dir}"
 
   [ "$status" -eq 0 ]
-  # The curl call must reference myorg/my-fork, not nicofernandez/walter-os.
+  # The curl call must reference myorg/my-fork, not a legacy hardcoded upstream owner.
   grep -q "myorg/my-fork" /tmp/walter_test_curl_args.txt
   rm -f /tmp/walter_test_curl_args.txt
 }

@@ -133,8 +133,8 @@ paths still declares "Apache-2.0" or "Apache License, Version 2.0".
 - NOT building or scaffolding `walter-personal` (PR #49).
 - NOT updating `tests/oss/depersonalization.bats` for "Xipher Labs" — copyright
   holder is intentional branding, not a depersonalization leak. The depersonalization
-  suite guards against *personal* identifiers (xipherlabs.xyz domain, the operator's personal
-  email), not entity names.
+  suite guards against private operator identifiers and non-contact domain leaks,
+  not entity names.
 - NOT signing a CLA or building contributor agreements — separate v0.2.x decision.
 - NOT setting up the `licensing@xipherlabs.xyz` mailbox — COMMERCIAL.md placeholder
   only; mailbox is an ops task outside this PR.
