@@ -56,7 +56,7 @@ What this command does (idempotent steps, each can be skipped):
   8. Telegram ping if WALTER_TELEGRAM_BOT_TOKEN is set
 
 Examples:
-  walter new project projects wiht
+  walter new project projects my-app
   walter new project hackaton grant-categorizer
   walter new project work [company]-grpc-bench
 

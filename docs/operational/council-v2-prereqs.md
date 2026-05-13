@@ -251,14 +251,14 @@ Store it in Infisical workspace `walter-os`, env `dev`, as `CONTROL_TOWER_ADMIN_
 
 ### U-prereq-3: Tailscale ACL
 
-Control Tower is Tailscale-only. Verify the ACL does not expose the port:
+Control Tower is Tailscale-only. Verify Funnel is not exposing the port:
 
 ```bash
-ssh walter-vm "sudo tailscale serve status"
+ssh walter-vm "sudo tailscale funnel status"
 ```
 
 If `tailscale funnel status` shows public exposure, disable Funnel. Use
-`tailscale serve` for tailnet-only access.
+`tailscale serve status` only to confirm tailnet-only access.
 
 ACL fragment in Headscale on walter-vm:
 

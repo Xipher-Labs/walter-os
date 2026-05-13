@@ -138,7 +138,7 @@ count_matches() {
 
 @test "AC-3: no Argentine regulatory law refs outside _examples" {
   local count
-  count="$(grep -rliE 'argentine law [0-9]|Law [0-9]{1,3}\.[0-9]{3}|AFIP|ARCA|small-taxpayer|gross-receipts|MEP-CCL|ANMAT' "$REPO_ROOT" \
+  count="$(grep -rliE 'argentine law [0-9]|Law [0-9]{1,3}\.[0-9]{3}|L[e]y [0-9]+|AFIP|ARCA|small-taxpayer|gross-receipts|MEP-CCL|ANMAT' "$REPO_ROOT" \
     --include='*.md' \
     2>/dev/null \
     | grep -v "$REPO_ROOT/docs/specs/" \
