@@ -47,7 +47,7 @@ overlay before it does anything useful for you.
 > corrected on the fly while other work is in flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
-> (Xipher Labs) and is in the process of being generalized for OSS adoption.
+> (me @f0x1777) and is in the process of being generalized for OSS adoption.
 > v0.2.0 is the first release intended for third parties; v0.3.0 will fill
 > founder-toolkit gaps; v0.4.0+ stabilizes APIs.
 >
