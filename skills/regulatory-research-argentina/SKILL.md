@@ -190,8 +190,8 @@ For [Project B]:
 5. **Check resolutions.** Sector regulators (ANMAT, AFIP, BCRA) issue
    resolutions constantly that change practical compliance.
 6. **Read 2-3 legal doctrine sources.** Argentine legal commentary is rich
-   and often clarifies ambiguity. SAIJ (Sistema Argentino de
-   Informacion Juridica) has free access.
+   and often clarifies ambiguity. SAIJ (Argentine Legal Information System)
+   has free access.
 7. **Find precedents if possible.** Courts have interpreted these
    laws — relevant interpretations matter.
 8. **Identify the gaps.** What does the law NOT say? What's emergent?

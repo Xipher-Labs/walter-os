@@ -257,7 +257,8 @@ Control Tower is Tailscale-only. Verify the ACL does not expose the port:
 ssh walter-vm "sudo tailscale serve status"
 ```
 
-If a `serve` is exposed on port 443 to the internet, remove it and use internal `funnel` only.
+If `tailscale funnel status` shows public exposure, disable Funnel. Use
+`tailscale serve` for tailnet-only access.
 
 ACL fragment in Headscale on walter-vm:
 

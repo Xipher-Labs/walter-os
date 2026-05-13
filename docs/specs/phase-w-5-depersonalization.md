@@ -67,7 +67,7 @@ personal content to the overlay at their own pace.
   on all files outside `docs/specs/` and `contexts/_examples/` returns zero
   matches. (Case-insensitive. Historical spec references inside `docs/specs/`
   are exempt — they are a record, not active config.)
-- [AC-3] `grep -r "Argentine Law [0-9]\|AFIP\|ARCA\|small-taxpayer\|gross-receipts\|MEP-CCL\|ANMAT"
+- [AC-3] `grep -r "Argentine Law [0-9]\|Law 13\.064\|Law 24\.240\|Law 25\.326\|Law 26\.529\|AFIP\|ARCA\|small-taxpayer\|gross-receipts\|MEP-CCL\|ANMAT"
   --include="*.md"` on all files outside `contexts/_examples/` returns zero
   matches. Country-specific law references removed from OSS core.
 - [AC-4] `contexts/_examples/` directory exists and contains:
@@ -130,7 +130,9 @@ personal content to the overlay at their own pace.
 ### Task 1: Grep audit — catalogue all personal references [AC-1, AC-2, AC-3]
 - File: Audit only (no file writes in this task)
 - Change: Run grep for maintainer domains and project-specific names,
-  `Argentine Law [0-9]`, `AFIP`, `ARCA`, `small-taxpayer`, `gross-receipts`, `MEP-CCL`, `ANMAT`.
+  `Argentine Law [0-9]`, `Law 13.064`, `Law 24.240`, `Law 25.326`,
+  `Law 26.529`, `AFIP`, `ARCA`, `small-taxpayer`, `gross-receipts`,
+  `MEP-CCL`, `ANMAT`.
   Produce an annotated list of every file and line that needs changing.
   Output: comment in commit body, not a file.
 - Verify: Audit list is non-empty (confirming the grep patterns work).

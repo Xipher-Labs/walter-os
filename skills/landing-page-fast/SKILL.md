@@ -86,7 +86,8 @@ Examples:
 - Color: warmer palette than [Project A] (terracotta, sage, cream).
 - Forms minimal — just email + "I'm a [patient | doctor | clinic]"
   selector.
-- Privacy disclosure prominent (Law 25.326 + Law 26.529 references).
+- Privacy disclosure prominent (applicable local patient-rights and
+  personal-data-protection law references).
 
 ### [Company] product page
 - **English-first**, no localization.

@@ -264,8 +264,8 @@ prefixed_key() {
   [ "$output" = "$raw" ]
 }
 
-@test "normal prose with punctuation passes through unchanged" {
-  raw="The integration worked after the latest deployment; cafe stayed open."
+@test "normal prose with Unicode punctuation passes through unchanged" {
+  raw="The integration worked after the latest deployment - Unicode dash – intact."
   run_redact "$raw"
   [ "$status" -eq 0 ]
   [ "$output" = "$raw" ]
