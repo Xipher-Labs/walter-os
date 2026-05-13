@@ -181,6 +181,11 @@ the full stack later.
 Deploy walter-host on a VM, homelab node, or local lab machine, then connect
 walter-os on your workstation.
 
+The commands below are the **remote VM example**, which is the reference path
+for v0.2.0. Homelab and local-lab installs reuse the same service directories,
+but skip cloud VM provisioning and may use a local network or Tailscale-only
+access path instead of Cloudflare Tunnel.
+
 ```bash
 # 1. Provision VM (Hetzner CX31 or equivalent, Ubuntu 24.04)
 # 2. Run bootstrap on VM

@@ -108,6 +108,29 @@ use the repo as a reference with no install, install only the client to make
 agents behave consistently across every repo, and then add self-hosted services
 only when the additional control is worth the operational cost.
 
+Once installed, Walter-OS becomes the agent-behavior baseline for the tools you
+choose to wire into it. `install.sh` symlinks the global contract, skills,
+agents, commands, hooks, and MCP profiles into the local tool homes used by
+Claude Code and Codex CLI. Cursor can follow the same philosophy through
+repo-level instructions and its rules adapter. The goal is not to force a new
+editor; it is to make the same operating discipline available wherever you ask
+an agent to work.
+
+That discipline is loaded as a three-level `AGENTS.md` cascade:
+
+1. **Global layer** — Walter-OS's root `AGENTS.md`: shared philosophy, task
+   rigor, branch flow, review loop, safety gates, tool preferences, and default
+   skills.
+2. **Context layer** — a parent-directory working mode such as `work`,
+   `projects-personal`, `personal`, or `hackathons`, selected from cwd or
+   `WALTER_CONTEXT` and optionally overridden by your private overlay.
+3. **Repository layer** — the current repo's own `AGENTS.md`, where project
+   constraints, stack-specific rules, and local Definition of Done live.
+
+Conflicts resolve most-specific-wins: repo > context > global. This is what lets
+Walter-OS keep a consistent agent philosophy while still allowing each repo to
+override the parts that must be local.
+
 `walter-host` is not a requirement for Walter-OS. It is the optional control
 plane that increases leverage: Infisical centralizes secrets instead of spreading
 tokens across shell files, LiteLLM gives one model gateway with spend/audit
@@ -420,6 +443,8 @@ git clone https://github.com/xipher-labs/walter-os.git /opt/walter-os && cd /opt
 This gives you the local agent contract, skills, CLI, and overlay structure.
 It is the mode that makes agents behave consistently across repositories once
 the global/context/repo `AGENTS.md` cascade and symlinked skills are installed.
+Claude Code and Codex CLI pick up the symlinked Walter-OS contract and skills;
+Cursor can use the same repo/context instructions through its rules adapter.
 The optional self-hosted service stack is a separate step:
 
 ```bash
