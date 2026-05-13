@@ -46,6 +46,8 @@ Options:
 
 This command stores the Infisical Machine Identity in an OS credential store.
 It never writes plaintext bootstrap credentials to a dotenv file.
+The Infisical CLI can be installed after this step, but runtime secret loading
+requires it before walter-os secrets-bootstrap is useful.
 USAGE
 }
 
@@ -302,11 +304,15 @@ BACKEND="$(resolve_store)"
 step "Preflight"
 require_cmd jq "brew install jq  # or: sudo apt-get install -y jq"
 require_cmd curl "brew install curl  # or: sudo apt-get install -y curl"
-require_cmd infisical "brew install infisical/get-cli/infisical  # Linux: see Infisical CLI docs"
 preflight_backend "$BACKEND"
 ok "Credential store: $BACKEND"
 ok "Infisical domain: $INFISICAL_DOMAIN_RESOLVED"
-ok "Infisical CLI: $(infisical --version 2>&1 | head -1)"
+if command -v infisical >/dev/null 2>&1; then
+  ok "Infisical CLI: $(infisical --version 2>&1 | head -1)"
+else
+  warn "Infisical CLI not found; identity storage can continue."
+  warn "Install it before using walter-os secrets-bootstrap."
+fi
 
 step "Existing identity entry?"
 if identity_exists "$BACKEND"; then

@@ -6,6 +6,8 @@ setup() {
   MOCK_LOG_DIR="$BATS_TEST_TMPDIR/logs"
   mkdir -p "$MOCKBIN" "$MOCK_LOG_DIR"
   export PATH="$MOCKBIN:$PATH"
+  REAL_JQ="$(command -v jq)"
+  export REAL_JQ
   export MOCK_LOG_DIR
   export USER="test-user"
   unset INFISICAL_DOMAIN WALTER_INFISICAL_DOMAIN WALTER_DOMAIN
@@ -154,6 +156,22 @@ run_with_creds() {
   ! grep -q 'client-secret' "$MOCK_LOG_DIR/security-add.log"
   grep -q '"clientSecret":"client-secret"' "$MOCK_LOG_DIR/curl.body"
   ! grep -q 'client-secret' "$MOCK_LOG_DIR/curl.log"
+}
+
+@test "missing Infisical CLI warns but still stores verified identity" {
+  write_uname "Darwin"
+  write_security
+  rm -f "$MOCKBIN/infisical"
+  ln -sf "$REAL_JQ" "$MOCKBIN/jq"
+  export PATH="$MOCKBIN:/usr/bin:/bin"
+  export INFISICAL_DOMAIN="https://secrets.example.test"
+
+  run_with_creds "--store auto --yes"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Infisical CLI not found; identity storage can continue"* ]]
+  [[ -f "$MOCK_LOG_DIR/security.secret" ]]
+  grep -q '"domain":"https://secrets.example.test"' "$MOCK_LOG_DIR/security.secret"
 }
 
 @test "Linux auto backend uses Secret Service when secret-tool exists" {
