@@ -11,6 +11,9 @@ setup() {
   WALTER_CONFIG="$(mktemp -d -t walter-config-XXXXXX)"
   export WALTER_CONFIG
   export WALTER_OS_HOME="$BATS_TEST_DIRNAME/../.."
+  HOME="$WALTER_CONFIG/home"
+  export HOME
+  mkdir -p "$HOME"
 }
 
 teardown() {

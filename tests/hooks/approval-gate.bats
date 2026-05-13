@@ -14,6 +14,53 @@ setup() {
   export WALTER_AGENT_NAME=test-agent
   unset PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT
   mkdir -p "$WALTER_CONFIG"
+
+  cat > "$WALTER_CONFIG/trust-tiers.yml" <<'TIERS'
+agents:
+  test-agent:
+    tier: medium
+    overrides: {}
+TIERS
+
+  if ! command -v yq >/dev/null 2>&1; then
+    mkdir -p "$WALTER_CONFIG/mock-bin"
+    cat > "$WALTER_CONFIG/mock-bin/yq" <<'YQ'
+#!/usr/bin/env bash
+set -euo pipefail
+
+expr="${1:-}"
+file="${2:-}"
+
+case "$expr" in
+  ".agents."*".tier // "*)
+    agent="${expr#*.agents.}"
+    agent="${agent%%.tier*}"
+    awk -v agent="$agent" '
+      $1 == agent ":" { in_agent=1; next }
+      /^  [^[:space:]][^:]*:/ && in_agent { in_agent=0 }
+      in_agent && $1 == "tier:" { print $2; found=1; exit }
+      END { if (!found) exit 0 }
+    ' "$file"
+    ;;
+  ".agents."*".overrides["*)
+    echo ""
+    ;;
+  ".auto_approved // {} | to_entries[]"*)
+    agent="${expr#*select(.value.agent == \"}"
+    agent="${agent%%\"*}"
+    awk -v agent="$agent" '
+      /^  [^[:space:]][^:]*:/ { key=$1; sub(":$", "", key) }
+      $1 == "agent:" && $2 == agent { print key }
+    ' "$file"
+    ;;
+  *)
+    echo ""
+    ;;
+esac
+YQ
+    chmod +x "$WALTER_CONFIG/mock-bin/yq"
+    export PATH="$WALTER_CONFIG/mock-bin:$PATH"
+  fi
 }
 
 teardown() {
