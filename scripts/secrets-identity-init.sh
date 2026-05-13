@@ -47,7 +47,7 @@ Options:
 This command stores the Infisical Machine Identity in an OS credential store.
 It never writes plaintext bootstrap credentials to a dotenv file.
 The Infisical CLI can be installed after this step, but runtime secret loading
-requires it before walter-os secrets-bootstrap is useful.
+via walter_secrets_load and related runtime-secret commands requires it.
 USAGE
 }
 
