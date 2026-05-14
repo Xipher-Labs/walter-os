@@ -59,6 +59,7 @@ Commands:
   providers configure              Interactive provider choice wizard. Choose LLM,
                                      git, secrets, analytics, search, embeddings
                                      providers and write to providers.yaml + .env.local.
+  overlay                          Open ~/.config/walter-os/overlay in VS Code/editor
   status                           Walter-VM service health snapshot
   deploy <service>                 Pull + restart a Walter-VM service
   logs <service> [tail]            Tail logs from a service
@@ -141,6 +142,7 @@ NEW_USAGE
   pivot)      exec bash "$WALTER_LIB/subcommands/pivot.sh" "$@" ;;
 
   providers) exec bash "$WALTER_LIB/subcommands/providers.sh" "$@" ;;
+  overlay)   exec bash "$WALTER_LIB/subcommands/overlay.sh" "$@" ;;
 
   status)     exec bash "$WALTER_LIB/subcommands/status.sh" "$@" ;;
   deploy)     exec bash "$WALTER_LIB/subcommands/deploy.sh" "$@" ;;

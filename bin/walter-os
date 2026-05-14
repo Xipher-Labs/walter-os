@@ -44,6 +44,7 @@
 #   pr-title <TYPE> <CATEGORY> <text>
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
+#   overlay                     Open ~/.config/walter-os/overlay in VS Code/editor
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
 #   help                        Show this help
@@ -1056,6 +1057,7 @@ case "$cmd" in
   agents)             cmd_agents "$@" ;;
   new)                cmd_new "$@" ;;
   bridge)             exec "${WALTER_OS_HOME}/scripts/walter/subcommands/bridge.sh" "$@" ;;
+  overlay)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/overlay.sh" "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
