@@ -35,7 +35,8 @@ print_install_help() {
 
 # ---------- config ----------
 
-readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly REPO_ROOT
 readonly CLAUDE_HOME="${HOME}/.claude"
 readonly CODEX_HOME="${HOME}/.codex"
 readonly WALTER_CONFIG="${HOME}/.config/walter-os"
@@ -164,6 +165,27 @@ check_requirements() {
   say "${c_b}Expected agent CLIs:${c_reset}"
   check_optional_tool claude "Install Claude Code: https://claude.com/code"
   check_optional_tool codex "npm i -g @openai/codex-cli"
+
+  say
+  say "${c_b}Expected for secrets runtime:${c_reset}"
+  check_optional_tool infisical "brew install infisical/get-cli/infisical  # Linux: see Infisical CLI docs"
+  case "$(uname -s)" in
+    Darwin)
+      check_optional_tool security "built into macOS; verify /usr/bin/security exists"
+      check_optional_tool ykman "optional hardware-key tooling: brew install ykman"
+      ;;
+    Linux)
+      if command -v secret-tool >/dev/null 2>&1; then
+        ok "secret-tool: $(command -v secret-tool)"
+      elif command -v pass >/dev/null 2>&1 && command -v gpg >/dev/null 2>&1; then
+        ok "pass+gpg: $(command -v pass), $(command -v gpg)"
+      else
+        warn "No Linux credential store found for secrets runtime"
+        warn "  Install: sudo apt-get install -y libsecret-tools gnome-keyring"
+        warn "  Or:      sudo apt-get install -y pass gnupg"
+      fi
+      ;;
+  esac
 
   if [[ $_requirement_failures -gt 0 ]]; then
     err "Requirements check failed with $_requirement_failures missing required tool(s)."
@@ -320,7 +342,8 @@ do_uninstall() {
     if [[ $DRY_RUN -eq 1 ]]; then
       dry "would strip walter_os hooks from $settings"
     else
-      local backup="${settings}.pre-walter-os-uninstall.$(date +%s)"
+      local backup
+      backup="${settings}.pre-walter-os-uninstall.$(date +%s)"
       cp -- "$settings" "$backup"
       echo "$cleaned" | jq . > "$settings"
       ok "Stripped walter_os hooks from $settings (backup: $backup)"
@@ -368,7 +391,8 @@ link_safe() {
     warn "Replacing existing symlink: $dest (was → $current)"
     run "rm -- '$dest'"
   elif [[ -e "$dest" ]]; then
-    local backup="${dest}.pre-walter-os.$(date +%s)"
+    local backup
+    backup="${dest}.pre-walter-os.$(date +%s)"
     warn "Backing up existing $dest → $backup"
     run "mv -- '$dest' '$backup'"
   fi
@@ -459,7 +483,8 @@ merge_claude_mcp_servers() {
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "would update $settings .mcpServers from servers.json"
   else
-    local backup="${settings}.pre-walter-os-mcp.$(date +%s)"
+    local backup
+    backup="${settings}.pre-walter-os-mcp.$(date +%s)"
     cp -- "$settings" "$backup" 2>/dev/null || true
     echo "$merged" | jq . > "$settings"
     ok "Merged mcpServers into $settings"
@@ -552,7 +577,8 @@ merge_claude_hooks() {
     diff <(echo "$current_json" | jq -S .) <(echo "$merged" | jq -S .) || true
     echo "${c_dim}--- end diff ---${c_reset}"
   else
-    local backup="${settings}.pre-walter-os.$(date +%s)"
+    local backup
+    backup="${settings}.pre-walter-os.$(date +%s)"
     cp -- "$settings" "$backup"
     echo "$merged" | jq . > "$settings"
     ok "Merged hooks into $settings"
@@ -585,7 +611,8 @@ write_codex_config() {
   fi
 
   if [[ -f "$dest" ]]; then
-    local backup="${dest}.bak.$(date +%s)"
+    local backup
+    backup="${dest}.bak.$(date +%s)"
     warn "Existing config will be backed up: $backup"
     run "cp -- '$dest' '$backup'"
   fi
@@ -626,13 +653,13 @@ write_secrets_template() {
   if [[ -f "$dest" ]]; then
     warn "Legacy plain-text secrets.env found at $dest"
     warn "  This is deprecated. Migrate to the runtime flow:"
-    warn "    1. walter-os secrets-keychain-init  (one-time, requires Yubikey)"
+    warn "    1. walter-os secrets-identity-init  (one-time, OS credential store)"
     warn "    2. Open new shell — walter_secrets_load runs lazily"
     warn "    3. Once verified working, srm -z $dest"
     return 0
   fi
   ok "No legacy secrets.env (good — using runtime flow)"
-  warn "  First-time setup: walter-os secrets-keychain-init"
+  warn "  First-time setup: walter-os secrets-identity-init"
   warn "  See: docs/specs/secrets-runtime-architecture.md"
   return 0
 }

@@ -144,12 +144,13 @@ that is always gitignored. For production setups, Walter-OS routes secrets
 through Infisical (self-hosted) so that:
 
 1. Secrets are never in plaintext on disk at rest (Infisical encrypts them).
-2. Secrets are fetched at runtime (12-hour session, Yubikey-gated on macOS).
+2. Secrets are fetched at runtime (12-hour session, OS credential-store gated).
 3. Rotating a secret in Infisical rotates it everywhere without editing files.
 
 The overlay's `.env.local` still exists as a fallback for local dev (e.g.,
-before Infisical is set up, or on a machine with no Yubikey). Infisical is
-the production-grade path; `.env.local` is the bootstrap path.
+before Infisical is set up). Infisical plus `walter-os secrets-identity-init`
+is the production-grade path; `.env.local` is local non-secret configuration
+and last-resort development-only state.
 
 See `docs/specs/secrets-runtime-architecture.md` for the full secrets flow.
 

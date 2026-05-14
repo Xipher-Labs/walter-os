@@ -15,6 +15,8 @@ on:
       - "CODE_OF_CONDUCT.md"
       - "CONTRIBUTING.md"
       - "contexts/**"
+      - "docs/operational/**"
+      - "docs/specs/**"
       - ".github/workflows/readme-lint.yml"
   pull_request:
     paths:
@@ -30,6 +32,8 @@ on:
       - "CODE_OF_CONDUCT.md"
       - "CONTRIBUTING.md"
       - "contexts/**"
+      - "docs/operational/**"
+      - "docs/specs/**"
       - ".github/workflows/readme-lint.yml"
 
 jobs:
@@ -39,10 +43,10 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install bats + python3-yaml (founder-skills assertions need yaml.safe_load)
+      - name: Install bats + python3-yaml + ripgrep
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -qq bats python3-yaml
+          sudo apt-get install -qq bats python3-yaml ripgrep
 
       - name: Run readme-detailed bats suite [AC-11]
         run: bats tests/oss/readme-detailed.bats
@@ -73,6 +77,9 @@ jobs:
 
       - name: Run walter-personal-skeleton bats suite [audit B-5]
         run: bats tests/oss/walter-personal-skeleton.bats
+
+      - name: Run secrets runtime docs bats suite [issue #33]
+        run: bats tests/oss/secrets-runtime-docs.bats
 
   readme-markdown-lint:
     name: Markdown lint [AC-12]
