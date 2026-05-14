@@ -31,8 +31,8 @@ levels. Choose the smallest mode that gives you value.
 | Mode | Setup | When to use | Recommended? |
 |---|---|---|---|
 | **Clone-only reference** | Clone the repo; do not run `install.sh` | Study the system, copy an `AGENTS.md` pattern, review skills/hooks/specs before installing, or use it as an operating playbook | **Yes** — for evaluation and lightweight reuse |
-| **Client install** | Install walter-os on your workstation, no walter-host | Make Claude Code, Codex CLI, Cursor, and repo-level agents follow the same rules and workflows everywhere | **Yes** — default starting point |
-| **Client + selected services** | Client install plus only the services you need, self-hosted or SaaS | Add Infisical, LiteLLM, Grafana, Syncthing, n8n, or other pieces without running the full stack | **Yes** — best incremental path |
+| **Client install** | Install walter-os on your workstation, no walter-host | Make Claude Code, Codex CLI, and repo-level agents follow the same rules and workflows everywhere. Cursor can join once you wire its rules file manually. | **Yes** — default starting point |
+| **Client + selected services** | Client install plus only the services you need, self-hosted or SaaS | Add Infisical, LiteLLM, the observability stack, Syncthing, n8n, or other pieces without running the full stack | **Yes** — best incremental path |
 | **Full walter-host** | Client install plus the complete server stack on a VM, homelab node, or local lab machine | Full private control plane for secrets, model routing, issue tracking, git hosting, dashboards, automation, backups, and Council operations | **Yes** — for operators who want full self-hosting |
 
 ### Trade-offs in detail
@@ -51,10 +51,10 @@ directly. No VM to maintain.
 
 **Client + selected services** is the incremental path. Add Infisical when shell
 secrets become hard to manage. Add LiteLLM when you want one model gateway,
-semantic model aliases, and spend/audit visibility. Add Grafana or Control Tower
-when you need human-visible agent telemetry. Add Syncthing when you want memory
-and overlay material to follow you across trusted devices. Keep SaaS where it is
-still the better trade-off.
+semantic model aliases, and spend/audit visibility. Add the observability stack
+or Control Tower when you need human-visible agent telemetry. Add Syncthing when
+you want memory and overlay material to follow you across trusted devices. Keep
+SaaS where it is still the better trade-off.
 
 **Full walter-host** is the complete private backend. It gives agents a private
 issue tracker, git host, secrets vault, model gateway, dashboards, automations,
@@ -162,19 +162,21 @@ a real problem for your setup.
 
 Common examples:
 
-- Infisical for a centralized secrets vault and Machine Identity based runtime
+- Infisical for a centralized secrets vault and Machine Identity-based runtime
   secrets.
 - LiteLLM for model aliases, routing, cost tracking, and audit visibility.
-- Grafana or Control Tower for human-visible agent telemetry.
+- The observability stack (Prometheus, Loki, Grafana) or Control Tower for
+  human-visible agent telemetry.
 - Syncthing for trusted-device memory and overlay synchronization.
 - n8n for workflow automation that agents can trigger or inspect.
 
 You can use SaaS for the rest. For example: GitHub + Linear + Infisical +
 LiteLLM is a perfectly valid Walter-OS deployment.
 
-Deploy only the services you need from `setup/walter-host/services/`. Each
-service directory has its own compose/config surface and can be promoted into
-the full stack later.
+Deploy only the compose-backed services you need from
+`setup/walter-host/services/`. Some directories are runbooks, scripts, or
+templates rather than standalone compose surfaces, so check for `compose.yml`,
+`docker-compose.yml`, or `deploy.sh` before treating a directory as deployable.
 
 ### Mode 4 — Full stack (walter-os + walter-host)
 
