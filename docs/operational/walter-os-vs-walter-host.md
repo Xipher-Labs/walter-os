@@ -202,10 +202,12 @@ ssh root@<vm-ip> "bash /tmp/bootstrap-vm.sh"
 docker compose up -d
 
 # 5. Configure workstation to use your walter-host services
-# Set WALTER_DOMAIN, WALTER_OPERATOR_USER in personal.env
+# Set WALTER_DOMAIN in personal.env
 ```
 
-**Required**: `WALTER_GITHUB_ORG`, `WALTER_DOMAIN`, `WALTER_OPERATOR_USER` in personal.env.
+**Required**: `WALTER_GITHUB_ORG` and `WALTER_DOMAIN` in personal.env.
+The walter-host bootstrap currently creates and uses the fixed server account
+`walter`; custom server usernames are not a supported public install path yet.
 See `docs/operational/operator-setup-runbook.md` for the full walkthrough.
 
 ---
@@ -232,7 +234,7 @@ there is no VM to connect to.
 Yes. The migration path is:
 1. Provision a VM (or repurpose hardware).
 2. Run `bootstrap-vm.sh` on the server.
-3. Update `WALTER_DOMAIN` and `WALTER_OPERATOR_USER` in personal.env.
+3. Update `WALTER_DOMAIN` in personal.env.
 4. Deploy walter-host services.
 5. Update your API keys to point at your self-hosted LiteLLM, Forgejo, etc.
 
