@@ -67,9 +67,9 @@ Providers with API keys (Design B). Tracked at
 ### 1. Secrets runtime (5 min)
 
 ```bash
-# Mac, one-time
-walter-os secrets-keychain-init
-# → enter Infisical Machine Identity creds, Yubikey touched once
+# Mac or Linux, one-time
+walter-os secrets-identity-init
+# -> enter Infisical Machine Identity creds
 walter_secrets_load
 walter_secrets_status   # session valid 12h
 ```

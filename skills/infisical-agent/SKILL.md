@@ -1,6 +1,6 @@
 ---
 name: infisical-agent
-description: How to consume Infisical secrets from every Walter-OS surface — Mac (zsh), Walter-VM Docker services, Vercel deploys, Railway services, GitHub Actions, n8n workflows, Cursor, Claude Code. The unifying principle: NEVER paste secrets into config files; always pull from Infisical at runtime via CLI / SDK / native integration. Use this skill when the user asks "how do I use this secret in <X>", "Infisical setup for Vercel", "secrets in GitHub Actions", "n8n credentials".
+description: How to consume Infisical secrets from every Walter-OS surface — operator shells, walter-host Docker services, Vercel deploys, Railway services, GitHub Actions, n8n workflows, Cursor, Claude Code. The unifying principle: NEVER paste secrets into config files; always pull from Infisical at runtime via CLI / SDK / native integration. Use this skill when the user asks "how do I use this secret in <X>", "Infisical setup for Vercel", "secrets in GitHub Actions", "n8n credentials".
 ---
 
 # Infisical agent — secrets across the stack
@@ -25,17 +25,18 @@ mechanism to *consume* differs per platform but the principle is one:
                                │
    ┌───────────┬──────────┬────┴────┬─────────┬───────────┐
    │           │          │         │         │           │
-  Mac      Walter-VM    Vercel   Railway   GitHub      n8n
-  (CLI    (Docker      (native) (native)   Actions    (built-in
-  + Touch  agent w/                        (action)    node)
-  ID)     auto-renew)
+Operator  Walter-VM    Vercel   Railway   GitHub      n8n
+shells    (Docker      (native) (native)   Actions    (built-in
+          agent w/                         (action)    node)
+          auto-renew)
 ```
 
 Five distinct integration surfaces, one source of truth.
 
-## 1. Mac (operator) — CLI + Keychain + Yubikey
+## 1. Operator shell — CLI + OS credential store
 
-See full detail in `skills/secrets-yubikey-unlock/`.
+See full detail in `skills/secrets-yubikey-unlock/`, the legacy-named
+credential-store bootstrap guide.
 
 Quick version:
 
@@ -43,18 +44,16 @@ Quick version:
 # Install
 brew install infisical/get-cli/infisical
 
-# Login (one time, browser OAuth + Yubikey 2FA)
-infisical login --domain https://secrets.${WALTER_DOMAIN}
+# Store the Infisical Machine Identity locally (macOS Keychain,
+# Linux Secret Service, or pass+GPG).
+walter-os secrets-identity-init --domain https://secrets.${WALTER_DOMAIN}
 
-# Use in a shell session
-infisical run --workspace-name=walter-os --env=dev -- pnpm dev
-
-# Or export to current shell (for the duration of cwd)
-eval "$(infisical export --workspace-name=walter-os --env=dev --format=shell)"
+# Load secrets into the current shell.
+walter_secrets_load
 ```
 
-The Mac approach is **operator-interactive**. For autonomous agents, use
-machine identity (path #2).
+The operator shell approach is **interactive**. For autonomous services, use a
+service-scoped machine identity (path #2).
 
 ## 2. Walter-VM (Docker services) — Infisical Agent (sidecar)
 
@@ -261,8 +260,8 @@ Claude Code respects the calling shell's env. So either:
 # Approach A: load secrets in your shell session, then run claude
 infisical run --workspace-name=walter-os --env=dev -- bash -c 'claude'
 
-# Approach B: use Walter-OS's modular zshrc auto-loading (skills/secrets-yubikey-unlock/)
-# which auto-injects per-cwd. Then `claude` just works.
+# Approach B: use Walter-OS's modular zshrc auto-loading.
+# See the legacy-named skills/secrets-yubikey-unlock/ guide.
 ```
 
 ## Hard rules
@@ -301,8 +300,8 @@ When deploying a new service to Walter-VM:
 
 | Surface | Skill / file |
 |---|---|
-| Mac shell | `skills/secrets-yubikey-unlock/SKILL.md` |
-| Mac shell modular zshrc | `templates/zsh.d/80-secrets.zsh` (in config-personal repo) |
+| Operator shell | `skills/secrets-yubikey-unlock/SKILL.md` |
+| Operator shell modular zshrc | `templates/zsh.d/80-secrets.zsh` (in config-personal repo) |
 | Walter-VM service deploy | (TODO) `setup/walter-host/services/<svc>/deploy.sh` should include agent |
 | Vercel | `skills/vercel-cli/` references this as the canonical pattern |
 | GitHub Actions | (TODO) `.github/workflows/*.yml` examples |

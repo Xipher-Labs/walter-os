@@ -14,8 +14,9 @@
 #   profile {default|high-risk} Switch MCP profile (settings.json swap)
 #   profile-bootstrap {init|status|sync-shared} [claude|codex|all]
 #                               Set up multi-account profile dirs (work + personal)
-#   secrets-keychain-init       Bootstrap macOS Keychain with Infisical Machine Identity (Yubikey-gated)
-#   secrets-status              Report current secrets session (age, expiry, Yubikey)
+#   secrets-identity-init       Bootstrap Infisical identity into an OS credential store
+#   secrets-keychain-init       DEPRECATED alias for secrets-identity-init
+#   secrets-status              Report current secrets session (age, expiry)
 #   secrets-clear               Clear session marker, force re-auth on next load
 #   secrets-pull [--list]       DEPRECATED — use `walter_secrets_load` shell fn instead
 #   secrets-bootstrap [--force] DEPRECATED — Bitwarden retired for walter-os
@@ -66,7 +67,10 @@ if [[ -f "$_OVERLAY_PERSONAL_ENV" ]]; then
 fi
 unset _OVERLAY_PERSONAL_ENV
 
-[[ -f "${WALTER_CONFIG}/env" ]] && source "${WALTER_CONFIG}/env"
+if [[ -f "${WALTER_CONFIG}/env" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_CONFIG}/env"
+fi
 # Default Walter-OS checkout location.
 # Operators override via WALTER_OS_HOME env (in personal.env overlay or .env.local)
 # or by symlinking ~/walter-os to their preferred location.
@@ -437,14 +441,21 @@ cmd_secrets_bootstrap() {
   echo "walter-os: secrets-bootstrap is DEPRECATED." >&2
   echo "  Bitwarden retired for walter-os (operator decision 2026-05-05)." >&2
   echo "  Use the runtime flow instead:" >&2
-  echo "    walter-os secrets-keychain-init   # one-time setup" >&2
+  echo "    walter-os secrets-identity-init   # one-time setup" >&2
   echo "    walter_secrets_load               # in-shell, every 12h" >&2
   exit 1
 }
 
-# ---------- secrets-keychain-init (one-time Keychain bootstrap) ----------
+# ---------- secrets-identity-init (one-time credential-store bootstrap) ----------
+
+cmd_secrets_identity_init() {
+  exec "${WALTER_OS_HOME}/scripts/secrets-identity-init.sh" "$@"
+}
+
+# ---------- secrets-keychain-init (deprecated compatibility alias) ----------
 
 cmd_secrets_keychain_init() {
+  echo "walter-os: secrets-keychain-init is deprecated; use secrets-identity-init." >&2
   exec "${WALTER_OS_HOME}/scripts/secrets-keychain-init.sh" "$@"
 }
 
@@ -891,7 +902,7 @@ cmd_content() {
 cmd_version() {
   # Source _version_is_newer from the shared lib on first use (lazy).
   # Keeps the blast radius small: only 'version' fails if the lib is absent.
-  # shellcheck source=scripts/walter/lib/version-compare.sh
+  # shellcheck source=/dev/null
   source "${WALTER_OS_HOME}/scripts/walter/lib/version-compare.sh" 2>/dev/null \
     || { echo "walter-os: missing scripts/walter/lib/version-compare.sh" >&2; exit 1; }
 
@@ -1024,7 +1035,7 @@ shift || true
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|sync-repos|profile-bootstrap|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge)
+    sync|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -1045,6 +1056,7 @@ case "$cmd" in
   profile-bootstrap)  cmd_profile_bootstrap "$@" ;;
   secrets-pull)         cmd_secrets_pull "$@" ;;
   secrets-bootstrap)    cmd_secrets_bootstrap "$@" ;;
+  secrets-identity-init) cmd_secrets_identity_init "$@" ;;
   secrets-keychain-init) cmd_secrets_keychain_init "$@" ;;
   secrets-status)       cmd_secrets_status "$@" ;;
   secrets-clear)        cmd_secrets_clear "$@" ;;

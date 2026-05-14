@@ -13,17 +13,20 @@
 
 | Tool | Install | Why |
 |---|---|---|
-| `ykman` | `brew install ykman` | Detects Yubikey for secrets runtime |
-| Yubikey 5C | physical | Hard-required by walter-os secrets policy |
 | `infisical` | `brew install infisical/get-cli/infisical` | Fetch secrets at runtime |
+| macOS Keychain | built in | Stores the Infisical Machine Identity on macOS |
+| `secret-tool` (Linux) | `sudo apt-get install -y libsecret-tools gnome-keyring` | Stores the Infisical Machine Identity via Secret Service |
+| `pass` + `gpg` (Linux fallback) | `sudo apt-get install -y pass gnupg` | Optional encrypted fallback if Secret Service is unavailable |
+| YubiKey / security key (optional) | physical + OS setup | Optional credential-store hardening, not required by Walter-OS |
 | `bw` (optional) | `brew install bitwarden-cli` | Only if you keep using BW for personal site passwords |
 | Anthropic Console access | https://console.anthropic.com ([Company] enterprise) | For step 2 |
 | B2 account (defer until step 6) | https://www.backblaze.com | Offsite backup target |
 
 Verify:
 ```bash
-ykman info | grep 'Serial number' && echo "✓ Yubikey detected"
 which infisical claude codex
+# Linux only: one of these should exist before secrets bootstrap:
+which secret-tool || which pass
 ```
 
 If anything's missing, fix it before continuing.
@@ -33,8 +36,8 @@ If anything's missing, fix it before continuing.
 ## Step 1 — Secrets runtime (5 min) 🔐
 
 **Goal**: replace `~/.config/walter-os/secrets.env` plain dotenv with
-runtime fetch from Infisical, gated by Yubikey, in-memory only, 12h
-session.
+runtime fetch from Infisical, gated by the local OS credential store,
+in-memory only, 12h session.
 
 ### 1a. Create Infisical Machine Identity (web UI, ~2 min)
 
@@ -51,22 +54,22 @@ session.
 > 💡 If you fat-finger the secret, just delete the identity and make
 > a new one. Cheap to redo.
 
-### 1b. Bootstrap macOS Keychain (~30 sec)
+### 1b. Bootstrap local credential store (~30 sec)
 
 ```bash
-walter-os secrets-keychain-init
+walter-os secrets-identity-init
 # Prompts:
 #   client_id: <paste>
 #   client_secret (hidden): <paste>
-# It'll touch your Yubikey to verify, then write the encrypted blob
-# to Keychain at service "walter-os.infisical-identity".
+# It writes the encrypted bootstrap identity to macOS Keychain,
+# Linux Secret Service, or pass+GPG.
 ```
 
 ### 1c. Test (~30 sec)
 
 Open a fresh shell:
 ```bash
-walter_secrets_load           # → first call: Yubikey prompt
+walter_secrets_load           # → first call: credential-store prompt
 walter_secrets_status         # → "Session active. Expires in 11h 59m..."
 echo $ANTHROPIC_API_KEY | head -c 20  # → starts with sk-ant-
 ```
@@ -75,10 +78,9 @@ echo $ANTHROPIC_API_KEY | head -c 20  # → starts with sk-ant-
 
 | Symptom | Fix |
 |---|---|
-| `walter_secrets_load: Yubikey not detected` | Plug the Yubikey in. `ykman info` should show a Serial number. |
-| `Could not read Keychain entry` | You haven't run 1b yet. Or the entry got deleted — re-run. |
+| `Could not read local identity entry` | You haven't run 1b yet. Or the entry got deleted — re-run. |
 | `Infisical login failed` | client_id/secret wrong, OR the Machine Identity was deleted. Re-create in 1a. |
-| Yubikey prompts on EVERY call (not 12h) | The shell session marker (`WALTER_SECRETS_LOADED_AT` env var) didn't persist. New tab = new shell = re-fetch. That's by design. To survive across tabs: tmux/zellij or a long-running shell. |
+| Credential prompt on EVERY call (not 12h) | The shell session marker (`WALTER_SECRETS_LOADED_AT` env var) didn't persist. New tab = new shell = re-fetch. That's by design. To survive across tabs: tmux/zellij or a long-running shell. |
 | Want to force re-auth before 12h | `walter_secrets_clear` then next `walter_secrets_load` will prompt. |
 
 ### 1e. Finalize (after a week of working flawlessly)
@@ -540,12 +542,12 @@ If any of those flag a regression, ask the agent to triage.
 
 | Cadence | Action |
 |---|---|
-| Every shell start (12h) | Yubikey prompt for `walter_secrets_load` (transparent) |
+| Every shell start (12h) | Credential-store prompt for `walter_secrets_load` (transparent) |
 | Every session start | Daily supply-chain audit (gated by hook) |
 | Every PR | Branch-flow guard, pre-commit tests, CI shellcheck/bats |
 | Weekly | Run `walter-os wiki lint` to catch orphans |
 | Monthly | Review Grafana alerts, review B2 spend, check Infisical access logs |
-| Quarterly | DR drill (restore a snapshot), refresh Yubikey/Machine Identity, rotate any keys nearing expiry |
+| Quarterly | DR drill (restore a snapshot), review optional hardware-key enrollment, refresh Machine Identity, rotate any keys nearing expiry |
 | When you onboard a new device | Repeat steps 1, 3, 4 for that device. Per-device Machine Identity. |
 
 ---
@@ -555,7 +557,7 @@ If any of those flag a regression, ask the agent to triage.
 - `docs/operational/onboarding-checklist.md` — what's pending, at-a-glance
 - `docs/specs/secrets-runtime-architecture.md` — the why behind step 1
 - `docs/specs/karpathy-llm-wiki-compliance.md` — the why behind step 5
-- `skills/secrets-yubikey-unlock/SKILL.md` — internals of the Keychain dance
+- `skills/secrets-yubikey-unlock/SKILL.md` — legacy-named guide for OS credential-store secrets bootstrap
 - `wiki/SCHEMA.md` — what wiki pages look like
 
 Questions / issues: ask the agent ("the runbook step X is failing

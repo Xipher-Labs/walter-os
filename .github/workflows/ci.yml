@@ -42,6 +42,7 @@ jobs:
             scripts/agent-memory-setup.sh \
             scripts/profile-bootstrap.sh \
             scripts/secrets-bootstrap.sh \
+            scripts/secrets-identity-init.sh \
             scripts/secrets-keychain-init.sh \
             scripts/wiki.sh \
             scripts/agent-runtime-watchdog.sh \
@@ -90,16 +91,24 @@ jobs:
           # real pinned commit (not `-` for uninit). Without recursive init,
           # submodule-pin tests fail in CI even though the pin file is correct.
           submodules: recursive
-      - name: Install bats + jq + flock + sqlite3 + python3-yaml
+      - name: Install bats + jq + flock + sqlite3 + python3-yaml + ripgrep
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -qq bats jq util-linux sqlite3 python3-yaml
+          sudo apt-get install -qq bats jq util-linux sqlite3 python3-yaml ripgrep
       - name: Configure git
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "ci"
       - name: Run hook + agent + wiki + litellm + walter-bridge tests
-        run: bats tests/hooks/ tests/agents/ tests/wiki/ tests/litellm/ tests/walter-bridge/
+        run: |
+          bats \
+            tests/hooks/ \
+            tests/agents/ \
+            tests/wiki/ \
+            tests/litellm/ \
+            tests/walter-bridge/ \
+            tests/scripts/secrets-identity-init.bats \
+            tests/oss/secrets-runtime-docs.bats
 
   install-dry-run:
     name: install.sh --dry-run

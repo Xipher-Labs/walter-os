@@ -35,7 +35,7 @@ These items are documented and scripted; only operator-time blocks them.
 
 | Item | Source | Time |
 |---|---|---|
-| Secrets runtime cutover (Yubikey → Keychain → Infisical, no more secrets.env) | `operator-setup-runbook.md` step 1 | 15 min |
+| Secrets runtime cutover (OS credential store -> Infisical, no more secrets.env) | `operator-setup-runbook.md` step 1 | 15 min |
 | `ANTHROPIC_ENTERPRISE_KEY` pushed to Infisical, wired to work/ context | step 2 | 5 min |
 | Codex enterprise login for `~/.codex-work/auth.json` | step 3 | 5 min |
 | Tailscale via Headscale — Mac enrolled in the mesh | step 4 | 10 min |
@@ -55,11 +55,11 @@ Spec: `docs/specs/secrets-runtime-architecture.md`. Status: Approved. Implementa
 
 | Phase | What | Effort |
 |---|---|---|
-| **A** | Create Infisical Machine Identity; write JSON blob to macOS Keychain with Yubikey ACL | 2h |
+| **A** | Create Infisical Machine Identity; write JSON blob to the local OS credential store | 2h |
 | **B** | Add `walter_secrets_load` zsh function + `85-secrets-runtime.zsh` template; deprecate `80-secrets.zsh` direct source; add `walter-os secrets-status` / `secrets-clear` subcommands | 3h |
 | **C** | Cutover: `srm secrets.env`; update `install.sh` to stop generating the template | 1h |
 | **D** | Second device (future second Mac): per-device Machine Identity | 1h (when device exists) |
-| Linux equivalence | `pass` + GPG smartcard on standby homelab node/GPU inference node; out of scope for v1 | deferred |
+| Linux equivalence | Secret Service or `pass` + GPG on Linux operator nodes | included in issue #33 |
 
 **Effort total (A–C)**: ~6h implementer + 30min operator.
 
@@ -300,7 +300,7 @@ Applying 30% uncertainty padding: **~800h implementer, ~43h operator**.
 ## Recommended next 3 actions
 
 **1. Execute operator setup P0 in one sitting (~2h)**
-Steps 1–4 of `docs/operational/operator-setup-runbook.md`: secrets runtime keychain init, enterprise key, Codex login, Headscale enrollment. These unblock everything downstream and close the plaintext-secrets-on-disk security gap that's been open since May 5.
+Steps 1–4 of `docs/operational/operator-setup-runbook.md`: secrets identity bootstrap, enterprise key, Codex login, Headscale enrollment. These unblock everything downstream and close the plaintext-secrets-on-disk security gap that's been open since May 5.
 
 **2. Implement secrets runtime phases A–C and wiki WK1–WK4 in parallel (~1 week)**
 Both are documented specs with locked decisions and zero hardware dependencies. Secrets runtime closes the P0 security item. Wiki bootstrap is the foundation for the cross-agent learning broker (Council v2 Improvement 4) — the longer it's delayed, the less compound knowledge accumulates. Both can be parallelized with git worktrees.
