@@ -114,3 +114,13 @@ Initial CF Access script run used `AUTH_DOMAIN=xipherlabs.xyz` which set every p
 Fix: re-ran `bash setup/walter-host/cloudflare/04-create-access.sh xipherlabs.xyz solx.ar otp+google`. All 24 apps now have `allow @solx.ar`. Login restored.
 
 Lesson: AUTH_DOMAIN is the operator-email domain, NOT the service domain. The script header documents this; I misread the arg meaning on first invocation.
+
+## Homepage-template-variable fix — 2026-05-16
+
+Symptom: clicking the Hermes link on `home.xipherlabs.xyz` opened `https://hermes.{{HOMEPAGE_VAR_WALTER_DOMAIN}}/` (literal placeholder, not substituted). All other URLs were probably also broken — the operator just happened to test Hermes first.
+
+Root cause: the homepage compose on the VM (`/opt/walter-vm/services/homepage/compose.yml`) was OLDER than the repo version. It only had `HOMEPAGE_ALLOWED_HOSTS` set, NOT the `HOMEPAGE_VAR_*` variables that homepage uses to substitute `{{HOMEPAGE_VAR_FOO}}` in `services.yaml`. Repo had been updated; VM wasn't.
+
+Fix: scp'd the repo compose to the VM, created `/opt/walter-vm/services/homepage/.env` with `WALTER_DOMAIN=xipherlabs.xyz` + 2 bot handles, `docker compose up -d --force-recreate`. Now all 20 services render with the correct host.
+
+Lesson: another instance of repo-vs-VM drift. The IaC source-of-truth map (above) now applies to homepage compose too — keep them in sync going forward.
