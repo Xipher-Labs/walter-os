@@ -86,14 +86,31 @@ done
 ## Files touched in this PR (repo side)
 
 - `setup/walter-host/cloudflare/04-create-access.sh` — added `matrix posthog tower metabase postiz hermes` to the sub list; removed `vault`.
+- `setup/walter-host/cloudflare/cloudflared-config.yml` — NEW, declarative source-of-truth for tunnel ingress (mirrors `/etc/cloudflared/config.yml` on walter-vm). Update here then `rsync` to the VM.
+- `setup/walter-host/services/metabase/compose.vm.yml` — NEW, walter-vm variant with Infisical sidecar wrapping. The original `compose.yml` stays as the all-in-one variant (root `compose.yml` consumer).
 - `setup/homepage/config/services.yaml` — added Hermes + OpenClaw; uncommented Communications + Design sections.
-- `setup/walter-host/services/metabase/compose.yml` — (unchanged in repo; VM gets a sidecar-wrapped variant at `/opt/walter-vm/services/metabase/compose.yml`).
 - This file.
 
-Live infrastructure (NOT in repo, on VM and CF):
-- `/etc/cloudflared/config.yml` on walter-vm (4 ingress rules added, vault removed).
-- 6 new CF Access apps.
-- 4 new CF DNS CNAMEs.
-- `/opt/walter-vm/services/metabase/compose.yml` (new sidecar-wrapped variant).
-- `/opt/walter-vm/services/homepage/config/services.yaml` (updated).
-- Infisical `walter-vm-internal/prod/{metabase,postiz,hermes,tower}/` — 11 secrets (some real, some placeholders).
+## IaC source-of-truth map (post-handoff)
+
+| Artifact | Repo path | Live location | Reconciliation |
+|---|---|---|---|
+| Tunnel ingress | `setup/walter-host/cloudflare/cloudflared-config.yml` | `/etc/cloudflared/config.yml` | manual rsync + `systemctl restart cloudflared` |
+| CF Access apps | `setup/walter-host/cloudflare/04-create-access.sh` | CF dashboard | re-run script (idempotent) |
+| CF DNS records | none (CF API direct) | CF dashboard | `cloudflared tunnel route dns` OR CF API |
+| Service composes (VM) | `setup/walter-host/services/<svc>/compose.vm.yml` (sidecar variant) | `/opt/walter-vm/services/<svc>/compose.yml` | manual scp + `docker compose up -d` |
+| Infisical secrets | none (Infisical UI / CLI) | Infisical workspace | declarative via Infisical's own audit log; deploy script asserts presence at boot |
+| Homepage YAML | `setup/homepage/config/services.yaml` | `/opt/walter-vm/services/homepage/config/services.yaml` | manual scp + `docker restart homepage` |
+
+**Convention going forward**:
+- Anything declarative AND repeatable lives in the repo.
+- State-ful items (secrets, DB rows, CF DNS records that target a tunnel id) are intentionally NOT in IaC — they're either operator-managed or persistence-managed.
+- The 04-create-access.sh + cloudflared-config.yml pair is the closest thing to a single-source-of-truth for the public surface. Update both when adding/removing services.
+
+## Login-policy bug fix — 2026-05-16 (post-merge)
+
+Initial CF Access script run used `AUTH_DOMAIN=xipherlabs.xyz` which set every policy to `allow @xipherlabs.xyz`. Operator's email is `@solx.ar`, so every login attempted with `nico@solx.ar` returned "That account does not have access".
+
+Fix: re-ran `bash setup/walter-host/cloudflare/04-create-access.sh xipherlabs.xyz solx.ar otp+google`. All 24 apps now have `allow @solx.ar`. Login restored.
+
+Lesson: AUTH_DOMAIN is the operator-email domain, NOT the service domain. The script header documents this; I misread the arg meaning on first invocation.
