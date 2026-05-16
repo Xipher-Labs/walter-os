@@ -71,11 +71,20 @@ echo "==> Create/update Access app per service..."
 # Single source of truth for which subdomains get a CF Access app.
 # Add new services here when their cloudflared ingress lands — without an
 # Access policy they'd be publicly reachable.
+#
 # NOTE: 'headscale' (control plane) is intentionally EXCLUDED — Tailscale
-# clients can't do interactive Google OAuth. The HS admin UI lives on
-# 'hs' (separate subdomain) which IS protected.
-for sub in vault llm plane git status home secrets uptime \
-           n8n grafana penpot draw chat sync element claw hs vpn; do
+#   clients can't do interactive Google OAuth. The HS admin UI lives on
+#   'hs' (separate subdomain) which IS protected.
+# NOTE: 'matrix' subdomain (Synapse federation) — listed here so HTTP
+#   client access (Element web, /_matrix/client/*) sits behind Access;
+#   federation traffic (/_matrix/federation/*) needs to be allow-bypassed
+#   by an additional policy, OR federation must be disabled. Today federation
+#   is OFF in homeserver.yaml so blanket Access is safe.
+# NOTE: 'vault' removed 2026-05-13 — Vaultwarden retired, Infisical is the
+#   secret store now (secrets.${SERVICE_DOMAIN}).
+for sub in llm plane git status home secrets uptime \
+           n8n grafana penpot draw chat sync element claw hs vpn \
+           matrix posthog tower metabase postiz hermes; do
   hostname="${sub}.${SERVICE_DOMAIN}"
 
   existing_apps=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps")
