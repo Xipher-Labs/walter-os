@@ -18,16 +18,8 @@
 - Agents & AI:
     - Control Tower:
         href: "https://tower.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Multi-agent orchestration GUI
+        description: Multi-agent orchestration GUI (Tailscale-only)
         icon: mdi-robot
-    - OpenClaw:
-        href: "https://claw.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Personal-assistant gateway (Telegram + Matrix)
-        icon: mdi-hand-extended
-    - Hermes Agent:
-        href: "https://hermes.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Self-hostable agentic framework (Nous Research)
-        icon: mdi-rocket-launch
     - LiteLLM:
         href: "https://llm.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
         description: Walter-Bridge LLM gateway
@@ -79,25 +71,51 @@
         description: File sync (multi-device)
         icon: syncthing.png
 
-- Communications:
-    - RocketChat:
-        href: "https://chat.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Team chat
-        icon: rocket-chat.png
-    - Element (Matrix):
-        href: "https://element.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Matrix client (federation OFF; CF Access gated)
-        icon: element.png
+# =============================================================================
+# PROFILE: comms — uncomment if you run `docker compose --profile comms up -d`
+# Services: rocketchat, synapse, element-web
+# =============================================================================
+#
+# - Communications:
+#     - RocketChat:
+#         href: "https://chat.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
+#         description: Team chat
+#         icon: rocket-chat.png
+#     - Element (Matrix):
+#         href: "https://element.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
+#         description: Matrix client (federated)
+#         icon: element.png
 
-- Design & Diagrams:
-    - Penpot:
-        href: "https://penpot.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Design + prototypes
-        icon: penpot.png
-    - Drawio:
-        href: "https://draw.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
-        description: Diagrams
-        icon: drawio.png
+# =============================================================================
+# PROFILE: design — uncomment if you run `docker compose --profile design up -d`
+# Services: penpot (frontend/backend/exporter/postgres/redis), drawio
+# =============================================================================
+#
+# - Design & Diagrams:
+#     - Penpot:
+#         href: "https://penpot.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
+#         description: Design + prototypes
+#         icon: penpot.png
+#     - Drawio:
+#         href: "https://draw.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
+#         description: Diagrams
+#         icon: drawio.png
+
+# =============================================================================
+# PROFILE: assistant — uncomment if you run `docker compose --profile assistant up -d`
+# Services: openclaw, hermes-agent (mutually compatible — see
+# docs/operational/agent-runtimes-comparison.md)
+# =============================================================================
+#
+# - Personal Assistant:
+#     - OpenClaw:
+#         href: "https://claw.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
+#         description: Personal-assistant gateway (Telegram + Matrix)
+#         icon: mdi-hand-extended
+#     - Hermes Agent:
+#         href: "https://hermes.{{HOMEPAGE_VAR_WALTER_DOMAIN}}"
+#         description: Self-hostable agentic framework (Nous Research)
+#         icon: mdi-rocket-launch
 
 - Marketing & Analytics:
     - Metabase:
