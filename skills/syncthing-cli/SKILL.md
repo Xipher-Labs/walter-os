@@ -123,7 +123,7 @@ hardcoded in a shared script.
 # Operator bootstrap script — lives in the operator overlay or a personal
 # scripts repository outside the OSS repo.
 # Place at: ~/.config/walter-os/overlay/scripts/syncthing-bootstrap.sh
-# Or at:    ${WALTER_CONFIG_PERSONAL_DIR}/scripts/syncthing-bootstrap.sh
+# Or at:    ~/config-personal/scripts/syncthing-bootstrap.sh
 #
 # Required env vars:
 #   WALTER_VM_SSH_ALIAS   — SSH config alias for the hub VM
@@ -219,7 +219,7 @@ Supported locations (in discovery order used by `walter-os syncthing-bootstrap`)
 
 1. `${WALTER_OPERATOR_SCRIPTS_DIR}/syncthing-bootstrap.sh` (env var, highest priority)
 2. `~/.config/walter-os/overlay/scripts/syncthing-bootstrap.sh` (overlay convention)
-3. `${WALTER_CONFIG_PERSONAL_DIR}/scripts/syncthing-bootstrap.sh` (personal scripts fallback)
+3. `~/config-personal/scripts/syncthing-bootstrap.sh` (personal scripts fallback)
 
 Run `walter-os syncthing-bootstrap --help` for the live discovery order.
 
