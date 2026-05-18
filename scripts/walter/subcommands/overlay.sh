@@ -18,7 +18,7 @@ Open ~/.config/walter-os/overlay in an editor, preferring:
 
 WALTER_OVERLAY_EDITOR may be: system, cursor, code, zed, vim, nvim,
 or an executable path. WALTER_OVERLAY_OPEN_CMD is an advanced override
-and may include arguments.
+and may include simple whitespace-separated arguments.
 
 The system opener is platform-native: macOS open, Linux xdg-open, and
 WSL explorer.exe when available.
@@ -63,9 +63,15 @@ exec_command_string() {
   local command_string="$1"
   local target_dir="$2"
   local -a command_parts
+  local glob_state
 
+  glob_state="$(set +o | grep '^set +o noglob$' || true)"
+  set -f
   # shellcheck disable=SC2206
   command_parts=($command_string)
+  if [[ -n "$glob_state" ]]; then
+    set +f
+  fi
   exec "${command_parts[@]}" "$target_dir"
 }
 
@@ -82,14 +88,14 @@ try_system_opener() {
 
   case "$(uname -s)" in
     Darwin)
-      exec open "$target_dir"
+      open "$target_dir" && exit 0
       ;;
     Linux)
       if is_wsl && command -v wslpath >/dev/null 2>&1 && command -v explorer.exe >/dev/null 2>&1; then
-        exec explorer.exe "$(wslpath -w "$target_dir")"
+        explorer.exe "$(wslpath -w "$target_dir")" && exit 0
       fi
       if command -v xdg-open >/dev/null 2>&1; then
-        exec xdg-open "$target_dir"
+        xdg-open "$target_dir" && exit 0
       fi
       ;;
   esac
@@ -103,7 +109,7 @@ try_editor_preference() {
 
   case "$preference" in
     ""|system)
-      try_system_opener "$target_dir"
+      try_system_opener "$target_dir" || true
       return 1
       ;;
     cursor|code|zed|vim|nvim)
@@ -152,10 +158,10 @@ if [[ -n "${WALTER_OVERLAY_OPEN_CMD:-}" ]] && command_string_available "$WALTER_
 fi
 
 if [[ -n "${WALTER_OVERLAY_EDITOR:-}" ]]; then
-  try_editor_preference "$WALTER_OVERLAY_EDITOR" "$overlay_dir"
+  try_editor_preference "$WALTER_OVERLAY_EDITOR" "$overlay_dir" || true
 fi
 
-try_system_opener "$overlay_dir"
+try_system_opener "$overlay_dir" || true
 
 if [[ -n "${VISUAL:-}" ]] && command_string_available "$VISUAL"; then
   exec_command_string "$VISUAL" "$overlay_dir"

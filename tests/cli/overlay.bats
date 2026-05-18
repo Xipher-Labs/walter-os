@@ -78,6 +78,32 @@ SH
   rm -rf "$tmp_home"
 }
 
+@test "overlay command arguments do not expand globs" {
+  local tmp_home opener_log opener
+  tmp_home="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+  opener="${tmp_home}/opener"
+
+  cat > "$opener" <<'SH'
+#!/usr/bin/env bash
+printf '%s %s\n' "$1" "$2" > "$WALTER_TEST_OPENER_LOG"
+SH
+  chmod +x "$opener"
+
+  run env \
+    HOME="$tmp_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_OVERLAY_OPEN_CMD="$opener --pattern=*" \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "--pattern=* ${tmp_home}/.config/walter-os/overlay" ]
+
+  rm -rf "$tmp_home"
+}
+
 @test "overlay uses explicit editor preference" {
   local tmp_home opener_log opener
   tmp_home="$(mktemp -d)"
@@ -203,6 +229,41 @@ SH
 
   [ "$status" -eq 0 ]
   [ "$(cat "$opener_log")" = "explorer.exe C:\\Users\\operator\\overlay" ]
+
+  rm -rf "$tmp_home" "$tmp_bin"
+}
+
+@test "overlay falls back to VISUAL when Linux system opener fails" {
+  local tmp_home tmp_bin opener_log
+  tmp_home="$(mktemp -d)"
+  tmp_bin="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+
+  cat > "${tmp_bin}/uname" <<'SH'
+#!/usr/bin/env bash
+printf 'Linux\n'
+SH
+  cat > "${tmp_bin}/xdg-open" <<'SH'
+#!/usr/bin/env bash
+exit 3
+SH
+  cat > "${tmp_bin}/visual-opener" <<'SH'
+#!/usr/bin/env bash
+printf 'visual %s\n' "$1" > "$WALTER_TEST_OPENER_LOG"
+SH
+  chmod +x "${tmp_bin}/uname" "${tmp_bin}/xdg-open" "${tmp_bin}/visual-opener"
+
+  run env \
+    HOME="$tmp_home" \
+    PATH="${tmp_bin}:/usr/bin:/bin" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    VISUAL=visual-opener \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "visual ${tmp_home}/.config/walter-os/overlay" ]
 
   rm -rf "$tmp_home" "$tmp_bin"
 }
