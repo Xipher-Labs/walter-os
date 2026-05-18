@@ -2,9 +2,9 @@
 # tests/walter/syncthing-bootstrap-delegation.bats
 # Covers: AC-3, AC-4, AC-5, AC-6, AC-7
 # Tests the 3-tier discovery in cmd_syncthing_bootstrap:
-#   1. WALTER_OPERATOR_SCRIPTS_DIR  (highest precedence)
-#   2. HOME/.config/walter-os/overlay/scripts/  (overlay)
-#   3. HOME/config-personal/scripts/  (lowest)
+#   1. WALTER_OPERATOR_SCRIPTS_DIR  (highest precedence) — exercised
+#   2. HOME/.config/walter-os/overlay/scripts/  (overlay) — exercised
+#   3. HOME/config-personal/scripts/  (lowest) — exercised below
 
 WALTER_OS_BIN="$BATS_TEST_DIRNAME/../../bin/walter-os"
 
@@ -66,6 +66,7 @@ EOF
 
 @test "syncthing-bootstrap with no script prints 'no operator script' message" {
   HOME="$TEST_HOME" run "$WALTER_OS_BIN" syncthing-bootstrap
+  [ "$status" -eq 2 ]
   echo "$output" | grep -qi "no operator script"
 }
 
@@ -108,5 +109,18 @@ EOF
   overlay_dir="${TEST_HOME}/.config/walter-os/overlay/scripts"
   _make_stub "$overlay_dir"
   HOME="$TEST_HOME" run "$WALTER_OS_BIN" syncthing-bootstrap
+  echo "$output" | grep -q "STUB_EXECD"
+}
+
+# --- Tier-3 fallback: config-personal/scripts/ exec'd when env var unset
+# and overlay absent. Not strictly required by AC-7, but the header comment
+# claims this tier is exercised and the reviewer asked for parity. ---
+
+@test "syncthing-bootstrap execs config-personal script as last fallback" {
+  local cp_dir
+  cp_dir="${TEST_HOME}/config-personal/scripts"
+  _make_stub "$cp_dir"
+  HOME="$TEST_HOME" run "$WALTER_OS_BIN" syncthing-bootstrap
+  [ "$status" -eq 0 ]
   echo "$output" | grep -q "STUB_EXECD"
 }
