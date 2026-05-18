@@ -20,6 +20,9 @@ WALTER_OVERLAY_EDITOR may be: system, cursor, code, zed, vim, nvim,
 or an executable path. WALTER_OVERLAY_OPEN_CMD is an advanced override
 and may include arguments.
 
+The system opener is platform-native: macOS open, Linux xdg-open, and
+WSL explorer.exe when available.
+
 Options:
   --print      Print the overlay path without opening it.
   -h, --help   Show this help.
@@ -66,6 +69,14 @@ exec_command_string() {
   exec "${command_parts[@]}" "$target_dir"
 }
 
+is_wsl() {
+  if [[ -n "${WSL_DISTRO_NAME:-}" || -n "${WSL_INTEROP:-}" ]]; then
+    return 0
+  fi
+
+  [[ -r /proc/version ]] && grep -qi microsoft /proc/version
+}
+
 try_system_opener() {
   local target_dir="$1"
 
@@ -74,11 +85,11 @@ try_system_opener() {
       exec open "$target_dir"
       ;;
     Linux)
+      if is_wsl && command -v wslpath >/dev/null 2>&1 && command -v explorer.exe >/dev/null 2>&1; then
+        exec explorer.exe "$(wslpath -w "$target_dir")"
+      fi
       if command -v xdg-open >/dev/null 2>&1; then
         exec xdg-open "$target_dir"
-      fi
-      if command -v wslpath >/dev/null 2>&1 && command -v explorer.exe >/dev/null 2>&1; then
-        exec explorer.exe "$(wslpath -w "$target_dir")"
       fi
       ;;
   esac

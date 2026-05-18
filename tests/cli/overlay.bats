@@ -104,6 +104,109 @@ SH
   rm -rf "$tmp_home"
 }
 
+@test "overlay system opener uses macOS open on Darwin" {
+  local tmp_home tmp_bin opener_log
+  tmp_home="$(mktemp -d)"
+  tmp_bin="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+
+  cat > "${tmp_bin}/uname" <<'SH'
+#!/usr/bin/env bash
+printf 'Darwin\n'
+SH
+  cat > "${tmp_bin}/open" <<'SH'
+#!/usr/bin/env bash
+printf 'open %s\n' "$1" > "$WALTER_TEST_OPENER_LOG"
+SH
+  chmod +x "${tmp_bin}/uname" "${tmp_bin}/open"
+
+  run env \
+    HOME="$tmp_home" \
+    PATH="${tmp_bin}:/usr/bin:/bin" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_OVERLAY_EDITOR=system \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "open ${tmp_home}/.config/walter-os/overlay" ]
+
+  rm -rf "$tmp_home" "$tmp_bin"
+}
+
+@test "overlay system opener uses xdg-open on Linux" {
+  local tmp_home tmp_bin opener_log
+  tmp_home="$(mktemp -d)"
+  tmp_bin="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+
+  cat > "${tmp_bin}/uname" <<'SH'
+#!/usr/bin/env bash
+printf 'Linux\n'
+SH
+  cat > "${tmp_bin}/xdg-open" <<'SH'
+#!/usr/bin/env bash
+printf 'xdg-open %s\n' "$1" > "$WALTER_TEST_OPENER_LOG"
+SH
+  chmod +x "${tmp_bin}/uname" "${tmp_bin}/xdg-open"
+
+  run env \
+    HOME="$tmp_home" \
+    PATH="${tmp_bin}:/usr/bin:/bin" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_OVERLAY_EDITOR=system \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "xdg-open ${tmp_home}/.config/walter-os/overlay" ]
+
+  rm -rf "$tmp_home" "$tmp_bin"
+}
+
+@test "overlay system opener prefers explorer.exe on WSL" {
+  local tmp_home tmp_bin opener_log
+  tmp_home="$(mktemp -d)"
+  tmp_bin="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+
+  cat > "${tmp_bin}/uname" <<'SH'
+#!/usr/bin/env bash
+printf 'Linux\n'
+SH
+  cat > "${tmp_bin}/wslpath" <<'SH'
+#!/usr/bin/env bash
+printf 'C:\\Users\\operator\\overlay\n'
+SH
+  cat > "${tmp_bin}/explorer.exe" <<'SH'
+#!/usr/bin/env bash
+printf 'explorer.exe %s\n' "$1" > "$WALTER_TEST_OPENER_LOG"
+SH
+  cat > "${tmp_bin}/xdg-open" <<'SH'
+#!/usr/bin/env bash
+printf 'xdg-open %s\n' "$1" > "$WALTER_TEST_OPENER_LOG"
+exit 99
+SH
+  chmod +x "${tmp_bin}/uname" "${tmp_bin}/wslpath" "${tmp_bin}/explorer.exe" "${tmp_bin}/xdg-open"
+
+  run env \
+    HOME="$tmp_home" \
+    PATH="${tmp_bin}:/usr/bin:/bin" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_OVERLAY_EDITOR=system \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    WSL_DISTRO_NAME=Ubuntu \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "explorer.exe C:\\Users\\operator\\overlay" ]
+
+  rm -rf "$tmp_home" "$tmp_bin"
+}
+
 @test "overlay --print handles missing HOME with clear error" {
   run env -u HOME -u WALTER_OVERLAY_DIR bash "${OVERLAY_SCRIPT}" --print
 
