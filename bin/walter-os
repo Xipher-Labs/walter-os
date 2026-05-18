@@ -45,7 +45,7 @@
 #   pr-title <TYPE> <CATEGORY> <text>
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
-#   overlay                     Open ~/.config/walter-os/overlay in VS Code/editor
+#   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
 #   help                        Show this help

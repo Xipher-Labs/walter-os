@@ -17,11 +17,12 @@ export WALTER_OS_HOME="${REPO_ROOT}"
   [ "$output" = "/tmp/walter-test-home/.config/walter-os/overlay" ]
 }
 
-@test "overlay help documents VS Code behavior" {
+@test "overlay help documents configured opener behavior" {
   run bash "${OVERLAY_SCRIPT}" --help
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Visual Studio Code"* ]]
+  [[ "$output" == *"configured overlay opener"* ]]
+  [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]]
   [[ "$output" == *"--print"* ]]
 }
 
@@ -49,6 +50,65 @@ SH
   [ "$(cat "$opener_log")" = "${tmp_home}/.config/walter-os/overlay" ]
 
   rm -rf "$tmp_home"
+}
+
+@test "overlay invokes injected opener command with arguments" {
+  local tmp_home opener_log opener
+  tmp_home="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+  opener="${tmp_home}/opener"
+
+  cat > "$opener" <<'SH'
+#!/usr/bin/env bash
+printf '%s %s\n' "$1" "$2" > "$WALTER_TEST_OPENER_LOG"
+SH
+  chmod +x "$opener"
+
+  run env \
+    HOME="$tmp_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_OVERLAY_OPEN_CMD="$opener --flag" \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "--flag ${tmp_home}/.config/walter-os/overlay" ]
+
+  rm -rf "$tmp_home"
+}
+
+@test "overlay uses explicit editor preference" {
+  local tmp_home opener_log opener
+  tmp_home="$(mktemp -d)"
+  mkdir -p "${tmp_home}/.config/walter-os/overlay"
+  opener_log="${tmp_home}/opener.log"
+  opener="${tmp_home}/opener"
+
+  cat > "$opener" <<'SH'
+#!/usr/bin/env bash
+printf '%s %s\n' "$1" "$2" > "$WALTER_TEST_OPENER_LOG"
+SH
+  chmod +x "$opener"
+
+  run env \
+    HOME="$tmp_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_OVERLAY_EDITOR="$opener --project" \
+    WALTER_TEST_OPENER_LOG="$opener_log" \
+    "${WALTER_OS_BIN}" overlay
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$opener_log")" = "--project ${tmp_home}/.config/walter-os/overlay" ]
+
+  rm -rf "$tmp_home"
+}
+
+@test "overlay --print handles missing HOME with clear error" {
+  run env -u HOME -u WALTER_OVERLAY_DIR bash "${OVERLAY_SCRIPT}" --print
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"HOME is required"* ]]
 }
 
 @test "walter dispatch exposes overlay command" {

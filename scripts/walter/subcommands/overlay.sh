@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/walter/subcommands/overlay.sh
-# Open the Walter-OS personal overlay in the operator's editor.
+# Open the Walter-OS personal overlay with the configured overlay opener.
 
 set -euo pipefail
 
@@ -11,11 +11,14 @@ Usage: walter-os overlay [--print]
 
 Open ~/.config/walter-os/overlay in an editor, preferring:
   1. WALTER_OVERLAY_OPEN_CMD
-  2. VISUAL
-  3. EDITOR
-  4. code
-  5. Visual Studio Code via macOS open
-  6. xdg-open
+  2. WALTER_OVERLAY_EDITOR
+  3. System opener
+  4. VISUAL
+  5. EDITOR
+
+WALTER_OVERLAY_EDITOR may be: system, cursor, code, zed, vim, nvim,
+or an executable path. WALTER_OVERLAY_OPEN_CMD is an advanced override
+and may include arguments.
 
 Options:
   --print      Print the overlay path without opening it.
@@ -23,7 +26,91 @@ Options:
 EOF
 }
 
-overlay_dir="${WALTER_OVERLAY_DIR:-${HOME}/.config/walter-os/overlay}"
+resolve_overlay_dir() {
+  if [[ -n "${WALTER_OVERLAY_DIR:-}" ]]; then
+    printf '%s\n' "$WALTER_OVERLAY_DIR"
+    return 0
+  fi
+
+  if [[ -z "${HOME:-}" ]]; then
+    echo "walter-os overlay: HOME is required unless WALTER_OVERLAY_DIR is set" >&2
+    exit 2
+  fi
+
+  printf '%s/.config/walter-os/overlay\n' "$HOME"
+}
+
+command_string_available() {
+  local command_string="$1"
+  local executable
+
+  read -r executable _ <<<"$command_string"
+  if [[ -z "$executable" ]]; then
+    return 1
+  fi
+
+  if [[ "$executable" == */* ]]; then
+    [[ -x "$executable" ]]
+  else
+    command -v "$executable" >/dev/null 2>&1
+  fi
+}
+
+exec_command_string() {
+  local command_string="$1"
+  local target_dir="$2"
+  local -a command_parts
+
+  # shellcheck disable=SC2206
+  command_parts=($command_string)
+  exec "${command_parts[@]}" "$target_dir"
+}
+
+try_system_opener() {
+  local target_dir="$1"
+
+  case "$(uname -s)" in
+    Darwin)
+      exec open "$target_dir"
+      ;;
+    Linux)
+      if command -v xdg-open >/dev/null 2>&1; then
+        exec xdg-open "$target_dir"
+      fi
+      if command -v wslpath >/dev/null 2>&1 && command -v explorer.exe >/dev/null 2>&1; then
+        exec explorer.exe "$(wslpath -w "$target_dir")"
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
+try_editor_preference() {
+  local preference="$1"
+  local target_dir="$2"
+
+  case "$preference" in
+    ""|system)
+      try_system_opener "$target_dir"
+      return 1
+      ;;
+    cursor|code|zed|vim|nvim)
+      if command -v "$preference" >/dev/null 2>&1; then
+        exec "$preference" "$target_dir"
+      fi
+      ;;
+    *)
+      if command_string_available "$preference"; then
+        exec_command_string "$preference" "$target_dir"
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
+overlay_dir="$(resolve_overlay_dir)"
 
 case "${1:-}" in
   --print)
@@ -49,30 +136,24 @@ if [[ ! -d "$overlay_dir" ]]; then
   exit 1
 fi
 
-if [[ -n "${WALTER_OVERLAY_OPEN_CMD:-}" ]]; then
-  exec "$WALTER_OVERLAY_OPEN_CMD" "$overlay_dir"
+if [[ -n "${WALTER_OVERLAY_OPEN_CMD:-}" ]] && command_string_available "$WALTER_OVERLAY_OPEN_CMD"; then
+  exec_command_string "$WALTER_OVERLAY_OPEN_CMD" "$overlay_dir"
 fi
 
-if [[ -n "${VISUAL:-}" ]]; then
-  exec "$VISUAL" "$overlay_dir"
+if [[ -n "${WALTER_OVERLAY_EDITOR:-}" ]]; then
+  try_editor_preference "$WALTER_OVERLAY_EDITOR" "$overlay_dir"
 fi
 
-if [[ -n "${EDITOR:-}" ]]; then
-  exec "$EDITOR" "$overlay_dir"
+try_system_opener "$overlay_dir"
+
+if [[ -n "${VISUAL:-}" ]] && command_string_available "$VISUAL"; then
+  exec_command_string "$VISUAL" "$overlay_dir"
 fi
 
-if command -v code >/dev/null 2>&1; then
-  exec code "$overlay_dir"
+if [[ -n "${EDITOR:-}" ]] && command_string_available "$EDITOR"; then
+  exec_command_string "$EDITOR" "$overlay_dir"
 fi
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  exec open -a "Visual Studio Code" "$overlay_dir"
-fi
-
-if command -v xdg-open >/dev/null 2>&1; then
-  exec xdg-open "$overlay_dir"
-fi
-
-echo "walter-os overlay: no editor opener found. Overlay path:" >&2
+echo "walter-os overlay: no configured overlay opener found. Overlay path:" >&2
 echo "  $overlay_dir" >&2
 exit 3

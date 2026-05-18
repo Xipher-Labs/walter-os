@@ -59,7 +59,7 @@ Commands:
   providers configure              Interactive provider choice wizard. Choose LLM,
                                      git, secrets, analytics, search, embeddings
                                      providers and write to providers.yaml + .env.local.
-  overlay                          Open ~/.config/walter-os/overlay in VS Code/editor
+  overlay                          Open ~/.config/walter-os/overlay with configured opener
   status                           Walter-VM service health snapshot
   deploy <service>                 Pull + restart a Walter-VM service
   logs <service> [tail]            Tail logs from a service
