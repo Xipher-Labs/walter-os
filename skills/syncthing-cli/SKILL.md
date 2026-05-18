@@ -133,10 +133,13 @@ hardcoded in a shared script.
 set -euo pipefail
 
 API="http://127.0.0.1:8384/rest"
-SSH_CMD="ssh ${WALTER_VM_SSH_ALIAS}"
 
-api_get()  { ${SSH_CMD} curl -sf -H "X-API-Key: ${SYNCTHING_API_KEY}" "${API}/$1"; }
-api_post() { ${SSH_CMD} curl -sf -X POST -H "X-API-Key: ${SYNCTHING_API_KEY}" \
+# Wrap ssh in a function so the alias is always properly quoted — avoids
+# word-splitting if the operator's SSH config alias contains spaces.
+ssh_to_hub() { ssh "${WALTER_VM_SSH_ALIAS}" "$@"; }
+
+api_get()  { ssh_to_hub curl -sf -H "X-API-Key: ${SYNCTHING_API_KEY}" "${API}/$1"; }
+api_post() { ssh_to_hub curl -sf -X POST -H "X-API-Key: ${SYNCTHING_API_KEY}" \
                -H "Content-Type: application/json" --data "$2" "${API}/$1"; }
 
 ensure_folder() {
@@ -155,7 +158,7 @@ ensure_folder() {
       rescanIntervalS:3600, fsWatcherEnabled:true, fsWatcherDelayS:10,
       ignorePerms:false, autoNormalize:true, devices:[]}')"
   api_post "config/folders" "$payload"
-  ${SSH_CMD} mkdir -p "$folder_path"
+  ssh_to_hub mkdir -p "$folder_path"
 }
 
 # Operator populates FOLDERS array with their actual folder inventory.
