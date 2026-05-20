@@ -18,6 +18,108 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
+Target release: **v0.3.0** — process hygiene + depersonalization
+cleanup pass. The big-rock founder-skills epic (issue #4 — terms,
+financial-plan, hiring, legal-doc-review, track-pending) moves to
+v0.4.0 to keep the v0.3.0 cycle short.
+
+### Removed
+
+- `scripts/syncthing-bootstrap.sh` — operator-specific Syncthing folder
+  registration script (extracted to the operator's private overlay).
+  The CLI subcommand `walter-os syncthing-bootstrap` now discovers the
+  operator's script via a three-tier lookup:
+  `${WALTER_OPERATOR_SCRIPTS_DIR}` env var, then
+  `~/.config/walter-os/overlay/scripts/`, then
+  `~/config-personal/scripts/`. See `skills/syncthing-cli/SKILL.md`
+  for the depersonalized guide and `walter-os syncthing-bootstrap
+  --help` for the live discovery order. Refs:
+  `docs/specs/syncthing-script-extraction.md`. (from PR #45)
+
+- Three-stage branch-flow gate (`feature → dev → staging → main`)
+  retired in `hooks/branch-flow-guard.sh`. New canonical flow is
+  `feature/<slug> → main`. The `--allow-branch-skip` flag is no
+  longer needed (every recent PR used it as the default; see ADR
+  0013). Direct push to protected branches (`main`, `master`,
+  `staging`, `production`) is still blocked unconditionally.
+  (from PR #49)
+
+### Added
+
+- `skills/syncthing-cli/SKILL.md` — depersonalized guide for talking
+  to a Syncthing hub via REST over SSH. Sibling of the existing
+  `*-cli` skills (`postgres-cli`, `hcloud-cli`, etc.). (from PR #45)
+
+- `skills/readme-craft/SKILL.md` — opinionated README authoring guide
+  for project / profile / hackathon / OSS-publication templates,
+  curated layer on top of `dhyeythumar/awesome-readme-tools`
+  (CC0-1.0). Cross-references `landing-page-fast`, `brand-creation`,
+  `oss-readiness`, `content-writer`. (from PR #47)
+
+- `bin/walter overlay` subcommand — open the operator overlay
+  directory with a configured opener. Supports `WALTER_OVERLAY_EDITOR`
+  (system / cursor / code / zed / vim / nvim / path) and the lower-
+  level `WALTER_OVERLAY_OPEN_CMD`. Platform-native default opener for
+  macOS (`open`), Linux (`xdg-open`), and WSL (`explorer.exe`). 12
+  bats tests cover all platforms. (from PR #36, external contributor
+  `@MzzuMrz`)
+
+- `docs/operational/walter-os-vs-walter-host.md` — clarifies the
+  four adoption modes (clone-only / client install / client +
+  selected services / full walter-host). The optional walter-host
+  layer is now explicit in the top-level summary. (from PR #32)
+
+- `docs/decisions/0013-solo-operator-merge-policy.md` — ADR for the
+  branch-flow retirement. (from PR #49)
+
+- CI bats job now covers `tests/cli/`, `tests/walter/`, and 11 of
+  the 13 `tests/oss/` bats files. Closes the gap that bit PR #45
+  (new `tests/walter/syncthing-bootstrap-delegation.bats` was not
+  gating the merge until #45 itself patched the workflow). Two
+  `tests/oss/` files with pre-existing failures (`depersonalization
+  AC-3`, `security-no-weak-defaults A-1`) are tracked in #50 and
+  explicitly skipped in CI until fixed. (from PR #49)
+
+### Changed
+
+- `bin/walter-os syncthing-bootstrap` no longer execs a script
+  bundled in the OSS repo. It delegates to operator-supplied scripts
+  via the three-tier discovery order or exits 2 with actionable
+  next-step instructions when none is found. (from PR #45)
+
+- `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `commands/pr.md`,
+  `skills/pr-review/SKILL.md`,
+  `skills/definition-of-done-validator/SKILL.md`,
+  `agents/implementer.md`, and the context files
+  (`contexts/{work,projects-personal}/AGENTS.md`) all updated to
+  reflect the single-tier branch flow (ADR 0013). (from PR #49)
+
+- `mcp/servers.json` — `elevenlabs` MCP pinned to `elevenlabs-mcp==0.9.1`
+  (exact uvx version). Audit pinning rules (`npx`, `uvx`, `git`)
+  documented explicitly in `skills/daily-supply-chain-audit/SKILL.md`.
+  (from PR #48)
+
+### Fixed
+
+- `skills/syncthing-cli/SKILL.md` — `printf '%q'` quoting for SSH
+  argv + stdin piping for JSON bodies, mitigates the same class of
+  issues flagged in security audit P1-04. (from PR #45)
+
+### Issues closed by this release
+
+- #37 — portable overlay opener (via PR #36)
+- #40 — pin elevenlabs MCP exact uvx version (via PR #48)
+- #43 — AGENTS branch-flow rule vs repo reality (via PR #49)
+- #46 — readme-craft skill (via PR #47)
+
+### Issues filed during this cycle (not closed)
+
+- #44 — `setup/walter-host/` operator-specific configs (broader
+  depersonalization tracker, epic)
+- #50 — pre-existing `tests/oss/` failures (`depersonalization AC-3`,
+  `security-no-weak-defaults A-1`) — block the full `tests/oss/`
+  glob inclusion
+
 ---
 
 ## [0.2.0] — 2026-05-11
