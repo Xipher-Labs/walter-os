@@ -349,15 +349,18 @@ Auto-escalate to **major** (regardless of LOC) for: any change in `auth/`,
 
 ### Branch flow
 
-```
-feature/<slug> → main
-```
+Configurable via `WALTER_BRANCH_FLOW` in your overlay. Default
+(`single-tier`) is `feature/<slug>` → `main`. Set
+`WALTER_BRANCH_FLOW=three-stage` in
+`~/.config/walter-os/overlay/personal.env` to opt in to the
+`feature → dev → staging → main` flow for teams with a real
+staging environment.
 
-PRs target `main` directly. Direct push to `main` (or `master`, `staging`,
-`production` if those branches exist) is blocked unconditionally by
-`hooks/branch-flow-guard.sh`. The decision to use a single-tier flow
-instead of the previous `feature → dev → staging → main` is captured in
-`docs/decisions/0013-solo-operator-merge-policy.md`.
+Direct push to `main` (or `master`, `staging`, `production` if those
+branches exist) is blocked unconditionally by
+`hooks/branch-flow-guard.sh` regardless of mode. See
+`docs/decisions/0013-solo-operator-merge-policy.md` for the
+trade-offs.
 
 ### Definition of Done
 

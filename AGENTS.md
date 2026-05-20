@@ -134,23 +134,39 @@ superpowers) enforces this.
 
 ### Branch flow
 
+The flow is **operator-configurable** via `WALTER_BRANCH_FLOW` in your
+overlay (`~/.config/walter-os/overlay/personal.env`). Two modes are
+supported by `hooks/branch-flow-guard.sh`:
+
 ```
-feature/<slug> → main
+# Default — solo operator, small team
+WALTER_BRANCH_FLOW=single-tier
+   feature/<slug> → main
+
+# Opt-in — team with dev / staging environments
+WALTER_BRANCH_FLOW=three-stage
+   feature/<slug> → dev → staging → main
 ```
 
-- `feature/<slug>` (or `fix/<slug>` / `chore/<slug>`): all work happens here.
-- `main`: production. Tagged with semver on merge.
+- **`single-tier`** (default when `WALTER_BRANCH_FLOW` is unset).
+  Feature branches target `main` directly. No multi-stage promotion.
+  Best for solo operators and small teams without a separate staging
+  environment.
 
-PRs target `main` directly. Direct push to `main` (and to `master`,
-`staging`, `production` if those branches ever exist) is blocked
-unconditionally by `hooks/branch-flow-guard.sh` — there is no bypass.
+- **`three-stage`**. Feature branches must target `dev`; `dev` →
+  `staging`; `staging` → `main`. The hook enforces the next-level
+  rule; `--allow-branch-skip` is the documented bypass for genuine
+  hotfixes (must be justified in the PR body). Best for teams with a
+  real `dev` integration branch and a `staging` deploy gate.
 
-The decision to drop the previously-documented three-stage flow
-(`feature → dev → staging → main`) is captured in
-`docs/decisions/0013-solo-operator-merge-policy.md`. Revisit when the
-project crosses the scale triggers in that ADR (multi-contributor
-weekly cadence, staging environment that needs a deploy branch, or
->5 in-flight PRs at any one time).
+Independent of the mode, direct push to `main` / `master` / `staging`
+/ `production` is blocked unconditionally — every change goes through
+a PR.
+
+See `docs/decisions/0013-solo-operator-merge-policy.md` for the full
+trade-off rationale and the rejected alternatives (auto-detect from
+branch existence; multiple additional modes such as release-branch
+or trunk-based).
 
 ### Definition of Done
 

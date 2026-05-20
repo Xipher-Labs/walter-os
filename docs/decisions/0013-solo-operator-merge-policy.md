@@ -1,123 +1,139 @@
-# 0013. Solo-operator merge policy — simplified branch flow
+# 0013. Branch flow — operator-configurable, single-tier default
 
 **Date**: 2026-05-20
 **Status**: Accepted
+**Supersedes the de-facto rule documented (but not implemented) before this ADR.**
 
 ## Context
 
-The `AGENTS.md` "Branch flow (non-negotiable)" rule reads:
+The pre-existing `AGENTS.md` "Branch flow (non-negotiable)" rule read:
 
 ```
 feature/<slug> → dev → staging → main
 ```
 
-`hooks/branch-flow-guard.sh` enforces this at the Claude Code PreToolUse
-layer by blocking `gh pr create --base main` from a `feature/*` branch
-unless `--allow-branch-skip` is passed with a justification.
+`hooks/branch-flow-guard.sh` enforced this at the Claude Code
+PreToolUse layer by blocking `gh pr create --base main` from a
+`feature/*` branch unless `--allow-branch-skip` was passed with a
+justification.
 
-In practice the rule is theatrical for the current scale of the
-project:
+In practice the rule did not match the project's reality:
 
 1. **`dev` and `staging` branches do not exist** on `origin`. Every
-   feature PR for the last release cycle (#35, #45, #47) has targeted
-   `main` directly using `--allow-branch-skip` plus a justification —
-   the "hotfix" escape hatch is the default path.
+   feature PR for the last release cycle (#35, #45, #47) used
+   `--allow-branch-skip` to target `main` directly — the "hotfix"
+   escape hatch was the default path.
 
-2. **Walter-OS is operator-only today.** The bypass list in branch
-   protection includes the operator account. Any "required review"
-   gate is bypassed for the solo operator on every merge anyway.
-   Three-stage promotion does not provide value when nobody downstream
-   is going to integration-test a `dev` branch against other in-flight
-   PRs.
+2. **Walter-OS adopters span a wide range.** The framework is built
+   to be forked. A solo operator does not need three integration
+   tiers; a small team with a real staging environment genuinely
+   does. Hard-coding either choice into the framework forces every
+   adopter to either accept friction they do not need (solo) or
+   bypass a hook the framework ships with (team).
 
-3. **Three new contributors have already submitted PRs** (one external
-   via PR #36, the Copilot bot via PR #48, the codex bot via PR #32).
-   They all opened against `main` because that is what the README,
-   the CONTRIBUTING flow, and the GitHub UI all point at. Asking them
-   to target a `dev` branch that does not exist is a documentation /
-   reality mismatch.
-
-The cost of keeping the documented rule is real:
-
-- New contributors must guess the `--allow-branch-skip` workaround.
-- The branch-flow-guard hook is the most-triggered hook in operator
-  sessions; every PR creates a friction point.
-- Documentation drift compounds: any change to AGENTS.md branch flow
-  needs matching changes in `hooks/branch-flow-guard.sh`, in the
-  `branch-flow-guard.bats` tests, and in every onboarding doc.
+3. **Three external contributors** opened PRs against `main` in two
+   weeks (#32 codex bot, #36 `@MzzuMrz`, #48 Copilot bot). They all
+   targeted `main` because that is what the README, the CONTRIBUTING
+   flow, and the GitHub UI all point at. Sending them to a `dev`
+   branch that does not exist would be a documentation / reality
+   mismatch.
 
 ## Decision
 
-**Drop the `dev`/`staging` branch tier requirement. Adopt a one-stage
-feature flow: `feature/<slug>` → `main`.**
+**The branch flow is now an operator-configurable choice, with
+single-tier as the default.**
 
-Direct push to `main` (and to `staging` / `production` / `master` if
-those branches are ever created) stays blocked unconditionally — the
-guard still enforces that.
+Two modes are supported by `hooks/branch-flow-guard.sh`:
 
-The `--allow-branch-skip` flag is no longer the default escape hatch
-and can be removed entirely. (If someone needs to hotfix a branch that
-is not `main`, they create a feature branch and target the destination
-explicitly.)
+- **`single-tier`** (default) — `feature/<slug>` → `main`. PRs target
+  `main` directly. Best for solo operators and small teams without a
+  separate staging environment. This is what the framework defaults
+  to when the operator has not set anything.
 
-## Why not the alternatives
+- **`three-stage`** — `feature/<slug>` → `dev` → `staging` → `main`.
+  The hook enforces the next-level rule (feature → dev → staging →
+  main); skipping requires `--allow-branch-skip` plus a
+  justification in the PR body. Best for teams with a real `dev`
+  integration branch and a `staging` environment whose deploy is
+  gated on a separate branch.
 
-**Establish `dev` and `staging` for real.** This would require:
-- Creating both branches with branch protection (1 approval, all
-  required checks).
-- A separate workflow that integration-tests `dev` against in-flight
-  PRs nightly or on demand.
-- A `dev → staging → main` promotion workflow (auto-PR on schedule,
-  with semver tag handling).
-- Onboarding doc updates that point new contributors at `dev`.
+Operators select the mode by exporting `WALTER_BRANCH_FLOW` in their
+overlay (`~/.config/walter-os/overlay/personal.env`):
 
-That is real engineering and ongoing maintenance for benefits the
-project does not currently see at this scale. Revisit when:
-- Two or more contributors are regularly merging the same week, OR
-- A staging environment exists that needs a separate integration
-  branch as its deploy source, OR
-- The number of in-flight PRs at any one time exceeds five.
+```bash
+# Default — equivalent to not setting the variable at all
+export WALTER_BRANCH_FLOW=single-tier
 
-**Keep the rule as aspiration; flag every bypass.** That is the
-current state and it is the worst of both — the rule reads as policy
-but the hook fires constantly with bypass flags that nobody enforces.
-Pick one direction.
+# Opt in to the original three-stage flow
+export WALTER_BRANCH_FLOW=three-stage
+```
+
+What stays the same regardless of mode:
+
+- Direct push to `main` / `master` / `staging` / `production` is
+  blocked unconditionally. There is no bypass for that.
+- The optional `WALTER_MANUAL_PR_REMOTE_PATTERN` gate (forces manual
+  PR creation on matching remotes) still applies.
+
+## Why this shape, not the alternatives
+
+**Why not retire the three-stage flow entirely?**
+The original ADR draft did this and removed the option. That is
+wrong for a framework: it locks adopters who genuinely want the
+three-stage flow into either patching the hook locally or running
+without it. The framework should give the choice and document the
+trade-off, not pick for everyone.
+
+**Why not auto-detect from branch existence?**
+"If `origin/dev` exists, enforce three-stage" is elegant but fragile.
+A `dev` branch created by accident — or one that lingers from a
+deleted feature/* — would silently flip the policy. Explicit config
+is harder to surface but easier to reason about when the hook fires.
+
+**Why not multiple flavours (e.g. release-branch model, gitflow)?**
+Two modes covers the common cases without bloating the hook. Adding
+a `release-branch` mode would require the hook to know about release
+naming (`release/*`) and tagging behaviour, which is too much for
+this layer. If a forker needs a different flow they can extend the
+hook locally — the contract is small enough to do that without
+re-engineering the rest of walter-os.
 
 ## Consequences
 
-### Required changes (this PR)
+### Behavior change for current adopters
 
-- `AGENTS.md` "Branch flow" section: rewrite to describe
-  `feature/<slug>` → `main` as the canonical flow. Remove `dev` and
-  `staging` references. Keep the direct-push-to-`main` block.
-- `hooks/branch-flow-guard.sh`: remove the `feature/* → dev`,
-  `dev → staging`, and `staging → main` cases. Keep the direct-push
-  block and the optional `WALTER_MANUAL_PR_REMOTE_PATTERN`
-  enforcement. Remove the `--allow-branch-skip` handling.
-- `tests/hooks/branch-flow-guard.bats` (if present): update tests to
-  match the new behavior. Drop the `dev`-base tests; keep the
-  direct-push-block tests.
+- **The solo operator (default)** — `--allow-branch-skip` is no
+  longer required. Existing PRs that include the flag continue to
+  work; the flag is now a no-op in `single-tier` mode.
+- **Team operators on `three-stage`** — must set
+  `WALTER_BRANCH_FLOW=three-stage` in their overlay. The hook
+  behaviour matches the pre-ADR rule once the variable is set.
 
-### Knock-on effects elsewhere
+### Implementation slice in this PR
 
-- Open PRs that used `--allow-branch-skip` in their command lines no
-  longer need it — the next session can drop the flag without
-  blockage.
-- Recent PRs (#35, #45, #47) that referenced this ADR in their
-  branch-skip justification can have that justification removed in
-  follow-up CHANGELOG / spec hygiene.
+- `hooks/branch-flow-guard.sh` — reads `WALTER_BRANCH_FLOW`,
+  defaults to `single-tier`. In `three-stage` mode, enforces the
+  original `feature → dev → staging → main` gate with
+  `--allow-branch-skip` bypass.
+- `tests/hooks/branch-flow-guard.bats` — covers both modes plus the
+  default-when-unset behaviour.
+- `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, the contexts/, the
+  commands/, the skills/, and `agents/implementer.md` — describe
+  the default flow but cross-reference this ADR for the
+  configurable alternative.
 
 ### Future re-evaluation
 
-When the project crosses any of the scale triggers in "Why not the
-alternatives", revisit this ADR. The expected next form is `feature/*
-→ release/x.y` (release-branch model), not the original three-tier
-flow.
+Revisit if a third common pattern emerges (release-branch model,
+trunk-based with feature flags, etc.). The next likely extension is
+adding `release/x.y` as a target in `single-tier` mode for projects
+that cut tag branches.
 
 ## References
 
 - Issue #43 — branch flow rule vs reality
-- `AGENTS.md` "Branch flow (non-negotiable)" section
+- `AGENTS.md` "Branch flow" section
 - `hooks/branch-flow-guard.sh`
-- PRs #35, #45, #47 (recent examples of `--allow-branch-skip` as the
-  default)
+- PRs #35, #45, #47 (recent examples that ran into the rule)
+- Issue #50 — pre-existing `tests/oss/` failures (not directly
+  related; surfaced during the implementation of this ADR)
