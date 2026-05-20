@@ -38,11 +38,23 @@ auditable than a community plugin.
 # Verify SSH alias resolves
 ssh "${WALTER_VM_SSH_ALIAS}" echo ok
 
-# Verify Syncthing API is reachable from hub
-ssh "${WALTER_VM_SSH_ALIAS}" \
-  curl -sf -H "X-API-Key: ${SYNCTHING_API_KEY}" \
+# Verify Syncthing API is reachable from hub.
+# Header value contains a space ("X-API-Key: <key>"), so we must quote it
+# the way the remote shell will re-parse — ssh joins argv with spaces
+# and the remote sh re-tokenises, splitting the header into `-H` +
+# `X-API-Key:` + `<key>` and breaking curl. Use printf '%q' on the
+# header to round-trip the embedded space correctly:
+ssh "${WALTER_VM_SSH_ALIAS}" -- curl -sf \
+  -H "$(printf '%q' "X-API-Key: ${SYNCTHING_API_KEY}")" \
   http://127.0.0.1:8384/rest/system/ping
 # Expected: {"ping":"pong"}
+#
+# In practice all the operator API calls in this skill use the
+# ssh_to_hub() wrapper defined under "Idempotent reconciliation"
+# below, which centralises the printf '%q' quoting and uses stdin for
+# arbitrary-byte payloads. The example above is the bare equivalent
+# operators can run to validate connectivity before installing the
+# wrapper.
 ```
 
 ## Common operations
@@ -98,13 +110,19 @@ FOLDER_JSON="$(jq -n \
     devices: []
   }')"
 
-ssh "${WALTER_VM_SSH_ALIAS}" \
-  curl -sf -X POST \
-    -H "X-API-Key: ${SYNCTHING_API_KEY}" \
-    -H "Content-Type: application/json" \
-    --data "${FOLDER_JSON}" \
-    http://127.0.0.1:8384/rest/config/folders
+printf '%s' "${FOLDER_JSON}" | ssh "${WALTER_VM_SSH_ALIAS}" -- curl -sf \
+  -X POST \
+  -H "$(printf '%q' "X-API-Key: ${SYNCTHING_API_KEY}")" \
+  -H "Content-Type: application/json" \
+  --data-binary @- \
+  http://127.0.0.1:8384/rest/config/folders
 ```
+
+The JSON body goes over stdin (`--data-binary @-`) so we never
+have to worry about quotes, braces, or newlines in the payload
+getting re-tokenised by the remote shell. The headers still travel
+over argv and are quoted with `printf '%q'` so that `X-API-Key:
+<key>` stays one argument all the way to `curl`.
 
 ### Reload Syncthing config after changes
 
