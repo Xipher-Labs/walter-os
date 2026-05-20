@@ -132,24 +132,25 @@ superpowers) enforces this.
    live in `tests/business/<project>/` and validate end-to-end legal/operational
    flows, not just code paths.
 
-### Branch flow (non-negotiable)
+### Branch flow
 
 ```
-feature/<slug> → dev → staging → main
+feature/<slug> → main
 ```
 
-- `dev`: local docker-compose, Postgres in container, `.env.local` only.
-- `staging`: Vercel + Supabase staging project, anonymized realistic data.
+- `feature/<slug>` (or `fix/<slug>` / `chore/<slug>`): all work happens here.
 - `main`: production. Tagged with semver on merge.
 
-PRs must target the next level. Skipping levels is blocked by
-`hooks/branch-flow-guard.sh`. Hotfix to main requires `--allow-branch-skip`
-flag + justification in PR body.
+PRs target `main` directly. Direct push to `main` (and to `master`,
+`staging`, `production` if those branches ever exist) is blocked
+unconditionally by `hooks/branch-flow-guard.sh` — there is no bypass.
 
-Exception on record: the six Council v2 branches (F through V) were cut from
-each other in a chain with no intermediate `dev` branch. Each PR body documents
-the `--allow-branch-skip` justification. Post-merge, the `dev` branch will be
-re-established.
+The decision to drop the previously-documented three-stage flow
+(`feature → dev → staging → main`) is captured in
+`docs/decisions/0013-solo-operator-merge-policy.md`. Revisit when the
+project crosses the scale triggers in that ADR (multi-contributor
+weekly cadence, staging environment that needs a deploy branch, or
+>5 in-flight PRs at any one time).
 
 ### Definition of Done
 

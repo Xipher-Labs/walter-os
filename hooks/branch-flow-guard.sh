@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # branch-flow-guard.sh
-# Enforces: feature/* → dev → staging → main
-# Also: blocks auto-PR creation on remotes matching WALTER_MANUAL_PR_REMOTE_PATTERN
-# (opt-in, default disabled).
+# Enforces the Walter-OS branch policy at the Claude Code PreToolUse layer.
+#
+# Policy (see docs/decisions/0013-solo-operator-merge-policy.md):
+#   - Direct push to main / master / staging / production is forbidden.
+#   - Direct push from main / master / staging / production is forbidden
+#     (the operator should be on a feature branch).
+#   - PR creation does NOT require a specific base branch: feature/* can
+#     target main directly. The previous three-stage flow
+#     (feature → dev → staging → main) was retired in ADR 0013.
+#   - Optional: WALTER_MANUAL_PR_REMOTE_PATTERN forces manual PR creation
+#     on matching remotes (opt-in, default disabled).
 #
 # Hooked into Claude Code's PreToolUse for the Bash tool, matching commands
 # that look like `gh pr create` or `git push origin <branch>`.
@@ -43,10 +51,6 @@ block() {
 # Set WALTER_MANUAL_PR_OVERRIDE_FLAG to a custom --flag to allow bypass (default:
 # --allow-manual-pr). Leave WALTER_MANUAL_PR_REMOTE_PATTERN empty (the default) to
 # disable enforcement entirely.
-#
-# Example (.env.local or secrets.env):
-#   WALTER_MANUAL_PR_REMOTE_PATTERN=acme-corp   # enforce on remotes containing "acme-corp"
-#   WALTER_MANUAL_PR_OVERRIDE_FLAG=--allow-acme-pr  # optional custom bypass flag
 
 MANUAL_PR_PATTERN="${WALTER_MANUAL_PR_REMOTE_PATTERN:-}"
 MANUAL_PR_OVERRIDE="${WALTER_MANUAL_PR_OVERRIDE_FLAG:---allow-manual-pr}"
@@ -63,41 +67,9 @@ if [[ -n "$MANUAL_PR_PATTERN" ]]; then
   esac
 fi
 
-# ---------- 2. Branch flow: enforce next-level merge ----------
-
-if echo "$CMD" | grep -qE '^[[:space:]]*gh[[:space:]]+pr[[:space:]]+create'; then
-  # Try to extract --base flag; default to current default branch
-  BASE="$(echo "$CMD" | grep -oE -- '--base[[:space:]]+[^[:space:]]+' | awk '{print $2}' || echo "")"
-  if [[ -z "$BASE" ]]; then
-    BASE="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")"
-  fi
-
-  case "$BRANCH" in
-    feature/*|fix/*|chore/*)
-      if [[ "$BASE" != "dev" ]]; then
-        if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
-          block "Branch flow: feature branches must target 'dev', not '${BASE}'. Use --allow-branch-skip with justification for hotfixes."
-        fi
-      fi
-      ;;
-    dev)
-      if [[ "$BASE" != "staging" ]]; then
-        if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
-          block "Branch flow: 'dev' must merge to 'staging', not '${BASE}'."
-        fi
-      fi
-      ;;
-    staging)
-      if [[ "$BASE" != "main" ]]; then
-        if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
-          block "Branch flow: 'staging' must merge to 'main', not '${BASE}'."
-        fi
-      fi
-      ;;
-  esac
-fi
-
-# ---------- 3. Block direct push to protected branches ----------
+# ---------- 2. Block direct push to (or from) protected branches ----------
+# The previous three-stage branch-flow gate (feature → dev → staging → main)
+# was retired in ADR 0013. The protected-branch push block stays.
 
 if echo "$CMD" | grep -qE '^[[:space:]]*git[[:space:]]+push'; then
   for protected in main master staging production; do

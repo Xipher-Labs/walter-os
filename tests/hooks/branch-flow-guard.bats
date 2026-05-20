@@ -1,5 +1,9 @@
 #!/usr/bin/env bats
 # Tests for hooks/branch-flow-guard.sh
+#
+# Policy enforced by the hook (per ADR 0013):
+#   - feature/* may target main directly (no dev → staging → main gate)
+#   - direct push to or from main/master/staging/production is forbidden
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -28,18 +32,13 @@ input_json() {
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }
 
-@test "blocks gh pr create from feature/* to main" {
+@test "allows gh pr create from feature/* to main (ADR 0013 — direct flow)" {
   result="$(input_json "gh pr create --base main --title test" | "$HOOK")"
-  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
-}
-
-@test "allows gh pr create from feature/* to dev" {
-  result="$(input_json "gh pr create --base dev --title test" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }
 
-@test "allows --allow-branch-skip override" {
-  result="$(input_json "gh pr create --base main --allow-branch-skip --title hotfix" | "$HOOK")"
+@test "allows gh pr create from feature/* with no explicit --base" {
+  result="$(input_json "gh pr create --title test" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }
 
@@ -55,7 +54,33 @@ input_json() {
   [ "$(jq -r '.decision' <<<"$result")" = "block" ]
 }
 
+@test "blocks direct push to master" {
+  git checkout -q -b master
+  result="$(input_json "git push origin master" | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
+
+@test "blocks direct push to production" {
+  git checkout -q -b production
+  result="$(input_json "git push origin production" | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
+
 @test "allows push to feature branch" {
   result="$(input_json "git push origin feature/test" | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
+}
+
+@test "manual-PR remote pattern blocks gh pr create without override flag" {
+  export WALTER_MANUAL_PR_REMOTE_PATTERN=example/test
+  result="$(input_json "gh pr create --title test" | "$HOOK")"
+  unset WALTER_MANUAL_PR_REMOTE_PATTERN
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
+
+@test "manual-PR remote pattern allows with override flag" {
+  export WALTER_MANUAL_PR_REMOTE_PATTERN=example/test
+  result="$(input_json "gh pr create --allow-manual-pr --title test" | "$HOOK")"
+  unset WALTER_MANUAL_PR_REMOTE_PATTERN
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }

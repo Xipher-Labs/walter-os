@@ -99,7 +99,7 @@ jobs:
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "ci"
-      - name: Run hook + agent + wiki + litellm + walter-bridge tests
+      - name: Run hook + agent + wiki + litellm + walter-bridge + cli + walter + oss tests
         run: |
           bats \
             tests/hooks/ \
@@ -107,8 +107,10 @@ jobs:
             tests/wiki/ \
             tests/litellm/ \
             tests/walter-bridge/ \
-            tests/scripts/secrets-identity-init.bats \
-            tests/oss/secrets-runtime-docs.bats
+            tests/cli/ \
+            tests/walter/ \
+            tests/oss/ \
+            tests/scripts/secrets-identity-init.bats
 
   install-dry-run:
     name: install.sh --dry-run
