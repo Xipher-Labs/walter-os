@@ -23,33 +23,7 @@ cleanup pass. The big-rock founder-skills epic (issue #4 — terms,
 financial-plan, hiring, legal-doc-review, track-pending) moves to
 v0.4.0 to keep the v0.3.0 cycle short.
 
-### Removed
-
-- `scripts/syncthing-bootstrap.sh` — operator-specific Syncthing folder
-  registration script (extracted to the operator's private overlay).
-  The CLI subcommand `walter-os syncthing-bootstrap` now discovers the
-  operator's script via a three-tier lookup:
-  `${WALTER_OPERATOR_SCRIPTS_DIR}` env var, then
-  `~/.config/walter-os/overlay/scripts/`, then
-  `~/config-personal/scripts/`. See `skills/syncthing-cli/SKILL.md`
-  for the depersonalized guide and `walter-os syncthing-bootstrap
-  --help` for the live discovery order. Refs:
-  `docs/specs/syncthing-script-extraction.md`. (from PR #45)
-
-- Three-stage branch-flow gate is no longer the only path. The hook
-  (`hooks/branch-flow-guard.sh`) now reads `WALTER_BRANCH_FLOW` from
-  the operator overlay: default `single-tier` → `feature/<slug>` →
-  `main`; opt-in `three-stage` → `feature → dev → staging → main`
-  (the original gate, preserved for teams with a real staging
-  environment). Direct push to protected branches is blocked
-  unconditionally in both modes. See ADR 0013 for the trade-off.
-  (from PR #49)
-
 ### Added
-
-- `skills/syncthing-cli/SKILL.md` — depersonalized guide for talking
-  to a Syncthing hub via REST over SSH. Sibling of the existing
-  `*-cli` skills (`postgres-cli`, `hcloud-cli`, etc.). (from PR #45)
 
 - `skills/readme-craft/SKILL.md` — opinionated README authoring guide
   for project / profile / hackathon / OSS-publication templates,
@@ -71,7 +45,8 @@ v0.4.0 to keep the v0.3.0 cycle short.
   layer is now explicit in the top-level summary. (from PR #32)
 
 - `docs/decisions/0013-solo-operator-merge-policy.md` — ADR for the
-  branch-flow retirement. (from PR #49)
+  branch-flow change. Documents both single-tier (new default) and
+  three-stage (opt-in) modes with the trade-off framing. (from PR #49)
 
 - CI bats job now covers `tests/cli/`, `tests/walter/`, and 11 of
   the 13 `tests/oss/` bats files. Closes the gap that bit PR #45
@@ -83,28 +58,26 @@ v0.4.0 to keep the v0.3.0 cycle short.
 
 ### Changed
 
-- `bin/walter-os syncthing-bootstrap` no longer execs a script
-  bundled in the OSS repo. It delegates to operator-supplied scripts
-  via the three-tier discovery order or exits 2 with actionable
-  next-step instructions when none is found. (from PR #45)
+- `hooks/branch-flow-guard.sh` is now configurable via
+  `WALTER_BRANCH_FLOW` in the operator overlay: default
+  `single-tier` (feature → main, recommended for solo operators and
+  small teams) or opt-in `three-stage` (feature → dev → staging →
+  main, for teams with a real staging environment). The original
+  three-stage logic is preserved behind the opt-in. Direct push to
+  protected branches is blocked unconditionally in both modes.
+  (from PR #49)
 
 - `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `commands/pr.md`,
   `skills/pr-review/SKILL.md`,
   `skills/definition-of-done-validator/SKILL.md`,
   `agents/implementer.md`, and the context files
   (`contexts/{work,projects-personal}/AGENTS.md`) all updated to
-  reflect the single-tier branch flow (ADR 0013). (from PR #49)
+  describe both branch-flow modes (ADR 0013). (from PR #49)
 
 - `mcp/servers.json` — `elevenlabs` MCP pinned to `elevenlabs-mcp==0.9.1`
   (exact uvx version). Audit pinning rules (`npx`, `uvx`, `git`)
   documented explicitly in `skills/daily-supply-chain-audit/SKILL.md`.
   (from PR #48)
-
-### Fixed
-
-- `skills/syncthing-cli/SKILL.md` — `printf '%q'` quoting for SSH
-  argv + stdin piping for JSON bodies, mitigates the same class of
-  issues flagged in security audit P1-04. (from PR #45)
 
 ### Issues closed by this release
 
@@ -120,6 +93,27 @@ v0.4.0 to keep the v0.3.0 cycle short.
 - #50 — pre-existing `tests/oss/` failures (`depersonalization AC-3`,
   `security-no-weak-defaults A-1`) — block the full `tests/oss/`
   glob inclusion
+
+### Previously in [Unreleased] before merge (from PR #45)
+
+- **Removed**: `scripts/syncthing-bootstrap.sh` — operator-specific
+  Syncthing folder registration script. CLI subcommand
+  `walter-os syncthing-bootstrap` now discovers the operator's
+  script via a three-tier lookup:
+  `${WALTER_OPERATOR_SCRIPTS_DIR}` env var, then
+  `~/.config/walter-os/overlay/scripts/`, then
+  `~/config-personal/scripts/`. Operators with an existing local
+  script must move it to one of these locations. See
+  `skills/syncthing-cli/SKILL.md` and `walter-os
+  syncthing-bootstrap --help`.
+- **Added**: `skills/syncthing-cli/SKILL.md` — depersonalized guide
+  for talking to a Syncthing hub via REST over SSH (idempotent
+  reconciliation, `.stignore` seeding). Sibling of `postgres-cli`,
+  `hcloud-cli`, etc.
+- **Changed**: `bin/walter-os syncthing-bootstrap` no longer execs
+  a script bundled in the OSS repo. Delegates to operator-supplied
+  scripts via the three-tier discovery order or exits 2 with
+  actionable next-step instructions when none is found.
 
 ---
 
