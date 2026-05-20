@@ -138,8 +138,11 @@ set -euo pipefail
 
 API="http://127.0.0.1:8384/rest"
 
-# Wrap ssh in a function so the alias is always properly quoted — avoids
-# word-splitting if the operator's SSH config alias contains spaces.
+# Wrap ssh in a small function so every call passes through one
+# consistently-quoted path. Each invocation's arguments stay as separate
+# argv tokens through the SSH transport (the remote shell does not re-parse
+# them as a single string), which is the safe pattern recommended by the
+# walter-os security audit (P1-04 mitigation). See `walter-os audit` output.
 ssh_to_hub() { ssh "${WALTER_VM_SSH_ALIAS}" "$@"; }
 
 api_get()  { ssh_to_hub curl -sf -H "X-API-Key: ${SYNCTHING_API_KEY}" "${API}/$1"; }
