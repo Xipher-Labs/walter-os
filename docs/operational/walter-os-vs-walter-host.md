@@ -201,9 +201,12 @@ access path instead of Cloudflare Tunnel.
 
 ```bash
 # 0. Required env (export before running the scripts below).
-#    Each Cloudflare script reads its inputs from environment variables.
+#    The Cloudflare scripts use the v4 API "Global Key" auth pair, not a
+#    scoped token; values come from ~/.config/walter-os/secrets.env.
+export CF_EMAIL="<your-cloudflare-account-email>"
+export CF_KEY="<cloudflare-global-api-key>"
+export CF_ACCOUNT="<cloudflare-account-id>"
 export WALTER_DOMAIN="your-walter-domain.example"     # apex zone you control
-export CF_API_TOKEN="<cloudflare-api-token>"          # Zone + DNS edit scopes
 export VM_HOST="root@<vm-ip-or-hostname>"             # SSH target for the VM
 # Service hostnames default to <service>.${WALTER_DOMAIN}; override via
 # WALTER_SERVICES_DOMAIN if you want a separate subdomain hierarchy.
@@ -214,24 +217,28 @@ scp setup/walter-host/bootstrap-vm.sh "$VM_HOST":/tmp/
 ssh "$VM_HOST" "bash /tmp/bootstrap-vm.sh"
 
 # 3. Set up Cloudflare Tunnel (for public HTTPS access).
-#    01-create-zone.sh creates the zone (uses WALTER_DOMAIN + CF_API_TOKEN)
-#    and prints the ZONE_ID — capture it for the next step:
-ZONE_ID="$(./setup/walter-host/cloudflare/01-create-zone.sh)"
-export ZONE_ID                                        # consumed by step 02
-./setup/walter-host/cloudflare/02-create-tunnel.sh    # creates tunnel, prints TUNNEL_ID
-./setup/walter-host/cloudflare/03-install-cloudflared.sh  # uses $VM_HOST
-./setup/walter-host/cloudflare/04-create-access.sh    # uses $WALTER_DOMAIN
+#    01-create-zone.sh takes the domain as a positional arg, creates the
+#    zone, and prints the ZONE_ID on stdout — capture it for the next
+#    script. 02-create-tunnel.sh also reads ZONE_ID from the env.
+ZONE_ID="$(./setup/walter-host/cloudflare/01-create-zone.sh "$WALTER_DOMAIN")"
+export ZONE_ID
+./setup/walter-host/cloudflare/02-create-tunnel.sh "$WALTER_DOMAIN"
+./setup/walter-host/cloudflare/03-install-cloudflared.sh "$VM_HOST"
+./setup/walter-host/cloudflare/04-create-access.sh "$WALTER_DOMAIN"
 
-# 4. Deploy services
-docker compose up -d
+# 4. Deploy services ON THE VM (not on your local workstation):
+ssh "$VM_HOST" "cd /opt/walter-host && docker compose up -d"
+# `/opt/walter-host` is the bootstrap-default clone path; adjust if you
+# cloned walter-host to a different directory on the VM.
 
 # 5. Configure workstation to use your walter-host services
 # Set WALTER_DOMAIN in personal.env (same value as step 0).
 ```
 
-> Every script in `setup/walter-host/cloudflare/` prints `--help` when run
-> with no args. If any step exits non-zero, fix the missing input and
-> re-run only that step — they are designed to be idempotent.
+> Every script in `setup/walter-host/cloudflare/` reads each `:?must set`
+> guard at the top. If a step exits non-zero, the error names the missing
+> env var or positional arg. The scripts are idempotent — re-running them
+> after fixing the input is safe.
 
 **Required**: `WALTER_GITHUB_ORG` and `WALTER_DOMAIN` in personal.env.
 The walter-host bootstrap currently creates and uses the fixed server account
