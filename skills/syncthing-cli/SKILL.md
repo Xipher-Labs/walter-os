@@ -26,7 +26,11 @@ auditable than a community plugin.
 - SSH alias `${WALTER_VM_SSH_ALIAS}` configured in `~/.ssh/config`.
 - Syncthing container running on the hub VM, API accessible at
   `http://127.0.0.1:8384` from the hub's localhost.
-- `jq` installed on the hub VM (`apt-get install jq` or equivalent).
+- `jq` installed on the **operator's local machine** — the bootstrap
+  script runs locally and pipes SSH stdout through `jq` to parse JSON
+  responses. (`brew install jq` is already in `setup/Brewfile`.)
+- `curl` available on the hub VM (universal default; verify with
+  `ssh "${WALTER_VM_SSH_ALIAS}" which curl`).
 - Syncthing API key stored in `~/.config/walter-os/secrets.env` as
   `SYNCTHING_API_KEY`. Never hardcode in scripts.
 
