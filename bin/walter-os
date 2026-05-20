@@ -474,9 +474,42 @@ cmd_secrets_clear() {
 }
 
 # ---------- syncthing-bootstrap (pre-register folders on the VM hub) ----------
+# Discovery order (highest → lowest precedence):
+#   1. ${WALTER_OPERATOR_SCRIPTS_DIR}/syncthing-bootstrap.sh  (env var)
+#   2. ${HOME}/.config/walter-os/overlay/scripts/syncthing-bootstrap.sh
+#   3. ${HOME}/config-personal/scripts/syncthing-bootstrap.sh
 
 cmd_syncthing_bootstrap() {
-  exec "${WALTER_OS_HOME}/scripts/syncthing-bootstrap.sh" "$@"
+  if [[ "${1:-}" =~ ^(--help|-h|help)$ ]]; then
+    echo "walter-os syncthing-bootstrap — register folders on the Syncthing hub VM"
+    echo ""
+    echo "Usage: walter-os syncthing-bootstrap [args...]"
+    echo ""
+    echo "Discovery order (first found wins):"
+    echo "  1. \${WALTER_OPERATOR_SCRIPTS_DIR}/syncthing-bootstrap.sh"
+    echo "  2. \${HOME}/.config/walter-os/overlay/scripts/syncthing-bootstrap.sh"
+    echo "  3. \${HOME}/config-personal/scripts/syncthing-bootstrap.sh"
+    echo ""
+    echo "See skills/syncthing-cli/SKILL.md for the idempotent reconciliation"
+    echo "pattern and instructions for writing your operator bootstrap script."
+    exit 0
+  fi
+  local candidates=(
+    "${WALTER_OPERATOR_SCRIPTS_DIR:+${WALTER_OPERATOR_SCRIPTS_DIR}/syncthing-bootstrap.sh}"
+    "${HOME}/.config/walter-os/overlay/scripts/syncthing-bootstrap.sh"
+    "${HOME}/config-personal/scripts/syncthing-bootstrap.sh"
+  )
+  for candidate in "${candidates[@]}"; do
+    [[ -n "$candidate" && -f "$candidate" && -x "$candidate" ]] || continue
+    # shellcheck disable=SC2093  # exec is intentional — replaces process so
+    # the rest of the function never runs once a candidate is found.
+    exec "$candidate" "$@"
+  done
+  echo "walter-os: no operator script found for syncthing-bootstrap." >&2
+  echo "  Add your script to one of the discovery paths listed in:" >&2
+  echo "  skills/syncthing-cli/SKILL.md (section: Operator customization pointer)" >&2
+  echo "  Run: walter-os syncthing-bootstrap --help  for the full discovery order." >&2
+  exit 2
 }
 
 # ---------- agent-memory ----------
