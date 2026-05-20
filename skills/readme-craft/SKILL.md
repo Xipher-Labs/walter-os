@@ -306,8 +306,19 @@ typically follows:
    blank page is faster than editing a bad first draft.
 3. After draft: walk the anti-patterns list and remove any that
    applied.
-4. Pick one statistical widget IF this is a profile README. Pin to a
-   commit SHA from the upstream tool.
+4. Pick one statistical widget IF this is a profile README. Most
+   widgets are served as SVG endpoints from a third-party host
+   (`raw.githubusercontent.com/...`, `github-readme-stats.vercel.app`,
+   etc.) — there is no commit SHA you can pin to. Supply-chain
+   defense in this layer is therefore: (a) verify the upstream repo
+   is actively maintained (commit within the last ~6 months), (b)
+   prefer hosts the operator already trusts, (c) lock the widget's
+   query string to a known-good config (so the rendered output does
+   not silently change), and (d) re-audit on every quarterly upgrade
+   pass.
+   GitHub Actions that *update* the README on a schedule DO have
+   pinnable SHAs — for those, follow the same supply-chain rule as
+   any other action.
 5. Curate badges. Drop anything that fails the "what question does this
    answer" test.
 6. Add a hero artifact LAST — only after the core content is solid.
@@ -319,8 +330,12 @@ typically follows:
 - **Never publish a README without an SPDX license identifier.** A
   PR / commit that adds operator-facing public material with no
   license is incomplete.
-- **Pin upstream tools to commit SHAs**, never branch names or moving
-  tags. Same supply-chain rule as MCP servers.
+- **Pin pinnable upstream tools to commit SHAs** — GitHub Actions and
+  any tool you `git clone` or `npm install`. Use the same supply-chain
+  rule as MCP servers. (Statistical-widget SVG endpoints are NOT
+  pinnable; see "Operator workflow" step 4 for the alternative
+  hardening — verify maintenance, trusted host, locked query string,
+  quarterly re-audit.)
 - **Never embed widgets that require third-party tracking** (visitor
   counters that log IPs, follower-history services that scrape on
   behalf of an authenticated user).
