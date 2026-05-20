@@ -36,12 +36,13 @@ v0.4.0 to keep the v0.3.0 cycle short.
   --help` for the live discovery order. Refs:
   `docs/specs/syncthing-script-extraction.md`. (from PR #45)
 
-- Three-stage branch-flow gate (`feature → dev → staging → main`)
-  retired in `hooks/branch-flow-guard.sh`. New canonical flow is
-  `feature/<slug> → main`. The `--allow-branch-skip` flag is no
-  longer needed (every recent PR used it as the default; see ADR
-  0013). Direct push to protected branches (`main`, `master`,
-  `staging`, `production`) is still blocked unconditionally.
+- Three-stage branch-flow gate is no longer the only path. The hook
+  (`hooks/branch-flow-guard.sh`) now reads `WALTER_BRANCH_FLOW` from
+  the operator overlay: default `single-tier` → `feature/<slug>` →
+  `main`; opt-in `three-stage` → `feature → dev → staging → main`
+  (the original gate, preserved for teams with a real staging
+  environment). Direct push to protected branches is blocked
+  unconditionally in both modes. See ADR 0013 for the trade-off.
   (from PR #49)
 
 ### Added
