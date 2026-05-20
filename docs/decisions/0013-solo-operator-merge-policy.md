@@ -24,16 +24,17 @@ project:
    the "hotfix" escape hatch is the default path.
 
 2. **Walter-OS is operator-only today.** The bypass list in branch
-   protection includes `f0x1777`. Any "required review" gate is
-   bypassed for the solo operator on every merge anyway. Three-stage
-   promotion does not provide value when nobody downstream is going to
-   integration-test a `dev` branch against other in-flight PRs.
+   protection includes the operator account. Any "required review"
+   gate is bypassed for the solo operator on every merge anyway.
+   Three-stage promotion does not provide value when nobody downstream
+   is going to integration-test a `dev` branch against other in-flight
+   PRs.
 
-3. **Three new contributors have already submitted PRs** (`@MzzuMrz` via
-   PR #36, the Copilot bot via PR #48, the codex bot via PR #32). They
-   all opened against `main` because that is what the README, the
-   CONTRIBUTING flow, and the GitHub UI all point at. Asking them to
-   target a `dev` branch that does not exist is a documentation /
+3. **Three new contributors have already submitted PRs** (one external
+   via PR #36, the Copilot bot via PR #48, the codex bot via PR #32).
+   They all opened against `main` because that is what the README,
+   the CONTRIBUTING flow, and the GitHub UI all point at. Asking them
+   to target a `dev` branch that does not exist is a documentation /
    reality mismatch.
 
 The cost of keeping the documented rule is real:
