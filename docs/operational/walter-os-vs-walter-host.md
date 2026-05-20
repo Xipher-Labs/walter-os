@@ -23,43 +23,64 @@ LiteLLM).
 
 ---
 
-## Deployment patterns
+## Adoption modes
 
-Four patterns are supported. Choose based on your situation.
+There are four ways to use Walter-OS. These are adoption modes, not maturity
+levels. Choose the smallest mode that gives you value.
 
-| Pattern | Setup | When to use | Recommended? |
+| Mode | Setup | When to use | Recommended? |
 |---|---|---|---|
-| **Client-only** | walter-os on workstation, no walter-host | Just the agent framework; use SaaS for git, issues, and LLM APIs | **Yes** — for individual users starting out |
-| **Local walter-host** | Both walter-os and walter-host on the same machine (laptop or desktop) | Single-user development, full offline capability, testing the full stack | **Acceptable but discouraged** — resource intensive, no multi-device access |
-| **Remote walter-host** | walter-os on workstation, walter-host on a dedicated VM (Hetzner CX31 or equivalent) | Production use, multi-device access, team usage | **Yes — recommended default** for operators who want full self-hosting |
-| **Homelab walter-host** | walter-host on a local server (Proxmox, bare metal, mini-PC) | Privacy-first, no cloud spend, full control over data | **Yes** — for privacy-focused operators |
+| **Clone-only reference** | Clone the repo; do not run `install.sh` | Study the system, copy an `AGENTS.md` pattern, review skills/hooks/specs before installing, or use it as an operating playbook | **Yes** — for evaluation and lightweight reuse |
+| **Client install** | Install walter-os on your workstation, no walter-host | Make Claude Code and Codex CLI follow the same rules and workflows everywhere. Cursor adapter is backlog work — operators on Cursor today get the same operating model only by wiring a Cursor rules file by hand. | **Yes** — default starting point |
+| **Client + selected services** | Client install plus only the services you need, self-hosted or SaaS | Add Infisical, LiteLLM, the observability stack, Syncthing, n8n, or other pieces without running the full stack | **Yes** — best incremental path |
+| **Full walter-host** | Client install plus the complete server stack on a VM, homelab node, or local lab machine | Full private control plane for secrets, model routing, issue tracking, git hosting, dashboards, automation, backups, and Council operations | **Yes** — for operators who want full self-hosting |
 
 ### Trade-offs in detail
 
-**Client-only** is the right start for most operators. You install walter-os
-(`./install.sh`), set `WALTER_GITHUB_ORG` and a few other vars in
-`~/.config/walter-os/overlay/personal.env`, and have a working agent framework in
-minutes. You keep using GitHub, Linear, and the Anthropic API directly.
-No VM to maintain.
+**Clone-only reference** is the zero-footprint mode. You can read the global
+`AGENTS.md`, copy context templates, inspect hooks, browse skills, and adapt the
+workflow to another repo without writing anything to `~/.claude`,
+`~/.codex`, or `~/.config/walter-os`. This is the right mode when you are
+auditing Walter-OS before trusting it or only want the operating model.
 
-**Local walter-host** works but has a real cost: the full walter-host stack
-needs at least 4 GB RAM and significant CPU headroom (see
-`docs/operational/hosting-providers-comparison.md` for the resource floor).
-Running that on your laptop competes with your daily workload (IDE, browser,
-video calls). It is useful for testing the full stack without paying for a VM,
-or for operators who work from a powerful desktop with no multi-device needs.
+**Client install** is the right start for most operators. You install walter-os
+(client-only refresh: `./install.sh --check` then `./install.sh --upgrade` —
+this installs the symlinks, hooks, and MCP configs without running the
+walter-host bootstrap steps), scaffold `~/.config/walter-os/overlay/`, set
+`WALTER_GITHUB_ORG` and any provider-specific values, and have a working agent
+framework in minutes. You keep using GitHub, Linear, and the Anthropic API
+directly. No VM to maintain.
 
-**Remote walter-host (VM)** is the recommended production pattern because:
-1. Resources do not compete with your daily workload.
-2. The stack is accessible from any workstation via Tailscale or Cloudflare Tunnel.
-3. Cleaner separation of concerns: client code on your Mac, services on the VM.
-4. Hetzner CX31 (~€7/month) covers the minimum resource floor comfortably.
+> The bare `./install.sh` (no flags) launches the full interactive wizard,
+> which includes optional walter-host bootstrap steps (Plane, Postgres,
+> Docker, n8n, Infisical). Use `--upgrade` to stay client-only.
 
-**Homelab walter-host** is the best choice for operators who want full data
-sovereignty, no cloud spend, and are comfortable maintaining physical hardware.
-Proxmox on a repurposed server or a mini-PC like a NUC runs the stack well.
-The Tailscale-based access model in `setup/walter-host/` works equally well
-over a local network.
+**Client + selected services** is the incremental path. Add Infisical when shell
+secrets become hard to manage. Add LiteLLM when you want one model gateway,
+semantic model aliases, and spend/audit visibility. Add the observability stack
+or Control Tower when you need human-visible agent telemetry. Add Syncthing when
+you want memory and overlay material to follow you across trusted devices. Keep
+SaaS where it is still the better trade-off.
+
+**Full walter-host** is the complete private backend. It gives agents a private
+issue tracker, git host, secrets vault, model gateway, dashboards, automations,
+and backups. The cost is operational: DNS, tunnels, updates, backups,
+monitoring, and incident response become your responsibility.
+
+## Walter-host topologies
+
+Once you choose to run walter-host, it can live in three places:
+
+| Topology | Setup | When to use | Caveat |
+|---|---|---|---|
+| **Local lab** | walter-os and walter-host on the same laptop or desktop | Testing the full stack or working from a powerful single-user machine | Resource intensive; competes with IDE/browser/video calls |
+| **Remote VM** | walter-os on workstation, walter-host on a dedicated cloud VM | Production use, multi-device access, simple always-on operations | Monthly cloud spend; reference path is Hetzner Ubuntu 24.04 |
+| **Homelab node** | walter-host on local hardware such as Proxmox, bare metal, or a mini-PC | Privacy-first operation, no cloud spend, full data ownership | You own hardware reliability, power, backups, and remote access |
+
+Remote VM is the recommended default for operators who want full self-hosting
+without maintaining physical hardware. Homelab is best when data sovereignty is
+worth the extra operational work. Local lab is useful for validation but is not
+the preferred always-on setup.
 
 ---
 
@@ -88,7 +109,7 @@ walter-host (server — runs on a dedicated machine)
     │   ├── forgejo/         Self-hosted Git + CI
     │   ├── plane/           Project management
     │   ├── litellm/         LLM model gateway (walter-bridge)
-    │   ├── grafana/         Metrics dashboards
+    │   ├── observability/  Prometheus + Loki + Grafana stack
     │   ├── n8n/             Workflow automation
     │   └── ...              20+ additional services
     ├── cloudflare/          CF Tunnel + Access setup scripts
@@ -103,15 +124,32 @@ shared (root-level compose + configs used by both)
 
 ## Operator modes
 
-### Mode 1 — Client-only
+### Mode 1 — Clone-only reference
+
+Clone the repository and use it as a reference. Do not run installers.
+
+```bash
+git clone https://github.com/xipher-labs/walter-os ~/Projects/walter-os
+cd ~/Projects/walter-os
+less AGENTS.md
+find contexts skills commands hooks -maxdepth 2 -type f | sort
+```
+
+**Required**: nothing beyond Git.
+**Writes to your machine**: none outside the clone.
+**Use this for**: evaluation, security review, copying patterns into another
+repo, or learning the operating model before installing it.
+
+### Mode 2 — Client install
 
 Install walter-os on your workstation. Use SaaS for everything else.
 
 ```bash
-# Install
+# Install (client-only — skips the walter-host bootstrap wizard steps)
 git clone https://github.com/xipher-labs/walter-os ~/Projects/walter-os
 cd ~/Projects/walter-os
-./install.sh
+./install.sh --check       # verify minimum local requirements
+./install.sh --upgrade     # install symlinks, hooks, MCP configs only
 
 # Configure
 cp contexts/_examples/personal.env.example ~/.config/walter-os/overlay/personal.env
@@ -121,44 +159,91 @@ cp contexts/_examples/personal.env.example ~/.config/walter-os/overlay/personal.
 walter doctor
 ```
 
+> The bare `./install.sh` (no flags) launches the full interactive wizard
+> which includes optional walter-host bootstrap steps. Stick to `--upgrade`
+> for the client-only mode described here.
+
 **Required**: `WALTER_GITHUB_ORG` in personal.env.
 **Not required**: `WALTER_OPERATOR_USER`, `WALTER_DOMAIN` (use defaults).
 
-### Mode 2 — Full stack (walter-os + remote walter-host VM)
+### Mode 3 — Client + selected services
 
-Deploy walter-host on a VM, then connect walter-os on your workstation.
+Run walter-os client on your workstation, then add only the services that solve
+a real problem for your setup.
+
+Common examples:
+
+- Infisical for a centralized secrets vault and Machine Identity-based runtime
+  secrets.
+- LiteLLM for model aliases, routing, cost tracking, and audit visibility.
+- The observability stack (Prometheus, Loki, Grafana) or Control Tower for
+  human-visible agent telemetry.
+- Syncthing for trusted-device memory and overlay synchronization.
+- n8n for workflow automation that agents can trigger or inspect.
+
+You can use SaaS for the rest. For example: GitHub + Linear + Infisical +
+LiteLLM is a perfectly valid Walter-OS deployment.
+
+Deploy only the compose-backed services you need from
+`setup/walter-host/services/`. Some directories are runbooks, scripts, or
+templates rather than standalone compose surfaces, so check for `compose.yml`,
+`docker-compose.yml`, or `deploy.sh` before treating a directory as deployable.
+
+### Mode 4 — Full stack (walter-os + walter-host)
+
+Deploy walter-host on a VM, homelab node, or local lab machine, then connect
+walter-os on your workstation.
+
+The commands below are the **remote VM example**, which is the reference path
+for v0.2.0. Homelab and local-lab installs reuse the same service directories,
+but skip cloud VM provisioning and may use a local network or Tailscale-only
+access path instead of Cloudflare Tunnel.
 
 ```bash
+# 0. Required env (export before running the scripts below).
+#    The Cloudflare scripts use the v4 API "Global Key" auth pair, not a
+#    scoped token; values come from ~/.config/walter-os/secrets.env.
+export CF_EMAIL="<your-cloudflare-account-email>"
+export CF_KEY="<cloudflare-global-api-key>"
+export CF_ACCOUNT="<cloudflare-account-id>"
+export WALTER_DOMAIN="your-walter-domain.example"     # apex zone you control
+export VM_HOST="root@<vm-ip-or-hostname>"             # SSH target for the VM
+# Service hostnames default to <service>.${WALTER_DOMAIN}; override via
+# WALTER_SERVICES_DOMAIN if you want a separate subdomain hierarchy.
+
 # 1. Provision VM (Hetzner CX31 or equivalent, Ubuntu 24.04)
 # 2. Run bootstrap on VM
-scp setup/walter-host/bootstrap-vm.sh root@<vm-ip>:/tmp/
-ssh root@<vm-ip> "bash /tmp/bootstrap-vm.sh"
+scp setup/walter-host/bootstrap-vm.sh "$VM_HOST":/tmp/
+ssh "$VM_HOST" "bash /tmp/bootstrap-vm.sh"
 
-# 3. Set up Cloudflare Tunnel (for public HTTPS access)
-./setup/walter-host/cloudflare/01-create-zone.sh
-./setup/walter-host/cloudflare/02-create-tunnel.sh
-./setup/walter-host/cloudflare/03-install-cloudflared.sh
-./setup/walter-host/cloudflare/04-create-access.sh
+# 3. Set up Cloudflare Tunnel (for public HTTPS access).
+#    01-create-zone.sh takes the domain as a positional arg, creates the
+#    zone, and prints the ZONE_ID on stdout — capture it for the next
+#    script. 02-create-tunnel.sh also reads ZONE_ID from the env.
+ZONE_ID="$(./setup/walter-host/cloudflare/01-create-zone.sh "$WALTER_DOMAIN")"
+export ZONE_ID
+./setup/walter-host/cloudflare/02-create-tunnel.sh "$WALTER_DOMAIN"
+./setup/walter-host/cloudflare/03-install-cloudflared.sh "$VM_HOST"
+./setup/walter-host/cloudflare/04-create-access.sh "$WALTER_DOMAIN"
 
-# 4. Deploy services
-docker compose up -d
+# 4. Deploy services ON THE VM (not on your local workstation):
+ssh "$VM_HOST" "cd /opt/walter-host && docker compose up -d"
+# `/opt/walter-host` is the bootstrap-default clone path; adjust if you
+# cloned walter-host to a different directory on the VM.
 
 # 5. Configure workstation to use your walter-host services
-# Set WALTER_DOMAIN, WALTER_OPERATOR_USER in personal.env
+# Set WALTER_DOMAIN in personal.env (same value as step 0).
 ```
 
-**Required**: `WALTER_GITHUB_ORG`, `WALTER_DOMAIN`, `WALTER_OPERATOR_USER` in personal.env.
+> Every script in `setup/walter-host/cloudflare/` reads each `:?must set`
+> guard at the top. If a step exits non-zero, the error names the missing
+> env var or positional arg. The scripts are idempotent — re-running them
+> after fixing the input is safe.
+
+**Required**: `WALTER_GITHUB_ORG` and `WALTER_DOMAIN` in personal.env.
+The walter-host bootstrap currently creates and uses the fixed server account
+`walter`; custom server usernames are not a supported public install path yet.
 See `docs/operational/operator-setup-runbook.md` for the full walkthrough.
-
-### Mode 3 — Hybrid
-
-Run walter-os client on your workstation but only deploy a subset of
-walter-host services. Common hybrid: use GitHub + Linear (SaaS) but self-host
-LiteLLM for cost routing and Grafana for observability.
-
-Deploy only the services you need from `setup/walter-host/services/`.
-Each service directory has its own `compose.yml` that can be deployed
-independently.
 
 ---
 
@@ -184,7 +269,7 @@ there is no VM to connect to.
 Yes. The migration path is:
 1. Provision a VM (or repurpose hardware).
 2. Run `bootstrap-vm.sh` on the server.
-3. Update `WALTER_DOMAIN` and `WALTER_OPERATOR_USER` in personal.env.
+3. Update `WALTER_DOMAIN` in personal.env.
 4. Deploy walter-host services.
 5. Update your API keys to point at your self-hosted LiteLLM, Forgejo, etc.
 
