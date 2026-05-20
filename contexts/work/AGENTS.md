@@ -43,7 +43,7 @@ leave example values in production — they mislead the agent.
 
 ### PR flow
 
-- Branch: `feature/<slug>` → `dev` → `staging` → `main`
+- Branch: `feature/<slug>` → `main` (single-tier per ADR 0013).
 - Operator creates every PR manually (default). Override in overlay if
   your team trusts auto-PR.
 
