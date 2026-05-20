@@ -23,10 +23,12 @@ This release is still alpha, but the core idea is ready to study, fork, and
 improve.
 
 Walter-OS is an opinionated, single-repository operations framework that wires
-Claude Code, Codex CLI, Cursor, and a self-hosted VM together under the same
-agent contract, the same skills catalog, and the same MCP configuration. You
-fork it, apply a personal overlay, and get a consistent AI-agent environment
-that follows you across machines and tools.
+Claude Code, Codex CLI, and Cursor-friendly repo rules together under the same
+agent contract, the same skills catalog, and the same MCP configuration. A
+self-hosted service stack (`walter-host`) is the optional fourth layer — most
+adopters never deploy it, and the agent framework works fully without it.
+You fork the repo, apply a personal overlay, and get a consistent AI-agent
+environment that follows you across machines and tools.
 
 **Walter-OS IS**: an agent contract layer (`AGENTS.md` + context files), a
 curated skills library (50+ skills), a VM bootstrap stack (25+ self-hosted
@@ -83,21 +85,62 @@ overlay before it does anything useful for you.
 
 ## What is Walter-OS?
 
-Walter-OS ships two components that can be used independently:
+Walter-OS is deliberately split into two parts:
 
-- **walter-os (client framework)** — installs on your workstation (Mac or
-  Linux). Provides skills, agent contexts, the AGENTS.md cascade, the `walter`
-  CLI, and the Walter Council agents. **Requires no VM.** Works with your
-  existing GitHub, Linear, and Anthropic API accounts.
-- **walter-host (`setup/walter-host/`)** — an optional self-hosted service
-  stack for a dedicated server (VM, homelab, or same machine). Provides
-  Forgejo, Plane, LiteLLM cost routing, Grafana dashboards, n8n automation,
-  and the other services the Council agents talk to. Deploy this if you want
-  internal services instead of SaaS.
+- **walter-os (client framework)** — the local agent operating layer for your
+  workstation. It provides the `AGENTS.md` cascade, contexts, skills, commands,
+  hooks, the `walter` CLI, MCP profiles, and Walter Council agent definitions.
+  **It does not require a VM.**
+- **walter-host (`setup/walter-host/`)** — an optional self-hosted service stack
+  for a server, VM, homelab node, or local lab machine. It provides services
+  such as Infisical, LiteLLM, Plane, Forgejo, Grafana, n8n, Syncthing, and
+  Control Tower.
 
-Four deployment patterns are supported — from **client-only** (no server
-needed) to **homelab walter-host** (full data sovereignty). See
-`docs/operational/walter-os-vs-walter-host.md` for the full breakdown,
+You can adopt those parts in four ways:
+
+| Mode | What you do | What you get | Why it exists |
+|---|---|---|---|
+| **1. Clone-only reference** | Clone the repo and read/copy from it. Do not run `install.sh`. | The agent contract, workflow rules, skills, docs, specs, hooks, and service recipes as plain files. | Useful when you only want to study the operating model, copy an `AGENTS.md` pattern into another repo, audit the system before trusting it, or use Walter-OS as a playbook without changing your machine. |
+| **2. Client install** | Run `./install.sh` on your workstation and configure a personal overlay. | A consistent agent environment across repos: same global/context/repo `AGENTS.md` cascade, same skills catalog, same commands, same hooks, same MCP profiles, same CLI. | This is the default starting point. It makes Claude Code, Codex CLI, and repo-level agents behave consistently without asking you to self-host anything. Cursor can follow the same rules once you wire its rules file manually. |
+| **3. Client + selected services** | Keep the client install, then add only the services you need from `walter-host` or from existing SaaS. | Targeted upgrades such as Infisical for better secrets control, LiteLLM for model routing and spend visibility, Grafana for observability, Syncthing for memory/file sync, or n8n for automation. | Most operators do not need the full stack on day one. This lets you add control where it matters while keeping GitHub/Linear/hosted tools where they already work. |
+| **4. Full walter-host** | Deploy the self-hosted stack on a VM, homelab node, or local lab machine. | A complete operator control plane: secrets vault, model gateway, project tracker, git host, dashboards, automations, backups, and Control Tower for supervising agent activity. | This is for operators who want stronger data ownership, reproducible service wiring, human-visible agent telemetry, and a private backend for longer-running Council workflows. |
+
+The stack is built this way because the useful part should start small. You can
+use the repo as a reference with no install, install only the client to make
+agents behave consistently across every repo, and then add self-hosted services
+only when the additional control is worth the operational cost.
+
+Once installed, Walter-OS becomes the agent-behavior baseline for the tools you
+choose to wire into it. `install.sh` symlinks the global contract, skills,
+agents, commands, hooks, and MCP profiles into the local tool homes used by
+Claude Code and Codex CLI. Cursor can follow the same philosophy through a
+manual Cursor rules file today; a generated adapter is still backlog work. The
+goal is not to force a new editor; it is to make the same operating discipline
+available wherever you ask an agent to work.
+
+That discipline is loaded as a three-level `AGENTS.md` cascade:
+
+1. **Global layer** — Walter-OS's root `AGENTS.md`: shared philosophy, task
+   rigor, branch flow, review loop, safety gates, tool preferences, and default
+   skills.
+2. **Context layer** — a parent-directory working mode such as `work`,
+   `projects-personal`, `personal`, or `hackathons`, selected from cwd or
+   `WALTER_CONTEXT` and optionally overridden by your private overlay.
+3. **Repository layer** — the current repo's own `AGENTS.md`, where project
+   constraints, stack-specific rules, and local Definition of Done live.
+
+Conflicts resolve most-specific-wins: repo > context > global. This is what lets
+Walter-OS keep a consistent agent philosophy while still allowing each repo to
+override the parts that must be local.
+
+`walter-host` is not a requirement for Walter-OS. It is the optional control
+plane that increases leverage: Infisical centralizes secrets instead of spreading
+tokens across shell files, LiteLLM gives one model gateway with spend/audit
+visibility, Grafana and Control Tower make agent activity visible to the human
+operator, and Plane/Forgejo/n8n provide private workflow surfaces for agents to
+work against.
+
+See `docs/operational/walter-os-vs-walter-host.md` for the full breakdown,
 trade-offs, and which mode is right for your situation.
 
 ---
@@ -122,8 +165,8 @@ graph TD
         HOOKS["Shell hooks in hooks/"]
     end
 
-    subgraph "Layer 3 — Walter-VM + Walter Council"
-        VM["Hetzner CX53 VM"]
+    subgraph "Layer 3 — Walter-host + Walter Council"
+        VM["VM, homelab node,\nor local lab machine"]
         SVCS["25+ self-hosted services\n(Cloudflare Tunnel + Caddy)"]
         COUNCIL["Walter Council\n(6 specialized agents)"]
         CT["Control Tower\n(browser UI)"]
@@ -149,10 +192,11 @@ are slash commands (`/brainstorm`, `/write-plan`, `/execute-plan`). Hooks are
 shell scripts that run at key points in the git and Claude Code lifecycle
 (pre-commit, branch-flow guard, daily supply-chain audit).
 
-**Layer 3 — Walter-VM + Walter Council**: the VM runs the self-hosted services
-stack. The Walter Council is six specialized agents (triage, researcher, coder,
-reviewer, janitor, liaison) that work on Plane issues autonomously. Control
-Tower is the browser UI for monitoring and directing the Council.
+**Layer 3 — Walter-host + Walter Council**: walter-host runs the optional
+self-hosted services stack on a VM, homelab node, or local lab machine. The
+Walter Council is six specialized agents (triage, researcher, coder, reviewer,
+janitor, liaison) that work on Plane issues autonomously. Control Tower is the
+browser UI for monitoring and directing the Council.
 
 ---
 
@@ -391,16 +435,24 @@ Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `security`.
 
 ---
 
-## Quick start (client-only)
+## Quick start (mode 2 — client install)
+
+If you only want to evaluate Walter-OS as a reference, stop after cloning and
+read the repo. Nothing outside the clone changes until you run `install.sh`.
 
 ```bash
 git clone https://github.com/xipher-labs/walter-os.git /opt/walter-os && cd /opt/walter-os
 ./install.sh --check               # verify minimum local requirements
 ./install.sh --dry-run             # preview all writes before touching your config
 ./setup/personal-overlay-init.sh   # scaffold ~/.config/walter-os/overlay/
+./install.sh --upgrade             # install/refresh local symlinks, hooks, MCP configs
 ```
 
 This gives you the local agent contract, skills, CLI, and overlay structure.
+It is the mode that makes agents behave consistently across repositories once
+the global/context/repo `AGENTS.md` cascade and symlinked skills are installed.
+Claude Code and Codex CLI pick up the symlinked Walter-OS contract and skills;
+Cursor requires a manual Cursor rules file until the adapter is implemented.
 The optional self-hosted service stack is a separate step:
 
 ```bash
