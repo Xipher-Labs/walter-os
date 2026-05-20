@@ -138,24 +138,46 @@ set -euo pipefail
 
 API="http://127.0.0.1:8384/rest"
 
-# Wrap ssh in a small function so every call passes through one
-# consistently-quoted path. This reduces the surface for accidental
-# string interpolation at the call sites; it does NOT by itself prevent
-# remote command injection — OpenSSH still serialises the remote command
-# into a string that the remote login shell parses. Defense in depth:
-#   1. Allowlist any operator-supplied identifier (folder IDs, paths)
-#      against a strict regex such as ^[a-z0-9][a-z0-9_-]{0,63}$ BEFORE
-#      it reaches this wrapper.
-#   2. For values that may contain arbitrary bytes (file contents, JSON
-#      bodies), prefer piping over stdin (see the .stignore example
-#      below) or send a base64-encoded payload that a remote wrapper
-#      script decodes — never interpolate the raw value.
+# OpenSSH does not preserve argv quoting end-to-end: it joins the local
+# argv with spaces into a single string that the remote login shell then
+# re-tokenises. Passing `-H "X-API-Key: $key"` directly through
+# `ssh host curl ...` results in the remote shell seeing four tokens
+# (-H X-API-Key: <key> ...) instead of two (-H "X-API-Key: $key").
+# For headers and straight URLs we work around this with `printf '%q'`,
+# which produces shell-quoted output the remote shell re-parses back to
+# the original value. For arbitrary bytes (JSON bodies) we avoid the
+# argv path entirely and pipe via stdin — see api_post below.
+#
+# Defense in depth still applies:
+#   1. Allowlist operator-supplied identifiers (folder IDs, paths) against
+#      a strict regex such as ^[a-z0-9][a-z0-9_-]{0,63}$ BEFORE they
+#      reach this wrapper.
+#   2. For arbitrary-byte payloads, stdin is the only safe transport.
 #   3. See walter-os security audit P1-04 for the historical context.
-ssh_to_hub() { ssh "${WALTER_VM_SSH_ALIAS}" "$@"; }
+ssh_to_hub() {
+  local quoted=() a
+  for a in "$@"; do
+    quoted+=( "$(printf '%q' "$a")" )
+  done
+  ssh "${WALTER_VM_SSH_ALIAS}" "${quoted[@]}"
+}
 
-api_get()  { ssh_to_hub curl -sf -H "X-API-Key: ${SYNCTHING_API_KEY}" "${API}/$1"; }
-api_post() { ssh_to_hub curl -sf -X POST -H "X-API-Key: ${SYNCTHING_API_KEY}" \
-               -H "Content-Type: application/json" --data "$2" "${API}/$1"; }
+api_get() {
+  ssh_to_hub curl -sf -H "X-API-Key: ${SYNCTHING_API_KEY}" "${API}/$1"
+}
+
+# JSON bodies travel over stdin (--data-binary @-) rather than as a
+# command-line argument: this sidesteps the entire remote-shell
+# re-parsing problem for payloads that contain quotes, braces, or
+# newlines (every jq output).
+api_post() {
+  local path="$1" body="$2"
+  printf '%s' "$body" | ssh_to_hub curl -sf -X POST \
+    -H "X-API-Key: ${SYNCTHING_API_KEY}" \
+    -H "Content-Type: application/json" \
+    --data-binary @- \
+    "${API}/$path"
+}
 
 ensure_folder() {
   local folder_id="$1" folder_label="$2" folder_path="$3"
