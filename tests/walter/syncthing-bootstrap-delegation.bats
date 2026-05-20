@@ -79,6 +79,7 @@ EOF
   HOME="$TEST_HOME" WALTER_OPERATOR_SCRIPTS_DIR="$env_dir" \
     run "$WALTER_OS_BIN" syncthing-bootstrap
   rm -rf "$env_dir"
+  [ "$status" -eq 0 ]
   echo "$output" | grep -q "STUB_EXECD"
 }
 
@@ -98,6 +99,7 @@ EOF
   HOME="$TEST_HOME" WALTER_OPERATOR_SCRIPTS_DIR="$env_dir" \
     run "$WALTER_OS_BIN" syncthing-bootstrap
   rm -rf "$env_dir"
+  [ "$status" -eq 0 ]
   echo "$output" | grep -q "STUB_EXECD"
   ! (echo "$output" | grep -q "OVERLAY_EXECD")
 }
@@ -109,6 +111,7 @@ EOF
   overlay_dir="${TEST_HOME}/.config/walter-os/overlay/scripts"
   _make_stub "$overlay_dir"
   HOME="$TEST_HOME" run "$WALTER_OS_BIN" syncthing-bootstrap
+  [ "$status" -eq 0 ]
   echo "$output" | grep -q "STUB_EXECD"
 }
 
