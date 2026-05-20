@@ -7,7 +7,7 @@
 
 services:
   penpot-frontend:
-    image: penpotapp/frontend:latest
+    image: penpotapp/frontend@sha256:490202201f78f899ae8d570a2121f8bf7fd15464c9cabab11e7ec4d9e4cd29b1
     container_name: penpot-frontend
     restart: unless-stopped
     ports:
@@ -30,7 +30,7 @@ services:
       retries: 5
 
   penpot-backend:
-    image: penpotapp/backend:latest
+    image: penpotapp/backend@sha256:8381a9e4573cf415ee2fa27f1c367d481bb9bd66e50b335d8b6a0bf8c6527349
     container_name: penpot-backend
     restart: unless-stopped
     volumes:
@@ -54,7 +54,7 @@ services:
     networks: [penpot_net]
 
   penpot-exporter:
-    image: penpotapp/exporter:latest
+    image: penpotapp/exporter@sha256:f87bbdcb689f4f8e68759b3933320fc37670bdb0b2305c43180f984db66d182d
     container_name: penpot-exporter
     restart: unless-stopped
     environment:

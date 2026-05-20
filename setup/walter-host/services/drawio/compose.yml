@@ -10,7 +10,7 @@
 
 services:
   drawio:
-    image: jgraph/drawio:latest
+    image: jgraph/drawio@sha256:ae3bc30c60bbfcdf89bf750782e8c38a6ad944a7a5d11b21ea64507e59cfd0e9
     container_name: drawio
     restart: unless-stopped
     ports:
