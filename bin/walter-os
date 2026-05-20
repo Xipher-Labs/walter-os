@@ -501,6 +501,8 @@ cmd_syncthing_bootstrap() {
   )
   for candidate in "${candidates[@]}"; do
     [[ -n "$candidate" && -f "$candidate" && -x "$candidate" ]] || continue
+    # shellcheck disable=SC2093  # exec is intentional — replaces process so
+    # the rest of the function never runs once a candidate is found.
     exec "$candidate" "$@"
   done
   echo "walter-os: no operator script found for syncthing-bootstrap." >&2
