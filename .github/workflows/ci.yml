@@ -38,7 +38,6 @@ jobs:
             bin/walter-os \
             scripts/sync.sh \
             scripts/sync-repos.sh \
-            scripts/syncthing-bootstrap.sh \
             scripts/agent-memory-setup.sh \
             scripts/profile-bootstrap.sh \
             scripts/secrets-bootstrap.sh \
@@ -99,7 +98,7 @@ jobs:
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "ci"
-      - name: Run hook + agent + wiki + litellm + walter-bridge tests
+      - name: Run hook + agent + wiki + litellm + walter-bridge + walter tests
         run: |
           bats \
             tests/hooks/ \
@@ -107,6 +106,7 @@ jobs:
             tests/wiki/ \
             tests/litellm/ \
             tests/walter-bridge/ \
+            tests/walter/ \
             tests/scripts/secrets-identity-init.bats \
             tests/oss/secrets-runtime-docs.bats
 
