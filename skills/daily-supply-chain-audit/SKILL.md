@@ -30,8 +30,15 @@ ongoing).
 6. **Tool definition drift** — for each connected MCP server, today's tool
    definitions diffed against yesterday's. Mutation = potential tool-name
    shadowing attack = block.
-7. **Pinned versions** — every npm/pip/cargo MCP must be pinned to a commit
-   hash or exact version, never `latest` or a branch name.
+7. **Pinned versions** — every MCP package reference in runtime config
+   (`~/.claude/settings.json` → `.mcpServers`) must be pinned. The audit
+   enforces these exact forms:
+   - npm / npx: `package@x.y.z` (or `@scope/package@x.y.z`)
+   - uvx: `package==x.y.z` (or `uvx --from package==x.y.z <entry-point>`)
+   - git: `package#<commit-sha>` (7+ hex chars)
+   Dist-tags/ranges are rejected (`@latest`, `@beta`, `^1.2.3`, `>=1.0`,
+   `~=1.5`, etc.). If you change `mcp/servers.json`, re-run `install.sh
+   --upgrade` so `~/.claude/settings.json` is refreshed before auditing.
 8. **CVE feed** — checks NVD for new CVEs published in the last 24h affecting
    any installed package. Match-by-name and match-by-CPE.
 9. **Secrets exposure** — greps `~/.claude/settings.json`, `~/.codex/config.toml`,
