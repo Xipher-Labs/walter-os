@@ -32,6 +32,21 @@
 
 set -euo pipefail
 
+# Source operator overlay if present. The hook is invoked from Claude Code's
+# PreToolUse layer with a minimal inherited env, so WALTER_BRANCH_FLOW set in
+# the operator's overlay (~/.config/walter-os/overlay/personal.env) is not
+# visible unless we source the file ourselves. set +u/-u guards against
+# `set -u` aborts inside the overlay (some operator overlays reference
+# variables they themselves define later in the file).
+_OVERLAY_PERSONAL_ENV="${HOME}/.config/walter-os/overlay/personal.env"
+if [[ -f "$_OVERLAY_PERSONAL_ENV" ]]; then
+  set +u
+  # shellcheck source=/dev/null
+  source "$_OVERLAY_PERSONAL_ENV"
+  set -u
+fi
+unset _OVERLAY_PERSONAL_ENV
+
 # Read the tool call from stdin
 INPUT="$(cat)"
 
@@ -88,41 +103,55 @@ if [[ -n "$MANUAL_PR_PATTERN" ]]; then
   esac
 fi
 
-# ---------- 2. Branch flow: three-stage mode enforces next-level merge ----------
-# In single-tier mode this section is a no-op; feature/* can target main
-# directly. In three-stage mode it enforces the original gate.
+# ---------- 2. Branch flow: enforce the mode's PR-base policy ----------
+# single-tier — feature/* targets main (or master/repo default) directly;
+#               anything else is blocked.
+# three-stage — feature → dev → staging → main; --allow-branch-skip
+#               bypasses with a justification.
 
-if [[ "$BRANCH_FLOW" == "three-stage" ]] && \
-   echo "$CMD" | grep -qE '^[[:space:]]*gh[[:space:]]+pr[[:space:]]+create'; then
-  # Try to extract --base flag; default to current default branch.
+if echo "$CMD" | grep -qE '^[[:space:]]*gh[[:space:]]+pr[[:space:]]+create'; then
+  # Try to extract --base flag; default to repo's default branch.
   BASE="$(echo "$CMD" | grep -oE -- '--base[[:space:]]+[^[:space:]]+' | awk '{print $2}' || echo "")"
   if [[ -z "$BASE" ]]; then
     BASE="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")"
   fi
 
-  case "$BRANCH" in
-    feature/*|fix/*|chore/*)
-      if [[ "$BASE" != "dev" ]]; then
-        if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
-          block "Branch flow (three-stage): feature branches must target 'dev', not '${BASE}'. Use --allow-branch-skip with justification for hotfixes."
+  if [[ "$BRANCH_FLOW" == "single-tier" ]]; then
+    # Default branch is whatever origin/HEAD points at (usually main, sometimes
+    # master). Both are acceptable PR bases for feature/* in single-tier mode.
+    DEFAULT_BRANCH="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")"
+    case "$BRANCH" in
+      feature/*|fix/*|chore/*)
+        if [[ "$BASE" != "$DEFAULT_BRANCH" && "$BASE" != "main" && "$BASE" != "master" ]]; then
+          block "Branch flow (single-tier): feature branches must target the default branch ('${DEFAULT_BRANCH}' / main / master), not '${BASE}'. Set WALTER_BRANCH_FLOW=three-stage in your overlay if you need a dev/staging promotion chain."
         fi
-      fi
-      ;;
-    dev)
-      if [[ "$BASE" != "staging" ]]; then
-        if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
-          block "Branch flow (three-stage): 'dev' must merge to 'staging', not '${BASE}'."
+        ;;
+    esac
+  elif [[ "$BRANCH_FLOW" == "three-stage" ]]; then
+    case "$BRANCH" in
+      feature/*|fix/*|chore/*)
+        if [[ "$BASE" != "dev" ]]; then
+          if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
+            block "Branch flow (three-stage): feature branches must target 'dev', not '${BASE}'. Use --allow-branch-skip with justification for hotfixes."
+          fi
         fi
-      fi
-      ;;
-    staging)
-      if [[ "$BASE" != "main" ]]; then
-        if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
-          block "Branch flow (three-stage): 'staging' must merge to 'main', not '${BASE}'."
+        ;;
+      dev)
+        if [[ "$BASE" != "staging" ]]; then
+          if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
+            block "Branch flow (three-stage): 'dev' must merge to 'staging', not '${BASE}'."
+          fi
         fi
-      fi
-      ;;
-  esac
+        ;;
+      staging)
+        if [[ "$BASE" != "main" ]]; then
+          if ! echo "$CMD" | grep -q -- '--allow-branch-skip'; then
+            block "Branch flow (three-stage): 'staging' must merge to 'main', not '${BASE}'."
+          fi
+        fi
+        ;;
+    esac
+  fi
 fi
 
 # ---------- 3. Block direct push to (or from) protected branches ----------

@@ -63,6 +63,21 @@ input_json() {
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }
 
+@test "single-tier: blocks feature/* → staging (only main/default allowed)" {
+  result="$(input_json "gh pr create --base staging --title test" | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
+
+@test "single-tier: blocks feature/* → dev" {
+  result="$(input_json "gh pr create --base dev --title test" | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
+
+@test "single-tier: allows feature/* → master (default-branch alias)" {
+  result="$(input_json "gh pr create --base master --title test" | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
+}
+
 # ---- three-stage mode -------------------------------------------------
 
 @test "three-stage: blocks feature/* → main" {
