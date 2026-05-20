@@ -67,15 +67,16 @@ All non-trivial contributions follow the plan-first discipline:
    (GREEN), then refactor. Never skip RED.
 4. **Commit** — Conventional commits (see below). Each task in the plan is one
    atomic commit.
-5. **PR** — Open against `dev` (not `main`). Fill in the PR template.
+5. **PR** — Open against `main`. Fill in the PR template.
 6. **Review** — Two rounds minimum. Internal Claude reviewer subagent + GitHub
    Copilot (auto-requested via REST API, see PR template).
 
 Walter-OS uses a 3-round review pattern (Copilot → Codex → collaborative).
 See `AGENTS.md` for details.
 
-Branch flow: `feature/<slug>` → `dev` → `staging` → `main`.
-Never target `main` directly.
+Branch flow: `feature/<slug>` → `main`. Direct push to `main` is blocked
+unconditionally — every change goes through a PR. The single-tier flow is
+documented in `docs/decisions/0013-solo-operator-merge-policy.md`.
 
 ---
 
