@@ -187,7 +187,7 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 
 ### P1-04 — `syncthing-bootstrap.sh` `sapi()` passes `$body` interpolated into remote SSH shell string — potential SSH command injection
 
-**Category**: 4 (Shell injection)
+**Category**: 4 (Shell injection)  
 **File**: removed (the vulnerable script was deleted from OSS in the syncthing-script-extraction change; P1-04 is resolved for the OSS surface; see `skills/syncthing-cli/SKILL.md`)
 
 **Description**:
