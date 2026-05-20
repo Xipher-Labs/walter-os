@@ -23,10 +23,12 @@ This release is still alpha, but the core idea is ready to study, fork, and
 improve.
 
 Walter-OS is an opinionated, single-repository operations framework that wires
-Claude Code, Codex CLI, Cursor-friendly repo rules, and a self-hosted VM
-together under the same agent contract, the same skills catalog, and the same
-MCP configuration. You fork it, apply a personal overlay, and get a consistent
-AI-agent environment that follows you across machines and tools.
+Claude Code, Codex CLI, and Cursor-friendly repo rules together under the same
+agent contract, the same skills catalog, and the same MCP configuration. A
+self-hosted service stack (`walter-host`) is the optional fourth layer — most
+adopters never deploy it, and the agent framework works fully without it.
+You fork the repo, apply a personal overlay, and get a consistent AI-agent
+environment that follows you across machines and tools.
 
 **Walter-OS IS**: an agent contract layer (`AGENTS.md` + context files), a
 curated skills library (50+ skills), a VM bootstrap stack (25+ self-hosted

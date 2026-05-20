@@ -31,7 +31,7 @@ levels. Choose the smallest mode that gives you value.
 | Mode | Setup | When to use | Recommended? |
 |---|---|---|---|
 | **Clone-only reference** | Clone the repo; do not run `install.sh` | Study the system, copy an `AGENTS.md` pattern, review skills/hooks/specs before installing, or use it as an operating playbook | **Yes** — for evaluation and lightweight reuse |
-| **Client install** | Install walter-os on your workstation, no walter-host | Make Claude Code, Codex CLI, and repo-level agents follow the same rules and workflows everywhere. Cursor can join once you wire its rules file manually. | **Yes** — default starting point |
+| **Client install** | Install walter-os on your workstation, no walter-host | Make Claude Code and Codex CLI follow the same rules and workflows everywhere. Cursor adapter is backlog work — operators on Cursor today get the same operating model only by wiring a Cursor rules file by hand. | **Yes** — default starting point |
 | **Client + selected services** | Client install plus only the services you need, self-hosted or SaaS | Add Infisical, LiteLLM, the observability stack, Syncthing, n8n, or other pieces without running the full stack | **Yes** — best incremental path |
 | **Full walter-host** | Client install plus the complete server stack on a VM, homelab node, or local lab machine | Full private control plane for secrets, model routing, issue tracking, git hosting, dashboards, automation, backups, and Council operations | **Yes** — for operators who want full self-hosting |
 
@@ -44,10 +44,16 @@ workflow to another repo without writing anything to `~/.claude`,
 auditing Walter-OS before trusting it or only want the operating model.
 
 **Client install** is the right start for most operators. You install walter-os
-(`./install.sh`), scaffold `~/.config/walter-os/overlay/`, set
+(client-only refresh: `./install.sh --check` then `./install.sh --upgrade` —
+this installs the symlinks, hooks, and MCP configs without running the
+walter-host bootstrap steps), scaffold `~/.config/walter-os/overlay/`, set
 `WALTER_GITHUB_ORG` and any provider-specific values, and have a working agent
 framework in minutes. You keep using GitHub, Linear, and the Anthropic API
 directly. No VM to maintain.
+
+> The bare `./install.sh` (no flags) launches the full interactive wizard,
+> which includes optional walter-host bootstrap steps (Plane, Postgres,
+> Docker, n8n, Infisical). Use `--upgrade` to stay client-only.
 
 **Client + selected services** is the incremental path. Add Infisical when shell
 secrets become hard to manage. Add LiteLLM when you want one model gateway,
@@ -103,7 +109,7 @@ walter-host (server — runs on a dedicated machine)
     │   ├── forgejo/         Self-hosted Git + CI
     │   ├── plane/           Project management
     │   ├── litellm/         LLM model gateway (walter-bridge)
-    │   ├── grafana/         Metrics dashboards
+    │   ├── observability/  Prometheus + Loki + Grafana stack
     │   ├── n8n/             Workflow automation
     │   └── ...              20+ additional services
     ├── cloudflare/          CF Tunnel + Access setup scripts
@@ -139,10 +145,11 @@ repo, or learning the operating model before installing it.
 Install walter-os on your workstation. Use SaaS for everything else.
 
 ```bash
-# Install
+# Install (client-only — skips the walter-host bootstrap wizard steps)
 git clone https://github.com/xipher-labs/walter-os ~/Projects/walter-os
 cd ~/Projects/walter-os
-./install.sh
+./install.sh --check       # verify minimum local requirements
+./install.sh --upgrade     # install symlinks, hooks, MCP configs only
 
 # Configure
 cp contexts/_examples/personal.env.example ~/.config/walter-os/overlay/personal.env
@@ -151,6 +158,10 @@ cp contexts/_examples/personal.env.example ~/.config/walter-os/overlay/personal.
 # Verify
 walter doctor
 ```
+
+> The bare `./install.sh` (no flags) launches the full interactive wizard
+> which includes optional walter-host bootstrap steps. Stick to `--upgrade`
+> for the client-only mode described here.
 
 **Required**: `WALTER_GITHUB_ORG` in personal.env.
 **Not required**: `WALTER_OPERATOR_USER`, `WALTER_DOMAIN` (use defaults).
@@ -189,23 +200,38 @@ but skip cloud VM provisioning and may use a local network or Tailscale-only
 access path instead of Cloudflare Tunnel.
 
 ```bash
+# 0. Required env (export before running the scripts below).
+#    Each Cloudflare script reads its inputs from environment variables.
+export WALTER_DOMAIN="your-walter-domain.example"     # apex zone you control
+export CF_API_TOKEN="<cloudflare-api-token>"          # Zone + DNS edit scopes
+export VM_HOST="root@<vm-ip-or-hostname>"             # SSH target for the VM
+# Service hostnames default to <service>.${WALTER_DOMAIN}; override via
+# WALTER_SERVICES_DOMAIN if you want a separate subdomain hierarchy.
+
 # 1. Provision VM (Hetzner CX31 or equivalent, Ubuntu 24.04)
 # 2. Run bootstrap on VM
-scp setup/walter-host/bootstrap-vm.sh root@<vm-ip>:/tmp/
-ssh root@<vm-ip> "bash /tmp/bootstrap-vm.sh"
+scp setup/walter-host/bootstrap-vm.sh "$VM_HOST":/tmp/
+ssh "$VM_HOST" "bash /tmp/bootstrap-vm.sh"
 
-# 3. Set up Cloudflare Tunnel (for public HTTPS access)
-./setup/walter-host/cloudflare/01-create-zone.sh
-./setup/walter-host/cloudflare/02-create-tunnel.sh
-./setup/walter-host/cloudflare/03-install-cloudflared.sh
-./setup/walter-host/cloudflare/04-create-access.sh
+# 3. Set up Cloudflare Tunnel (for public HTTPS access).
+#    01-create-zone.sh creates the zone (uses WALTER_DOMAIN + CF_API_TOKEN)
+#    and prints the ZONE_ID — capture it for the next step:
+ZONE_ID="$(./setup/walter-host/cloudflare/01-create-zone.sh)"
+export ZONE_ID                                        # consumed by step 02
+./setup/walter-host/cloudflare/02-create-tunnel.sh    # creates tunnel, prints TUNNEL_ID
+./setup/walter-host/cloudflare/03-install-cloudflared.sh  # uses $VM_HOST
+./setup/walter-host/cloudflare/04-create-access.sh    # uses $WALTER_DOMAIN
 
 # 4. Deploy services
 docker compose up -d
 
 # 5. Configure workstation to use your walter-host services
-# Set WALTER_DOMAIN in personal.env
+# Set WALTER_DOMAIN in personal.env (same value as step 0).
 ```
+
+> Every script in `setup/walter-host/cloudflare/` prints `--help` when run
+> with no args. If any step exits non-zero, fix the missing input and
+> re-run only that step — they are designed to be idempotent.
 
 **Required**: `WALTER_GITHUB_ORG` and `WALTER_DOMAIN` in personal.env.
 The walter-host bootstrap currently creates and uses the fixed server account
