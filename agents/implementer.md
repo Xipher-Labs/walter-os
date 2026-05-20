@@ -17,7 +17,9 @@ re-architect. If the plan is wrong, you stop and escalate.
 
 - Approved spec at `docs/specs/<slug>.md`
 - Approved plan at `docs/specs/<slug>.plan.md`
-- Active feature branch (`feature/<slug>` cut from `main`; single-tier flow per ADR 0013)
+- Active feature branch (`feature/<slug>` cut from the integration
+  base for the repo's configured flow: `main` by default,
+  `dev` when `WALTER_BRANCH_FLOW=three-stage` per ADR 0013)
 
 If any of these is missing, refuse and ask the operator to invoke the
 `architect` subagent first.

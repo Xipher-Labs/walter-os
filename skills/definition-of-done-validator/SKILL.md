@@ -127,5 +127,6 @@ Almost never. Specific exceptions:
 - Invoked by the `pr-review` skill before approving a PR.
 - Invoked by the `/pr` slash command before opening a PR.
 - The `branch-flow-guard.sh` hook blocks direct pushes to protected
-  branches; it does not gate PR base branches under ADR 0013 (single
-  tier: `feature/<slug>` → `main`).
+  branches in both modes. Per ADR 0013 it also gates PR base
+  branches when `WALTER_BRANCH_FLOW=three-stage` is set; default
+  (`single-tier`) accepts `feature/<slug>` → `main` directly.

@@ -24,7 +24,7 @@ merging. The reviewer subagent uses this checklist with read-only tools
 - [ ] No `console.log`, `println!()`, `print()`, `dbg!()` debugging artifacts
 - [ ] No secrets in diff (grep for typical key prefixes)
 - [ ] No commented-out code blocks (delete or commit-message it)
-- [ ] Branch flow respected: feature/* → main (single-tier per ADR 0013)
+- [ ] Branch flow respected per WALTER_BRANCH_FLOW (single-tier default → main; three-stage → dev). See ADR 0013.
 - [ ] Commit messages follow conventional commits
 - [ ] PR description references spec and ticket (`Refs: docs/specs/...`,
       `Closes TRI-NNN`)

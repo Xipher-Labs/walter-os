@@ -58,7 +58,8 @@ Define your active projects in the personal overlay. Example structure:
 
 ### PR flow
 
-- Branch: `feature/<slug>` → `main` (single-tier per ADR 0013).
+- Branch: `feature/<slug>` → target per `WALTER_BRANCH_FLOW` (default
+  `single-tier` → `main`; opt-in `three-stage` → `dev`). See ADR 0013.
 - Auto-PR enabled after review convergence (at least 1 review round).
 - Local dev migrations: agent may run without confirmation.
 - Production / staging-environment migrations: require operator

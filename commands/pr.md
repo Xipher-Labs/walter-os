@@ -6,10 +6,11 @@ argument-hint: <spec-slug>
 Pre-flight checks (all must pass):
 
 1. Branch flow: current branch must be `feature/$ARGUMENTS` (or
-   `fix/$ARGUMENTS` / `chore/$ARGUMENTS`). Target branch is `main`
-   directly — single-tier flow per ADR 0013. The
+   `fix/$ARGUMENTS` / `chore/$ARGUMENTS`). Target branch follows
+   `WALTER_BRANCH_FLOW`: default (`single-tier`) → `main`;
+   `three-stage` → `dev`. See ADR 0013. The
    `branch-flow-guard.sh` hook blocks direct pushes to protected
-   branches but does not gate the PR base.
+   branches in both modes.
 2. Tests: full suite passes locally.
 3. Lint, typecheck, format: clean.
 4. `definition-of-done-validator` skill: every AC in
