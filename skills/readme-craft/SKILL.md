@@ -188,18 +188,26 @@ Avoid when:
 ### README generators
 
 CLIs and web apps that scaffold a README from a wizard or template.
-Use when:
 
-- Starting from zero on a non-trivial project and you want a
-  consistent structure.
-- You are uncomfortable with the blank-page problem.
+**Default position: do not use generators for the README content itself.**
+Generators produce average-quality output by design, and editing average
+output is consistently slower than writing your own draft against the
+section template above. See the "Operator workflow" section below — step
+2 is "draft from scratch".
 
-Avoid when:
+The one narrow exception: generators are acceptable for **outline-only
+scaffolding** when you genuinely cannot picture the structure (e.g. your
+first profile README, or a project type you have never written before).
+Use the generator to produce the section skeleton, then throw away the
+generated prose and write each section from scratch against the templates
+above. Never ship generator prose.
 
-- You already have a draft. Generators produce average-quality output
-  by design; editing your own draft beats accepting theirs.
-- The generator embeds telemetry or attribution links you cannot
-  remove. Check before adopting.
+Avoid entirely when:
+
+- The generator embeds telemetry, attribution links, or backlinks you
+  cannot remove.
+- You already have any draft — even a bad one. Editing your draft beats
+  reading and rewriting the generator's.
 
 ### GitHub Actions for READMEs
 
