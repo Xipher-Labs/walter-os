@@ -18,6 +18,32 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
+### Removed
+
+- `scripts/syncthing-bootstrap.sh` — operator-specific Syncthing folder
+  registration script. The CLI subcommand `walter-os syncthing-bootstrap`
+  now discovers the operator's script via a three-tier lookup:
+  `${WALTER_OPERATOR_SCRIPTS_DIR}` env var, then
+  `~/.config/walter-os/overlay/scripts/`, then `~/config-personal/scripts/`.
+  Operators with an existing local script must move it to one of these
+  locations. See `skills/syncthing-cli/SKILL.md` for the depersonalized
+  guide and `walter-os syncthing-bootstrap --help` for the live discovery
+  order. Refs: `docs/specs/syncthing-script-extraction.md`.
+
+### Added
+
+- `skills/syncthing-cli/SKILL.md` — depersonalized guide for talking to a
+  Syncthing hub via REST over SSH (idempotent reconciliation, `.stignore`
+  seeding pattern). Sibling of the existing `*-cli` skills (`postgres-cli`,
+  `hcloud-cli`, etc.).
+
+### Changed
+
+- `bin/walter-os syncthing-bootstrap` no longer execs a script bundled in
+  the OSS repo. It delegates to operator-supplied scripts via the
+  documented three-tier discovery order, or exits 2 with actionable
+  next-step instructions when none is found.
+
 ---
 
 ## [0.2.0] — 2026-05-11
