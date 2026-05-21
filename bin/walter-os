@@ -263,6 +263,25 @@ cmd_baseline_hooks() {
   echo "✓ Hook checksums refreshed: $checksums"
 }
 
+# Re-snapshot mcp/servers.json after an intentional MCP server change
+# (added / removed / version bump / trust-level change). Operators run
+# this only after reviewing the change. Closes #117 Phase 1.
+# Phase 2 (per-tool schema query via stdio JSON-RPC) is a follow-up.
+cmd_baseline_mcp_tools() {
+  require_jq
+  local registry="${WALTER_OS_HOME:-${HOME}/walter-os}/mcp/servers.json"
+  if [[ ! -f "$registry" ]]; then
+    echo "walter-os baseline-mcp-tools: registry not found at $registry" >&2
+    exit 2
+  fi
+  local baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
+  mkdir -p "$(dirname "$baseline")"
+  jq --sort-keys '.servers // {}' "$registry" > "${baseline}.tmp" && mv "${baseline}.tmp" "$baseline"
+  local n
+  n="$(jq 'length' "$baseline")"
+  echo "✓ MCP server snapshot refreshed ($n servers): $baseline"
+}
+
 # Re-snapshot external/**/hooks/scripts/*.{sh,py,js} after an intentional
 # submodule bump (audit P1-07). Operators should run this only after
 # reviewing the diff in the submodule.
@@ -1239,6 +1258,7 @@ case "$cmd" in
   baseline)       cmd_baseline "$@" ;;
   baseline-hooks) cmd_baseline_hooks "$@" ;;
   baseline-external-hooks) cmd_baseline_external_hooks "$@" ;;
+  baseline-mcp-tools) cmd_baseline_mcp_tools "$@" ;;
   enable-hook)    cmd_enable_hook "$@" ;;
   disable-hook)   cmd_disable_hook "$@" ;;
   sync)               cmd_sync "$@" ;;

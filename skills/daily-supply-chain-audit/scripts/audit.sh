@@ -155,12 +155,73 @@ check_mcp_scanners() {
 # ---------- 5. Tool definition drift ----------
 
 check_tool_definitions() {
-  # Snapshot today's tool defs from each connected MCP, diff against yesterday.
-  # Implementation depends on how MCPs are listed locally.
-  local snapdir="${WALTER_CONFIG}/mcp-snapshots"
-  mkdir -p "$snapdir"
-  # Phase 2: query each MCP for its tool list, diff against snapdir/yesterday.
-  # Until then this is a no-op rather than a noisy finding.
+  # Closes issue #117 (external review F4) Phase 1: snapshot the STATIC
+  # MCP server registry (mcp/servers.json) and diff against a baseline.
+  # Detects:
+  #   - server added → HIGH (new capability surface)
+  #   - server removed → INFO (cleanup, less suspicious)
+  #   - command / args changed → HIGH (different binary or version)
+  #   - trust level changed → MEDIUM
+  #
+  # Phase 2 (follow-up, not in this MVP): connect to each running MCP via
+  # stdio JSON-RPC, listTools, snapshot {name, schema, description} per
+  # tool, diff against baseline. Requires walter-os to ship an MCP client.
+  local registry="${WALTER_OS_HOME:-${HOME}/walter-os}/mcp/servers.json"
+  [[ -f "$registry" ]] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+
+  local baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
+  local current
+  current="$(jq --sort-keys '.servers // {}' "$registry" 2>/dev/null)" || return 0
+
+  if [[ ! -f "$baseline" ]]; then
+    echo "$current" > "$baseline"
+    return 0
+  fi
+
+  local stored
+  stored="$(cat "$baseline")"
+  [[ "$current" == "$stored" ]] && return 0
+
+  local current_names stored_names
+  current_names="$(jq -r 'keys[]' <<<"$current" | sort -u)"
+  stored_names="$(jq -r 'keys[]' <<<"$stored" | sort -u)"
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    finding high "mcp-server-added" \
+      "MCP server added: $name (in mcp/servers.json since baseline)" \
+      "Review new server's command, args, trust. If safe: walter-os baseline-mcp-tools"
+  done < <(comm -23 <(echo "$current_names") <(echo "$stored_names"))
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    finding info "mcp-server-removed" \
+      "MCP server removed: $name (was in baseline, not in current registry)" \
+      "If intentional: walter-os baseline-mcp-tools"
+  done < <(comm -13 <(echo "$current_names") <(echo "$stored_names"))
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    local cur_cmd cur_args cur_trust sto_cmd sto_args sto_trust
+    cur_cmd="$(jq -r --arg n "$name" '.[$n].command // ""' <<<"$current")"
+    cur_args="$(jq -c --arg n "$name" '.[$n].args // []' <<<"$current")"
+    cur_trust="$(jq -r --arg n "$name" '.[$n].trust // ""' <<<"$current")"
+    sto_cmd="$(jq -r --arg n "$name" '.[$n].command // ""' <<<"$stored")"
+    sto_args="$(jq -c --arg n "$name" '.[$n].args // []' <<<"$stored")"
+    sto_trust="$(jq -r --arg n "$name" '.[$n].trust // ""' <<<"$stored")"
+
+    if [[ "$cur_cmd" != "$sto_cmd" || "$cur_args" != "$sto_args" ]]; then
+      finding high "mcp-server-cmd-changed" \
+        "MCP server '$name' command/args changed since baseline" \
+        "REVIEW: jq '.servers.\"$name\"' $registry. If safe: walter-os baseline-mcp-tools"
+    fi
+    if [[ "$cur_trust" != "$sto_trust" ]]; then
+      finding medium "mcp-server-trust-changed" \
+        "MCP server '$name' trust level changed: '$sto_trust' → '$cur_trust'" \
+        "Verify intentional. If safe: walter-os baseline-mcp-tools"
+    fi
+  done < <(comm -12 <(echo "$current_names") <(echo "$stored_names"))
 }
 
 # ---------- 6. Minimum release age check ----------
