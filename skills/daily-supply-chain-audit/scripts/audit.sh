@@ -197,10 +197,12 @@ check_hooks() {
     return 0
   fi
 
-  # Schema detection
-  local schema
+  # Schema detection. The v1 and error paths return early; the v2 path
+  # falls through to the per-entry hash check below. We deliberately
+  # don't store the schema label — the control flow already encodes it
+  # and shellcheck SC2034 would flag a write-only variable.
   if jq -e 'type == "object" and .version == 2' "$checksums" >/dev/null 2>&1; then
-    schema="v2"
+    : # v2 — fall through to the per-entry content check
   elif jq -e 'type == "array"' "$checksums" >/dev/null 2>&1; then
     finding info "hook-checksums-v1-schema" \
       "hook-checksums.json on legacy v1 schema (does NOT detect in-place script modification)" \
