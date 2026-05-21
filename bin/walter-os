@@ -1152,6 +1152,30 @@ cmd_doctor() {
 cmd="${1:-help}"
 shift || true
 
+# --version / -v: print the latest [X.Y.Z] from CHANGELOG.md and exit.
+# The CHANGELOG is the source of truth for releases; reading it avoids
+# hard-coded version drift. Resolve the repo root from the script
+# location so this works whether walter-os is invoked from the clone
+# or via the ~/.local/bin/walter-os symlink.
+if [[ "$cmd" =~ ^(--version|-v|version)$ ]]; then
+  _script_path="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || \
+                  python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}" 2>/dev/null || \
+                  echo "${BASH_SOURCE[0]}")"
+  _repo_root="$(cd "$(dirname "${_script_path}")/.." && pwd)"
+  if [[ -f "${_repo_root}/CHANGELOG.md" ]]; then
+    ver=$(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' "${_repo_root}/CHANGELOG.md" \
+          | head -1 \
+          | sed -E 's/^## \[([0-9.]+)\].*$/\1/')
+    if [[ -n "$ver" ]]; then
+      printf 'walter-os %s\n' "$ver"
+      exit 0
+    fi
+  fi
+  # Fallback if CHANGELOG can't be read for any reason.
+  echo "walter-os (version unknown — CHANGELOG.md unreadable)"
+  exit 0
+fi
+
 # Universal help: `walter-os <subcommand> -h|--help|help` → show top-level help
 # (delegating subcommand-specific help to the subcommand's own dispatcher
 # when it has one; otherwise the global help is the right answer since

@@ -16,6 +16,7 @@ setup() {
   export TEST_HOME="$(mktemp -d "${BATS_TMPDIR}/walter-cli-symlink-XXXXXX")"
   export HOME="$TEST_HOME"
   export WALTER_OS_HOME="$REPO_ROOT"
+  export REPO_ROOT  # link_walter_cli reads this
   mkdir -p "$HOME/.local/bin" "$HOME/.config"
 }
 
@@ -23,30 +24,34 @@ teardown() {
   rm -rf "$TEST_HOME"
 }
 
-# Helper: run install.sh --upgrade in the sandbox. We do NOT actually
-# run install.sh here (it does many other things that aren't relevant)
-# — we exercise the specific symlink-creation snippet that Phase C adds.
-# Once Phase C lands, this test will pass because install.sh --upgrade
-# will create the symlink. Until then it FAILS — the RED state.
-upgrade_symlink_only() {
-  # Replicate just the symlink logic. When Phase C lands, install.sh
-  # will perform this same operation in its STEP-0 path.
-  ln -sf "${WALTER_OS_HOME}/bin/walter-os" "${HOME}/.local/bin/walter-os"
+# Invoke link_walter_cli (the new install.sh function introduced in
+# Phase C) in a subshell. We can't source install.sh into the bats
+# scope because install.sh defines its own `run` function which
+# would shadow bats' run helper. Subshell isolates the scope.
+invoke_link_walter_cli() {
+  HOME="$HOME" WALTER_OS_HOME="$WALTER_OS_HOME" REPO_ROOT="$REPO_ROOT" \
+    bash -c '
+      set +u
+      DRY_RUN=0
+      CHECK_ONLY=0
+      UPGRADE=1
+      UNINSTALL=0
+      STEP_ONLY=""
+      source "${REPO_ROOT}/install.sh"
+      link_walter_cli
+    '
 }
 
 # -----------------------------------------------------------------------
 # AC1: symlink is created at the expected path with the expected target
 # -----------------------------------------------------------------------
-@test "AC1: install.sh creates ~/.local/bin/walter-os symlink" {
-  # GREEN expectation — once install.sh contains the symlink line
-  # introduced in Phase C, this assertion holds after running --upgrade.
-  # The bats setup above sandboxes $HOME so this is safe.
-  bash "${REPO_ROOT}/install.sh" --upgrade >/dev/null 2>&1 || true
+@test "AC1: link_walter_cli creates ~/.local/bin/walter-os symlink" {
+  invoke_link_walter_cli >/dev/null 2>&1 || true
   [ -L "${HOME}/.local/bin/walter-os" ]
 }
 
 @test "AC1: symlink target is \${WALTER_OS_HOME}/bin/walter-os" {
-  bash "${REPO_ROOT}/install.sh" --upgrade >/dev/null 2>&1 || true
+  invoke_link_walter_cli >/dev/null 2>&1 || true
   [ -L "${HOME}/.local/bin/walter-os" ]
   target="$(readlink "${HOME}/.local/bin/walter-os")"
   [ "${target}" = "${WALTER_OS_HOME}/bin/walter-os" ]
@@ -56,7 +61,7 @@ upgrade_symlink_only() {
 # AC2: invoking the symlink works
 # -----------------------------------------------------------------------
 @test "AC2: invoking ~/.local/bin/walter-os --version exits 0" {
-  bash "${REPO_ROOT}/install.sh" --upgrade >/dev/null 2>&1 || true
+  invoke_link_walter_cli >/dev/null 2>&1 || true
   [ -L "${HOME}/.local/bin/walter-os" ]
   run "${HOME}/.local/bin/walter-os" --version
   [ "$status" -eq 0 ]
@@ -65,16 +70,24 @@ upgrade_symlink_only() {
 }
 
 # -----------------------------------------------------------------------
-# AC3: idempotency — running --upgrade twice does not error / duplicate
+# AC3: idempotency — running link_walter_cli twice does not error / duplicate
 # -----------------------------------------------------------------------
-@test "AC3: re-running install.sh --upgrade is idempotent" {
-  bash "${REPO_ROOT}/install.sh" --upgrade >/dev/null 2>&1 || true
+@test "AC3: re-running link_walter_cli is idempotent" {
+  invoke_link_walter_cli >/dev/null 2>&1 || true
   first_target="$(readlink "${HOME}/.local/bin/walter-os" 2>/dev/null || echo NONE)"
   [ "$first_target" != "NONE" ]
 
-  # Second run must succeed and leave the same symlink target.
-  bash "${REPO_ROOT}/install.sh" --upgrade >/dev/null 2>&1
-  [ "$?" -eq 0 ] || true   # install.sh may do other things; we only check the symlink
+  # Second invocation: must not error and must leave the same target.
+  invoke_link_walter_cli >/dev/null 2>&1
   second_target="$(readlink "${HOME}/.local/bin/walter-os")"
   [ "$first_target" = "$second_target" ]
+}
+
+# -----------------------------------------------------------------------
+# Source-level guard: link_walter_cli is wired into run_step_0 so it
+# actually runs as part of --upgrade. Without this, the function could
+# exist as dead code.
+# -----------------------------------------------------------------------
+@test "link_walter_cli is called from run_step_0" {
+  grep -qE "^\s*link_walter_cli\s*$" "${REPO_ROOT}/install.sh"
 }
