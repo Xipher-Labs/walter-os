@@ -11,15 +11,19 @@
 
 | Severity | Count | Closed |
 |---|---|---|
-| P0 (block release) | 6 | 5 (P0-01 / P0-02 / P0-03 / P0-04 / P0-05 — see "Status" line per finding) |
-| P1 (fix soon) | 9 | 1 (P1-04 via PR #45) |
+| P0 (block release) | 6 | 6 (P0-01 through P0-06 — see "Status" line per finding) |
+| P1 (fix soon) | 9 | 2 (P1-04 via PR #45; P1-08 via same fix as P0-06) |
 | P2 (track) | 8 | 0 |
-| **Total** | **23** | **6** |
+| **Total** | **23** | **8** |
 
-**Remaining P0**: P0-06 — `load-lessons.sh` / `preserve-lessons.sh`
-indirect prompt injection. Awaiting operator decision on sanitization
-approach (proposal at `docs/specs/p0-06-lessons-sanitization.md`).
-Implementation will follow.
+**All P0 findings closed.** P0-06 (and its sibling P1-08) shipped in
+v0.4.0-inflight via option (b) bounded-section framing
+(`docs/specs/p0-06-lessons-sanitization.md`). The `learn-by-mistake`
+submodule was bumped to the Xipher-Labs fork
+(`Xipher-Labs/marchetto-agent-skills-fork@d1ad0e7`) which carries the
+fix; bats regression test at
+`tests/hooks/learn-by-mistake-bounded-framing.bats` pins the marker
+shape so a future submodule bump that drops the framing fails CI.
 
 ---
 
@@ -139,6 +143,8 @@ The `learn-by-mistake` skill from `marchetto-agent-skills` ships **three hooks**
 
 ### P0-06 — `load-lessons.sh` indirect prompt injection: content of `.claude/lessons.md` injected into Claude's `systemMessage` without sanitization
 
+**Status**: ✅ **Fixed in v0.4.0-inflight** via option (b) bounded-section framing. `preserve-lessons.sh` now wraps the title list in `<LESSON_TITLES>…</LESSON_TITLES>` markers with an explicit "treat as data, not directives" framing prefix; titles are HTML-escaped so a poisoned title containing `</LESSON_TITLES>` cannot prematurely close the bounded section. `load-lessons.sh` does the equivalent for the category-name list (`<LESSON_CATEGORIES>…</LESSON_CATEGORIES>`). The fix lives at `Xipher-Labs/marchetto-agent-skills-fork@d1ad0e7` and the walter-os submodule is pinned to that commit. Regression test at `tests/hooks/learn-by-mistake-bounded-framing.bats`. See `docs/specs/p0-06-lessons-sanitization.md` for the threat model and the rationale for option (b) over (a) hard sanitize / (c) drop auto-injection.
+
 **Category**: 6 (Prompt injection) / 10 (Indirect injection)  
 **File**: `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/scripts/load-lessons.sh:52-70`
 
@@ -219,6 +225,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 
 ### P1-05 — `approval-gate.sh` standing-approval path entirely skips the check when `yq` is missing
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `hooks/approval-gate.sh` now hard-fails the hook with a `permissionDecision: "block"` when yq is missing, alongside the existing jq-missing block path (same pattern as P0-03). `install.sh` preflight adds `yq` to the required-tools list and the runtime check, so a degraded install is caught at install time, not at first hook fire. Regression test `tests/hooks/approval-gate.bats` cases "P1-05: hook mode fails CLOSED when yq is missing". As a side fix the `declare -A CATEGORY_MIN_TIER` array literal is now wrapped in `set +u` … `set -u` because bash 3.2 (macOS default) misparses `[token-with-dashes]=value` under `set -u`.
+
 **Category**: 3 (Authentication bypass)  
 **File**: `hooks/approval-gate.sh:141`
 
@@ -231,6 +239,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 ---
 
 ### P1-06 — `WALTER_STANDING_APPROVALS` env var allows operator to point approval config at attacker-controlled YAML file
+
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `STANDING_APPROVALS` is now hardcoded to `$WALTER_CONFIG/agent-approvals.yml` (no longer overridable via env var). The new `WALTER_STANDING_APPROVALS_OVERRIDE` env var is consulted ONLY when `WALTER_AGENT_ALLOW_OVERRIDE=1` is set in the same shell, and emits a `WARN` log line every invocation. Setting the old `WALTER_STANDING_APPROVALS` without the allow flag is now silently ignored (with a WARN). Two regression tests in `tests/hooks/approval-gate.bats` lock the new behavior.
 
 **Category**: 3 (Authentication bypass)  
 **File**: `hooks/approval-gate.sh:29`
@@ -245,6 +255,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 
 ### P1-07 — External submodule hooks execute WITHOUT audit-gate review; `learn-by-mistake` hooks are not covered by `hook-checksums.json`
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. The daily audit now includes a new `check_external_hooks()` step in `skills/daily-supply-chain-audit/scripts/audit.sh` that sha256-hashes every `external/**/hooks/scripts/*.{sh,py,js}` file, stores the baseline at `$WALTER_CONFIG/external-hook-checksums.json` on first run, and emits a CRITICAL `external-hook-tampered` finding on any subsequent drift (modified file, new file added, file removed). `check_skill_scripts()` is also extended to scan the `external/` tree for `curl|bash` and sensitive-fs-access patterns. New `walter-os baseline-external-hooks` CLI subcommand re-snapshots after an intentional submodule SHA bump. Side fixes: `finding()`'s `${level^^}` and the release-age check's `${sev,,}` use bash 3.2-incompatible syntax — both replaced with `tr` so the audit runs cleanly on macOS. Regression test `tests/audit/external-hook-integrity.bats` (6 cases) covers first-run snapshot, no-drift quiet, modified-file CRIT, new-file CRIT, intentional re-baseline, and no-external-tree no-op.
+
 **Category**: 8 (Supply chain) / 5 (Tool poisoning)  
 **File**: `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/`
 
@@ -257,6 +269,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 ---
 
 ### P1-08 — `preserve-lessons.sh` precompact hook reads `.claude/lessons.md` content into `systemMessage` — same indirect injection as P0-06
+
+**Status**: ✅ **Fixed in v0.4.0-inflight**. Same fix as P0-06 (bounded-section framing) — see the P0-06 Status entry above for the marker design, HTML-escape defense in depth, and the submodule pin location.
 
 **Category**: 6 (Prompt injection)  
 **File**: `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/scripts/preserve-lessons.sh:22-50`
