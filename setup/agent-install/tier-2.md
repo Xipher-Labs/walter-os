@@ -55,9 +55,15 @@ PRECHECK — verify Tier I
 Run:
   walter-os doctor --tier 1
 
-If any check returns ✗, STOP and tell the operator to re-run Tier I
-first ([`tier-1.md`](tier-1.md)). Do not proceed with a broken Tier I
-foundation.
+REQUIRED ✓ from tier-1 (full list in tier-1.md → Verify): WALTER_OS_HOME,
+env file, secrets template, ~/.local/bin/walter-os symlink, jq + git
++ gh, AT LEAST ONE of {claude, codex} CLIs.
+
+If a REQUIRED tier-1 check is ✗, STOP and re-run Tier I first
+([`tier-1.md`](tier-1.md)). Do not proceed with a broken foundation.
+
+If only ONE of {claude CLI, codex CLI} is ✗ while the other is ✓,
+that's expected — Tier I requires only one agent CLI. Proceed.
 
 ================================================================================
 STEP 1 — INSTALL obra/superpowers PLUGIN (operator action)

@@ -165,8 +165,24 @@ Verify the global cascade is wired:
 Then run the doctor with the tier filter:
   walter-os doctor --tier 1
 
-Expect every tier-1 check to be ✓. If any ✗, address it before
-continuing (often: missing required CLI like jq or yq).
+Required ✓:
+  - WALTER_OS_HOME exists
+  - env file present
+  - secrets template present
+  - ~/.claude/CLAUDE.md symlinked (if Claude Code installed)
+  - ~/.codex/AGENTS.md symlinked (if Codex CLI installed)
+  - ~/.local/bin/walter-os symlinked
+  - jq + git + gh installed
+
+Acceptable ✗ (one of {claude, codex} suffices):
+  - `claude CLI in PATH` — only required if the operator uses Claude Code
+  - `codex CLI in PATH` — only required if the operator uses Codex CLI
+  - At least ONE of the two must be ✓ for a working install; Cursor
+    users may legitimately have both ✗ (Cursor doesn't ship a CLI).
+
+If any REQUIRED check is ✗, address it (often: missing jq or yq).
+The acceptable-✗ checks are informational; they tell you which agent
+CLIs the operator has on this box.
 
 ================================================================================
 STEP 6 — REPORT
