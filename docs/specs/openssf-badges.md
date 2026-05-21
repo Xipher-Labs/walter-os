@@ -1,9 +1,9 @@
 # OpenSSF Best Practices Badges (OSS Trust E-1 + E-2) — combined spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer E E-1 + E-2
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer E E-1 + E-2 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
 **Target releases**: v0.5.0 (Passing) → v0.6.0 (Silver)
-**Depends on**: D-1 GitHub Security Advisories partner (from the OSS-trust-v0.5.0-small-batch spec — same release)
+**Depends on**: D-1 GitHub Security Advisories partner (in `docs/specs/oss-trust-v0.5.0-small-batch.md` — PR #89, also not yet on `main`; same release cycle as Passing).
 
 ## Problem
 
@@ -27,7 +27,7 @@ Why this matters:
 | D-1 | **File Passing in v0.5.0**, immediately after the D-1 (GHSA) partner registration ships. Silver in v0.6.0. | GHSA is one of Passing's required answers. Sequencing is forced. |
 | D-2 | **Maintain the answers in-repo** at `docs/operational/openssf-badge-passing.md` (Passing) and `docs/operational/openssf-badge-silver.md` (Silver). Each answer references the Walter-OS file / commit / PR that satisfies the criterion. | Answers stay diff-able; future operators can update without re-reading the rubric. |
 | D-3 | **`walter-os audit badge-prereqs`** subcommand checks every Passing / Silver criterion that has a programmatic-testable answer (LICENSE present, CHANGELOG present, SECURITY.md present, etc.). Operator-facing — gives a per-criterion status report. | Replaces "run through the questionnaire manually every 6 months" with a one-command check. |
-| D-4 | **CI badge** in README (after Passing is approved). Live link to the OpenSSF profile page. | Visible trust signal at the top of every README view. |
+| D-4 | **OpenSSF Best Practices badge** rendered in README (after Passing is approved). Live link to the OpenSSF profile page. This is the OpenSSF-published image badge, NOT a CI status badge — the two coexist (CI badge stays as-is; the OpenSSF badge sits next to it). | Visible trust signal at the top of every README view. |
 
 ## Acceptance criteria
 
@@ -44,7 +44,7 @@ The Passing rubric has ~70 criteria. The high-confidence MET subset (already sat
 - **Change-control**: public version-controlled repo, history, releases via tags
 - **Reporting**: BUG_TRACKER URL = github issues, vulnerabilities → `SECURITY.md`
 - **Quality**: working build (CI green), tests (bats + vitest), test policy in CONTRIBUTING
-- **Security**: developer training (operator docs), application of secure design (`docs/operational/security-audit-*.md`), at least 1 hardening tool (gitleaks via `hooks/pre-commit-gitleaks.sh`)
+- **Security**: developer training (operator docs), application of secure design (`docs/operational/security-audit-*.md`), at least 1 hardening tool (gitleaks via `.githooks/pre-commit`, activated by `core.hooksPath=.githooks` — installer at `scripts/setup-githooks.sh` / `scripts/install-pre-commit.sh`; CI scan at `.github/workflows/gitleaks.yml`)
 
 The gaps we likely need to address before filing (~5 criteria):
 
