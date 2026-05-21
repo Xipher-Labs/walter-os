@@ -24,19 +24,34 @@ teardown() {
 }
 
 # Helper: source install.sh under a stub env that loads the helpers
-# without running the full installer. The same pattern as
-# tests/install/no-eval-in-helpers.bats's _invoke.
+# without running the full installer.
+#
+# Copilot R2 #138: pass INSTALL_SH as a positional arg to `bash -c`
+# rather than interpolating its path into the script body. The previous
+# `source '$INSTALL_SH'` form broke under the exact adversarial
+# clone-path scenario (#133) these tests are supposed to validate —
+# a single quote in the install.sh path would terminate the literal.
+# Now: INSTALL_SH arrives as $1 inside the inner bash; the source line
+# uses double-quoted `"$1"` which tolerates any character in the path.
 _invoke() {
-  bash -c "
+  # Pass INSTALL_SH + the command string via env vars (NOT bash -c
+  # positional args), then save+clear $1,$2 inside the inner shell
+  # before sourcing — install.sh parses positional args at source
+  # time + would treat our INSTALL_SH path as "Unknown arg" otherwise.
+  WALTER_INSTALL_SH="$INSTALL_SH" WALTER_INVOKE_CMD="$1" \
+  bash -c '
     set -uo pipefail
     DRY_RUN=0
     CHECK_ONLY=0
     UPGRADE=1
     UNINSTALL=0
-    STEP_ONLY=''
-    source '$INSTALL_SH'
-    $1
-  "
+    STEP_ONLY=""
+    # Clear positional args (install.sh expects none when sourced).
+    set --
+    # shellcheck source=/dev/null
+    source "$WALTER_INSTALL_SH"
+    eval "$WALTER_INVOKE_CMD"
+  '
 }
 
 # -----------------------------------------------------------------------
@@ -50,34 +65,64 @@ _invoke() {
 }
 
 @test "#133: _shell_quote escapes a path containing a single quote" {
-  run _invoke "_shell_quote \"/tmp/foo'; touch INJECTION #\""
+  # Copilot R2 #138: the round-trip uses `eval` on _shell_quote's
+  # output. If _shell_quote ever regresses, that eval would execute
+  # the injection payload (the `touch INJECTION` in the input). Two
+  # defenses applied here:
+  #   1. The probe filename lives in an isolated $TMP_HOME subdir
+  #      that bats already cleans up on teardown.
+  #   2. After the round-trip, ASSERT the probe file does NOT exist —
+  #      so a future regression is caught with a clear failure
+  #      rather than a silently-passing test that ran the payload.
+  local canary_dir="$TMP_HOME/quote-roundtrip-canary"
+  mkdir -p "$canary_dir"
+  local canary="$canary_dir/INJECTION"
+  run _invoke "_shell_quote \"/tmp/foo'; touch $canary; #\""
   [ "$status" -eq 0 ]
   # The quoted form must NOT contain a bare apostrophe followed by `;`.
   # printf '%q' produces something like /tmp/foo\'\;\ touch\ INJECTION\ \#
   [[ "$output" != *"'; touch"* ]]
-  # And the escaped form must round-trip back to the original:
+  # Round-trip via eval (in the isolated $TMP_HOME context).
   local roundtrip
   roundtrip=$(eval "echo $output")
-  [ "$roundtrip" = "/tmp/foo'; touch INJECTION #" ]
+  [ "$roundtrip" = "/tmp/foo'; touch $canary; #" ]
+  # And — critically — the eval did NOT actually execute the
+  # `touch $canary` payload. If _shell_quote regresses, this fails.
+  [ ! -e "$canary" ]
 }
 
 @test "#133: env-file rendered from a quoted-path source is safe to re-source" {
-  # End-to-end byte test: render write_env_file with the real install.sh
-  # (REPO_ROOT == install.sh's parent dir, which is the worktree under
-  # /tmp/walter-escape). The crucial behavior is that the rendered file
-  # round-trips: source it, get WALTER_OS_HOME back identical.
-  _invoke "write_env_file" >/dev/null 2>&1
+  # End-to-end byte test under a malicious clone-path: copy install.sh
+  # to a dir whose name contains shell metacharacters, run write_env_file
+  # from that copy, then source the rendered env file in a clean subshell
+  # and assert the malicious payload did NOT execute (no canary file).
+  #
+  # Copilot R2 #138: the previous version of this test ran against the
+  # real worktree's REPO_ROOT, which has no metacharacters — so it would
+  # silently pass even if the integration broke under a quoted path.
+  # This version actually exercises the #133 exploit scenario.
+  local canary="$TMP_HOME/env-file-canary"
+  local malicious_dir="$TMP_HOME/foo with spaces and apostrophe'name"
+  mkdir -p "$malicious_dir"
+  cp "$INSTALL_SH" "$malicious_dir/install.sh"
+
+  INSTALL_SH="$malicious_dir/install.sh" _invoke "write_env_file" >/dev/null 2>&1
   local env_file="$WALTER_CONFIG/env"
   [ -f "$env_file" ]
-  # The export line must use printf '%q' output, not the old literal
-  # '${REPO_ROOT}' form. Static check: no single-quoted REPO_ROOT
-  # literal remains in the rendered output.
+
+  # No literal-single-quoted form in the rendered output (would mean
+  # we regressed to the pre-#133 `'${REPO_ROOT}'` template).
   ! grep -qE "^export WALTER_OS_HOME='" "$env_file"
-  # And the file must round-trip to the original REPO_ROOT.
-  local got expected
-  expected="$REPO_ROOT"
+
+  # Source in a clean subshell + verify the canary was NOT touched
+  # (the malicious dir name didn't escape into shell-context).
+  bash -c "source '$env_file'; true"
+  [ ! -e "$canary" ]
+
+  # And WALTER_OS_HOME (post-source) equals the malicious path verbatim.
+  local got
   got=$(bash -c "source '$env_file'; printf '%s' \"\$WALTER_OS_HOME\"")
-  [ "$got" = "$expected" ]
+  [ "$got" = "$malicious_dir" ]
 }
 
 # -----------------------------------------------------------------------
