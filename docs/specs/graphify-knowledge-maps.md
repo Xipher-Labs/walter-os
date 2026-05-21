@@ -37,16 +37,21 @@ Walter-OS is increasingly a multi-agent operating system, not a small codebase. 
 
 ### AC-1 — Pilot setup script + `.graphifyignore`
 - [ ] `scripts/graphify/setup.sh` (new) — bash script that:
-  - Checks `uv` is installed (`brew install uv`).
+  - Checks `uv` is installed. Install hints by platform:
+    - macOS: `brew install uv`
+    - Debian/Ubuntu (current Walter-OS reference Linux): `curl -LsSf https://astral.sh/uv/install.sh | sh` (Astral's official installer; runs unprivileged into `~/.local/bin`). `apt install uv` once it lands in stable.
+    - Other Linux / WSL: same upstream installer.
+    Canonical install matrix: <https://docs.astral.sh/uv/getting-started/installation/>. The setup script prints the platform-appropriate hint based on `$(uname -s)`.
   - Runs `uv tool install graphifyy==<pinned-version>` if not already installed.
   - Verifies `graphify --version` matches the pinned version.
   - Writes `.graphifyignore` if absent (with the D-5 exclusion list).
   - Adds `graphify-out/` to `.gitignore` if absent.
 - [ ] `scripts/graphify/setup.sh` is idempotent — re-running is safe.
+- [ ] `walter-os graphify init` wraps `scripts/graphify/setup.sh` as the operator-facing entry point per D-2. The wrapper is a thin shim that just dispatches to the script.
 - [ ] `.graphifyignore` (new) ships at repo root with the D-5 default exclusions.
 
 ### AC-2 — Pilot generation + report
-- [ ] `scripts/graphify/build.sh` (new) — runs `graphify build` against `$WALTER_OS_HOME`, outputs `graphify-out/{graph.json,graph.html,GRAPH_REPORT.md}`.
+- [ ] `scripts/graphify/build.sh` (new) — runs `graphify build` against the CURRENT REPO (resolved via `git rev-parse --show-toplevel`, falling back to `pwd` if not a git repo). Outputs `graphify-out/{graph.json,graph.html,GRAPH_REPORT.md}` inside that repo. The build script is per-repo (matching D-2's opt-in-per-repo workflow), NOT hardcoded to `$WALTER_OS_HOME`. The pilot ASCII diagram earlier in this spec shows the operator running it inside walter-os as a SPECIFIC example, but the script itself is repo-agnostic.
 - [ ] First-time build prints elapsed time, output size, and a "are docs being sent to your model API?" prompt that reads `GRAPHIFY_LOCAL_ONLY` env var.
 - [ ] `walter-os graphify build` wraps `scripts/graphify/build.sh` for discoverability.
 
@@ -76,7 +81,10 @@ After ≥ 30 days of operator use, decide on promotion to default profile. Succe
 If success, file follow-up issue to evaluate the Graphify MCP server for default-profile inclusion (separate from `pentest` profile spec #27 work).
 
 ### AC-7 — Docs
-- [ ] `docs/operational/graphify-pilot.md` (new):
+- [ ] `docs/operational/graphify-runbook.md` (new) — the canonical operator
+  runbook for the Graphify integration. (Earlier draft proposed
+  `graphify-pilot.md` as a temporary pilot-period name; using `runbook` from
+  the start avoids a rename later when the pilot concludes.)
   - Setup steps (one paragraph)
   - Privacy boundary diagram (what stays local, what may go to the LLM)
   - When to use Graphify vs `rg` vs reading files directly
