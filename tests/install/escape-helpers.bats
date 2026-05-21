@@ -51,7 +51,12 @@ _invoke() {
     STEP_ONLY=""
     set --
     # shellcheck source=/dev/null
-    if ! source "$WALTER_INSTALL_SH"; then
+    # 2>/dev/null on the source: install.sh emits warn-level messages
+    # to stderr at source time on systems where personal.env / config
+    # files don't exist (CI runners, fresh checkouts). Those landed in
+    # the bats `run` capture + polluted $output. The function output
+    # itself stays on stdout uncluttered.
+    if ! source "$WALTER_INSTALL_SH" 2>/dev/null; then
       echo "_invoke: source of $WALTER_INSTALL_SH failed" >&2
       exit 1
     fi
