@@ -119,12 +119,14 @@ Almost never. Specific exceptions:
   prefix `refactor:` and the validator skips. Reviewer must confirm
   no behavior changed.
 - **Documentation-only PRs**: `docs:` prefix, validator skips.
-- **Hotfix to main with `--allow-branch-skip`**: validator runs but
-  doesn't block. Postmortem must add the missing test within 48h.
+- **Hotfix to main**: validator runs but doesn't block. Postmortem
+  must add the missing test within 48h.
 
 ## Integration
 
 - Invoked by the `pr-review` skill before approving a PR.
 - Invoked by the `/pr` slash command before opening a PR.
-- Invoked by `branch-flow-guard.sh` hook before allowing a merge from
-  dev → staging or staging → main.
+- The `branch-flow-guard.sh` hook blocks direct pushes to protected
+  branches in both modes. Per ADR 0013 it also gates PR base
+  branches when `WALTER_BRANCH_FLOW=three-stage` is set; default
+  (`single-tier`) accepts `feature/<slug>` → `main` directly.
