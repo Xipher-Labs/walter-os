@@ -81,6 +81,18 @@ PRs #55–#59 and land as the bundle epic completes.)
   Audit ledger `docs/operational/security-audit-2026-05-11.md` updated:
   6/6 P0 findings closed; P1-08 closed by the same fix.
 
+- **Audit P1-09 closed.** `hooks/daily-audit-gate.sh` no longer `source`s
+  `$WALTER_CONFIG/env` directly. New
+  `scripts/walter/lib/env-loader.sh` exports a
+  `walter_env_load_allowlist()` parser that reads `KEY=VALUE` lines,
+  rejects keys not in `WALTER_ENV_ALLOWLIST` (with a WARN), and never
+  evaluates values as code — command substitution (`$(...)`),
+  backticks, and any other shell payload in the value land as literal
+  strings. Operators can extend the allowlist via
+  `$WALTER_CONFIG/env-allowlist.txt` (one KEY per line). 9 new bats
+  tests at `tests/hooks/env-allowlist.bats` lock the parser against
+  direct injection attempts.
+
 ### Changed (build / release pipeline)
 
 - Consolidated `.github/workflows/release-security.yml` into

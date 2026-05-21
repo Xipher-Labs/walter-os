@@ -23,7 +23,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
-[[ -f "${WALTER_CONFIG}/env" ]] && source "${WALTER_CONFIG}/env"
+
+# Load operator env via the allowlist parser, NOT bash `source` (audit
+# P1-09). Sourcing the raw file lets any attacker who can write to
+# ~/.config/walter-os/env execute arbitrary shell at every Claude Code
+# session start.
+_walter_env_loader_lib="${WALTER_OS_HOME:-$REPO_ROOT}/scripts/walter/lib/env-loader.sh"
+if [[ -f "$_walter_env_loader_lib" ]]; then
+  # shellcheck source=/dev/null
+  source "$_walter_env_loader_lib"
+  walter_env_load_allowlist "${WALTER_CONFIG}/env"
+fi
+unset _walter_env_loader_lib
+
 WALTER_OS_HOME="${WALTER_OS_HOME:-$REPO_ROOT}"
 
 TODAY="$(date +%Y-%m-%d)"
