@@ -114,3 +114,66 @@ _invoke() {
   count=$(grep -cE '^[[:space:]]+run_args ' "$INSTALL_SH")
   [ "$count" -ge 10 ]
 }
+
+# -----------------------------------------------------------------------
+# R3: arg-count guards on run_args / run_sh / write_file
+# -----------------------------------------------------------------------
+# Copilot R3 #128 — under set -euo pipefail, an empty "$@" expansion in
+# run_args silently succeeds (masking call-site bugs); missing positional
+# args to run_sh / write_file surface as confusing unbound errors. All
+# three helpers now exit 2 with a clear message on misuse.
+
+@test "AC-R3: run_args with zero args returns 2 with usage message" {
+  run bash -c "set -uo pipefail; DRY_RUN=0; CHECK_ONLY=0; UPGRADE=1; UNINSTALL=0; STEP_ONLY=''; source '$INSTALL_SH'; run_args"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"requires at least 1 argument"* ]]
+}
+
+@test "AC-R3: run_sh with zero args returns 2" {
+  run bash -c "set -uo pipefail; DRY_RUN=0; CHECK_ONLY=0; UPGRADE=1; UNINSTALL=0; STEP_ONLY=''; source '$INSTALL_SH'; run_sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"requires exactly 1 argument"* ]]
+}
+
+@test "AC-R3: write_file with 1 arg returns 2" {
+  run bash -c "set -uo pipefail; DRY_RUN=0; CHECK_ONLY=0; UPGRADE=1; UNINSTALL=0; STEP_ONLY=''; source '$INSTALL_SH'; write_file /tmp/foo"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"requires exactly 2 arguments"* ]]
+}
+
+# -----------------------------------------------------------------------
+# R3: trailing newline preservation on write_file
+# -----------------------------------------------------------------------
+# Copilot R3 #128 (MAJOR): `content="$(cat <<EOF ... )"` strips trailing
+# newlines (bash command-substitution semantics). The previous direct-
+# heredoc form (cat > file <<EOF) produced exactly one trailing newline.
+# write_file now appends a single '\n' via printf '%s\n' to restore that.
+
+@test "AC-R3: write_file preserves one trailing newline (heredoc parity)" {
+  local out="$TMP_HOME/wf-test.txt"
+  _invoke "write_file '$out' 'line1
+line2'"
+  [ -f "$out" ]
+  # Byte-equivalent to `cat > $out <<EOF\nline1\nline2\nEOF`: 12 bytes.
+  local size; size=$(wc -c <"$out" | tr -d ' ')
+  [ "$size" -eq 12 ]
+  [[ "$(tail -c 1 "$out" | od -An -c | tr -d ' ')" == "\\n" ]]
+}
+
+# -----------------------------------------------------------------------
+# R3: run_sh no longer relies on inner eval
+# -----------------------------------------------------------------------
+# Copilot R3 #128: switched from `bash -c 'set -euo pipefail; eval "$1"' bash "$1"`
+# to `printf '%s\n' 'set -euo pipefail' "$1" | bash -s` so there's no
+# extra eval layer. Lock the new pattern in.
+
+@test "AC-R3: run_sh impl uses bash -s pipe (no eval layer)" {
+  grep -qE "printf '%s\\\\n' 'set -euo pipefail' \"\\\$1\" \\| bash -s" "$INSTALL_SH"
+}
+
+@test "AC-R3: run_sh does NOT pass snippet via 'bash -c .* eval' (call sites only)" {
+  # Anchor to leading whitespace so the historical-pattern documentation
+  # comment inside run_sh (lines starting with '#') doesn't false-fail
+  # this assertion. Only flag a real call-site regression.
+  ! grep -qE '^[[:space:]]+bash -c .* eval "\$1"' "$INSTALL_SH"
+}

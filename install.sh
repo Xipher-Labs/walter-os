@@ -228,7 +228,13 @@ run() {
 # run_args — preferred form. Takes an argv array; each arg passed verbatim
 # to exec without shell interpretation. Safe even if args contain ';', '|',
 # '$(...)', backticks, etc. Issue #119.
+#
+# Zero-arg guard (Copilot R3 #128): with `set -euo pipefail`, an empty
+# "$@" expansion becomes a no-op that silently succeeds, which can mask
+# bugs at call sites that built an argv array incorrectly. Return 2 with
+# a clear message so the misuse fails loudly.
 run_args() {
+  [[ $# -ge 1 ]] || { echo "run_args: requires at least 1 argument (the command + args)" >&2; return 2; }
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "$*"
   else
@@ -249,27 +255,44 @@ run_sh() {
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "$1"
   else
-    # Pass the snippet as a positional argument to bash -c rather than
-    # interpolating it into the script string. This keeps the outer
-    # shell from re-interpreting any quotes, backslashes, or newlines
-    # inside the snippet before the inner bash sees it. The inner bash
-    # script applies strict mode (same semantics as install.sh) and
-    # eval's $1 — run_sh explicitly accepts shell-snippet semantics
-    # (redirects, pipes, glob), so eval-inside is by design.
-    # Copilot R1 #128 R1.2 (strict mode) + R2 #128 R2.3 (quoting).
-    bash -c 'set -euo pipefail; eval "$1"' bash "$1"
+    # Pipe the snippet to `bash -s` via stdin (Copilot R3 #128). The
+    # snippet bytes pass through `printf '%s\n'` verbatim — no outer-
+    # shell re-interpretation of quotes/backslashes/$-substitutions, and
+    # no inner `eval` layer. `set -euo pipefail` prepended as the first
+    # script line keeps strict-mode parity with install.sh.
+    #
+    # Previous patterns + why they were rejected:
+    #   bash -c "set -euo pipefail; $1"
+    #     R2 finding: outer "" re-interpolates $1's contents.
+    #   bash -c 'set -euo pipefail; eval "$1"' bash "$1"
+    #     R3 finding: extra eval layer adds quoting surprises +
+    #     re-parsing risk on operator-controlled snippets.
+    printf '%s\n' 'set -euo pipefail' "$1" | bash -s
   fi
 }
 
 # write_file — replaces the `cat > '$dest' <<EOF ... EOF` pattern. Takes
 # a destination path and content as separate args, writes via printf
 # (no eval, no second-pass variable expansion). Issue #119.
+#
+# Arg-count guard parallels run_sh's (Copilot R3 #128) — `set -u` would
+# otherwise produce an unhelpful unbound-parameter error on missing args.
+#
+# Trailing-newline restoration (Copilot R3 #128, MAJOR): when callers
+# build $content via `content="$(cat <<EOF ... )"`, bash command
+# substitution strips trailing newlines. The previous direct-heredoc
+# form (`cat > file <<EOF ... EOF`) produced ONE trailing newline.
+# `printf '%s\n'` here re-adds that single trailing newline to keep
+# the written file byte-equivalent to the original heredoc output
+# (env files + plists both end with one newline by convention; tools
+# like systemd/launchd and the env-file consumers expect it).
 write_file() {
+  [[ $# -eq 2 ]] || { echo "write_file: requires exactly 2 arguments (dest + content)" >&2; return 2; }
   local dest="$1" content="$2"
   if [[ $DRY_RUN -eq 1 ]]; then
-    dry "write_file: $dest ($(printf '%s' "$content" | wc -c | tr -d ' ') bytes)"
+    dry "write_file: $dest ($(printf '%s\n' "$content" | wc -c | tr -d ' ') bytes)"
   else
-    printf '%s' "$content" > "$dest"
+    printf '%s\n' "$content" > "$dest"
   fi
 }
 
