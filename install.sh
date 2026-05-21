@@ -894,9 +894,11 @@ step_1() {
 
 _install_deps_macos() {
   # yq is REQUIRED (not optional): approval-gate.sh fails CLOSED without it.
-  # Listing it as optional in Step 1 while requiring it in --check + preflight
-  # broke fresh installs (Step 1 skipped yq, then preflight failed before
-  # reaching the rest of the wizard). Issue #120.
+  # The previous mismatch — Step 1 marked yq optional while --check and
+  # the preflight required it — caused fresh installs to skip the install
+  # in Step 1 and then trip on the missing tool the next time
+  # approval-gate.sh ran on a hook event (the failure surfaces as a
+  # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
   local required_deps=(git curl jq yq docker bats)
   local optional_deps=(python3)
 
@@ -1009,18 +1011,48 @@ _install_deps_linux() {
       # if snap is unavailable (common on minimal Debian/Ubuntu images).
       # Copilot R2 #125.
       if [[ "$dep" == "yq" ]]; then
+        # _yq_arch — map `uname -m` to the mikefarah/yq release-asset name.
+        # arm64/aarch64 systems were previously told to download _amd64,
+        # which silently installs the wrong binary (Copilot R3 #125).
+        local _yq_arch
+        case "$(uname -m)" in
+          x86_64|amd64)   _yq_arch="amd64" ;;
+          aarch64|arm64)  _yq_arch="arm64" ;;
+          armv7l|armv7)   _yq_arch="arm" ;;
+          ppc64le)        _yq_arch="ppc64le" ;;
+          s390x)          _yq_arch="s390x" ;;
+          *)              _yq_arch="amd64" ;;  # best-effort default
+        esac
         if [[ $DRY_RUN -eq 1 ]]; then
           dry "would run: sudo snap install yq  (mikefarah/yq — NOT apt's yq)"
         elif command -v snap >/dev/null 2>&1; then
           say "Installing $dep via snap (mikefarah/yq)..."
           sudo snap install yq
-          ok "Installed $dep"
+          # Post-install verification (Copilot R3 #125): snap puts yq at
+          # /snap/bin/yq, which may not be on PATH yet in the current
+          # shell. Refresh + flavor-check before claiming success so an
+          # operator on a system where snap's PATH wiring is broken
+          # isn't told "Installed" only to find the gate still missing yq.
+          hash -r 2>/dev/null || true
+          if ! command -v yq >/dev/null 2>&1; then
+            err "yq install succeeded but 'yq' is not on PATH yet."
+            err "  Add snap's bin to PATH and re-source your shell:"
+            err "    export PATH=\"/snap/bin:\$PATH\""
+            exit 1
+          fi
+          if ! _yq_is_mikefarah; then
+            err "yq is on PATH but is not mikefarah/yq."
+            err "  Detected: $(yq --version 2>&1 | head -1)"
+            err "  Check 'which yq' — another binary may shadow snap's yq."
+            exit 1
+          fi
+          ok "Installed $dep ($(yq --version 2>&1 | head -1))"
         else
           err "yq install path needs snap, but snap is not installed."
           err "  Option A (preferred): enable snap, then re-run:"
           err "    sudo apt-get install -y snapd  # Debian/Ubuntu"
-          err "  Option B (direct binary download — pick your arch):"
-          err "    sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \\"
+          err "  Option B (direct binary download for this arch — ${_yq_arch}):"
+          err "    sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${_yq_arch} \\"
           err "      -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq"
           err "  Verify after either: yq --version  # must say 'mikefarah'"
           exit 1
