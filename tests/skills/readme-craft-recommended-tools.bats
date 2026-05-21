@@ -33,7 +33,10 @@ RECOMMENDED_MD="${SKILL_DIR}/recommended-tools.md"
 }
 
 # -----------------------------------------------------------------------
-# AC-3: each entry has the four required subsections
+# AC-3: each entry has the three required structured subsections
+# (Use-when / Avoid-when / Supply-chain notes). The "Why this not X"
+# narrative subsection that some entries carry is free-form and not
+# enforced here.
 # -----------------------------------------------------------------------
 @test "AC-3: every entry has Use-when, Avoid-when, and Supply-chain notes" {
   use_when=$(grep -cE '^\*\*Use when\*\*' "${RECOMMENDED_MD}")

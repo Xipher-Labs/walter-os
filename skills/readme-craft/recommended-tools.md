@@ -273,7 +273,8 @@ Run this checklist when `quarterly-upgrade-cadence` skill triggers, OR
 when `daily-supply-chain-audit` flags an issue with any tool here:
 
 - [ ] All 8 upstream URLs return 200 (run the bats test in
-  `tests/recommended-tools-urls.bats`).
+  `tests/skills/readme-craft-recommended-tools.bats` — the
+  `URL liveness` cases under the `READMECRAFT_CHECK_URLS=1` gate).
 - [ ] Each upstream's last commit is within the last 6 months.
 - [ ] None of the GitHub Actions have published a new major version
   without a security advisory.
