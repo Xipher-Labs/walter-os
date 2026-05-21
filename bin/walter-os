@@ -1086,7 +1086,32 @@ cmd_version() {
 # ---------- doctor ----------
 
 cmd_doctor() {
-  echo "Walter-OS doctor"
+  # Parse optional --tier N flag. Without it, every check runs (legacy
+  # contract preserved). With it, only checks tagged ≤ N run — useful
+  # for verifying a tier install (see setup/agent-install/tier-*.md).
+  local tier_filter=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --tier)
+        tier_filter="${2:-}"
+        shift 2 || shift
+        ;;
+      --tier=*)
+        tier_filter="${1#--tier=}"
+        shift
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -n "$tier_filter" ]] && ! [[ "$tier_filter" =~ ^[1-4]$ ]]; then
+    echo "Error: --tier must be 1, 2, 3, or 4 (got: ${tier_filter})" >&2
+    return 1
+  fi
+
+  echo "Walter-OS doctor${tier_filter:+ (tier ${tier_filter})}"
   echo
 
   local ok=0 issues=0
@@ -1102,45 +1127,75 @@ cmd_doctor() {
     fi
   }
 
+  # tier_check: wraps `check` with a tier number. Skips when a tier
+  # filter is active and the check's tier > the filter (i.e. tier-3
+  # check is skipped when running --tier 2).
+  tier_check() {
+    local n="$1"; shift
+    if [[ -z "$tier_filter" ]] || [[ "$n" -le "$tier_filter" ]]; then
+      check "$@"
+    fi
+  }
+
   echo "Walter-OS config:"
-  check "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
-  check "env file present" test -f "${WALTER_CONFIG}/env"
-  check "secrets template present" test -f "${WALTER_CONFIG}/secrets.env"
+  tier_check 1 "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
+  tier_check 1 "env file present" test -f "${WALTER_CONFIG}/env"
+  tier_check 1 "secrets template present" test -f "${WALTER_CONFIG}/secrets.env"
   # shellcheck disable=SC2088 # tildes here are labels, not paths
-  check '~/.claude/settings.json present' test -f "$CLAUDE_SETTINGS"
-  # shellcheck disable=SC2088
-  check '~/.claude/CLAUDE.md symlinked to walter-os' \
+  tier_check 1 '~/.claude/CLAUDE.md symlinked to walter-os' \
     bash -c "[[ -L \"\$HOME/.claude/CLAUDE.md\" ]] && [[ \"\$(readlink \"\$HOME/.claude/CLAUDE.md\")\" == \"$WALTER_OS_HOME\"* ]]"
   # shellcheck disable=SC2088
-  check '~/.codex/AGENTS.md symlinked to walter-os' \
+  tier_check 1 '~/.codex/AGENTS.md symlinked to walter-os' \
     bash -c "[[ -L \"\$HOME/.codex/AGENTS.md\" ]] && [[ \"\$(readlink \"\$HOME/.codex/AGENTS.md\")\" == \"$WALTER_OS_HOME\"* ]]"
   # shellcheck disable=SC2088
-  check 'skills symlinked into ~/.claude/skills' \
-    bash -c "ls -1 \"\$HOME/.claude/skills\" 2>/dev/null | grep -q ."
-  check "audit ran today" test -f "${WALTER_CONFIG}/audit-${TODAY}.md"
+  tier_check 1 '~/.local/bin/walter-os symlinked' \
+    bash -c "[[ -L \"\$HOME/.local/bin/walter-os\" ]]"
 
+  # Tier 2: local tooling — skills, MCP profile, audit cadence.
+  # shellcheck disable=SC2088
+  tier_check 2 '~/.claude/settings.json present' test -f "$CLAUDE_SETTINGS"
+  # shellcheck disable=SC2088
+  tier_check 2 'skills symlinked into ~/.claude/skills' \
+    bash -c "ls -1 \"\$HOME/.claude/skills\" 2>/dev/null | grep -q ."
+  tier_check 2 "audit ran today" test -f "${WALTER_CONFIG}/audit-${TODAY}.md"
+
+  # Tier 3: VM-side credentials (validated locally, the actual service
+  # health checks run from the VM via the tier-3.md prompt's verify
+  # commands).
+  tier_check 3 "WALTER_DOMAIN env set (Tier III)" \
+    bash -c 'test -n "${WALTER_DOMAIN:-}"'
+  tier_check 3 "HCLOUD_TOKEN env set (Tier III)" \
+    bash -c 'test -n "${HCLOUD_TOKEN:-}"'
+
+  # Tier 4: Council prerequisites.
+  tier_check 4 "trust-tiers.yml present (Tier IV)" \
+    test -f "${WALTER_CONFIG}/trust-tiers.yml"
+  tier_check 4 "Council agent definitions present (Tier IV)" \
+    bash -c "ls -1 \"$WALTER_OS_HOME/agents\"/*.md 2>/dev/null | grep -q ."
+
+  # CLI presence checks (tier 1 — needed for any agent install).
   echo
   echo "Required CLIs:"
-  check "claude CLI in PATH" command -v claude
-  check "codex CLI in PATH" command -v codex
-  check "jq installed" command -v jq
-  check "git installed" command -v git
-  check "gh (GitHub CLI) installed" command -v gh
+  tier_check 1 "claude CLI in PATH" command -v claude
+  tier_check 1 "codex CLI in PATH" command -v codex
+  tier_check 1 "jq installed" command -v jq
+  tier_check 1 "git installed" command -v git
+  tier_check 1 "gh (GitHub CLI) installed" command -v gh
 
   echo
   echo "Bootstrap tooling (optional but expected):"
-  check "Homebrew installed" command -v brew
-  check "mise (runtime version manager)" command -v mise
-  check "OrbStack / docker daemon" command -v docker
-  check "ripgrep (rg)" command -v rg
-  check "shellcheck" command -v shellcheck
-  check "bats-core" command -v bats
-  check "gitleaks (secret scan)" command -v gitleaks
-  check "uvx (Python runner)" command -v uvx
-  check "Solana CLI" command -v solana
-  check "Anchor (Solana programs)" command -v anchor
-  check "Maestro (mobile testing)" command -v maestro
-  check "Tailscale" command -v tailscale
+  tier_check 2 "Homebrew installed" command -v brew
+  tier_check 2 "mise (runtime version manager)" command -v mise
+  tier_check 2 "OrbStack / docker daemon" command -v docker
+  tier_check 2 "ripgrep (rg)" command -v rg
+  tier_check 2 "shellcheck" command -v shellcheck
+  tier_check 2 "bats-core" command -v bats
+  tier_check 2 "gitleaks (secret scan)" command -v gitleaks
+  tier_check 2 "uvx (Python runner)" command -v uvx
+  tier_check 2 "Solana CLI" command -v solana
+  tier_check 2 "Anchor (Solana programs)" command -v anchor
+  tier_check 2 "Maestro (mobile testing)" command -v maestro
+  tier_check 2 "Tailscale" command -v tailscale
 
   echo
   echo "${ok} ok / ${issues} issues"
