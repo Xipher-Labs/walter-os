@@ -65,7 +65,7 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 | E-3 | **`@types/*` allowlist for `minimumReleaseAge`** | v0.4.1 | 2h | Deferred from PR #60; needs `check-release-age.py` (already shipped) |
 | E-4 | **`walter-os justify revoke` CLI** | v0.4.1 | 2-4h | Deferred from PR #60; pairs with walter-debt-tracker spec (PR #77) |
 
-**16 items total.** All v1.0-blocking items target v0.4.1 → v0.6.0 (the next two minor releases). C-1 + C-2 close at v1.0.
+**16 items total.** All v1.0-blocking items target v0.4.1 → v0.6.0 (v0.4.1 is a patch on top of v0.4.0; v0.5.x and v0.6.0 are the two minors that follow). C-1 + C-2 close at v1.0.
 
 ## Cross-cutting decisions (DEC-1..DEC-4)
 
