@@ -37,9 +37,9 @@ Walter-OS's value isn't picking the "best" model. It's **orchestrating each mode
 |---|---|---|
 | D-1 | **Preferences live in `~/.config/walter-os/overlay/personal.env`** with `WALTER_MODEL_*` env var keys. | Same overlay surface that ADR 0013 + the new env-allowlist parser (P1-09) already use. No new config surface to maintain. |
 | D-2 | **Six preference axes**: `BACKEND_REVIEW`, `FRONTEND`, `LONGFORM`, `QUICK_REFACTOR`, `PHI`, `BRAINSTORM`, plus a `DEFAULT` fallback. | Matches the bullet list in #24 (operator's design). Adding more axes later is backward-compatible (new env vars; old code keeps reading `DEFAULT`). |
-| D-3 | **Values are LiteLLM model-name strings** (e.g. `sonnet`, `opus`, `gpt`, `cheap`, `openrouter/claude`, `local-ollama`). Skills resolve via the existing LiteLLM gateway. | One source of truth for what each name means. LiteLLM `config.yaml` is the catalogue. |
-| D-4 | **Comma-separated parallel mode**: `WALTER_MODEL_BACKEND_REVIEW=codex,claude` means "dispatch to Codex AND Claude in parallel, surface both outputs." | Maps directly to the 3-round review pattern. Single-value = single model; comma-list = team. |
-| D-5 | **PHI is an override, not a preference.** `WALTER_MODEL_PHI=local-ollama` (the default) is a HARD cap — any skill that detects PHI tags refuses non-local models regardless of other settings. | `medical-data-compliance` already enforces this; we're surfacing the env var that controls it. |
+| D-3 | **Values are LiteLLM `model_name` aliases** as defined in `setup/walter-host/services/litellm/config.yaml` (e.g. the currently-shipped aliases `sonnet`, `opus`, `gpt`, `cheap`, `openrouter/claude`, `local-ollama` — list snapshotted at spec-writing time; the authoritative catalogue is the LiteLLM config). The wizard examples earlier in this doc that use `codex` / `claude` are SHORTHAND CHOICES the wizard offers and translates to the corresponding alias under the hood (e.g., "claude" → "sonnet" or "opus" depending on selection); the env vars persisted to personal.env carry the resolved aliases, not the shorthand. | One source of truth for what each name means. LiteLLM `config.yaml` is the catalogue. |
+| D-4 | **Comma-separated parallel mode**: `WALTER_MODEL_BACKEND_REVIEW=codex,claude` means "dispatch to Codex AND Claude in parallel, surface both outputs." Maps to the 3-round review pattern. Implementation note: `llm_invoke` today accepts a single model alias; the per-skill resolver (D-7 — `walter_model_for`) is responsible for parsing the comma-list and invoking `llm_invoke` N times in parallel, then merging the outputs. `llm_invoke` itself does NOT change. | Single-value = single model; comma-list = team. The plan should call out the resolver's parallel-fanout pattern explicitly. |
+| D-5 | **PHI is an override, not a preference.** `WALTER_MODEL_PHI=local-ollama` (the default) is a HARD cap — any skill that detects PHI tags refuses non-local models regardless of other settings. The current `skills/medical-data-compliance/SKILL.md` describes the POLICY but does not implement the env-driven routing check; this spec adds the implementation to the new `walter_model_for` resolver (D-7) so PHI tasks route locally regardless of other env vars. | The skill defines the rule; this spec wires it up so the rule has teeth at the routing layer. |
 | D-6 | **Interactive wizard at `setup/personal-overlay-init.sh`** asks the 6 axes during overlay scaffold. Re-run-friendly. | Operators new to the framework get good defaults; existing operators can re-run when they want to change. |
 | D-7 | **Per-skill resolution function `walter_model_for <domain>`** lives in `scripts/walter/lib/model-router.sh` (new) and reads the env vars. Skills consult it instead of hardcoding. | Single point of truth. Easy to test. Skills don't all need to be rewritten at once. |
 | D-8 | **No HARD-LOCK to any model.** Operator can always override any skill via env var on a per-invocation basis (`WALTER_MODEL_OVERRIDE=opus walter ask ...`). | Per #24 AC-final bullet. Critical to maintain operator autonomy. |
@@ -95,10 +95,19 @@ Each skill below now reads `walter_model_for <its-domain>` and dispatches accord
 - [ ] `commands/pr.md` updated to consult `$WALTER_REVIEW_POLICY_FILE` (defaults to `~/.config/walter-os/overlay/review-policy.yml`) and route review rounds accordingly.
 - [ ] bats test in `tests/walter/review-policy.bats` parses the example file + asserts per-domain routing.
 
-### AC-5 — `walter status --models` subcommand
-- [ ] `bin/walter-os` exposes `walter status --models` that reads from the LiteLLM Postgres usage table and reports:
+### AC-5 — `walter-os status --models` subcommand
+
+Note on the command name: the current repo exposes the audit/spend
+report at `walter-os status` (in `bin/walter-os`); `walter status`
+is a separate frontend in `bin/walter`. This spec adds the
+`--models` flag to `walter-os status` specifically so the existing
+audit/spend plumbing flows through one frontend. The `walter`
+wrapper can forward unknown subcommands to `walter-os` later if the
+operator wants a single entry point; that's out of scope here.
+
+- [ ] `bin/walter-os` `cmd_status` gains a `--models` flag (or a new `cmd_models` subcommand — pick at /write-plan time) that reads from the LiteLLM Postgres usage table and reports:
   - Calls per model in the last 24h / 7d / 30d (selectable)
-  - Calls per `domain` tag (from `llm_invoke`'s metadata)
+  - Calls per `domain` tag. NOTE: `scripts/agents/lib/llm.sh` `llm_invoke` currently emits metadata with `agent_id`, `task_id`, `context`, and `model_alias` only — no `domain` tag. This AC ALSO extends `llm_invoke`'s metadata to include `domain` (sourced from the calling skill via the `WALTER_MODEL_DOMAIN` env var the new `walter_model_for` resolver sets), so the per-domain breakdown has data to query.
   - Cost per model (USD, attribution via `walter-os spend report` plumbing)
   - "Effective routing": which `WALTER_MODEL_*` env var fired which domain
 - [ ] Output format: same table style as `walter-os status` (text by default; `--json` flag for scripting).
