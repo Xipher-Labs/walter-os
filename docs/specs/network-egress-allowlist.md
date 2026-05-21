@@ -16,7 +16,7 @@ The fix isn't more regex. The fix is a default-deny network gate: agents reach a
 - Cross-application firewall replacement (`ufw` / `nftables`). Out of scope; operator runs whatever host firewall they want.
 - Per-tool fine-grained allowlists. Single operator-global allowlist for v0.5.0; per-skill scoping is a v0.6.0 follow-up.
 - Inbound traffic filtering. This spec is OUTBOUND only.
-- Inspecting TLS payloads. We block at the connection layer; what crosses an allowed connection is the operator's call.
+- Inspecting TLS payloads. The hook makes the allow/deny decision BEFORE the connection is opened (command-string parse → host extract → allowlist check). What crosses an allowed connection after that point is the operator's call. (Per D-2 below: the hook is hook-level / command-string parsing, NOT a connection-layer / kernel-netfilter intercept — that distinction is load-bearing for the threat model.)
 
 ## Decisions (proposed)
 
@@ -161,7 +161,7 @@ The fix isn't more regex. The fix is a default-deny network gate: agents reach a
 
 ## Refs
 
-- Parent: `docs/specs/oss-trust-roadmap.md` A-1
-- Pattern source: `docs/specs/p1-hardening-epic.md` AC-6 (env-allowlist parser — same shape)
-- `hooks/approval-gate.sh` + `hooks/bash-denylist.sh` (existing PreToolUse chain this composes with)
-- `scripts/walter/lib/env-loader.sh` (P1-09 parser — template for the egress-loader)
+- Parent: OSS Trust roadmap A-1 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); post-merge in-tree path is `docs/specs/oss-trust-roadmap.md`.
+- Pattern source: P1 hardening epic AC-6 (env-allowlist parser — same shape) — spec in [PR #94](https://github.com/Xipher-Labs/walter-os/pull/94); post-merge: `docs/specs/p1-hardening-epic.md`.
+- `hooks/approval-gate.sh` + `hooks/bash-denylist.sh` (existing PreToolUse chain this composes with — already on main).
+- `scripts/walter/lib/env-loader.sh` — P1-09 parser implementation. ALREADY on `main` (landed via [PR #69](https://github.com/Xipher-Labs/walter-os/pull/69) for v0.4.0); the egress-loader uses this as a template.
