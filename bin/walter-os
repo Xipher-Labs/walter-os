@@ -1302,8 +1302,10 @@ cmd_doctor() {
   # Tier 4: Council prerequisites.
   tier_check 4 "trust-tiers.yml present (Tier IV)" \
     test -f "${WALTER_CONFIG}/trust-tiers.yml"
+  # shellcheck disable=SC2016 # single-quoted bash -c is intentional —
+  # positional-arg pattern prevents WALTER_OS_HOME interpolation injection.
   tier_check 4 "Council agent definitions present (Tier IV)" \
-    bash -c 'ls -1 "$1/agents"/*.md 2>/dev/null | grep -q .' bash "$WALTER_OS_HOME"  # shellcheck disable=SC2016
+    bash -c 'ls -1 "$1/agents"/*.md 2>/dev/null | grep -q .' bash "$WALTER_OS_HOME"
 
   # CLI presence checks (tier 1 — needed for any agent install).
   echo
