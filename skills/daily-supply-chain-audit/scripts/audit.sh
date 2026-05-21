@@ -152,7 +152,11 @@ check_mcp_scanners() {
   # day creates alert fatigue. It's documented in the SKILL.md as optional.
 }
 
-# ---------- 5. Tool definition drift ----------
+# ---------- 5. MCP server-registry drift ----------
+# (Function still named check_tool_definitions for backward compat with
+# audit_main() invocation order; Phase 1 closes the no-op gap at the
+# registry level. Phase 2 — tool-schema drift via stdio JSON-RPC — is
+# follow-up under #117.)
 
 check_tool_definitions() {
   # Closes issue #117 (external review F4) Phase 1: snapshot the STATIC
@@ -168,14 +172,23 @@ check_tool_definitions() {
   # tool, diff against baseline. Requires walter-os to ship an MCP client.
   local registry="${WALTER_OS_HOME:-${HOME}/walter-os}/mcp/servers.json"
   [[ -f "$registry" ]] || return 0
-  command -v jq >/dev/null 2>&1 || return 0
+  # MAJOR fix (Copilot R1 #129 R1.1): if jq is missing, the audit's
+  # security-relevant MCP drift check would silently pass. Emit a HIGH
+  # finding instead of returning quietly — same pattern as check_hooks.
+  if ! command -v jq >/dev/null 2>&1; then
+    finding high "no-jq-mcp-drift" "jq not installed; cannot verify MCP server registry for drift" "brew install jq"
+    return 0
+  fi
 
   local baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
   local current
   current="$(jq --sort-keys '.servers // {}' "$registry" 2>/dev/null)" || return 0
 
   if [[ ! -f "$baseline" ]]; then
-    echo "$current" > "$baseline"
+    # Atomic write (Copilot R1 #129 R1.3) — consistent with
+    # cmd_baseline_mcp_tools' .tmp + mv pattern.
+    mkdir -p "$(dirname "$baseline")"
+    echo "$current" > "${baseline}.tmp" && mv "${baseline}.tmp" "$baseline"
     return 0
   fi
 
