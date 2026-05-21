@@ -35,7 +35,10 @@ bump() {
 finding() {
   local level="$1" id="$2" desc="$3" action="${4:-investigate manually}"
   bump "$level"
-  FINDINGS+=("- **[${level^^}]** \`${id}\` — ${desc}")
+  # `${level^^}` is bash 4+ syntax. macOS bash 3.2 fails to parse it.
+  local level_upper
+  level_upper="$(printf '%s' "$level" | tr '[:lower:]' '[:upper:]')"
+  FINDINGS+=("- **[${level_upper}]** \`${id}\` — ${desc}")
   FINDINGS+=("  - Action: ${action}")
 }
 
@@ -312,7 +315,10 @@ for r in rows:
     [[ -z "$sev" ]] && continue
     local justify_target="$pkg_spec"
     [[ "$justify_target" == "-" || -z "$justify_target" ]] && justify_target="<pkg>@<version>"
-    case "${sev,,}" in
+    # `${sev,,}` is bash 4+ syntax. Use tr for bash 3.2 compatibility.
+    local sev_lower
+    sev_lower="$(printf '%s' "$sev" | tr '[:upper:]' '[:lower:]')"
+    case "$sev_lower" in
       info) finding info "$id" "$rest" \
               "Use 'walter-os justify ${justify_target} --reason=...' to exempt" ;;
       high) finding high "$id" "$rest" \
@@ -350,7 +356,15 @@ check_pinning() {
 # ---------- 8. Skill static checks ----------
 
 check_skill_scripts() {
-  for skills_dir in "${CLAUDE_HOME}/skills" "${CODEX_HOME}/skills"; do
+  # Scan ~/.claude/skills, ~/.codex/skills, AND the in-repo external/
+  # submodule tree (audit P1-07 — external submodule hooks were
+  # previously outside the audit perimeter).
+  local skill_dirs=("${CLAUDE_HOME}/skills" "${CODEX_HOME}/skills")
+  if [[ -n "${WALTER_OS_HOME:-}" && -d "${WALTER_OS_HOME}/external" ]]; then
+    skill_dirs+=("${WALTER_OS_HOME}/external")
+  fi
+
+  for skills_dir in "${skill_dirs[@]}"; do
     [[ -d "$skills_dir" ]] || continue
     while IFS= read -r script; do
       # Check for dangerous patterns
@@ -367,6 +381,71 @@ check_skill_scripts() {
       fi
     done < <(find "$skills_dir" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) 2>/dev/null)
   done
+}
+
+# ---------- 8b. External submodule hook integrity (P1-07) ----------
+#
+# `external/**/hooks/scripts/*.sh` execute at SessionStart, PostToolUse,
+# and PreCompact under operator credentials. They are loaded via the
+# plugin marketplace and may not appear in ~/.claude/settings.json's
+# checksum table. We snapshot their sha256 at first run and fire CRIT
+# on any subsequent drift — a malicious commit to the submodule (or a
+# tampered checkout) is caught before the next session start.
+
+check_external_hooks() {
+  [[ -n "${WALTER_OS_HOME:-}" && -d "${WALTER_OS_HOME}/external" ]] || return 0
+
+  # Resolve sha256sum invocation per platform. Use an array so the
+  # multi-arg `shasum -a 256` form splits correctly under shellcheck-
+  # clean quoting in the pipeline below.
+  local -a hasher_cmd=()
+  if command -v sha256sum >/dev/null 2>&1; then
+    hasher_cmd=(sha256sum)
+  elif command -v shasum >/dev/null 2>&1; then
+    hasher_cmd=(shasum -a 256)
+  else
+    finding high "external-hook-integrity-skipped" \
+      "Neither sha256sum nor shasum installed — cannot verify external hook integrity" \
+      "Install coreutils (Linux) or rely on macOS default shasum"
+    return 0
+  fi
+
+  local baseline="${WALTER_CONFIG}/external-hook-checksums.json"
+  local current_tmp
+  current_tmp="$(mktemp)"
+
+  # Hash every external hook script. Sort for reproducibility so the
+  # baseline JSON is line-stable across runs.
+  find "${WALTER_OS_HOME}/external" \
+    -type f \
+    -path '*/hooks/scripts/*' \
+    \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
+    -print0 2>/dev/null \
+    | LC_ALL=C sort -z \
+    | xargs -0 "${hasher_cmd[@]}" 2>/dev/null \
+    | jq -R 'split("  ") | {(.[1] | sub("^.*/external/"; "external/")): .[0]}' \
+    | jq -s 'add // {}' \
+    > "$current_tmp"
+
+  if [[ ! -s "$current_tmp" ]]; then
+    rm -f "$current_tmp"
+    return 0   # No external hook scripts → nothing to check.
+  fi
+
+  if [[ ! -f "$baseline" ]]; then
+    # First run — snapshot silently. Future runs compare against this.
+    mv "$current_tmp" "$baseline"
+    return 0
+  fi
+
+  if ! diff -q "$baseline" "$current_tmp" >/dev/null 2>&1; then
+    local diff_summary
+    diff_summary="$(diff "$baseline" "$current_tmp" 2>/dev/null | head -20 | tr '\n' ' ')"
+    finding crit "external-hook-tampered" \
+      "External submodule hook scripts changed since baseline. diff: ${diff_summary}" \
+      "Review the change. If intentional (e.g. submodule SHA bump after security review): walter-os baseline-external-hooks"
+  fi
+  rm -f "$current_tmp"
 }
 
 # ---------- 9. Notifications ----------
@@ -397,6 +476,7 @@ main() {
   check_pinning
   check_min_release_age
   check_skill_scripts
+  check_external_hooks
 
   # Write report
   {
@@ -449,4 +529,8 @@ EOF
   exit "$SEVERITY"
 }
 
-main "$@"
+# Only run main() when invoked as a script — tests source this file to
+# call individual `check_*` functions in isolation.
+if [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
+  main "$@"
+fi
