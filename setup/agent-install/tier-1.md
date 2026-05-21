@@ -139,7 +139,10 @@ The --upgrade path runs run_step_0 which:
 
 Verify:
   command -v walter-os            # expect: ~/.local/bin/walter-os
-  walter-os --version             # expect: walter-os X.Y.Z
+  walter-os --version             # expect: "Walter-OS vX.Y.Z" (the
+                                  # `--version` alias routes to the
+                                  # `version` subcommand, which reads
+                                  # the canonical VERSION file)
 
 If `walter-os` is NOT found, ~/.local/bin/ may not be on $PATH.
 install.sh prints the shell-rc edit needed. Ask the operator to add
