@@ -106,33 +106,45 @@ patch_env_for_category() {
 
   [[ -f "$env_file" ]] || return 0
 
+  # bash 3.2 (macOS default) misparses `[key]=value` array assignments
+  # under `set -u` as a parameter expansion before recognizing the
+  # array-assignment syntax. Wrap each `declare -A` block in
+  # `set +u` / `set -u` so the script loads cleanly on every supported
+  # bash. Same pattern as approval-gate.sh CATEGORY_MIN_TIER
+  # (PR #68 P1-05 side fix) and providers.sh CATEGORY_LABELS.
   case "$category" in
     llm)
+      set +u
       declare -A llm_vars=(
         [litellm]="LITELLM_BASE_URL LITELLM_API_KEY"
         [anthropic]="ANTHROPIC_API_KEY ANTHROPIC_ENTERPRISE_KEY"
         [openai]="OPENAI_API_KEY"
         [ollama]="OLLAMA_BASE_URL"
       )
+      set -u
       _patch_vars "$selected" "$env_file" "litellm anthropic openai ollama" llm_vars
       ;;
 
     project_management)
+      set +u
       declare -A pm_vars=(
         [plane]="PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT"
         [plane_cloud]="PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT"
         [linear]="LINEAR_API_KEY"
       )
+      set -u
       # plane and plane_cloud share vars; _patch_vars handles shared-var protection
       _patch_vars "$selected" "$env_file" "plane plane_cloud linear" pm_vars
       ;;
 
     git)
+      set +u
       declare -A git_vars=(
         [github]="GITHUB_TOKEN"
         [forgejo]="FORGEJO_URL FORGEJO_TOKEN"
         [gitlab]="GITLAB_TOKEN GITLAB_URL"
       )
+      set -u
       _patch_vars "$selected" "$env_file" "github forgejo gitlab" git_vars
       # Write canonical GIT_PROVIDER identifier so scripts don't have to
       # infer the provider from which credential vars are set.
@@ -142,40 +154,48 @@ patch_env_for_category() {
       ;;
 
     secrets)
+      set +u
       declare -A secrets_vars=(
         [infisical]="INFISICAL_CLIENT_ID INFISICAL_CLIENT_SECRET INFISICAL_API_URL"
         [doppler]="DOPPLER_TOKEN"
         [onepassword]="OP_ACCOUNT"
         [bitwarden]="BW_SESSION BW_SERVER"
       )
+      set -u
       _patch_vars "$selected" "$env_file" "infisical doppler onepassword bitwarden" secrets_vars
       ;;
 
     web_analytics)
+      set +u
       declare -A analytics_vars=(
         [plausible]="PLAUSIBLE_API_KEY PLAUSIBLE_SITE_ID"
         [plausible_cloud]="PLAUSIBLE_API_KEY PLAUSIBLE_SITE_ID"
         [cloudflare]="CF_ANALYTICS_TOKEN"
         [ga4]="GA4_MEASUREMENT_ID GA4_API_SECRET"
       )
+      set -u
       # plausible and plausible_cloud share vars; _patch_vars handles shared-var protection
       _patch_vars "$selected" "$env_file" "plausible plausible_cloud cloudflare ga4" analytics_vars
       ;;
 
     search)
+      set +u
       declare -A search_vars=(
         [brave]="BRAVE_API_KEY"
         [algolia]="ALGOLIA_API_KEY ALGOLIA_APP_ID"
       )
+      set -u
       _patch_vars "$selected" "$env_file" "brave algolia" search_vars
       ;;
 
     embeddings)
+      set +u
       declare -A embed_vars=(
         [nomic]="OLLAMA_BASE_URL"
         [openai_ada]="OPENAI_API_KEY"
         [voyage]="VOYAGE_API_KEY"
       )
+      set -u
       # OLLAMA_BASE_URL and OPENAI_API_KEY are shared with the llm category.
       # _var_owned_by_llm_category() reads WALTER_LLM_PROVIDER (set by
       # providers.sh before calling this function) to check whether the

@@ -13,6 +13,16 @@ WALTER_BIN="${REPO_ROOT}/bin/walter"
 # Test environment setup helpers
 # -----------------------------------------------------------------------
 setup() {
+  # patch_env.sh + providers.sh require bash >= 4 (associative arrays).
+  # macOS ships bash 3.2 as /bin/bash AND that's what `bats` uses to
+  # source files inside @test blocks; we cannot re-exec a sourced
+  # file. Skip if bats itself is bash 3.2 — the script-under-test
+  # re-execs to bash 4+ on real invocation, so this is a test-harness-
+  # only limitation, not a production gap.
+  if [[ "${BASH_VERSION%%.*}" -lt 4 ]]; then
+    skip "providers test suite requires bash >= 4 (BASH_VERSION=$BASH_VERSION); the script re-execs under bash 4+ on real invocation, but bats sources files in its own shell"
+  fi
+
   # Fresh temp dir for each test — simulates HOME config
   TEST_HOME="$(mktemp -d)"
   export HOME="$TEST_HOME"
