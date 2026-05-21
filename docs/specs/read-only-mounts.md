@@ -43,10 +43,10 @@ This is the difference between "you can read config" and "config is not at this 
 
 ### AC-1 — Invisible-mount mechanism
 - [ ] `scripts/walter/lib/sandbox.sh` `walter_sandbox_run` gains a `--high-tier` flag that adds invisible mounts.
-- [ ] **Per-target type**: D-3's protected-paths list contains BOTH directories (`~/.ssh/`, `~/.aws/`) AND single files (`~/.docker/config.json`, `~/.config/walter-os/overlay/personal.env`). The mechanism creates an EMPTY DIR placeholder for dir targets and an EMPTY FILE placeholder for file targets — bind-mounting a dir over a file (or vice-versa) errors out at sandbox start. The detection rule: if the source path resolves to a regular file, use an empty file placeholder; if it resolves to a directory (or doesn't exist yet), use an empty dir placeholder. Both placeholder kinds are mode `0700` (file) / `0700` (dir) so even the placeholder itself can't be probed for contents from outside the sandbox.
+- [ ] **Per-target type**: D-3's protected-paths list contains BOTH directories (`~/.ssh/`, `~/.aws/`) AND single files (`~/.docker/config.json`, `~/.config/walter-os/overlay/personal.env`). The mechanism creates an EMPTY DIR placeholder for dir targets and an EMPTY FILE placeholder for file targets — bind-mounting a dir over a file (or vice-versa) errors out at sandbox start. **Each protected-paths entry is explicitly tagged**: D-3 lists entries as `~/.ssh/:dir`, `~/.docker/config.json:file`, etc. The loader requires the `:dir` / `:file` suffix; entries without it are rejected with a hard error at config-load time so an ambiguous "doesn't exist yet" target never silently defaults to a dir placeholder (which would then over-mount a real file if the operator later creates one). The loader also asserts type-vs-existence consistency: if an entry is tagged `:file` but the path resolves to a directory (or vice versa), config-load fails loudly.
 - [ ] Linux (nsjail): each protected DIR adds `mount { dst: ... is_bind: true src: <empty-dir> }`; each protected FILE adds `mount { dst: ... is_bind: true src: <empty-file> }` (nsjail bind-mounts work on regular files too).
 - [ ] macOS (sandbox-exec): each protected path adds a `(deny file-read-data (subpath "..."))` clause (NOT `file-read*`, which also blocks metadata — a `file-read*` deny would make the path itself return "operation not permitted" on `stat`, breaking parent-directory existence probes; `file-read-data` lets `stat` succeed while blocking content reads, matching the Linux empty-placeholder semantics. On macOS we cannot bind-mount in user space, so the deny-rule is the equivalent of the Linux empty-mount — different mechanism, same observable result.)
-- [ ] Empty placeholders (dirs and files) created on first use under `${WALTER_RUNTIME_DIR}/sandbox/invisible/`. Each is mode `0700` (dir) / `0600` (file). Re-used across sandbox starts; recreated if the operator deletes them.
+- [ ] Empty placeholders (dirs and files) created on first use under `${WALTER_RUNTIME_DIR}/sandbox/invisible/`. **Dirs are mode `0700`** (operator-only rwx — needed so the dir itself can be listed). **Files are mode `0600`** (operator-only read/write, NO execute — `0700` on a regular file would set the execute bit, which is wrong for a config-file placeholder and could surface as a security finding from a code scanner). Re-used across sandbox starts; recreated if the operator deletes them.
 - [ ] bats coverage in `tests/walter/sandbox-invisible-mounts.bats`:
   - With `--high-tier`: `ls ~/.ssh` → empty (no `id_rsa` visible)
   - Without `--high-tier`: `ls ~/.ssh` → operator's actual ssh dir
@@ -95,7 +95,7 @@ This is the difference between "you can read config" and "config is not at this 
 | Approved Bash call legitimately reads config; same call also reads `~/.ssh/id_rsa` | At high-tier, `~/.ssh/` is bind-mounted to an empty dir; the secondary read fails. |
 | Operator overlay personal.env contains LITELLM_MASTER_KEY etc.; high-tier op reads it | personal.env is in the default protected list; high-tier read fails. |
 | Operator EXPLICITLY needs to read a secret for a one-off task | Two-factor bypass + audit-chain entry. |
-| Attacker tries to whitelist their own path via overlay | Overlay file is operator-controlled; integrity of the overlay file itself is covered by P1-09 env-allowlist parser (operator-writable filesystem; out of scope for A-5 specifically). |
+| Attacker tries to whitelist their own path via overlay | Overlay file is operator-controlled. P1-09's `env-allowlist` parser is NOT the right integrity control here (P1-09 covers `${WALTER_CONFIG}/env` sourcing semantics, not arbitrary overlay-config integrity). The actual control is the daily audit's `check_skill_scripts()` extension which checksum-baselines every file under `~/.config/walter-os/overlay/` (same pattern as P1-07 external-hook integrity); a malicious overlay edit between sessions fires a `medium` finding on the next audit run. Operator-controllable filesystem is still out of scope for A-5 itself, but the audit-side baseline IS in scope and documented here. |
 | Empty-dir mount confuses tools that need parent directory existence | The path itself remains present (so `mkdir -p ~/.ssh/x` succeeds at the dir level); only the CONTENTS are hidden. |
 
 ## Out of scope
@@ -123,7 +123,7 @@ Each ≤200 LOC. 3-round review.
 
 ## Refs
 
-- Parent: `docs/specs/oss-trust-roadmap.md` Layer A item A-5
-- Sibling: `docs/specs/process-isolation-sandbox.md` A-3 (this is a refinement layer)
+- Parent: OSS Trust roadmap Layer A item A-5 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); post-merge in-tree: `docs/specs/oss-trust-roadmap.md`.
+- Sibling: A-3 process-isolation sandbox — [PR #92](https://github.com/Xipher-Labs/walter-os/pull/92); post-merge in-tree: `docs/specs/process-isolation-sandbox.md`. This spec is a refinement layer on top.
 - nsjail bind-mount docs: <https://github.com/google/nsjail/blob/master/MANUAL.md>
 - macOS sandbox-exec deny-subpath: <https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf>
