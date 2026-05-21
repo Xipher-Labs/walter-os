@@ -331,6 +331,16 @@ _shell_quote() {
 # &entities;), otherwise we'd double-escape the entities we just added.
 _xml_escape() {
   local v="$1"
+  # bash 5.2+ enables `patsub_replacement` by default — under that
+  # shopt, an unescaped `&` in the replacement of `${var//pat/repl}`
+  # is interpreted as "the matched text". `${v//</&lt;}` then produces
+  # `<lt;` instead of `&lt;` (the `&` gets eaten). Locally disable the
+  # shopt so substitutions work identically on bash 5.1 (macOS Homebrew,
+  # older Ubuntu) and 5.2+ (Ubuntu 24.04+, current GitHub Actions runners).
+  # Found by PR #141 CI failure on bash 5.2; without this shopt the
+  # plist render would have silently produced broken XML on every
+  # operator install running bash 5.2+.
+  shopt -u patsub_replacement 2>/dev/null || true
   v="${v//&/&amp;}"
   v="${v//</&lt;}"
   v="${v//>/&gt;}"
