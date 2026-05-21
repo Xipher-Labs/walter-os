@@ -8,16 +8,24 @@
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 
 setup() {
-  if ! command -v docker >/dev/null 2>&1; then
-    skip "docker not available — compose profile checks require docker CLI"
-  fi
   cd "$REPO_ROOT"
+}
+
+# Helper: per-test docker gate. Used inside individual tests instead
+# of setup() so the source-level fallback test below still runs in
+# CI jobs without docker installed (which is the whole point of
+# having a source-level fallback).
+_require_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    skip "docker not available — this test exercises the compose CLI"
+  fi
 }
 
 # -----------------------------------------------------------------------
 # AC7: control-tower is NOT in the default / core profile output
 # -----------------------------------------------------------------------
 @test "AC7: docker compose config (no profile) does NOT list control-tower" {
+  _require_docker
   # Without --profile, control-tower must NOT appear (will fail in RED
   # state — current compose.yml has no profiles: declaration).
   run docker compose -f compose.yml config --services
@@ -30,6 +38,7 @@ setup() {
 }
 
 @test "AC7: docker compose --profile core config does NOT list control-tower" {
+  _require_docker
   run docker compose -f compose.yml --profile core config --services
   if [ "$status" -ne 0 ]; then
     skip "compose config failed: $output"
@@ -41,6 +50,7 @@ setup() {
 # AC8: control-tower IS in the tier4 profile output
 # -----------------------------------------------------------------------
 @test "AC8: docker compose --profile tier4 config DOES list control-tower" {
+  _require_docker
   run docker compose -f compose.yml --profile tier4 config --services
   if [ "$status" -ne 0 ]; then
     skip "compose config failed: $output"
