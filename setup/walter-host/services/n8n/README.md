@@ -67,15 +67,94 @@ These live as JSON exports in `templates/` (TODO — populate as we build):
 
 Import via n8n UI: Settings → Import.
 
-## Authentication strategy
+## Authentication strategy — two layers (audit P1-03 closed)
 
-We rely on **Cloudflare Access** in front of the tunnel. n8n's basic auth
-is disabled (`N8N_BASIC_AUTH_ACTIVE=false`).
+The compose ships **two independent auth layers**. Both must pass before
+a request reaches the workflow editor or the credential vault:
 
-If CF Access is removed or you want defense-in-depth:
-- Set `N8N_BASIC_AUTH_ACTIVE=true` in `.env`
-- Add `N8N_BASIC_AUTH_USER` and `N8N_BASIC_AUTH_PASSWORD`
-- Restart: `docker compose up -d n8n`
+```
+Internet
+   │
+   ▼
+Cloudflare Access (perimeter)
+   • Google IdP, allow @${WALTER_DOMAIN}
+   │  (passes only authed identities)
+   ▼
+Cloudflare Tunnel → 127.0.0.1:5678
+   │
+   ▼
+n8n basic auth (defense in depth)
+   • N8N_BASIC_AUTH_USER
+   • N8N_BASIC_AUTH_PASSWORD
+   │  (passes only with valid basic creds)
+   ▼
+n8n editor + credential vault
+```
+
+### Why both layers
+
+n8n has direct Postgres credentials, Execute Command nodes, and access
+to every credential the operator has saved. A single-layer setup with
+only CF Access at the perimeter is one misconfig away from full
+exposure:
+
+- **CF Access misconfig** — wrong allow rule, expired identity-provider
+  binding, or a paused application.
+- **Tunnel bypass** — if the firewall ever stops blocking direct
+  Walter-VM access on port 5678 (regression in `ufw` rule, debug shell
+  that opens it temporarily, etc.).
+- **cloudflared CVE** — a vulnerability that bypasses Access enforcement.
+- **Subdomain takeover** — DNS pointed at an unhealthy tunnel that
+  silently re-maps.
+
+n8n basic auth catches every one of those.
+
+### Operator setup
+
+1. Add the two basic-auth secrets to Infisical:
+
+   ```bash
+   infisical secrets set N8N_BASIC_AUTH_USER='walter-admin'
+   infisical secrets set N8N_BASIC_AUTH_PASSWORD="$(openssl rand -base64 24)"
+   ```
+
+   `N8N_BASIC_AUTH_USER` can be anything memorable; the password should
+   be **24+ random characters** (the example above gives 32). Save both
+   in your password manager.
+
+2. Pull them into the compose env:
+
+   ```bash
+   walter-os secrets-pull
+   ```
+
+3. Restart n8n to pick up the new env:
+
+   ```bash
+   cd setup/walter-host/services/n8n
+   docker compose up -d
+   ```
+
+4. The first browser hit will prompt for basic-auth credentials AFTER
+   CF Access succeeds.
+
+If either env var is missing at boot, the compose **fails with a clear
+error** (`N8N_BASIC_AUTH_USER required …`) thanks to the `${VAR:?msg}`
+substitution. This is deliberate — it prevents the
+"silent fallback to `N8N_BASIC_AUTH_ACTIVE: false`" anti-pattern that
+caused audit P1-03 in the first place.
+
+### Why not n8n user management instead
+
+n8n's built-in multi-user management is richer (per-user permissions,
+SSO, etc.) but it requires running in a multi-tenant mode that adds
+attack surface and complicates upgrades. For a solo-operator or small-
+team self-host, basic auth is the simpler, smaller surface.
+
+If you DO want full user management, leave
+`N8N_USER_MANAGEMENT_DISABLED: "false"` (already the default) and
+follow <https://docs.n8n.io/user-management/>. Basic auth can coexist
+as a third layer.
 
 ## Webhooks (incoming)
 

@@ -189,6 +189,8 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 
 ### P1-03 — n8n runs with `N8N_BASIC_AUTH_ACTIVE: "false"` — single-layer auth dependency on Cloudflare Access
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `setup/walter-host/services/n8n/compose.yml` now sets `N8N_BASIC_AUTH_ACTIVE: "true"` and wires `N8N_BASIC_AUTH_USER` + `N8N_BASIC_AUTH_PASSWORD` via `${VAR:?msg}` substitutions, so a missing operator-side secret makes the container fail at boot rather than silently falling back to disabled auth. `setup/walter-host/services/n8n/README.md` documents the two-layer auth model (CF Access perimeter + n8n basic defense-in-depth) with operator setup steps. Regression test at `tests/oss/services-n8n-auth.bats` (5 tests).
+
 **Category**: 3 (Authentication bypass)  
 **File**: `setup/walter-host/services/n8n/compose.yml:46-47`
 

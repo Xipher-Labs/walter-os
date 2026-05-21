@@ -49,6 +49,19 @@ PRs #55–#59 and land as the bundle epic completes.)
   was unreachable through the public wrappers. Added bats coverage
   for both entry points. Found by Codex review of PR #36. (PR #36)
 
+### Security
+
+- **Audit P1-03 closed.** `setup/walter-host/services/n8n/compose.yml`
+  now runs n8n's built-in basic auth as a defense-in-depth layer
+  behind Cloudflare Access (was off, single-layer perimeter only).
+  `N8N_BASIC_AUTH_ACTIVE: "true"` + `${N8N_BASIC_AUTH_USER:?…}` +
+  `${N8N_BASIC_AUTH_PASSWORD:?…}` substitutions mean missing operator
+  secrets cause the container to fail loudly at boot rather than
+  silently fall back to disabled auth. Updated
+  `setup/walter-host/services/n8n/README.md` with the two-layer threat
+  model and operator setup commands. New regression test
+  `tests/oss/services-n8n-auth.bats` (5 tests) pins the invariant.
+
 ### Changed (build / release pipeline)
 
 - Consolidated `.github/workflows/release-security.yml` into
