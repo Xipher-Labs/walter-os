@@ -183,17 +183,22 @@ jobs:
 
       # Step D: Compute SHA-256 checksums over every file in ASSET_DIR,
       # excluding the checksums file itself + previously-uploaded
-      # security artifacts (cosign bundle, sig). Sorted for reproducibility.
+      # security artifacts (cosign bundle, sig, keyless cert). Sorted
+      # for reproducibility.
       - name: Generate SHA-256 checksums for full release payload
         run: |
           set -euo pipefail
           cd "${ASSET_DIR}"
           # Remove any previously-downloaded security artifacts so the
           # re-signed checksums file covers ONLY the canonical payload.
-          rm -f "${CHECKSUMS_FILE}" "${CHECKSUMS_FILE}.sig" "${CHECKSUMS_FILE}.cosign.bundle"
+          rm -f "${CHECKSUMS_FILE}" \
+                "${CHECKSUMS_FILE}.sig" \
+                "${CHECKSUMS_FILE}.pem" \
+                "${CHECKSUMS_FILE}.cosign.bundle"
           find . -maxdepth 1 -type f \
             ! -name "${CHECKSUMS_FILE}" \
             ! -name "${CHECKSUMS_FILE}.sig" \
+            ! -name "${CHECKSUMS_FILE}.pem" \
             ! -name "*.cosign.bundle" \
             -exec sha256sum {} + | sort > "${CHECKSUMS_FILE}"
           test -s "${CHECKSUMS_FILE}"
@@ -213,12 +218,36 @@ jobs:
         run: |
           set -euo pipefail
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}"
+          # Cosign v3+ ignores --output-signature when --bundle is set
+          # (the bundle is the new canonical format and carries the
+          # signature internally). We run two sign-blob invocations:
+          #
+          # 1. With --bundle: produces the bundle (preferred verification
+          #    format — single file with sig + cert + Rekor entry).
+          # 2. Without --bundle, with both --output-signature AND
+          #    --output-certificate: produces the raw .sig + .pem pair
+          #    that v0.3.x-era verification scripts consume. Keyless
+          #    cosign verification REQUIRES the Fulcio-issued
+          #    certificate in addition to the signature — a .sig
+          #    alone cannot be verified. Earlier releases that
+          #    shipped only .sig are still verifiable via the bundle
+          #    path. See docs/security/verification.md.
+          #
+          # Both invocations use keyless OIDC; the second one re-signs
+          # the same bytes, so the Rekor transparency log has two
+          # entries — that is fine (both are auditable). When all
+          # consumers move to bundles we can drop step 2.
           cosign sign-blob --yes \
             "${ASSET_DIR}/${CHECKSUMS_FILE}" \
-            --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle" \
-            --output-signature "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
+            --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
+
+          cosign sign-blob --yes \
+            "${ASSET_DIR}/${CHECKSUMS_FILE}" \
+            --output-signature "${ASSET_DIR}/${CHECKSUMS_FILE}.sig" \
+            --output-certificate "${ASSET_DIR}/${CHECKSUMS_FILE}.pem"
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
+          test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.pem"
 
       # Step F: Upload SBOM + checksums + signature/bundle. --clobber
       # so workflow_dispatch re-runs overwrite previous artifacts cleanly.
@@ -232,6 +261,7 @@ jobs:
             "${ASSET_DIR}/${SBOM_FILE}" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}.sig" \
+            "${ASSET_DIR}/${CHECKSUMS_FILE}.pem" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle" \
             --repo "${RELEASE_REPO}" \
             --clobber
