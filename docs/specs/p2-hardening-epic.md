@@ -20,7 +20,7 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 ## Non-goals
 
 - Re-litigating P0 / P1. Those are closed.
-- Reproducing third-party CVEs (Syncthing TLS, Wireguard key management). We scope our exposure to *operator-controllable* config.
+- Reproducing third-party CVEs (Syncthing TLS, WireGuard key management). We scope our exposure to *operator-controllable* config.
 - Full OWASP-grade SQL injection coverage. The `approval-gate.sh` SQL pattern is defense-in-depth, not the primary control (the operator-supplied agent-approvals.yml is the primary control).
 
 ## Decisions (proposed)
@@ -29,7 +29,7 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 |---|---|---|
 | D-1 | **P2-01 `bootstrap.sh` eval**: replace `eval "$@"` with `run_args` (same pattern as `install.sh`). | Eliminates the eval path entirely. Same fix as P0-04. |
 | D-2 | **P2-02 Syncthing :22000**: keep `0.0.0.0` (required for device-to-device sync) but DOCUMENT it explicitly in the security posture doc + add Cloudflare-Access-equivalent gating note. | Functional requirement; we document the trust boundary, not change it. |
-| D-3 | **P2-03 Wireguard :51820/udp**: same as P2-02 — keep binding; harden documentation around `.env` file mode 600 + key rotation runbook. | Functional requirement. |
+| D-3 | **P2-03 WireGuard :51820/udp**: same as P2-02 — keep binding; harden documentation around `.env` file mode 600 + key rotation runbook. | Functional requirement. |
 | D-4 | **P2-04 `detect-error.sh` stderr injection**: wrap stderr in `<TOOL_STDERR>…</TOOL_STDERR>` and stdout in `<TOOL_STDOUT>…</TOOL_STDOUT>` bounded markers (two-marker scheme so the operator can tell them apart in logs and the submodule's regex can target each independently). Same UNTRUSTED-DATA framing prefix as P0-06. | Same mitigation class as the lessons.md fix. The submodule already houses the fix; just extend to the third hook script. AC-3 below pins the two-marker scheme. |
 | D-5 | **P2-05 Grafana Assistant plugin**: REMOVE from default install. Operator opts in via `WALTER_GRAFANA_ASSISTANT=1` env var. | Outbound LLM leakage from the observability layer (which has metric / log / alert content) is too easy to enable accidentally. Operator must opt in. |
 | D-6 | **P2-06 redactor gaps**: extend `scripts/agent-secret-redactor.sh` to cover Hetzner (operator-config required: see AC-5), Infisical (`st\.v3\.[A-Za-z0-9_-]{20,}` — prefix-anchored AND minimum 20 chars after the prefix; same shape as AC-5), Vercel (`vc_[A-Za-z0-9_-]{20,}` — same), Cloudflare (operator-config: see AC-5), and `LITELLM_MASTER_KEY` (operator-defined pattern via `WALTER_LITELLM_MASTER_KEY_PATTERN` env var — see AC-5 for the canonical config-key name; do NOT read raw from `personal.env`). | Each missing token class is one bats test + one regex. **Avoid generic high-entropy regexes** like `^[a-f0-9]{64}$` (matches every sha256 digest the operator prints) or `^[A-Za-z0-9_-]{40,60}$` (matches half the legitimate base64 output) — they cause false-positive redactions that hide real diagnostic content. The `{20,}` lower bound on the prefix-anchored tokens (matching AC-5) filters short look-alike strings (`vc_test`, `st.v3.x`) that would otherwise trigger FP redactions. Use prefix-anchored or operator-config patterns instead of generic high-entropy classes. |
@@ -45,15 +45,18 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 
 ### AC-2 — P2-02/P2-03 network-surface documentation
 - [ ] `docs/operational/network-exposure.md` (new) — lists every walter-host service with its port-binding policy:
-  - **`0.0.0.0` (required)**: Syncthing 22000, Wireguard 51820/udp — with rationale + Cloudflare-Access NOT a replacement explanation
+  - **`0.0.0.0` (required)**: Syncthing 22000, WireGuard 51820/udp — with rationale + Cloudflare-Access NOT a replacement explanation
   - **`127.0.0.1` only**: every other service (n8n, plane, litellm, infisical, etc.)
   - **Behind Cloudflare Tunnel**: services accessible via `https://*.${WALTER_DOMAIN}`
 - [ ] `tests/oss/network-exposure-doc.bats` — asserts every `compose.yml` port mapping is referenced in `network-exposure.md` (no undocumented `0.0.0.0` binds).
 
 ### AC-3 — P2-04 stderr/stdout bounded framing
 - [ ] Submodule `Xipher-Labs/marchetto-agent-skills-fork` gains a sibling commit to the d1ad0e7 P0-06 fix: `detect-error.sh` wraps `stderr` / `stdout` content in `<TOOL_STDERR>…</TOOL_STDERR>` + `<TOOL_STDOUT>…</TOOL_STDOUT>` markers with the same "UNTRUSTED DATA" framing prefix.
+- [ ] **Marker-escape invariant** (mirrors the P0-06 fix exactly): before wrapping, any occurrence of the closing marker (`</TOOL_STDERR>` or `</TOOL_STDOUT>`) inside the captured content MUST be HTML-escaped (`<` → `&lt;`, `>` → `&gt;`) so a tool that emits the literal closing tag in its stderr (curl progress, jq error, etc.) cannot prematurely terminate the bounded section. The marker pair itself is hard-coded in the wrapping code; only the BODY is the untrusted content. Same approach `preserve-lessons.sh` already uses for `</LESSON_TITLES>` (see `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/scripts/preserve-lessons.sh`).
 - [ ] `external/marchetto-agent-skills` submodule pin bumped to the new SHA.
-- [ ] `tests/hooks/learn-by-mistake-bounded-framing.bats` extended with 2 cases for `detect-error.sh`.
+- [ ] `tests/hooks/learn-by-mistake-bounded-framing.bats` extended with:
+  - 2 cases for `detect-error.sh` happy-path (stderr / stdout properly wrapped).
+  - 2 cases that inject the literal closing-tag string into stderr/stdout and assert the marker stays sealed (the closing tag in the body is escaped; the outer marker still terminates the section). Mirrors the existing `</LESSON_TITLES>` escape test from P0-06.
 
 ### AC-4 — P2-05 Grafana Assistant opt-in only
 - [ ] `setup/walter-host/services/observability/compose.yml` — remove `GF_INSTALL_PLUGINS: "grafana-assistant-app"` from the default config.
@@ -78,7 +81,7 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
     `WALTER_LITELLM_MASTER_KEY_PATTERN` env var (operator-defined regex,
     canonical config-key name — D-6 says the same; do NOT use a raw
     `LITELLM_MASTER_KEY` regex unless this env var is set).
-- [ ] `tests/scripts/agent-secret-redactor.bats` extended with 5 cases
+- [ ] `tests/scripts/secret-redactor.bats` (existing file — note the actual filename does NOT have an `agent-` prefix; earlier drafts of this spec referred to a non-existent `agent-secret-redactor.bats` path) extended with 5 cases
   (one per new pattern, plus 2 false-positive guards: a printed sha256
   digest should NOT be redacted when no `WALTER_HETZNER_TOKEN_PATTERN`
   is configured, and a JWT-shaped base64 segment should NOT be redacted
@@ -122,7 +125,7 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 |---|---|---|
 | P2-01 | Compromise of `bootstrap.sh` env in a way `install.sh` doesn't already protect | Shell injection during install |
 | P2-02 | Syncthing TLS vulnerability + direct internet access | Device handshake bypass; sync any folder |
-| P2-03 | Wireguard pre-shared-key leak | Unauthorized VPN access |
+| P2-03 | WireGuard pre-shared-key leak | Unauthorized VPN access |
 | P2-04 | Agent runs a command whose stderr contains adversarial markup | systemMessage injection at PostToolUse |
 | P2-05 | Operator runs Grafana Assistant query containing internal data | Leakage to Grafana Cloud LLM (metric / log / alert content) |
 | P2-06 | Agent inadvertently echoes a Hetzner/Infisical/Vercel/Cloudflare token | Token lands in Plane comment / audit log unredacted |
@@ -133,7 +136,7 @@ Closing all 8 brings cost-to-compromise across the residual tier up to "multi-st
 
 ## Out of scope
 
-- Reproducing Syncthing / Wireguard upstream CVEs (P2-02, P2-03). We harden our config + docs, not their code.
+- Reproducing Syncthing / WireGuard upstream CVEs (P2-02, P2-03). We harden our config + docs, not their code.
 - Full SQL injection coverage. Walter-OS's primary SQL gate is operator-supplied agent-approvals.yml; the regex is defense-in-depth.
 - Telemetry opt-out for Grafana Cloud (P2-05). Removing the plugin entirely from default is the floor; opt-in flag is the ceiling.
 
