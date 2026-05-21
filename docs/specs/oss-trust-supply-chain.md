@@ -1,7 +1,7 @@
 # Supply-chain hardening — SLSA L3 + reproducible builds (OSS Trust C-1 + C-2) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer C items C-1 + C-2
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer C items C-1 + C-2 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing; this spec assumes the parent merges first or in the same release cycle).
 **Target release**: v1.0
 **Depends on**: existing `release.yml` (SBOM + cosign signing — already in `main`), `docs/security/verification.md` (cosign verification doc).
 
@@ -31,8 +31,8 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 
 | # | Decision | Why |
 |---|---|---|
-| C1-D-1 | **Generator**: `actions/attest-build-provenance@v2`. Pinned by commit SHA, not tag. | Official GitHub-maintained action, SLSA L3 conformant, emits in-toto v1.0 statements. Pinning by SHA keeps supply-chain hygiene consistent with `release.yml`'s existing pin policy. |
-| C1-D-2 | **Subject set**: every artifact attached to the GH Release. That's: source tarballs (`.tar.gz`, `.zip`), SBOM (`*.sbom.cdx.json`), checksums (`SHA256SUMS`), checksum signature (`SHA256SUMS.sig`), cosign bundle (`SHA256SUMS.cosign.bundle`). | "Sign everything we publish" — a forker shouldn't have to wonder whether the SBOM has a different provenance than the tarball. |
+| C1-D-1 | **Generator**: `actions/attest-build-provenance` pinned by commit SHA (e.g. `@<40-char-sha>`), never by mutable tag like `@v2`. | Official GitHub-maintained action, SLSA L3 conformant, emits in-toto v1.0 statements. Pinning by SHA keeps supply-chain hygiene consistent with `release.yml`'s existing pin policy. The plan picks the concrete SHA at implementation time so this spec doesn't go stale on tag movement. |
+| C1-D-2 | **Subject set**: every artifact attached to the GH Release. That's: source tarballs (`.tar.gz`, `.zip`), SBOM (`*.sbom.cdx.json`), the checksums file (`checksums.sha256` — name comes from the existing `release.yml`), its cosign signature (`checksums.sha256.sig`), and the cosign bundle (`checksums.sha256.cosign.bundle`). | "Sign everything we publish" — a forker shouldn't have to wonder whether the SBOM has a different provenance than the tarball. Artifact names match what `release.yml` already emits and what `docs/security/verification.md` already documents — no rename required. |
 | C1-D-3 | **Attestation storage**: GitHub-native (each artifact gets a `.intoto.jsonl` attached to the release + the same attestation registered with Sigstore Rekor by the action). | `actions/attest-build-provenance` does both automatically. No separate uploader needed. |
 | C1-D-4 | **Verification path**: documented in `docs/security/verification.md` with two commands — `gh attestation verify <file> --repo Xipher-Labs/walter-os` (GitHub-native, no extra tooling) and `slsa-verifier verify-artifact <file> --provenance-path <file>.intoto.jsonl --source-uri github.com/Xipher-Labs/walter-os --source-tag <tag>` (cross-platform). | Two paths covers the "operator already has gh CLI" case and the "I'm verifying from a non-GH context" case. |
 | C1-D-5 | **CI enforcement**: a new `verify-attestation` job in `release.yml` runs `gh attestation verify` against every uploaded artifact AFTER the upload step. If verification fails, the workflow fails — we don't ship a release whose own attestation we can't verify. | Catch attestation regressions at release time, not when a downstream user complains weeks later. |
@@ -43,7 +43,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 | # | Decision | Why |
 |---|---|---|
 | C2-D-1 | **Scope**: source tarball + SBOM + checksums file. Cosign signature is NON-reproducible by design (timestamp + nonce), and that's fine — provenance covers it. | Matches roadmap D-4. Bigger scope is a v1.x problem. |
-| C2-D-2 | **Determinism technique for tarball**: use `git archive --format=tar.gz` (commit SHA pinned, no embedded timestamps), then re-compress with `gzip -n` (drops mtime + filename headers). Don't run `tar c` on a working copy — file mtimes vary. | Two runs of `git archive` on the same tag produce byte-identical output. This is the canonical "reproducible source tarball" recipe. |
+| C2-D-2 | **Determinism technique for tarball**: pipe `git archive --format=tar <tag>` into `gzip -n` (drops mtime + filename headers). Do NOT use `git archive --format=tar.gz`, which double-gzips when piped to gzip AND can embed a gzip-header timestamp that varies run-to-run. Don't run `tar c` on a working copy either — file mtimes vary. | Two runs of `git archive --format=tar <tag> \| gzip -n` produce byte-identical output. This is the canonical "reproducible source tarball" recipe; see reproducible-builds.org `archives` page. |
 | C2-D-3 | **Determinism technique for SBOM**: anchore/sbom-action already produces deterministic CycloneDX given a deterministic source. Pin `anchore/sbom-action` AND the underlying `syft` version. Sort `components` and `dependencies` arrays by `bom-ref` before write. | CycloneDX without sorted arrays differs run-to-run because syft walks the FS in inode order. Sorting is the documented fix; bash one-liner with jq. |
 | C2-D-4 | **Determinism technique for checksums**: sort the `find` output before hashing. Already partially done (`release.yml` line 186 says "Sorted for reproducibility"); verify and tighten. | `find` is not deterministic across reruns even on the same FS. `find ... | sort` is the standard pattern. |
 | C2-D-5 | **Verification job**: a new `reproducibility-check` job in `release.yml` re-builds the source tarball + SBOM + checksums in a fresh runner, compares SHA-256s to the published artifacts. Mismatch fails the workflow. | Same philosophy as C1-D-5: don't ship something whose reproducibility we haven't actually verified. |
@@ -53,7 +53,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 ## Acceptance criteria
 
 ### AC-1 — SLSA L3 attestation in `release.yml` (C-1)
-- [ ] `release.yml` gains an `attest` step after artifact assembly that calls `actions/attest-build-provenance@<sha>` with `subject-path` covering tarball + SBOM + checksums + signatures.
+- [ ] `release.yml` gains an `attest` step after artifact assembly that calls `actions/attest-build-provenance@<commit-sha>` (40-char SHA, never a mutable tag like `v2`) with `subject-path` covering tarball + SBOM + `checksums.sha256` + its signature/bundle.
 - [ ] The action emits one `.intoto.jsonl` per artifact and uploads to Rekor + GH attestation store automatically.
 - [ ] The release uploads ALSO include the `.intoto.jsonl` files as release assets (operator-friendly: one place to download).
 
@@ -69,7 +69,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 - [ ] Cross-link from `README.md` "Security" section to the verification doc.
 
 ### AC-4 — Reproducible source tarball + SBOM + checksums (C-2)
-- [ ] `release.yml` source-archive step uses `git archive --format=tar.gz <tag> | gzip -n` (replaces any timestamp-bearing tar invocation).
+- [ ] `release.yml` source-archive step uses `git archive --format=tar <tag> | gzip -n` (NOT `--format=tar.gz`, which double-gzips when piped — see C2-D-2). Replaces any timestamp-bearing tar invocation.
 - [ ] SBOM step pipes through `jq 'sort_by_components_and_dependencies'` (canonical bash one-liner spelled out in the spec; the plan refines it).
 - [ ] Checksums step pre-sorts the `find` output.
 
@@ -80,7 +80,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 ### AC-6 — Reproducibility check job (C-2)
 - [ ] New job `reproducibility-check` (depends on `sbom-and-sign`) re-runs the deterministic steps on a fresh runner.
 - [ ] Computes SHA-256 of re-built tarball, SBOM, checksums.
-- [ ] Asserts each matches the published artifact's SHA-256 from `SHA256SUMS`.
+- [ ] Asserts each matches the published artifact's SHA-256 from `checksums.sha256`.
 - [ ] Job failure marks the workflow failed AND posts a comment to the release explaining which artifact failed.
 - [ ] bats coverage in `tests/release/reproducibility.bats`.
 
