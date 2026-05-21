@@ -20,12 +20,16 @@ teardown() {
 }
 
 @test "generate-mcp-configs.sh codex output parses as valid TOML" {
-  # tomllib is stdlib only from Python 3.11+. Older Python interpreters
-  # (e.g. the one on macOS Big Sur, or some Linux distros that ship 3.9
-  # by default) would fail this test for environmental reasons, not
-  # because the script's TOML output is wrong. Skip gracefully when
-  # tomllib isn't importable so the test reports its actual scope:
-  # "TOML validity on Python 3.11+".
+  # Two-step prerequisite check (matches the repo's convention for
+  # environmental skips — see tests/agents/devrel-analyst.bats:44):
+  #   1. python3 must be on PATH at all
+  #   2. tomllib must be importable (stdlib from Python 3.11+)
+  # Distinguishing these gives clearer skip messages — a missing python3
+  # is an install gap; a present-but-old python3 is a version gap.
+  # Without step 1, the previous `python3 -c "import tomllib"` check
+  # would skip with the wrong reason when python3 itself was missing
+  # (exit 127 from "command not found" — Copilot R1 of #101).
+  command -v python3 >/dev/null 2>&1 || skip "python3 required (not on PATH)"
   if ! python3 -c "import tomllib" 2>/dev/null; then
     skip "tomllib required (Python 3.11+); test scope is TOML validity on Python 3.11+"
   fi
