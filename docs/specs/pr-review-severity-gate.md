@@ -30,9 +30,9 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 
 - **G1.** Every Copilot/Codex finding is assigned a severity (BLOCKER, MAJOR, MINOR, COSMETIC) at review-receive time.
 - **G2.** After a configurable number of review rounds (default 3), if all remaining findings are MINOR or below AND a set of safety preconditions hold, the PR may be auto-merged. The deferred findings spin off into a single follow-up issue with full context.
-- **G3.** BLOCKER findings never permit auto-merge regardless of rounds. The action sequence (§4.4) creates a new high-priority issue + posts a PR comment explaining the block. PR CLOSE on BLOCKER is an operator decision, not an automatic gate action — the gate posts the diagnostic and waits.
+- **G3.** BLOCKER findings never permit auto-merge regardless of rounds. The action sequence (§4.4) **(a) creates a new high-priority issue with the BLOCKER finding(s) + a suggested fix-shape, AND (b) posts a PR comment explaining the block and linking the new issue.** PR CLOSE on BLOCKER is an operator decision, not an automatic gate action — the gate posts the diagnostic and waits.
 - **G4.** Auto-merge is **per-repo opt-in** via a marker file (`auto-merge-enabled` in repo root). Repos without the marker behave per current `AGENTS.md` (manual operator merge).
-- **G5.** The current safety paths are NEVER eligible for auto-merge, regardless of opt-in or severity. AGENTS.md maintains two related but distinct lists — "Things agents must NEVER do" (task-rigor auto-escalation triggers) and "Blocked for ALL tiers" (hardcoded approval-gate blocks). This spec takes the **union** of both as a conservative super-set: a path landing on either list is BLOCKER. The path-glob list in §4.2 covers auth/, crypto/, money, PHI / `personal/health/**`, audit logs, prod migrations, hooks/, AGENTS.md, install.sh, mcp/servers.json. Two paths in §4.2 (`programs/**` for Solana on-chain code, `**/secrets/**` for any nested secrets dir) are explicit conservative additions beyond AGENTS.md — labeled as such in §4.2 so future readers don't mis-cite AGENTS.md.
+- **G5.** The current safety paths are NEVER eligible for auto-merge, regardless of opt-in or severity. AGENTS.md maintains two related but distinct lists — "Things agents must NEVER do" (task-rigor auto-escalation triggers) and "Blocked for ALL tiers" (hardcoded approval-gate blocks). This spec takes the **union** of both as a conservative super-set: a path landing on either list is BLOCKER. The path-glob list in §4.2 covers auth/, crypto/, money flows (Solana programs + Stripe SDK code paths), PHI / `personal/health/**`, audit logs (any directory literally named `audit/` or `audit-logs/`), prod migrations, hooks/, AGENTS.md, install.sh, mcp/servers.json. Two paths in §4.2 (`programs/**` for Solana on-chain code, `**/secrets/**` for any nested secrets dir) are explicit conservative additions beyond AGENTS.md — labeled as such in §4.2 so future readers don't mis-cite AGENTS.md.
 - **G6.** Severity classification is auditable: a deterministic ruleset produces the verdict, and any LLM-fallback classification is logged with the reasoning that led to it.
 - **G7.** Follow-up issues for deferred MINORs are auto-created with the verbatim finding + the source-of-truth file:line reference + a suggested fix shape.
 
@@ -68,25 +68,36 @@ and itself fetches the three inputs the classifier needs:
 
 The CLI design takes IDs (not raw text + path) so the classifier can be
 re-invoked deterministically from a hook/audit without the caller having
-to re-fetch + reassemble the same comment fields. Returns:
-`BLOCKER | MAJOR | MINOR | COSMETIC | UNCLASSIFIED` on stdout.
+to re-fetch + reassemble the same comment fields. Returns a single-line JSON
+object on stdout (matches plan B1):
+```json
+{"severity":"BLOCKER","rule":"auth-path-trigger","rule_detail":"auth/oauth.ts matched auth/**"}
+```
+Where `severity ∈ {BLOCKER, MAJOR, MINOR, COSMETIC, UNCLASSIFIED}`. Callers
+that only want the label can pipe through `jq -r .severity`.
 
 Order of evaluation:
 
 1. **Path-based BLOCKER triggers.** If the finding references any file matching:
    ```
    # From AGENTS.md auto-escalation-to-major + "Blocked for ALL tiers":
-   auth/** | crypto/** | migrations/** | hooks/**
+   auth/** | crypto/** | hooks/**
+   migrations/** | **/migrations/**     # any DB migration path (prod-DB risk)
+   audit/** | audit-logs/** | **/audit-logs/**   # audit-trail paths
    AGENTS.md | install.sh | mcp/servers.json
    personal/health/** | **/medical/** | **/phi/** | **/.env*
+   # Money-flow paths (AGENTS.md "money" trigger):
+   programs/**                          # Solana on-chain code (anchor)
+   **/stripe/** | **/billing/**         # Stripe SDK + billing logic
    # Conservative additions beyond AGENTS.md (this spec, §2 G5):
-   programs/**       # Solana on-chain code — anchor program changes
-   **/secrets/**     # any nested directory literally named 'secrets'
+   **/secrets/**                        # any nested 'secrets' dir
    ```
    → BLOCKER. No further evaluation. The first block is the AGENTS.md
-   union (G5); the second block is explicit conservative additions made
-   by this spec to widen the safety net without claiming AGENTS.md
-   provenance.
+   union (G5); the "Money-flow paths" group expands the abstract
+   "money" trigger from AGENTS.md to concrete file-path globs so the
+   classifier has something to match; the "Conservative additions" group
+   is explicit additions made by this spec to widen the safety net
+   without claiming AGENTS.md provenance.
 
 2. **Keyword-based MAJOR triggers** in the finding body. Each token in
    the list below is matched as a **prefix** against words in the finding
@@ -133,16 +144,25 @@ A skill named `pr-review-severity` documents the ruleset, the keyword lists, and
 
 ### 4.4 Auto-merge action sequence
 
-When C1-C9 hold:
+When C1-C9 hold (gate passes):
 
 1. The `pr-auto-merge-gate.sh` hook (triggered by GitHub webhook on `pull_request_review` event) executes.
 2. The hook calls `walter-os pr-classify-review <pr-num>` which produces a severity-tagged finding list.
 3. If gate passes:
-   a. Create follow-up issue with the deferred findings (one issue per PR, not per finding).
+   a. Create follow-up issue with the deferred MINOR/COSMETIC findings (one issue per PR, not per finding).
    b. Comment on the PR with the merge decision + the follow-up issue link.
    c. Auto-resolve the MINOR/COSMETIC review threads on the PR.
    d. Invoke `gh pr merge --squash --delete-branch --admin` (assumes operator's bypass permission is configured per branch-protection).
-4. If gate fails on any condition, post a comment on the PR explaining which condition blocked and remain pending.
+
+When the gate fails on any condition (C1-C9):
+
+5. Post a PR comment naming the failing condition + slug + remediation guidance. PR remains open.
+
+When a BLOCKER finding is detected (independent of gate pass/fail):
+
+6. Create a high-priority follow-up issue capturing the BLOCKER finding(s) verbatim + the source file:line + a suggested fix-shape (per G3). The issue title prefix is `[FIX] -SECURITY-` for security paths, `[FIX] -OPERATIONS-` otherwise.
+7. Post a PR comment naming the BLOCKER(s), linking the issue from step 6, and explicitly stating the gate did NOT auto-close the PR — operator decides (G3, Decision 4).
+8. The PR stays open. No further action.
 
 ### 4.5 `auto-merge-enabled` file format
 
@@ -192,7 +212,10 @@ Repos without this file → no auto-merge, manual operator merge as today.
 - [ ] **AC8.** When MERGE_APPROVED: hook creates the follow-up issue, auto-resolves the relevant conversation threads, and invokes `gh pr merge --squash --delete-branch --admin`. Tested via mocked GitHub API.
 - [ ] **AC9.** When MERGE_BLOCKED: hook posts a comment to the PR with the blocking condition + remediation guidance. Tested via mocked GitHub API.
 - [ ] **AC10.** `auto-merge-enabled` file at repo root is the only opt-in mechanism. Repos without it return `MERGE_BLOCKED:no-opt-in` (slug consistent with AC7's slug enumeration).
-- [ ] **AC11.** AGENTS.md "Never auto-merge a PR" hard rule is amended to "Never auto-merge a PR UNLESS the bounded conditions in §4.3 (gate) + §4.4 (action sequence) of `docs/specs/pr-review-severity-gate.md` are met"; new subsection links to ADR 0015.
+- [ ] **AC11.** AGENTS.md has TWO blocks that mention auto-merging — both are amended in this PR's implementation:
+  - Line ~336 (`## Universal disciplines` → `Things agents must NEVER do` → "Auto-merge a PR. Operator clicks merge.") → amended to "Auto-merge a PR UNLESS the bounded conditions in §4.3 (gate) + §4.4 (action sequence) of `docs/specs/pr-review-severity-gate.md` are met".
+  - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects the bounded auto-merge when the marker file is present + gate conditions hold.
+  Both edits link ADR 0015 in a new subsection. The implementation PR (not this spec PR) also updates `hooks/approval-gate.sh` to read the marker file + invoke the gate before refusing the merge action.
 - [ ] **AC12.** ADR 0015 documents the design choice + rejected alternatives (always auto-merge / fully manual / per-PR label / time-based auto-merge).
 - [ ] **AC13.** End-to-end smoke: a sample PR with one MINOR finding + 3 completed review rounds + `auto-merge-enabled` present produces a follow-up issue, resolves the thread, and squash-merges. Tested via a dedicated `tests/e2e/auto-merge-mock-pr.bats` using a forked test repo.
 

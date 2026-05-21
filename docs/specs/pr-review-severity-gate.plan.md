@@ -123,7 +123,7 @@ Output: JSON `{"severity": "BLOCKER", "rule": "auth-path-trigger", "rule_detail"
 **File:** `scripts/walter/subcommands/pr-classify-finding.sh` (extend).
 
 When no rule matches:
-1. Call `infisical secrets get LITELLM_PR_SEVERITY_KEY --env=prod` (key per AGENTS.md secrets flow).
+1. Call `infisical secrets get LITELLM_PR_SEVERITY_KEY --env=prod` via the Walter-OS secrets-runtime flow (see `docs/specs/secrets-runtime-architecture.md`). NOTE: AGENTS.md line ~481 still references Vaultwarden as the production secrets store — that's stale prose from the pre-Vaultwarden-retirement era (operator decision 2026-05-05). This plan assumes the live Infisical machine-identity flow; AGENTS.md update is tracked separately + is NOT a prerequisite for this plan.
 2. POST to `${LITELLM_BASE_URL}/v1/chat/completions` with a fixed prompt template (in `scripts/walter/lib/pr-severity-prompt.txt`).
 3. **Cost extraction**: OpenAI-compatible responses don't ship a cost field by default; LiteLLM proxy injects `usage.response_cost` (or `x-litellm-response-cost` header) when its callback is wired. Read both — header first (cheap parse, always present on a proxy hit), `usage.response_cost` second (fallback if the upstream model passed through). If neither is present, log a WARN + treat the call as if it hit the cap (return MAJOR — fail-safe). If cost > $0.01, log + return MAJOR.
 4. Log the call (prompt + response + decision + extracted cost field) to `~/.config/walter-os/state/auto-merge-log.jsonl`.

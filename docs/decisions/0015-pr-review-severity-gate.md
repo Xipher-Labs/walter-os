@@ -22,7 +22,7 @@ Two structural problems flow from this:
 
 2. There's no signal pipeline that distinguishes "safe to merge with N MINOR follow-ups" from "must not merge — there's a real bug". Both end up routed through the same human-eyes ritual.
 
-The operator surfaced both problems during PR #111 review and proposed: classify findings by severity, after a bounded number of rounds with only MINOR/COSMETIC remaining, auto-merge with the deferred items spawning a follow-up issue. Grave findings spin off a new issue and the PR closes. Opt-in per repo via a marker file in repo root.
+The operator surfaced both problems during PR #111 review and proposed: classify findings by severity, after a bounded number of rounds with only MINOR/COSMETIC remaining, auto-merge with the deferred items spawning a follow-up issue. Grave findings spin off a new issue + a diagnostic PR comment, **but the PR is NOT auto-closed** — closure is the operator's decision (see Decision 4). Opt-in per repo via a marker file in repo root.
 
 ## Decision
 
