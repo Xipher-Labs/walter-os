@@ -40,23 +40,30 @@ _invoke() {
 # -----------------------------------------------------------------------
 # AC4: run_args does NOT evaluate shell metacharacters in arguments
 # -----------------------------------------------------------------------
+# Copilot R1 #128 R1.1: the previous AC4 tests wrapped payloads in
+# SINGLE quotes, which means bash never saw the metacharacters as
+# special in the first place — even the dangerous deprecated run()
+# would have passed those tests. To actually prove run_args is safer
+# than run, use DOUBLE-quoted payloads (symmetric with the
+# "regression: run() still evaluates" test below). Then run_args
+# treating the arg as literal genuinely differentiates it from run.
 @test "AC4: run_args treats ; as literal" {
-  _invoke "run_args echo 'arg1; touch $PROBE'"
+  _invoke "run_args echo \"arg1 ; touch $PROBE\""
   [ ! -e "$PROBE" ]
 }
 
 @test "AC4: run_args treats | as literal" {
-  _invoke "run_args echo 'arg1 | touch $PROBE'"
+  _invoke "run_args echo \"arg1 | touch $PROBE\""
   [ ! -e "$PROBE" ]
 }
 
 @test "AC4: run_args treats && as literal" {
-  _invoke "run_args echo 'arg1 && touch $PROBE'"
+  _invoke "run_args echo \"arg1 && touch $PROBE\""
   [ ! -e "$PROBE" ]
 }
 
 @test "AC4: run_args treats command substitution as literal" {
-  _invoke "run_args echo 'arg1 \$(touch $PROBE)'"
+  _invoke "run_args echo \"arg1 \\\$(touch $PROBE)\""
   [ ! -e "$PROBE" ]
 }
 

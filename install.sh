@@ -245,7 +245,12 @@ run_sh() {
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "$1"
   else
-    bash -c "$1"
+    # Inherit strict-mode settings from install.sh so errors / undefined
+    # vars / pipe failures bubble up the same way they would inline.
+    # Without these flags, a typo or missed variable in a run_sh snippet
+    # would silently succeed where the equivalent inline code would
+    # abort. Copilot R1 #128 R1.2.
+    bash -c "set -euo pipefail; $1"
   fi
 }
 
