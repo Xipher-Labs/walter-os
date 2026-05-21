@@ -32,7 +32,7 @@ The operator surfaced both problems during PR #111 review and proposed: classify
 
 `BLOCKER | MAJOR | MINOR | COSMETIC`. Boundaries:
 
-- BLOCKER touches an auto-escalation path (`AGENTS.md` list: auth/, crypto/, money, PHI, audit logs, prod migrations, hooks/, install.sh, mcp/servers.json, secrets/, .env*).
+- BLOCKER touches an auto-escalation path. The list combines (a) the AGENTS.md "auto-escalate to major" + "Blocked for ALL tiers" union (auth/, crypto/, money, PHI, audit logs, prod migrations, hooks/, install.sh, mcp/servers.json, .env*) and (b) two explicit conservative additions made by this spec — `programs/**` (Solana on-chain code) and `**/secrets/**` (any nested directory literally named `secrets`). The conservative additions are labeled in §4.2 of the spec so the AGENTS.md union isn't mis-cited.
 - MAJOR is a real logic bug, broken test, regression, leak, or violation of an `AGENTS.md` hard rule.
 - MINOR is doc accuracy, comment drift, prose nit, portability quirk, test thoroughness improvement with no current false-negative.
 - COSMETIC is formatting, indentation, spelling, naming preference.
@@ -54,7 +54,7 @@ All LLM decisions are logged with the prompt + response to `~/.config/walter-os/
 
 Auto-merge is disabled by default. A repo opts in by committing an `auto-merge-enabled` file at its root. Empty file = accept all defaults. The file may declare per-repo overrides for: round threshold, LOC caps, additional BLOCKER paths, additional MAJOR keywords, follow-up-issue label/title, audit-log path.
 
-Repos without the marker file → auto-merge gate refuses (returns `MERGE_BLOCKED reason=no-opt-in`), falling back to the current manual-merge behavior.
+Repos without the marker file → auto-merge gate refuses (returns `MERGE_BLOCKED:no-opt-in` — same `MERGE_BLOCKED:<reason-slug>` notation as spec AC7 / Decision 4), falling back to the current manual-merge behavior.
 
 ### Decision 4 — Nine-condition gate (all must hold)
 

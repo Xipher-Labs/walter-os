@@ -37,14 +37,14 @@ Each task follows RED-GREEN-REFACTOR. Skip RED is a violation of
 
 **File:** `tests/severity-gate/pr-classify-finding.bats`
 
-Tests:
+Tests (17 total — one fixture per AC1 case + three additional gate tests):
 - `@test "AC1: classify blocker-auth-path → BLOCKER"`
-- (one per fixture: 14 tests total)
+- (one per fixture: 14 tests total — see §5 spec for the fixture matrix)
 - `@test "AC3: blocker path globs match all AGENTS.md auto-escalation paths"`
 - `@test "AC4: each major keyword triggers MAJOR"`
 - `@test "AC6: unclassified falls through to LLM fallback with audit log entry"`
 
-**Verify**: 16 FAIL (classifier doesn't exist yet).
+**Verify**: 17 FAIL (classifier doesn't exist yet; 14 fixture cases + 3 gate cases = 17).
 
 ### A3. Write failing tests for AC7 (gate conditions C1–C9)
 
@@ -101,7 +101,11 @@ Tests:
 
 Implements §4.2 ruleset:
 1. Path glob matching for BLOCKER triggers.
-2. Keyword (case-insensitive, word-boundary) matching for MAJOR triggers.
+2. **Prefix-token matching** (case-insensitive) for MAJOR triggers —
+   matches §4.2's prefix-style semantics so `vulnerabilit` catches
+   `vulnerability` + `vulnerabilities`, `expose` catches `exposed` /
+   `exposes`, etc. Verb-phrase rules use literal case-insensitive
+   substring match.
 3. Doc-file COSMETIC and MINOR bias.
 4. Test-file MINOR bias.
 5. UNCLASSIFIED → LLM fallback via existing LiteLLM virtual key (use the `pr-review-severity` virtual key, $0.01 per call cap).
@@ -121,8 +125,8 @@ Output: JSON `{"severity": "BLOCKER", "rule": "auth-path-trigger", "rule_detail"
 When no rule matches:
 1. Call `infisical secrets get LITELLM_PR_SEVERITY_KEY --env=prod` (key per AGENTS.md secrets flow).
 2. POST to `${LITELLM_BASE_URL}/v1/chat/completions` with a fixed prompt template (in `scripts/walter/lib/pr-severity-prompt.txt`).
-3. Cost-cap: read response's `usage.cost_usd`; if > 0.01, log + return MAJOR.
-4. Log the call (prompt + response + decision) to `~/.config/walter-os/state/auto-merge-log.jsonl`.
+3. **Cost extraction**: OpenAI-compatible responses don't ship a cost field by default; LiteLLM proxy injects `usage.response_cost` (or `x-litellm-response-cost` header) when its callback is wired. Read both — header first (cheap parse, always present on a proxy hit), `usage.response_cost` second (fallback if the upstream model passed through). If neither is present, log a WARN + treat the call as if it hit the cap (return MAJOR — fail-safe). If cost > $0.01, log + return MAJOR.
+4. Log the call (prompt + response + decision + extracted cost field) to `~/.config/walter-os/state/auto-merge-log.jsonl`.
 
 **Verify**: AC6 PASS.
 
@@ -204,7 +208,7 @@ If the gh call returns non-2xx, log + fail (do not retry).
 
 ### D4. MERGE_BLOCKED comment
 
-When any condition fails, post a PR comment with the failing condition + the remediation: "To unblock, address the BLOCKER findings in [list], then re-trigger via `walter-os pr-auto-merge 111`."
+When any condition fails, post a PR comment with the failing condition + the remediation: "To unblock, address the BLOCKER findings in [list], then re-trigger via `walter-os pr-auto-merge <pr-num>`." (The PR number is substituted at hook-call time; never hard-code a specific PR in the template.)
 
 **Verify**: AC9 PASS.
 
