@@ -18,7 +18,7 @@ quarterly upgrade cadence (`skills/quarterly-upgrade-cadence`).
 |---|---|---|---|---|
 | **prometheus** | service network only | own volume | no | Scrapes targets; no host filesystem access. |
 | **loki** | service network only | own volume | no | Stores ingested logs; no host filesystem access. |
-| **promtail** | `/var/log` (ro), `/var/lib/docker/containers` (ro), `/var/run/docker.sock` (ro) | none | no | Tails every host log + every container log via Docker socket (read-only) for shipping to Loki. The Docker socket is the broadest grant — promtail can enumerate all containers and read their stdout/stderr streams. |
+| **promtail** | `/var/log` (ro), `/var/lib/docker/containers` (ro), `/var/run/docker.sock` (mount flagged `:ro`) | **effective: read/write on the Docker API** (see below) | no | Tails every host log + every container log; uses the Docker socket to discover containers for log shipping to Loki. **Important caveat**: a `:ro` bind-mount on a Unix socket does not restrict the API surface — anything that connects to the socket can issue any Docker API call (start/stop/exec/destroy containers, mount host paths into new ones). Treat promtail's docker.sock access as full Docker daemon control + handle the container like an admin tool. |
 | **node-exporter** | `/proc` (ro), `/sys` (ro), `/` as `/rootfs` (ro), `/var/lib/walter-council` (ro) | none | no, but `pid: host` | Exports host CPU / memory / disk / network metrics. Sees the host process table via `pid: host`. The full `/` mount is needed for filesystem-usage collectors; explicit `--collector.filesystem.mount-points-exclude` keeps `/sys`, `/proc`, etc. out of the metrics. |
 | **cadvisor** | `/`, `/sys`, `/var/run`, `/var/lib/docker`, `/dev/disk` (all ro), `/dev/kmsg` (rw via `devices:`) | none | **yes (`privileged: true`)** | Per-container resource metrics. cadvisor upstream requires privileged mode to read kernel ring buffer (`kmsg`) and cgroup data — without it, container detection misses recent kernel versions. The broadest grant in the stack. |
 | **grafana** | service network only | own volume | no | UI + dashboards. No host access. |
@@ -28,13 +28,17 @@ quarterly upgrade cadence (`skills/quarterly-upgrade-cadence`).
 - **Promtail reads every log on the host.** If you put secrets in container stdout, they end up in Loki. Filter at the application layer or accept that Loki may contain sensitive log lines (and lock down Loki access accordingly — Grafana auth + admin_auth_gate Caddy snippet).
 - **node-exporter + cadvisor can read your entire filesystem.** Read-only, but anything readable to `root` on the host is readable inside the container. Don't co-host secrets the host's `root` shouldn't see with the observability profile.
 - **cadvisor is `privileged: true`.** A container escape from cadvisor would be a host compromise. This is an accepted risk in exchange for accurate container metrics — but it's the strongest argument for keeping the observability stack on a dedicated host or carefully-isolated VM.
-- **Promtail mounts the Docker socket read-only.** Docker socket access (even read-only) lets a container enumerate every other container's config, env vars, and labels. Treat the promtail container as if it were a sibling-aware admin tool.
+- **Promtail's Docker socket access is effectively full daemon control.** The `:ro` flag on a Unix-socket bind-mount restricts the bind, not the API — any process inside the container that can `connect()` to `/var/run/docker.sock` can issue any Docker API call (including `containers/create`, `containers/exec`, host-path mounts on new containers, `system/prune`). A promtail compromise = a host compromise via the Docker daemon. Treat the promtail container as if it were a full admin tool.
 
 ### Hardening levers
 
 - Pin every image by digest (`@sha256:...`), not tag, per `daily-supply-chain-audit`.
 - Keep the observability stack on its own host or VM if you handle PHI / regulated data — the broad-read grants make multi-tenancy uncomfortable.
-- Run `walter-os audit` daily; the audit checks for digest pins on all observability images.
+- Run `walter-os audit` daily. The current audit covers MCP servers,
+  hooks, and external dependencies; **digest-pin enforcement for
+  compose service images is a known gap** (tracked separately). Until
+  that lands, the operator runs `git grep '@sha256:' compose.yml` or
+  the manual quarterly review per `skills/quarterly-upgrade-cadence`.
 - Review this doc + the compose every quarter (`skills/quarterly-upgrade-cadence`).
 
 ### What this profile does **not** grant
