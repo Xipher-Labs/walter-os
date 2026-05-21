@@ -133,7 +133,7 @@ setup() {
 #!/usr/bin/env bash
 # Capture all args; return a valid (non-updating) response.
 echo "$*" >> /tmp/walter_test_curl_args.txt
-echo '{"tag_name":"v0.2.0","name":"Walter-OS v0.2.0"}'
+echo '{"tag_name":"v0.3.0","name":"Walter-OS v0.3.0"}'
 MOCK
   chmod +x "${mock_dir}/curl"
   rm -f /tmp/walter_test_curl_args.txt
@@ -159,11 +159,11 @@ MOCK
   # We override curl in PATH so the subprocess picks it up.
   local mock_dir
   mock_dir="$(mktemp -d)"
-  # The mock returns a tag newer than the current VERSION (0.2.0).
+  # The mock returns a tag newer than the current VERSION (0.3.0).
   cat > "${mock_dir}/curl" <<'MOCK'
 #!/usr/bin/env bash
 # Mock curl: ignore all args, return a fake GitHub releases/latest response.
-echo '{"tag_name":"v0.2.5","name":"Walter-OS v0.2.5"}'
+echo '{"tag_name":"v0.3.5","name":"Walter-OS v0.3.5"}'
 MOCK
   chmod +x "${mock_dir}/curl"
 
