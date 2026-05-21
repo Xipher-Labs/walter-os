@@ -36,6 +36,11 @@ _invoke() {
   # `set --` clears positional args before sourcing — install.sh
   # parses $@ at source time and would otherwise see whatever
   # positional args the bats caller had as install.sh's own args.
+  # Copilot R2 #141: explicit `if ! source` instead of `set -e`
+  # — install.sh runs its own discovery code at source time (CLI
+  # arg parsing, env defaults) which would short-circuit under
+  # `set -e` even for benign non-zero returns. We want to bail
+  # only when the source itself fails (missing file, parse error).
   WALTER_INSTALL_SH="$INSTALL_SH" WALTER_INVOKE_CMD="$1" \
   bash -c '
     set -uo pipefail
@@ -44,10 +49,12 @@ _invoke() {
     UPGRADE=1
     UNINSTALL=0
     STEP_ONLY=""
-    # Clear positional args (install.sh expects none when sourced).
     set --
     # shellcheck source=/dev/null
-    source "$WALTER_INSTALL_SH"
+    if ! source "$WALTER_INSTALL_SH"; then
+      echo "_invoke: source of $WALTER_INSTALL_SH failed" >&2
+      exit 1
+    fi
     eval "$WALTER_INVOKE_CMD"
   '
 }
@@ -80,9 +87,11 @@ _invoke() {
   # The quoted form must NOT contain a bare apostrophe followed by `;`.
   # printf '%q' produces something like /tmp/foo\'\;\ touch\ INJECTION\ \#
   [[ "$output" != *"'; touch"* ]]
-  # Round-trip via eval (in the isolated $TMP_HOME context).
+  # Round-trip via eval into printf (NOT echo — echo has impl-defined
+  # handling of -n / -e / backslashes that would corrupt the test for
+  # certain inputs; Copilot R2 #141 catch). printf '%s' is byte-faithful.
   local roundtrip
-  roundtrip=$(eval "echo $output")
+  roundtrip=$(eval "printf '%s' $output")
   [ "$roundtrip" = "/tmp/foo'; touch $canary; #" ]
   # And — critically — the eval did NOT actually execute the
   # `touch $canary` payload. If _shell_quote regresses, this fails.
