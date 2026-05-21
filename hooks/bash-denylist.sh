@@ -15,14 +15,26 @@
 # the bash-3.2-related fixes already shipped for approval-gate.sh
 # (P1-05 side fix); same class of bug here.
 if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+  # One-shot guard: if we already attempted a re-exec and ended up back in
+  # bash < 4, stop. Without this, a candidate path that itself resolves to
+  # bash 3.2 (e.g., symlink chain) would loop forever. Codex review of #81.
+  if [[ "${WALTER_BASH_DENYLIST_REEXEC:-0}" == "1" ]]; then
+    printf '%s\n' '{"decision":"block","reason":"bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 and ensure it is first on PATH or at /opt/homebrew/bin/bash."}'
+    exit 0
+  fi
+  # Use BASH_SOURCE[0] (the script's actual path) rather than $0, which can
+  # be just a bare filename when invoked via PATH lookup and would fail
+  # ENOENT under the re-exec. Codex review of #81.
+  _self="${BASH_SOURCE[0]}"
   for _candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
-    if [[ -x "$_candidate" ]]; then
-      exec "$_candidate" "$0" "$@"
+    if [[ -x "$_candidate" && -f "$_self" ]]; then
+      WALTER_BASH_DENYLIST_REEXEC=1 exec "$_candidate" "$_self" "$@"
     fi
   done
   # No newer bash available — emit fail-CLOSED block so the hook does
-  # not silently fail-open.
-  echo '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
+  # not silently fail-open. Use printf to stay consistent with the rest
+  # of the hook's JSON-output convention.
+  printf '%s\n' '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
 #
@@ -100,19 +112,39 @@ declare -A DENYLIST_PATTERNS
 # Structure: optional (sudo + optional path), optional (env or absolute-path
 # env), then the shell token, then a "boundary" that includes shell
 # parameter expansion (`${...}` / `$...`) so `bash${IFS}` is caught.
-DENYLIST_PATTERNS[curl-pipe-shell]='curl[[:space:]]+.*\|[[:space:]]*(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(ba|z|d)?sh([[:space:]]|$|;|&|\||\$)'
-DENYLIST_PATTERNS[wget-pipe-shell]='wget[[:space:]]+.*\|[[:space:]]*(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(ba|z|d)?sh([[:space:]]|$|;|&|\||\$)'
+# Shell token alternation. Explicit OR rather than `(ba|z|d|k)?sh`, which
+# (per Copilot review of #81) does NOT match `dash` — it expands to
+# `(ba|z|d|k)? + sh` and so matches `dsh` instead. We now match the full
+# names plus standalone `sh`. Used in pipe-to-shell + -c patterns below.
+#
+# Note: not a shell variable; just a comment grouping the alternation so
+# the regex strings below stay readable.
+#   SHELL_TOKEN = (bash|zsh|ksh|dash|sh)
+DENYLIST_PATTERNS[curl-pipe-shell]='curl[[:space:]]+.*\|[[:space:]]*(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)([[:space:]]|$|;|&|\||\$)'
+DENYLIST_PATTERNS[wget-pipe-shell]='wget[[:space:]]+.*\|[[:space:]]*(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)([[:space:]]|$|;|&|\||\$)'
 # Process substitution: <ANY_SHELL> <(curl ...) or <ANY_SHELL> <(wget ...)
 # Covers bash, sh, zsh, dash, ksh; also covers `source <(...)` and `. <(...)`.
 DENYLIST_PATTERNS[shell-process-sub-curl]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*curl'
 DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*wget'
 # bash -c / sh -c with command substitution: `bash -c "$(curl ...)"`, etc.
 # This also catches `bash -c "$(cat /tmp/payload)"`. Mirror of python-c-variable.
-DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(ba|z|d|k)?sh[[:space:]]+-c[[:space:]]+["'\'']?\$[{(]'
+#
+# Whitespace-after-`-c` is OPTIONAL. Copilot review of #81 flagged that
+# requiring `[[:space:]]+` after `-c` left `bash -c'...'` / `sh -c"..."` (no
+# space — valid POSIX shell syntax) as a bypass. We now allow zero or more
+# whitespace between `-c` and the opening quote.
+DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?\$[{(]'
 # Sibling pattern: backtick command substitution `bash -c "`curl …`"`. Codex
 # R2 of PR #63 flagged this gap (issue #3 P2-1). Backticks are still common
 # in older shell snippets / man pages / one-liners.
-DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]])(ba|z|d|k)?sh[[:space:]]+-c[[:space:]]+["'\'']?`'
+#
+# Match relaxation per Copilot review of #81: the backtick may appear after
+# the opening quote with arbitrary intermediate characters (whitespace,
+# escaped backticks `\``, leading text), since `bash -c "...`...`..."` is the
+# typical real-world form. We anchor on the `(bash|sh|zsh|dash|ksh) -c <quote> ... \?\``
+# shape: shell + `-c` + optional quote + any chars (incl. backslash-escape)
+# then a backtick.
+DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^`]*`'
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
 # without braces) OR a command-substitution `$(...)`. Deliberately does NOT
