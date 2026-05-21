@@ -893,8 +893,12 @@ step_1() {
 }
 
 _install_deps_macos() {
-  local required_deps=(git curl jq docker bats)
-  local optional_deps=(yq python3)
+  # yq is REQUIRED (not optional): approval-gate.sh fails CLOSED without it.
+  # Listing it as optional in Step 1 while requiring it in --check + preflight
+  # broke fresh installs (Step 1 skipped yq, then preflight failed before
+  # reaching the rest of the wizard). Issue #120.
+  local required_deps=(git curl jq yq docker bats)
+  local optional_deps=(python3)
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -949,8 +953,9 @@ _install_deps_macos() {
 }
 
 _install_deps_linux() {
-  local required_deps=(git curl jq bats)
-  local optional_deps=(yq python3)
+  # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
+  local required_deps=(git curl jq yq bats)
+  local optional_deps=(python3)
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
