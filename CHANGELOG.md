@@ -81,6 +81,26 @@ PRs #55–#59 and land as the bundle epic completes.)
   Audit ledger `docs/operational/security-audit-2026-05-11.md` updated:
   6/6 P0 findings closed; P1-08 closed by the same fix.
 
+- **Audit P1-05 closed.** `hooks/approval-gate.sh` now hard-fails with
+  `permissionDecision: "block"` when `yq` is missing (same pattern as
+  the P0-03 jq-missing path). `install.sh` adds `yq` to its required-
+  tools list and runtime preflight, so a degraded install is caught
+  at install time. Side fix: the `declare -A CATEGORY_MIN_TIER` array
+  is now wrapped in `set +u` … `set -u` because bash 3.2 (macOS
+  default) misparses `[token-with-dashes]=value` under `set -u` —
+  this was a latent script-load failure on macOS.
+
+- **Audit P1-06 closed.** Standing-approvals YAML path is now hardcoded
+  to `$WALTER_CONFIG/agent-approvals.yml`. The previous
+  `WALTER_STANDING_APPROVALS` env var (which let an attacker who
+  controlled the hook env point the gate at a permissive
+  attacker-supplied YAML) is now ignored with a WARN log line. An
+  explicit testing-only override (`WALTER_STANDING_APPROVALS_OVERRIDE`)
+  is consulted ONLY when `WALTER_AGENT_ALLOW_OVERRIDE=1` is set in
+  the same shell, and also emits a WARN every invocation. Three new
+  bats tests in `tests/hooks/approval-gate.bats` (P1-05 fail-closed
+  + two P1-06 lockdown cases) pin the behavior.
+
 ### Changed (build / release pipeline)
 
 - Consolidated `.github/workflows/release-security.yml` into
