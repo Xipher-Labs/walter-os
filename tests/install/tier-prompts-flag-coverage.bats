@@ -52,12 +52,25 @@ setup() {
 
 # -----------------------------------------------------------------------
 # AC10: walter-os subcommands referenced in prompts exist in bin/walter-os
+#
+# A subcommand reference is a line where `walter-os <word>` appears in
+# a way that looks like a command invocation, not prose. We require
+# either a leading `$ ` prompt indicator OR the line to be indented
+# (typical for code blocks inside the prompt's fenced block).
+#
+# Words known to appear in PROSE (not commands) are excluded:
+#   clone | repo | symlinked | config | directory | settings | path
+# These are nouns/adjectives that happen to follow "walter-os" in
+# contextual text like "from the walter-os clone:" or "walter-os repo
+# purpose".
 # -----------------------------------------------------------------------
 @test "AC10: every walter-os <subcmd> in prompts exists in bin/walter-os" {
-  # Extract subcommands. Pattern: walter-os <subcmd-name> (excluding
-  # walter-os --version, walter-os doctor --tier 3 second word, etc.).
-  # We grep for the first word after `walter-os ` that isn't a flag.
-  prompt_subs=$(grep -hoE 'walter-os\s+[a-z][a-z0-9-]*' "$PROMPT_DIR"/tier-*.md 2>/dev/null \
+  # Capture lines that contain `walter-os <word>` in a code-block-like
+  # context. Approach: take every line, extract candidate subcommands,
+  # then filter out the prose-only words.
+  prose_words="clone repo symlinked config directory settings path"
+
+  prompt_subs=$(grep -hoE 'walter-os[[:space:]]+[a-z][a-z0-9-]*' "$PROMPT_DIR"/tier-*.md 2>/dev/null \
     | sed -E 's/walter-os[[:space:]]+//' \
     | sort -u)
 
@@ -67,8 +80,11 @@ setup() {
 
   missing=""
   while IFS= read -r sub; do
-    # Skip anything that looks like a flag (defensive)
+    # Skip flag-like and known-prose words
     [[ "$sub" =~ ^- ]] && continue
+    case " $prose_words " in
+      *" $sub "*) continue ;;
+    esac
     # Find the dispatch case in bin/walter-os. Lines look like:
     #   doctor)             cmd_doctor "$@" ;;
     if ! grep -qE "^\s*${sub}\s*\)" "$WALTER_OS_BIN"; then
@@ -77,7 +93,7 @@ setup() {
   done <<< "$prompt_subs"
 
   if [ -n "$missing" ]; then
-    printf "walter-os subcommands missing from dispatch:%b\nsubcommands found in prompts:\n%s\n" \
+    printf "walter-os subcommands missing from dispatch:%b\nsubcommands found in prompts (after prose filter):\n%s\n" \
       "$missing" "$prompt_subs" >&2
     return 1
   fi

@@ -28,11 +28,18 @@ setup() {
 }
 
 # -----------------------------------------------------------------------
-# AC11: negative — incorrect form NOT present (defends against partial
-# rewrites that miss one occurrence)
+# AC11: negative — incorrect form NOT present in any USE context.
+# Educational mentions documenting the wrong-form pitfall (lines that
+# say "NOT 'personal-projects'") are allowed; bare uses are not.
+# Strip educational lines first, then assert no remaining matches.
 # -----------------------------------------------------------------------
-@test "AC11: tier-4.md does NOT use 'personal-projects' (wrong order)" {
-  ! grep -q "personal-projects" "$TIER4_MD"
+@test "AC11: tier-4.md does NOT use 'personal-projects' (except in NOT-prefixed callout)" {
+  # Find lines that mention 'personal-projects' but NOT preceded by NOT.
+  bad_lines=$(grep -n "personal-projects" "$TIER4_MD" | grep -v 'NOT "personal-projects"' | grep -v "NOT 'personal-projects'" || true)
+  if [ -n "$bad_lines" ]; then
+    printf "tier-4.md uses 'personal-projects' outside a NOT-prefixed callout:\n%s\n" "$bad_lines" >&2
+    return 1
+  fi
 }
 
 # -----------------------------------------------------------------------
