@@ -110,15 +110,32 @@ The operator creates (via Plane UI, manual):
       Dimension B (lane):     lane:research, lane:code, lane:review,
                               lane:janitor, lane:digest, lane:triage
 
-Ask the operator to confirm the workspace exists and the labels are
-created. If they want, the agent can script the label creation:
+Ask the operator to confirm the workspace + projects + labels are
+created.
 
-  walter-os agents bootstrap-plane-labels --workspace agents
+Walter-OS does NOT ship a `walter-os agents bootstrap-plane-labels`
+subcommand today (the real `walter-os agents` only supports
+`{list|run-once|pause|resume|status}` — see `scripts/agents/main.sh`).
+The operator creates the labels by hand from the Plane settings UI,
+or via direct API calls using `curl` + the token in Infisical at
+`walter-vm-internal/prod/plane/PLANE_API_TOKEN`.
 
-(This calls the Plane API with the operator's API token. Token must
-be in Infisical at walter-vm-internal/prod/plane/PLANE_API_TOKEN.
-If this subcommand doesn't exist yet, the operator creates labels by
-hand from the Plane settings UI.)
+If you want to script it inline, here's the minimum:
+
+  TOKEN=$(walter-os secrets-pull plane/PLANE_API_TOKEN 2>/dev/null)
+  for ctx in work projects-personal personal medical; do
+    curl -sS -X POST "https://plane.${WALTER_DOMAIN}/api/v1/workspaces/agents/labels/" \
+      -H "x-api-key: $TOKEN" -H "Content-Type: application/json" \
+      -d "{\"name\": \"context:${ctx}\"}"
+  done
+  for lane in research code review janitor digest triage; do
+    curl -sS -X POST "https://plane.${WALTER_DOMAIN}/api/v1/workspaces/agents/labels/" \
+      -H "x-api-key: $TOKEN" -H "Content-Type: application/json" \
+      -d "{\"name\": \"lane:${lane}\"}"
+  done
+
+A real `walter-os agents bootstrap-plane-labels` subcommand is a
+reasonable future enhancement; not in scope for this tier.
 
 ================================================================================
 STEP 3 — TRUST TIERS
