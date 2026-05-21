@@ -1,9 +1,9 @@
 # Filesystem capability tokens (OSS Trust A-2) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-2
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-2 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
 **Target release**: v0.5.0
-**Depends on**: env-allowlist parser (P1-09), time-bounded-sessions spec (`docs/specs/time-bounded-sessions.md`) — A-2 binds capability TTLs to the session TTL from A-4.
+**Depends on**: env-allowlist parser (P1-09 — in PR #69), time-bounded-sessions spec (`docs/specs/time-bounded-sessions.md` — in PR #87). A-2 binds capability TTLs to the session TTL from A-4; both dependencies must merge before A-2 implements.
 
 ## Problem
 
