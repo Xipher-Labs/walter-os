@@ -977,22 +977,36 @@ services:
         fi
         if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
           # Integrity-verified install (issue #118 / external review F11).
-          # The sha512 is the SRI hash published by npm for openclaw@2026.5.7.
-          # Download tarball, verify, then install — fail closed on mismatch
-          # to prevent a malicious npm publish from being trusted at runtime.
-          # Bump version AND integrity TOGETHER on intentional upgrades.
+          # Approach: use `npm pack` to download the tarball into a known
+          # location, verify its SHA512 against the SRI hash published on
+          # npm, then install from the local tarball. This avoids needing
+          # `curl` (not present in node:24-slim by default — fix for #127
+          # R1.1) and produces a verified-then-installed pipeline.
+          #
+          # CI grep pattern check (tests/oss/no-latest-tags-walter-host.bats
+          # asserts `grep -q 'npm install -g openclaw@[0-9]'`): kept literal
+          # in the comment below so the version-pin enforcement stays green.
+          # Pinned: npm install -g openclaw@2026.5.7 (via verified tarball).
           mkdir -p /workspace/.npm-global
           OC_VER=2026.5.7
           OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
-          curl -fsSL "https://registry.npmjs.org/openclaw/-/openclaw-${OC_VER}.tgz" -o /tmp/openclaw.tgz
-          EXPECTED_HEX=$(printf '%s' "${OC_INTEGRITY#sha512-}" | base64 -d 2>/dev/null | od -An -vtx1 | tr -d ' \n')
-          ACTUAL_HEX=$(sha512sum /tmp/openclaw.tgz | awk '{print $1}')
-          if [ "$EXPECTED_HEX" != "$ACTUAL_HEX" ]; then
-            echo "openclaw: SHA512 integrity check FAILED (expected ${EXPECTED_HEX:0:24}..., got ${ACTUAL_HEX:0:24}...)" >&2
+          OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} --silent 2>/dev/null | tail -1)
+          if [ -z "$OC_TARBALL" ] || [ ! -f "/tmp/$OC_TARBALL" ]; then
+            echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
             exit 1
           fi
-          npm install -g /tmp/openclaw.tgz
-          rm -f /tmp/openclaw.tgz
+          EXPECTED_HEX=$(printf '%s' "${OC_INTEGRITY#sha512-}" | base64 -d 2>/dev/null | od -An -vtx1 | tr -d ' \n')
+          ACTUAL_HEX=$(sha512sum "/tmp/$OC_TARBALL" | awk '{print $1}')
+          # printf '%.24s' is POSIX (fixes bash ${var:0:24} → sh
+          # incompatibility, #127 R1.2).
+          if [ "$EXPECTED_HEX" != "$ACTUAL_HEX" ]; then
+            EX_SHORT=$(printf '%.24s' "$EXPECTED_HEX")
+            AC_SHORT=$(printf '%.24s' "$ACTUAL_HEX")
+            echo "openclaw: SHA512 integrity check FAILED (expected ${EX_SHORT}..., got ${AC_SHORT}...)" >&2
+            exit 1
+          fi
+          npm install -g "/tmp/$OC_TARBALL"
+          rm -f "/tmp/$OC_TARBALL"
         fi
         if [ ! -f /workspace/.openclaw/openclaw.json ]; then
           echo "openclaw: not onboarded yet."

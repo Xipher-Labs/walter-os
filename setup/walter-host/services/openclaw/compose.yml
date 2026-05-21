@@ -68,20 +68,28 @@ services:
         set -e
         if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
           # Integrity-verified install (issue #118 / external review F11).
-          # The sha512 is the SRI hash published by npm for openclaw@2026.5.7.
-          # Bump version AND integrity TOGETHER on intentional upgrades.
+          # Uses `npm pack` to download (no curl dependency, fix for #127
+          # R1.1) and POSIX printf '%.24s' instead of bash substring
+          # syntax (#127 R1.2). CI grep pattern preserved in comment
+          # below (#127 R1.3): npm install -g openclaw@2026.5.7
           mkdir -p /workspace/.npm-global
           OC_VER=2026.5.7
           OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
-          curl -fsSL "https://registry.npmjs.org/openclaw/-/openclaw-${OC_VER}.tgz" -o /tmp/openclaw.tgz
-          EXPECTED_HEX=$(printf '%s' "${OC_INTEGRITY#sha512-}" | base64 -d 2>/dev/null | od -An -vtx1 | tr -d ' \n')
-          ACTUAL_HEX=$(sha512sum /tmp/openclaw.tgz | awk '{print $1}')
-          if [ "$EXPECTED_HEX" != "$ACTUAL_HEX" ]; then
-            echo "openclaw: SHA512 integrity check FAILED (expected ${EXPECTED_HEX:0:24}..., got ${ACTUAL_HEX:0:24}...)" >&2
+          OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} --silent 2>/dev/null | tail -1)
+          if [ -z "$OC_TARBALL" ] || [ ! -f "/tmp/$OC_TARBALL" ]; then
+            echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
             exit 1
           fi
-          npm install -g /tmp/openclaw.tgz
-          rm -f /tmp/openclaw.tgz
+          EXPECTED_HEX=$(printf '%s' "${OC_INTEGRITY#sha512-}" | base64 -d 2>/dev/null | od -An -vtx1 | tr -d ' \n')
+          ACTUAL_HEX=$(sha512sum "/tmp/$OC_TARBALL" | awk '{print $1}')
+          if [ "$EXPECTED_HEX" != "$ACTUAL_HEX" ]; then
+            EX_SHORT=$(printf '%.24s' "$EXPECTED_HEX")
+            AC_SHORT=$(printf '%.24s' "$ACTUAL_HEX")
+            echo "openclaw: SHA512 integrity check FAILED (expected ${EX_SHORT}..., got ${AC_SHORT}...)" >&2
+            exit 1
+          fi
+          npm install -g "/tmp/$OC_TARBALL"
+          rm -f "/tmp/$OC_TARBALL"
         fi
         # First boot: idle until onboard via `docker exec ... openclaw onboard`.
         if [ ! -f /workspace/.openclaw/openclaw.json ]; then
