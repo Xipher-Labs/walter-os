@@ -14,7 +14,7 @@ setup() {
 
 # Sites that MUST import admin_auth_gate (admin / internal-use surfaces).
 # Adding a new admin site to the Caddyfile.template means adding it here too.
-ADMIN_SITES="plane git secrets llm grafana n8n status home sync headscale-admin vpn postiz metabase penpot draw claw"
+ADMIN_SITES="plane git secrets llm grafana n8n status home sync headscale-admin vpn tower postiz metabase penpot draw claw"
 
 # Sites that MUST NOT import admin_auth_gate (genuinely public).
 # Reasoning per site captured in issue #116.
@@ -73,6 +73,30 @@ PUBLIC_SITES="headscale posthog matrix chat-matrix chat"
   local compose="$REPO_ROOT/compose.yml"
   [[ -f "$compose" ]] || skip "compose.yml missing"
   grep -qE 'WALTER_TAILNET_CIDR.*fd7a:115c:a1e0::/48' "$compose"
+}
+
+# Codex R2 #130 MINOR: 172.16.0.0/12 (RFC1918) was missing from the
+# default LAN CIDR, leaving common corporate LAN ranges denied even on
+# the operator's own network.
+@test "AC2: WALTER_LAN_CIDR default covers all 3 RFC1918 ranges" {
+  local compose="$REPO_ROOT/compose.yml"
+  [[ -f "$compose" ]] || skip "compose.yml missing"
+  # 10/8 is in the snippet's static allowlist; 192.168/16 + 172.16/12
+  # are the configurable WALTER_LAN_CIDR default.
+  grep -qE 'WALTER_LAN_CIDR.*192\.168\.0\.0/16.*172\.16\.0\.0/12' "$compose"
+}
+
+# Codex R2 #130 BLOCKER: scripts/bootstrap.sh used envsubst without an
+# allowlist, which would also expand Caddy's native `{$VAR}` placeholders
+# (turning them into `{}` or `{<literal-value>}` and breaking matchers).
+# Lock in the fix: envsubst gets a SHELL-FORMAT positional arg restricting
+# expansion to only the bootstrap-time vars (WALTER_DOMAIN + ADMIN_EMAIL).
+@test "AC2: bootstrap.sh envsubst uses explicit SHELL-FORMAT allowlist" {
+  local bs="$REPO_ROOT/scripts/bootstrap.sh"
+  [[ -f "$bs" ]] || skip "bootstrap.sh missing"
+  # The envsubst invocation must pass an explicit '$VAR_LIST' argument
+  # so non-listed $-references (Caddy's `{$VAR}` placeholders) survive.
+  grep -qE "envsubst '\\\$WALTER_DOMAIN \\\$WALTER_ADMIN_EMAIL'" "$bs"
 }
 
 # -----------------------------------------------------------------------

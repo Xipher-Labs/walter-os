@@ -105,7 +105,7 @@ services:
       # (Copilot R3 #130). Override either / both in personal.env if your
       # tailnet differs.
       WALTER_TAILNET_CIDR: ${WALTER_TAILNET_CIDR:-100.64.0.0/10 fd7a:115c:a1e0::/48}
-      WALTER_LAN_CIDR: ${WALTER_LAN_CIDR:-192.168.0.0/16}
+      WALTER_LAN_CIDR: ${WALTER_LAN_CIDR:-192.168.0.0/16 172.16.0.0/12}
       # Cloudflare edge ranges (IPv4 + IPv6, from cloudflare.com/ips/).
       # Single source of truth so the Caddyfile matchers don't duplicate
       # the list; quarterly refresh per skills/quarterly-upgrade-cadence

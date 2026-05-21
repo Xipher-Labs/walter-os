@@ -179,9 +179,12 @@ vpn.${WALTER_DOMAIN} {
 }
 
 # Control Tower — Walter Council UI (Tailscale-only)
-# NOTE: Access is enforced at the app layer (TAILSCALE_ENFORCE=true).
-# For defence-in-depth, add a `remote_ip` matcher here or use Cloudflare Access.
+# App-layer access control is TAILSCALE_ENFORCE=true; the proxy-layer
+# admin_auth_gate adds defense-in-depth so any future app-layer regression
+# (env var dropped, middleware bypassed, etc.) doesn't expose the dashboard
+# publicly. Closes Codex R2 #130 MAJOR.
 tower.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy control-tower:3000 {
     # Strip attacker-controlled IP headers; set from actual remote address only.
     # Prevents X-Forwarded-For spoofing that would break Tailscale IP enforcement.
