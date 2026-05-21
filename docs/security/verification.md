@@ -15,6 +15,16 @@ Five artifacts are attached to every release from v0.4.1 onward:
 - `checksums.sha256.cosign.bundle` — cosign transparency log bundle (single
   file carrying signature + cert + Rekor entry — preferred verification path)
 
+> **Note on the two signatures.** The release workflow invokes
+> `cosign sign-blob` twice over the same bytes — once with `--bundle`
+> (produces the `.cosign.bundle`) and once with
+> `--output-signature` + `--output-certificate` (produces `.sig` +
+> `.pem`). Each invocation requests a fresh ephemeral signing key
+> from the Sigstore keyless flow, so the signature bytes inside the
+> bundle do **not** match `.sig` byte-for-byte. Both are valid; pick
+> the artifact pair that fits your tooling, don't try to cross-check
+> the two. Rekor records both entries.
+
 Releases tagged before PR #105 landed shipped only the `.sig`
 without the matching keyless certificate, so raw
 `cosign verify-blob --signature … --certificate …` cannot complete on
