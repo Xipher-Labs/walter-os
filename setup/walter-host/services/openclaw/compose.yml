@@ -68,10 +68,12 @@ services:
         set -e
         if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
           # Integrity-verified install (issue #118 / external review F11).
-          # Uses `npm pack` to download (no curl dependency, fix for #127
-          # R1.1) and POSIX printf '%.24s' instead of bash substring
-          # syntax (#127 R1.2). CI grep pattern preserved in comment
-          # below (#127 R1.3): npm install -g openclaw@2026.5.7
+          # `npm pack` downloads the tarball; a node one-liner SRI-decodes
+          # and sha512-compares it (no curl needed; no coreutils dependency
+          # on base64/od/sha512sum — fix for #127 R2 — hermetic, single
+          # tool, also sidesteps any /bin/sh vs bash substring quirks).
+          # CI grep pattern preserved in the comment below (#127 R1.3):
+          # npm install -g openclaw@2026.5.7
           mkdir -p /workspace/.npm-global
           OC_VER=2026.5.7
           OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
@@ -80,14 +82,20 @@ services:
             echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
             exit 1
           fi
-          EXPECTED_HEX=$(printf '%s' "${OC_INTEGRITY#sha512-}" | base64 -d 2>/dev/null | od -An -vtx1 | tr -d ' \n')
-          ACTUAL_HEX=$(sha512sum "/tmp/$OC_TARBALL" | awk '{print $1}')
-          if [ "$EXPECTED_HEX" != "$ACTUAL_HEX" ]; then
-            EX_SHORT=$(printf '%.24s' "$EXPECTED_HEX")
-            AC_SHORT=$(printf '%.24s' "$ACTUAL_HEX")
-            echo "openclaw: SHA512 integrity check FAILED (expected ${EX_SHORT}..., got ${AC_SHORT}...)" >&2
-            exit 1
-          fi
+          OC_TARBALL_PATH="/tmp/$OC_TARBALL" OC_INTEGRITY="$OC_INTEGRITY" \
+            node -e '
+              const crypto=require("crypto"), fs=require("fs");
+              const sri=process.env.OC_INTEGRITY.replace(/^sha512-/,"");
+              const expected=Buffer.from(sri,"base64").toString("hex");
+              const actual=crypto.createHash("sha512")
+                .update(fs.readFileSync(process.env.OC_TARBALL_PATH))
+                .digest("hex");
+              if (expected!==actual) {
+                console.error("openclaw: SHA512 integrity check FAILED " +
+                  "(expected "+expected.slice(0,24)+"..., got "+actual.slice(0,24)+"...)");
+                process.exit(1);
+              }
+            ' || exit 1
           npm install -g "/tmp/$OC_TARBALL"
           rm -f "/tmp/$OC_TARBALL"
         fi
