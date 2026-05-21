@@ -280,7 +280,9 @@ when `daily-supply-chain-audit` flags an issue with any tool here:
 - [ ] None of the GitHub Actions have published a new major version
   without a security advisory.
 - [ ] No new tool in the upstream catalog deserves promotion to this
-  list (review the upstream's recent additions).
+  list — scan recent additions to
+  [`dhyeythumar/awesome-readme-tools`](https://github.com/dhyeythumar/awesome-readme-tools)
+  for anything worth elevating.
 - [ ] No tool here has been deprecated or transferred to a less-trusted
   maintainer.
 
