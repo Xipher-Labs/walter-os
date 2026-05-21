@@ -218,9 +218,19 @@ if ! command -v envsubst >/dev/null 2>&1; then
   exit 1
 fi
 
+# Restrict envsubst to ONLY the bootstrap-time vars. Closes Codex R2
+# (PR #130) BLOCKER: envsubst without an allowlist would also expand
+# Caddy's native `{$VAR}` placeholders (e.g. `{$WALTER_TAILNET_CIDR}` →
+# `{<value-or-empty>}`), corrupting the admin_auth_gate matchers.
+# The Caddy-native placeholders MUST survive untouched into the
+# rendered Caddyfile so Caddy resolves them at container start time
+# from its environment (set in compose.yml).
+#
+# The SHELL-FORMAT positional arg tells envsubst which $-references to
+# expand; any $-reference whose name is not in the list is left alone.
 WALTER_DOMAIN="$WALTER_DOMAIN" \
 WALTER_ADMIN_EMAIL="${WALTER_ADMIN_EMAIL:-admin@example.com}" \
-  envsubst < "$CADDY_TEMPLATE" > "$CADDY_FILE"
+  envsubst '$WALTER_DOMAIN $WALTER_ADMIN_EMAIL' < "$CADDY_TEMPLATE" > "$CADDY_FILE"
 
 ok "Caddyfile rendered to: $CADDY_FILE"
 
