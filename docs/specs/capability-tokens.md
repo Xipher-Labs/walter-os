@@ -1,9 +1,11 @@
 # Filesystem capability tokens (OSS Trust A-2) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-2 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
+**Parent**: OSS Trust roadmap Layer A item A-2 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83) (post-merge in-tree path: `docs/specs/oss-trust-roadmap.md`).
 **Target release**: v0.5.0
-**Depends on**: env-allowlist parser (P1-09 — in PR #69), time-bounded-sessions spec (`docs/specs/time-bounded-sessions.md` — in PR #87). A-2 binds capability TTLs to the session TTL from A-4; both dependencies must merge before A-2 implements.
+**Depends on**:
+- P1-09 env-allowlist parser — [PR #69](https://github.com/Xipher-Labs/walter-os/pull/69) (already merged into `main` for v0.4.0; the in-tree implementation lives at `scripts/walter/lib/env-loader.sh`).
+- A-4 time-bounded sessions — [PR #87](https://github.com/Xipher-Labs/walter-os/pull/87) (post-merge: `docs/specs/time-bounded-sessions.md`). A-2 binds capability TTLs to the session TTL from A-4; A-4 must merge before A-2 implements.
 
 ## Problem
 
@@ -162,4 +164,4 @@ Each ≤300 LOC. 3-round review.
 - Sibling: `docs/specs/time-bounded-sessions.md` A-4 (cap TTL bound to session TTL)
 - Pattern: `hooks/approval-gate.sh` `CATEGORY_MIN_TIER` (high-tier classifier this layer respects)
 - PASETO v4 spec: <https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version4.md>
-- `paseto-cli` PyPI: <https://pypi.org/project/paseto/>
+- `paseto-cli` PyPI: <https://pypi.org/project/paseto-cli/> (NOT the bare `paseto` package — that one is a library; the `-cli` variant ships the executable we install via `uv tool install paseto-cli==<pinned>` per AC-1).
