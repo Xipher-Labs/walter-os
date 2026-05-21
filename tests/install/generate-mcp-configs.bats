@@ -20,6 +20,16 @@ teardown() {
 }
 
 @test "generate-mcp-configs.sh codex output parses as valid TOML" {
+  # tomllib is stdlib only from Python 3.11+. Older Python interpreters
+  # (e.g. the one on macOS Big Sur, or some Linux distros that ship 3.9
+  # by default) would fail this test for environmental reasons, not
+  # because the script's TOML output is wrong. Skip gracefully when
+  # tomllib isn't importable so the test reports its actual scope:
+  # "TOML validity on Python 3.11+".
+  if ! python3 -c "import tomllib" 2>/dev/null; then
+    skip "tomllib required (Python 3.11+); test scope is TOML validity on Python 3.11+"
+  fi
+
   run bash "$SCRIPT" codex
   [ "$status" -eq 0 ]
   printf '%s' "$output" > "$TMP/out.toml"
