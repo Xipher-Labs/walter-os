@@ -25,10 +25,12 @@ Five artifacts are attached to every release from v0.4.1 onward:
 > the artifact pair that fits your tooling, don't try to cross-check
 > the two. Rekor records both entries.
 
-Releases tagged before PR #105 landed shipped only the `.sig`
-without the matching keyless certificate, so raw
-`cosign verify-blob --signature … --certificate …` cannot complete on
-those bundles. Two cases:
+Releases tagged before PR #105 landed shipped only the `.sig` —
+without the matching Fulcio-issued keyless certificate, the raw
+`cosign verify-blob --signature … --certificate …` path cannot
+run at all for those releases (no `.pem` to feed `--certificate`).
+The `.cosign.bundle` path still works on those releases because
+the bundle carries its own embedded cert. Two cases:
 
 - **v0.3.0** (and any earlier signed release): `.pem` is absent.
   Use the `.cosign.bundle` path — it carries the cert internally.
