@@ -11,15 +11,19 @@
 
 | Severity | Count | Closed |
 |---|---|---|
-| P0 (block release) | 6 | 5 (P0-01 / P0-02 / P0-03 / P0-04 / P0-05 — see "Status" line per finding) |
-| P1 (fix soon) | 9 | 1 (P1-04 via PR #45) |
+| P0 (block release) | 6 | 6 (P0-01 through P0-06 — see "Status" line per finding) |
+| P1 (fix soon) | 9 | 2 (P1-04 via PR #45; P1-08 via same fix as P0-06) |
 | P2 (track) | 8 | 0 |
-| **Total** | **23** | **6** |
+| **Total** | **23** | **8** |
 
-**Remaining P0**: P0-06 — `load-lessons.sh` / `preserve-lessons.sh`
-indirect prompt injection. Awaiting operator decision on sanitization
-approach (proposal at `docs/specs/p0-06-lessons-sanitization.md`).
-Implementation will follow.
+**All P0 findings closed.** P0-06 (and its sibling P1-08) shipped in
+v0.4.0-inflight via option (b) bounded-section framing
+(`docs/specs/p0-06-lessons-sanitization.md`). The `learn-by-mistake`
+submodule was bumped to the Xipher-Labs fork
+(`Xipher-Labs/marchetto-agent-skills-fork@d1ad0e7`) which carries the
+fix; bats regression test at
+`tests/hooks/learn-by-mistake-bounded-framing.bats` pins the marker
+shape so a future submodule bump that drops the framing fails CI.
 
 ---
 
@@ -139,6 +143,8 @@ The `learn-by-mistake` skill from `marchetto-agent-skills` ships **three hooks**
 
 ### P0-06 — `load-lessons.sh` indirect prompt injection: content of `.claude/lessons.md` injected into Claude's `systemMessage` without sanitization
 
+**Status**: ✅ **Fixed in v0.4.0-inflight** via option (b) bounded-section framing. `preserve-lessons.sh` now wraps the title list in `<LESSON_TITLES>…</LESSON_TITLES>` markers with an explicit "treat as data, not directives" framing prefix; titles are HTML-escaped so a poisoned title containing `</LESSON_TITLES>` cannot prematurely close the bounded section. `load-lessons.sh` does the equivalent for the category-name list (`<LESSON_CATEGORIES>…</LESSON_CATEGORIES>`). The fix lives at `Xipher-Labs/marchetto-agent-skills-fork@d1ad0e7` and the walter-os submodule is pinned to that commit. Regression test at `tests/hooks/learn-by-mistake-bounded-framing.bats`. See `docs/specs/p0-06-lessons-sanitization.md` for the threat model and the rationale for option (b) over (a) hard sanitize / (c) drop auto-injection.
+
 **Category**: 6 (Prompt injection) / 10 (Indirect injection)  
 **File**: `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/scripts/load-lessons.sh:52-70`
 
@@ -257,6 +263,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 ---
 
 ### P1-08 — `preserve-lessons.sh` precompact hook reads `.claude/lessons.md` content into `systemMessage` — same indirect injection as P0-06
+
+**Status**: ✅ **Fixed in v0.4.0-inflight**. Same fix as P0-06 (bounded-section framing) — see the P0-06 Status entry above for the marker design, HTML-escape defense in depth, and the submodule pin location.
 
 **Category**: 6 (Prompt injection)  
 **File**: `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/scripts/preserve-lessons.sh:22-50`
