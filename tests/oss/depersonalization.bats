@@ -137,15 +137,24 @@ count_matches() {
 # ---------------------------------------------------------------------------
 
 @test "AC-3: no Argentine regulatory law refs outside _examples" {
+  # Exclude vendor / build dirs that may contain unrelated "Law N.NNN" or
+  # "Ley N" matches (recharts CHANGELOG, eslint plugin docs, etc.). Those
+  # are in node_modules / .next / dist / build / test-results and have
+  # nothing to do with Walter-OS's depersonalization invariant.
   local count
   count="$(grep -rliE 'argentine law [0-9]|Law [0-9]{1,3}\.[0-9]{3}|L[e]y [0-9]+|AFIP|ARCA|small-taxpayer|gross-receipts|MEP-CCL|ANMAT' "$REPO_ROOT" \
     --include='*.md' \
+    --exclude-dir='node_modules' \
+    --exclude-dir='.next' \
+    --exclude-dir='dist' \
+    --exclude-dir='build' \
+    --exclude-dir='test-results' \
+    --exclude-dir='.git' \
     2>/dev/null \
     | grep -v "$REPO_ROOT/docs/specs/" \
     | grep -v "$REPO_ROOT/contexts/_examples/" \
     | grep -v "$REPO_ROOT/tests/oss/" \
     | grep -v "$REPO_ROOT/.claude/" \
-    | grep -v "$REPO_ROOT/.git/" \
     | grep -v "$REPO_ROOT/skills/regulatory-research-argentina/" \
     | wc -l \
     | tr -d ' ')"
