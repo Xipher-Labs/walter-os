@@ -189,7 +189,7 @@ class TestJustifyEntry:
             "version": "1.0.0",
             "level": "production",
             "reason": "critical security patch, need now",
-            "operator": "nico",
+            "operator": "ops-bot",
             "expires": _days_from_now_iso(89),
         }
         tmp_justify.write_text(json.dumps(entry) + "\n")
@@ -216,7 +216,7 @@ class TestJustifyEntry:
             "version": "1.0.0",
             "level": "production",
             "reason": "old justified entry, now expired",
-            "operator": "nico",
+            "operator": "ops-bot",
             "expires": _days_ago_iso(1),  # expired yesterday
         }
         tmp_justify.write_text(json.dumps(entry) + "\n")
