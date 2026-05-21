@@ -148,6 +148,18 @@ check_requirements() {
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
   check_required_tool yq "brew install yq  # or: sudo snap install yq"
+  # Codex R3 #125: --check (which calls check_requirements) was passing on
+  # any `yq` on PATH, including apt's kislyuk/yq which is the wrong tool.
+  # Add the flavor check inline so --check reports the same wrong-flavor
+  # exit as the install path.
+  if command -v yq >/dev/null 2>&1; then
+    if ! (yq --version 2>&1 | grep -qi 'mikefarah'); then
+      err "yq is installed but is NOT mikefarah/yq (required by hooks)"
+      say "  Detected: $(yq --version 2>&1 | head -1)" >&2
+      say "  Fix: sudo apt-get remove -y yq && sudo snap install yq" >&2
+      _requirement_failures=$((_requirement_failures + 1))
+    fi
+  fi
 
   say
   say "${c_b}Required for full walter-host stack:${c_reset}"
@@ -396,16 +408,51 @@ check_preflight() {
     exit 4
   fi
 
+  # yq presence handling (Codex R2-R6 #125 — flavor check + ordering):
+  # Three cases the preflight needs to disambiguate. Codex R6 collapsed
+  # the previous (a) warn-then-step1-installs path: run_step_0 writes
+  # the approval-gate hook BEFORE step_1 ever runs, so a step_1 failure
+  # mid-install would leave the operator with a broken hook (closed-by-
+  # default on yq-missing). Now: missing yq is always a hard-fail in
+  # preflight regardless of mode — operator installs once, re-runs.
+  #   (a) yq missing entirely: hard-exit with install hint (DRY_RUN
+  #       still warn-only, so the install plan can be previewed).
+  #   (b) yq present + mikefarah flavor: ok, proceed.
+  #   (c) yq present + WRONG flavor (kislyuk/Python yq from apt): hard-exit
+  #       with remediation. Without this check, an apt-yq machine would
+  #       pass preflight + fail at hook-runtime when approval-gate.sh
+  #       tries mikefarah-only syntax.
   if ! command -v yq >/dev/null 2>&1; then
-    # Hard dependency at RUNTIME (approval-gate.sh fails CLOSED if yq
-    # is missing — audit P1-05). At install-plan time (--dry-run),
-    # only warn so the operator can still preview the plan.
     if [[ $DRY_RUN -eq 1 ]]; then
       warn "yq missing (would be required on real install). ${_pkg_hint_yq}"
-      warn "DRY-RUN: continuing past the missing yq so the install plan"
-      warn "         can be previewed. A real install would have exited here."
+      warn "DRY-RUN: continuing past the missing yq so the install plan can be previewed."
     else
-      err "yq required (approval-gate hard dep). ${_pkg_hint_yq}"
+      # Codex R6 #125 BLOCKER fix: previous version warned-and-continued
+      # in full-install mode hoping step_1 would install yq. But
+      # run_step_0 writes the approval-gate hook BEFORE step_1 ever
+      # runs — and if step_1 fails for any reason (no Docker, no brew,
+      # no snap, network/package error), the operator is left with the
+      # hook in place + no yq, which fails closed on every claude/codex
+      # invocation. Better: hard-fail in preflight on missing yq.
+      # Operator installs it once, then re-runs. Aligns with --check's
+      # behavior + AGENTS.md "fail fast" pattern.
+      err "yq required (approval-gate hard dep) and not installed."
+      err "  Install yq first, then re-run install.sh: ${_pkg_hint_yq}"
+      err "  (mikefarah/yq, not apt's kislyuk/yq — they share a name but"
+      err "   only mikefarah/yq has the syntax our hooks use)"
+      exit 4
+    fi
+  else
+    # Flavor check using the same helper Step 1's install path uses.
+    # Defined inline here so check_preflight doesn't depend on
+    # _install_deps_linux being sourced first.
+    if ! (yq --version 2>&1 | grep -qi 'mikefarah'); then
+      err "yq is installed but NOT mikefarah/yq (Walter-OS hooks require it)."
+      err "  Detected: $(yq --version 2>&1 | head -1)"
+      err "  Fix:"
+      err "    sudo apt-get remove -y yq     # Debian/Ubuntu: drop kislyuk/yq"
+      err "    sudo snap install yq          # then install mikefarah/yq"
+      err "  Or download the binary: https://github.com/mikefarah/yq/releases"
       exit 4
     fi
   fi
@@ -987,8 +1034,14 @@ step_1() {
 }
 
 _install_deps_macos() {
-  local required_deps=(git curl jq docker bats)
-  local optional_deps=(yq python3)
+  # yq is REQUIRED (not optional): approval-gate.sh fails CLOSED without it.
+  # The previous mismatch — Step 1 marked yq optional while --check and
+  # the preflight required it — caused fresh installs to skip the install
+  # in Step 1 and then trip on the missing tool the next time
+  # approval-gate.sh ran on a hook event (the failure surfaces as a
+  # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
+  local required_deps=(git curl jq yq docker bats)
+  local optional_deps=(python3)
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1016,6 +1069,18 @@ _install_deps_macos() {
   for dep in "${required_deps[@]}"; do
     [[ "$dep" == "docker" ]] && continue
     if command -v "$dep" >/dev/null 2>&1; then
+      # Codex R3 #125: --step 1 bypasses check_preflight, so the macOS
+      # branch must also flavor-check yq when already-installed. Without
+      # this, `./install.sh --step 1` on a kislyuk/yq machine would
+      # report ok + leave hooks broken at runtime.
+      if [[ "$dep" == "yq" ]] && ! (yq --version 2>&1 | grep -qi 'mikefarah'); then
+        err "yq is installed but NOT mikefarah/yq (Walter-OS hooks require it)."
+        err "  Detected: $(yq --version 2>&1 | head -1)"
+        err "  Fix on macOS: brew uninstall yq && brew install yq"
+        err "  (Homebrew's 'yq' is mikefarah/yq — the conflict is when both"
+        err "   were installed via different sources)."
+        exit 1
+      fi
       ok "$dep already installed"
     else
       if [[ $DRY_RUN -eq 1 ]]; then
@@ -1043,8 +1108,9 @@ _install_deps_macos() {
 }
 
 _install_deps_linux() {
-  local required_deps=(git curl jq bats)
-  local optional_deps=(yq python3)
+  # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
+  local required_deps=(git curl jq yq bats)
+  local optional_deps=(python3)
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1059,22 +1125,124 @@ _install_deps_linux() {
     ok "docker found: $(docker --version 2>/dev/null | head -1)"
   fi
 
+  # _yq_is_mikefarah — validate the locally-installed yq is mikefarah/yq
+  # (Go-based; the YAML processor Walter-OS hooks expect), not the
+  # Python-based kislyuk/yq that Debian/Ubuntu's `apt install yq` ships.
+  # The two share a binary name but have incompatible syntax — the wrong
+  # one makes approval-gate.sh fail closed at runtime, which is exactly
+  # the breakage this dep guard is supposed to prevent. Copilot R2 #125.
+  _yq_is_mikefarah() {
+    yq --version 2>&1 | grep -qi 'mikefarah'
+  }
+
+  # Codex R4 #125: enforce yq flavor BEFORE the apt-get-missing early
+  # return. The previous order let `--step 1` on a non-Debian Linux
+  # (Arch, Fedora, Alpine, NixOS, etc.) hit the apt-get-missing branch,
+  # print "install manually", exit 0 — leaving wrong-flavor yq on
+  # PATH and hooks broken. Hard-fail here so the operator can't proceed
+  # with the bad state.
+  if command -v yq >/dev/null 2>&1 && ! _yq_is_mikefarah; then
+    err "yq is installed but is NOT mikefarah/yq (Walter-OS hooks require it)."
+    err "  Detected: $(yq --version 2>&1 | head -1)"
+    err "  Remove the wrong yq first, then install mikefarah/yq:"
+    err "    sudo apt-get remove -y yq    # Debian/Ubuntu"
+    err "    sudo dnf remove -y yq        # Fedora/RHEL"
+    err "    sudo pacman -R yq            # Arch"
+    err "  Then download mikefarah/yq directly:"
+    err "    https://github.com/mikefarah/yq/releases (look for yq_linux_*)"
+    exit 1
+  fi
+
   if ! command -v apt-get >/dev/null 2>&1; then
     warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
     warn "Install manually: ${required_deps[*]}"
+    # If yq is missing entirely on a non-Debian Linux, surface that
+    # explicitly so the operator doesn't think the warn-and-return
+    # means everything's OK. Codex R4 #125.
+    if ! command -v yq >/dev/null 2>&1; then
+      err "yq is REQUIRED at runtime and not installed."
+      err "  Install mikefarah/yq for your distro before re-running."
+      exit 1
+    fi
     return 0
   fi
 
   for dep in "${required_deps[@]}"; do
     if command -v "$dep" >/dev/null 2>&1; then
+      # yq pre-installed flavor check — see _yq_is_mikefarah above.
+      if [[ "$dep" == "yq" ]] && ! _yq_is_mikefarah; then
+        err "yq is installed but is NOT mikefarah/yq. Walter-OS hooks require the Go-based mikefarah/yq, not the Python-based kislyuk/yq."
+        err "  Detected: $(yq --version 2>&1 | head -1)"
+        err "  Fix on Debian/Ubuntu:"
+        err "    sudo apt-get remove -y yq    # drop the wrong one"
+        err "    sudo snap install yq         # install mikefarah/yq"
+        err "  Or install the binary directly:"
+        err "    https://github.com/mikefarah/yq/releases (look for yq_linux_*)"
+        exit 1
+      fi
       ok "$dep already installed"
     else
-      if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: sudo apt-get install -y $dep"
+      # yq install — Debian/Ubuntu's `apt install yq` is a different tool
+      # (kislyuk/yq, Python-based) than the Go-based mikefarah/yq that
+      # Walter-OS hooks expect. Use snap (which serves the correct flavor)
+      # in the auto-install path; print a concrete binary-download fallback
+      # if snap is unavailable (common on minimal Debian/Ubuntu images).
+      # Copilot R2 #125.
+      if [[ "$dep" == "yq" ]]; then
+        # _yq_arch — map `uname -m` to the mikefarah/yq release-asset name.
+        # arm64/aarch64 systems were previously told to download _amd64,
+        # which silently installs the wrong binary (Copilot R3 #125).
+        local _yq_arch
+        case "$(uname -m)" in
+          x86_64|amd64)   _yq_arch="amd64" ;;
+          aarch64|arm64)  _yq_arch="arm64" ;;
+          armv7l|armv7)   _yq_arch="arm" ;;
+          ppc64le)        _yq_arch="ppc64le" ;;
+          s390x)          _yq_arch="s390x" ;;
+          *)              _yq_arch="amd64" ;;  # best-effort default
+        esac
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: sudo snap install yq  (mikefarah/yq — NOT apt's yq)"
+        elif command -v snap >/dev/null 2>&1; then
+          say "Installing $dep via snap (mikefarah/yq)..."
+          sudo snap install yq
+          # Post-install verification (Copilot R3 #125): snap puts yq at
+          # /snap/bin/yq, which may not be on PATH yet in the current
+          # shell. Refresh + flavor-check before claiming success so an
+          # operator on a system where snap's PATH wiring is broken
+          # isn't told "Installed" only to find the gate still missing yq.
+          hash -r 2>/dev/null || true
+          if ! command -v yq >/dev/null 2>&1; then
+            err "yq install succeeded but 'yq' is not on PATH yet."
+            err "  Add snap's bin to PATH and re-source your shell:"
+            err "    export PATH=\"/snap/bin:\$PATH\""
+            exit 1
+          fi
+          if ! _yq_is_mikefarah; then
+            err "yq is on PATH but is not mikefarah/yq."
+            err "  Detected: $(yq --version 2>&1 | head -1)"
+            err "  Check 'which yq' — another binary may shadow snap's yq."
+            exit 1
+          fi
+          ok "Installed $dep ($(yq --version 2>&1 | head -1))"
+        else
+          err "yq install path needs snap, but snap is not installed."
+          err "  Option A (preferred): enable snap, then re-run:"
+          err "    sudo apt-get install -y snapd  # Debian/Ubuntu"
+          err "  Option B (direct binary download for this arch — ${_yq_arch}):"
+          err "    sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${_yq_arch} \\"
+          err "      -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq"
+          err "  Verify after either: yq --version  # must say 'mikefarah'"
+          exit 1
+        fi
       else
-        say "Installing $dep via apt-get..."
-        sudo apt-get install -y "$dep"
-        ok "Installed $dep"
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: sudo apt-get install -y $dep"
+        else
+          say "Installing $dep via apt-get..."
+          sudo apt-get install -y "$dep"
+          ok "Installed $dep"
+        fi
       fi
     fi
   done
