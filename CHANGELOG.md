@@ -81,6 +81,25 @@ PRs #55–#59 and land as the bundle epic completes.)
   Audit ledger `docs/operational/security-audit-2026-05-11.md` updated:
   6/6 P0 findings closed; P1-08 closed by the same fix.
 
+- **Audit P1-03 closed.** Both n8n compose files —
+  `setup/walter-host/services/n8n/compose.yml` AND the repo root
+  `compose.yml` used by `install.sh`'s default-deploy path — now run
+  n8n's built-in basic auth as a defense-in-depth layer behind
+  Cloudflare Access (was off, single-layer perimeter only).
+  `N8N_BASIC_AUTH_ACTIVE: "true"` + `${N8N_BASIC_AUTH_USER:?…}` +
+  `${N8N_BASIC_AUTH_PASSWORD:?…}` substitutions mean missing operator
+  secrets cause the container to fail loudly at boot rather than
+  silently fall back to disabled auth. Updated
+  `setup/walter-host/services/n8n/README.md` with the two-layer threat
+  model and operator setup commands (corrected to reflect the actual
+  `.env` flow, not the deprecated `walter-os secrets-pull`).
+  `.env.template` documents the two new required vars. New regression
+  test `tests/oss/services-n8n-auth.bats` (5 tests) pins the
+  invariant. The phrase "second factor" was misleading (this is not
+  MFA, it's a second independent credential check); compose comments
+  + README + audit doc all switched to "second auth layer" / "defense-
+  in-depth layer" to avoid implying multi-factor.
+
 - **Audit P1-05 closed.** `hooks/approval-gate.sh` now hard-fails with
   `permissionDecision: "block"` when `yq` is missing (same pattern as
   the P0-03 jq-missing path). `install.sh` adds `yq` to its required-
