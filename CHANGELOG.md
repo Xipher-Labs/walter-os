@@ -18,10 +18,25 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.4.0** — founder-skills epic + audit P1/P2
-cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
+Target release: **v0.4.1** — OSS Trust roadmap implementation (per
+docs/specs/oss-trust-roadmap.md). Spec PRs #85–#95 already landed in
+v0.4.0; v0.4.1 lands the implementations.
 
-### Added (v0.4.0 candidates already on main)
+### Pending
+
+- OSS Trust A–E implementation tasks (see docs/specs for individual
+  spec breakdown).
+
+---
+
+## [0.4.0] — 2026-05-21
+
+Founder-skills epic + audit P1/P2 cleanup + OSS Trust roadmap specs.
+22 PRs landed across the v0.4.0 sprint; the security audit ledger gained
+closure on all 6 P0 findings (P0-01..P0-06), P1-01/03/05/06/07/08/09, and
+P2-01..P2-08 are spec'd for v0.4.1.
+
+### Added (v0.4.0 highlights)
 
 - `skills/heygen-cli/` — HeyGen avatar-video REST API skill. Bash
   function library (`heygen.sh`) wrapping `curl` for `list_avatars`,
@@ -210,6 +225,39 @@ PRs #55–#59 and land as the bundle epic completes.)
   reappears under `setup/walter-host/services/`. The `openclaw`
   install was already pinned to `openclaw@2026.5.7`; the test
   enforces that too.
+
+### Release cycle fixes (late v0.4.0 sprint)
+
+- **#96 [SECURITY]** `bin/walter-os baseline-external-hooks`: harden
+  the CLI subcommand to use `jq` for JSON key extraction (replacing
+  `grep -bo` offset arithmetic) and pin the sorted-keys invariant
+  test to use `jq`-parsed key ordering. Closes operator-noted gap in
+  external-hook baseline generation parity with the audit script.
+- **#97 [SECURITY]** Bump submodule
+  `external/marchetto-agent-skills` to pick up the P0-06 jq/json
+  encoding fix in the fork.
+- **#98 [SECURITY]** Providers wizard: wrap `declare -A` block in
+  `set +u` … `set -u` so the script no longer crashes under bash 3.2
+  (macOS default). Adds bats coverage for both bash 3.2 and bash 4+
+  paths.
+- **#99 [OPERATIONS]** `install.sh --dry-run`: warn instead of exit
+  on missing `jq` / `yq`, with OS-aware install hints (`brew install`
+  on macOS, `apt-get install` on Linux). The `--check` path remains
+  hard-fail.
+- **#100 [SECURITY] (CRITICAL)** `install.sh` was missing both
+  `bash-denylist.sh` and `approval-gate.sh` from the generated
+  `PreToolUse` Bash hook chain — destructive-op protection was
+  effectively disabled for new installs. Both hooks restored in
+  bash-denylist → approval-gate order. Regression tests added at
+  `tests/install/hook-chain-content.bats` (3 cases) pin the chain
+  shape.
+- **#101 [TECHNICAL]** Skip `tests/install/generate-mcp-configs.bats`
+  codex-TOML parsing test on Python < 3.11 (when `tomllib` is
+  unavailable) instead of failing. Other tests in the file still run.
+- **#102 [OPERATIONS]** Add `setup/secrets-identity-init.sh` to the
+  Makefile `audit-shell` target so the script is covered by the
+  shellcheck CI gate (it was generated late and missed the original
+  glob).
 
 ---
 
@@ -508,6 +556,8 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/xipher-labs/walter-os/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/xipher-labs/walter-os/releases/tag/v0.2.0
-[0.1.0]: https://github.com/xipher-labs/walter-os/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.0
+[0.3.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.3.0
+[0.2.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.1.0

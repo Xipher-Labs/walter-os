@@ -159,11 +159,12 @@ MOCK
   # We override curl in PATH so the subprocess picks it up.
   local mock_dir
   mock_dir="$(mktemp -d)"
-  # The mock returns a tag newer than the current VERSION (0.3.0).
+  # The mock returns a tag deliberately far ahead of any plausible current
+  # VERSION so the test does not have to be touched on every release bump.
   cat > "${mock_dir}/curl" <<'MOCK'
 #!/usr/bin/env bash
 # Mock curl: ignore all args, return a fake GitHub releases/latest response.
-echo '{"tag_name":"v0.3.5","name":"Walter-OS v0.3.5"}'
+echo '{"tag_name":"v99.0.0","name":"Walter-OS v99.0.0"}'
 MOCK
   chmod +x "${mock_dir}/curl"
 
