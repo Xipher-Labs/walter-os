@@ -80,7 +80,11 @@ GROUND RULES — money + destructive
 PRECHECK
 
   walter-os doctor --tier 2                  # all ✓ from Tier I+II
-  walter-os audit run --quick                # no critical findings
+  walter-os audit                            # audit.sh; no `run` or
+                                             # `--quick` subcommand
+                                             # exists today — the
+                                             # wrapper execs the full
+                                             # audit and ignores args
 
 If either fails → STOP. Fix before continuing.
 

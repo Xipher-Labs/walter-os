@@ -350,7 +350,9 @@ Re-paste to:
 
 You now have the full stack. From here:
 - Read `docs/operational/operator-contexts.md` for the cascade diagram.
-- Run `walter-os audit run` daily (or let the cron do it).
+- Run `walter-os audit` daily (the wrapper has no `run` subcommand
+  — it just execs the full audit script; or let the launchd job /
+  cron from Tier II do it).
 - File issues in Plane with the appropriate `context:*` + `lane:*`
   labels and watch the Council pick them up.
 
