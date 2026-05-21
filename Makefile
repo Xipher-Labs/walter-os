@@ -14,6 +14,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agent-memory-setup.sh \
 		scripts/profile-bootstrap.sh \
 		scripts/secrets-bootstrap.sh \
+		scripts/secrets-identity-init.sh \
 		scripts/secrets-keychain-init.sh \
 		scripts/wiki.sh \
 		scripts/agent-runtime-watchdog.sh \
