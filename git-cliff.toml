@@ -71,6 +71,8 @@ commit_parsers = [
 ]
 
 # Link commits to GitHub (optional — nice for release bodies).
-# Override NEXT_PUBLIC_WALTER_REPO_URL or set the commit_url below to match your fork.
-# Default points to the upstream OSS repo. Operators maintaining a fork should update this.
-# commit_url = "https://github.com/xipher-labs/walter-os/commit/"
+# Set commit_url to YOUR fork's URL when generating release notes locally.
+# No default is set here so the template ships clean (no upstream org name
+# baked into configuration).
+# Example: commit_url = "https://github.com/your-org/walter-os/commit/"
+# commit_url = ""
