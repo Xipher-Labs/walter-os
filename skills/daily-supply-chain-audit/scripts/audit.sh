@@ -263,12 +263,25 @@ check_hooks() {
     path=$(jq -r '.path' <<<"$entry")
     stored_sha=$(jq -r '.sha256' <<<"$entry")
 
-    # Skip if baseline already recorded this as inline (no path). Also
-    # protects against the case where stored_sha is empty — the baseline
-    # acknowledged the file wasn't resolvable at baseline time, so we
-    # shouldn't flag it as "missing now" (Copilot R1 #124 R1.6 / R1.2).
+    # Skip if baseline recorded this as inline (no path) — inline
+    # commands are documented as not-content-hashable; we record them
+    # so the operator can see them in the report, but skip the integrity
+    # check (Copilot R1 #124 R1.6).
     [[ -z "$path" ]] && continue
-    [[ -z "$stored_sha" ]] && continue
+
+    # Copilot R6 #124: empty stored_sha with a resolvable path = the
+    # baseline tried to hash this file + failed (no hasher available,
+    # or unreadable at baseline-time). Previously we silently skipped
+    # — that means a hook with `path=/x/y, sha=""` would NEVER be
+    # integrity-checked even after sha256sum was installed. Now emit
+    # INFO so the operator knows the entry is in skipped-state + can
+    # re-baseline to fix it.
+    if [[ -z "$stored_sha" ]]; then
+      finding info "hook-sha-not-recorded" \
+        "Hook '$path' (cmd: $cmd) has empty stored sha in baseline; content-integrity check skipped" \
+        "Re-run: walter-os baseline-hooks (re-hashes all entries; needs sha256sum/shasum installed)"
+      continue
+    fi
 
     if [[ ! -f "$path" || ! -r "$path" ]]; then
       finding high "hook-file-missing" \
