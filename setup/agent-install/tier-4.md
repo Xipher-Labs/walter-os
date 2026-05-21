@@ -122,7 +122,11 @@ or via direct API calls using `curl` + the token in Infisical at
 
 If you want to script it inline, here's the minimum:
 
-  TOKEN=$(walter-os secrets-pull plane/PLANE_API_TOKEN 2>/dev/null)
+  # Fetch the token from Infisical via its CLI. `walter-os secrets-pull`
+  # is a Bitwarden helper and doesn't fetch a specific Infisical key
+  # — use the `infisical` CLI directly (installed in Tier I prereqs).
+  TOKEN=$(infisical secrets get PLANE_API_TOKEN \
+            --env=prod --path=/plane --plain 2>/dev/null)
   for ctx in work projects-personal personal medical; do
     curl -sS -X POST "https://plane.${WALTER_DOMAIN}/api/v1/workspaces/agents/labels/" \
       -H "x-api-key: $TOKEN" -H "Content-Type: application/json" \

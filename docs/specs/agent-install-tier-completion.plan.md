@@ -220,8 +220,13 @@ tier_check 3 "WALTER_DOMAIN env set" test -n "${WALTER_DOMAIN:-}"
 
 # Tier 4: Council prerequisites
 tier_check 4 "trust-tiers.yml present" test -f "${WALTER_CONFIG}/trust-tiers.yml"
-tier_check 4 "Plane API token present in Infisical" \
-  bash -c "test -n \"\$(walter-os secrets-pull plane/PLANE_API_TOKEN 2>/dev/null)\""
+# Plane API token retrieval is operator-side, not CLI-shipped:
+# `walter-os secrets-pull` is a Bitwarden helper, not an Infisical
+# key fetcher. Instead, gate on the Council agent definitions being
+# present (the static prereq) — token presence is verified at
+# runtime by the agents themselves.
+tier_check 4 "Council agent definitions present" \
+  bash -c "ls -1 \"\$WALTER_OS_HOME/agents\"/*.md 2>/dev/null | grep -q ."
 ```
 
 Verify: AC5 full pass (tier 3 and tier 4 add their extras).
