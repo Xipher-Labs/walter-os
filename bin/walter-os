@@ -7,6 +7,8 @@
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
+#   baseline-external-hooks     Refresh external/**/hooks/scripts/*.sh checksums
+#                               after an intentional submodule SHA bump (audit P1-07)
 #   enable-hook <name>          Enable a hook in ~/.claude/settings.json
 #   disable-hook <name>         Disable a hook (without uninstalling)
 #   sync                        Pull + reinstall walter-os itself
@@ -259,6 +261,38 @@ cmd_baseline_hooks() {
   local checksums="${WALTER_CONFIG}/hook-checksums.json"
   jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings" > "$checksums"
   echo "✓ Hook checksums refreshed: $checksums"
+}
+
+# Re-snapshot external/**/hooks/scripts/*.sh after an intentional
+# submodule bump (audit P1-07). Operators should run this only after
+# reviewing the diff in the submodule.
+cmd_baseline_external_hooks() {
+  [[ -n "${WALTER_OS_HOME:-}" && -d "${WALTER_OS_HOME}/external" ]] || {
+    echo "walter-os baseline-external-hooks: WALTER_OS_HOME/external not found" >&2
+    exit 2
+  }
+  local hasher=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    hasher="sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then
+    hasher="shasum -a 256"
+  else
+    echo "walter-os baseline-external-hooks: install sha256sum or shasum" >&2
+    exit 3
+  fi
+  require_jq
+  local baseline="${WALTER_CONFIG}/external-hook-checksums.json"
+  find "${WALTER_OS_HOME}/external" \
+    -type f \
+    -path '*/hooks/scripts/*' \
+    \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
+    -print0 2>/dev/null \
+    | LC_ALL=C sort -z \
+    | xargs -0 $hasher 2>/dev/null \
+    | jq -R 'split("  ") | {(.[1] | sub("^.*/external/"; "external/")): .[0]}' \
+    | jq -s 'add // {}' \
+    > "$baseline"
+  echo "✓ External hook checksums refreshed: $baseline"
 }
 
 # ---------- enable/disable hooks ----------
@@ -1081,6 +1115,7 @@ case "$cmd" in
   ack)            cmd_ack "$@" ;;
   baseline)       cmd_baseline "$@" ;;
   baseline-hooks) cmd_baseline_hooks "$@" ;;
+  baseline-external-hooks) cmd_baseline_external_hooks "$@" ;;
   enable-hook)    cmd_enable_hook "$@" ;;
   disable-hook)   cmd_disable_hook "$@" ;;
   sync)               cmd_sync "$@" ;;
