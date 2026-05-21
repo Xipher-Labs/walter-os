@@ -16,16 +16,16 @@ quarterly upgrade cadence (`skills/quarterly-upgrade-cadence`).
 
 | Service | Read | Write | Privileged | Why |
 |---|---|---|---|---|
-| **prometheus** | service network only | own volume | no | Scrapes targets; no host filesystem access. |
-| **loki** | service network only | own volume | no | Stores ingested logs; no host filesystem access. |
+| **prometheus** | `./prometheus/prometheus.yml` (ro config bind-mount), service network | own data volume | no | Scrapes targets; reads config from the repo at startup. No host-filesystem access beyond the mounted config. |
+| **loki** | `./loki/loki.yml` (ro config), service network | own data volume | no | Stores ingested logs; reads config from the repo at startup. No host-filesystem access beyond the mounted config. |
 | **promtail** | `/var/log` (ro), `/var/lib/docker/containers` (ro), `/var/run/docker.sock` (mount flagged `:ro`) | **effective: read/write on the Docker API** (see below) | no | Tails every host log + every container log; uses the Docker socket to discover containers for log shipping to Loki. **Important caveat**: a `:ro` bind-mount on a Unix socket does not restrict the API surface — anything that connects to the socket can issue any Docker API call (start/stop/exec/destroy containers, mount host paths into new ones). Treat promtail's docker.sock access as full Docker daemon control + handle the container like an admin tool. |
 | **node-exporter** | `/proc` (ro), `/sys` (ro), `/` as `/rootfs` (ro), `/var/lib/walter-council` (ro) | none | no, but `pid: host` | Exports host CPU / memory / disk / network metrics. Sees the host process table via `pid: host`. The full `/` mount is needed for filesystem-usage collectors; explicit `--collector.filesystem.mount-points-exclude` keeps `/sys`, `/proc`, etc. out of the metrics. |
 | **cadvisor** | `/`, `/sys`, `/var/run`, `/var/lib/docker`, `/dev/disk` (all ro) | `/dev/kmsg` via `devices:` (rw by default — kernel ring-buffer access) | **yes (`privileged: true`)** | Per-container resource metrics. cadvisor upstream requires privileged mode + `/dev/kmsg` to read kernel ring buffer + cgroup data; without them, container detection misses recent kernel versions. The broadest grant in the stack — `privileged: true` + `/dev/kmsg` write together = effective host kernel access. |
-| **grafana** | service network only | own volume | no | UI + dashboards. No host access. |
+| **grafana** | `./grafana/provisioning/` (ro), service network | own data volume | no | UI + dashboards. Provisioning configs read from the repo at startup. No other host-filesystem access. |
 
 ### What this means in practice
 
-- **Promtail reads every log on the host.** If you put secrets in container stdout, they end up in Loki. Filter at the application layer or accept that Loki may contain sensitive log lines (and lock down Loki access accordingly — Grafana auth + admin_auth_gate Caddy snippet).
+- **Promtail reads every log on the host.** If you put secrets in container stdout, they end up in Loki. Filter at the application layer or accept that Loki may contain sensitive log lines (and lock down Loki access accordingly — Grafana login + the `admin_auth_gate` Caddy snippet which PR #130 adds to `grafana.${WALTER_DOMAIN}`; if that PR hasn't landed in your branch yet, the snippet protection isn't active and Grafana is reachable from any source the network permits).
 - **node-exporter + cadvisor can read your entire filesystem.** Read-only, but anything readable to `root` on the host is readable inside the container. Don't co-host secrets the host's `root` shouldn't see with the observability profile.
 - **cadvisor is `privileged: true`.** A container escape from cadvisor would be a host compromise. This is an accepted risk in exchange for accurate container metrics — but it's the strongest argument for keeping the observability stack on a dedicated host or carefully-isolated VM.
 - **Promtail's Docker socket access is effectively full daemon control.** The `:ro` flag on a Unix-socket bind-mount restricts the bind, not the API — any process inside the container that can `connect()` to `/var/run/docker.sock` can issue any Docker API call (including `containers/create`, `containers/exec`, host-path mounts on new containers, `system/prune`). A promtail compromise = a host compromise via the Docker daemon. Treat the promtail container as if it were a full admin tool.
@@ -51,5 +51,5 @@ quarterly upgrade cadence (`skills/quarterly-upgrade-cadence`).
 
 - `setup/walter-host/services/observability/compose.yml` — source of truth.
 - `skills/daily-supply-chain-audit` — digest-pin enforcement, drift detection.
-- `setup/caddy/Caddyfile.template` — `admin_auth_gate` snippet on `grafana.${WALTER_DOMAIN}`.
+- `setup/caddy/Caddyfile.template` — `admin_auth_gate` snippet is being added to `grafana.${WALTER_DOMAIN}` in PR #130 (until that lands, grafana is reverse-proxied without the gate; the snippet itself is already defined in the template head).
 - Issue #123 / F10 — review feedback that triggered this doc.
