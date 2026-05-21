@@ -55,7 +55,15 @@ Three candidate install flows are under evaluation; the implementation PR (separ
 
 **Candidate A — wrapper-package + npm ci + npm link.**
 
-A tiny wrapper `package.json` has one dependency: `openclaw@<exact-OC_VER>`. The wrapper IS NOT a tracked file in the repo — it's generated in-container at install time via `printf` (single line, OC_VER + the wrapper-name are the only variables). The container does `npm ci --ignore-scripts` against the wrapper + the shipped shrinkwrap (deterministic deps), then `npm link openclaw` to expose the bin globally. Pros: standard npm flow; only one new tracked artifact (the shrinkwrap). Cons: introduces a wrapper-package concept the operator must understand.
+A tiny wrapper `package.json` has one dependency: `openclaw@<exact-OC_VER>`. The wrapper IS NOT a tracked file in the repo — it's generated in-container at install time via `printf` (single line, OC_VER + the wrapper-name are the only variables). The container does `npm ci --ignore-scripts` against the wrapper + the shipped shrinkwrap (deterministic deps), then exposes the bin globally with:
+
+```sh
+cd node_modules/openclaw && npm link --prefix /workspace/.npm-global
+```
+
+(NOT `npm link openclaw` from the wrapper dir — that's the wrong direction. The correct flow: cd INTO the openclaw package's own directory, then `npm link` symlinks its declared `bin` entries into the prefix. The ADR has the same command verbatim.)
+
+Pros: standard npm flow; only one new tracked artifact (the shrinkwrap). Cons: introduces a wrapper-package concept the operator must understand.
 
 Why generate, not track: a hand-tracked wrapper would have to be bumped in lockstep with OC_VER (operator gets it wrong half the time). Generating from OC_VER eliminates the drift surface. The wrapper has no security signal beyond "depend on openclaw@OC_VER" — that's already pinned by OC_VER + the shrinkwrap; the wrapper file itself is a re-declaration, not a trust anchor.
 

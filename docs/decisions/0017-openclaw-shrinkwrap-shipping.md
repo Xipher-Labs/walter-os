@@ -9,7 +9,7 @@
 
 v0.4.4's PR #127 added top-level SHA512 integrity verification + `--ignore-scripts` to the OpenClaw runtime npm install. Codex R2 cross-review caught that transitive dependencies remain unverified beyond npm's own per-registry-entry integrity check, which doesn't survive a registry-side compromise of any single dep.
 
-The repo already pins everything else by content hash (hooks via `hook-checksums.json` v2, container images via `@sha256:...` digests). OpenClaw's npm-dep tree is the last hash-less surface in the install path.
+The repo pins several artifacts by content hash already — hooks via `hook-checksums.json` v2, GitHub Actions deps via `@<sha>`, the semgrep CI container via `@sha256:...`. Other compose service images (including the `node:24-slim` base OpenClaw runs on) remain tag-pinned and are tracked under the OSS Trust roadmap for future digest hardening. Within that mixed state, OpenClaw's npm transitive-dep tree is the only operator-controlled install-time fetch path with no content-hash guarantee, so closing that gap is the highest-leverage next step.
 
 ## Decision
 
