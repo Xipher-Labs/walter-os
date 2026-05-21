@@ -126,8 +126,13 @@ swap-in:
   walter-os profile high-risk    # swap in
   walter-os profile default      # swap back
 
-Ask the operator if they want to install (write) it now. If yes:
-  walter-os profile-bootstrap init high-risk
+The high-risk profile is generated as part of `install.sh --upgrade`
+(if `mcp/servers.json` declares any `"money": true` MCPs). To activate
+it on demand:
+
+  walter-os profile high-risk    # active until swapped back
+  # ... do provisioning / spend / lateral-movement work ...
+  walter-os profile default      # restore the safe default
 
 (Token configuration for each high-risk MCP is the operator's
 follow-up via Infisical or their secrets manager — not in scope
@@ -143,10 +148,15 @@ installs the hook that gates the first session per day. Verify:
   test -x ~/.config/walter-os/hooks/daily-audit-gate.sh && \
     echo "daily-audit-gate.sh installed"
 
-Alternative: a cron-based run that doesn't gate sessions:
-  walter-os audit schedule
+Alternative: a scheduled run that doesn't gate sessions. install.sh
+already installs a launchd job on macOS (`com.walter-os.daily-audit`,
+fires at 08:30). On Linux, the operator adds a cron entry like:
 
-Ask which the operator prefers. Default to the hook (already installed).
+  echo "30 8 * * * /bin/bash $WALTER_OS_HOME/skills/daily-supply-chain-audit/scripts/audit.sh" \
+    | crontab -
+
+Ask which the operator prefers. Default to the hook (already installed
+by Tier I).
 
 ================================================================================
 STEP 5 — VERIFY THE FULL TIER II STACK
