@@ -2,7 +2,7 @@
 
 **Status**: ready for `/write-plan` — D-1 below proposes Option B (overlay + envsubst rendering) as the migration approach; what's pending is operator sign-off on that proposal plus selection of the first pilot service.
 **Issue**: #44 (`[CHORE] -OPERATIONS- setup/walter-host contains operator-specific configs`)
-**Target release**: v0.5.0 → v0.7.0 (multi-release migration; each service is its own small PR)
+**Target release**: v0.4.1 → v0.7.0 (multi-release migration; each service is its own small PR)
 **Depends on**: nothing new in main — extends the existing overlay pattern.
 **Parent**: `docs/specs/phase-w-5-depersonalization.md` (a broad depersonalization pass that already covered scripts, compose files, contexts, and other operator-personal references — this spec is the same depersonalization discipline applied at scale to the ~31 service stacks under `setup/walter-host/` that W-5 didn't enumerate one-by-one).
 **Precedent**: `skills/syncthing-cli/SKILL.md` + the `bin/walter-os syncthing-bootstrap` subcommand — the existing service-extraction pattern that this spec scales to 31 services.
@@ -46,7 +46,7 @@ The issue proposed two options:
 - **Option A — Jinja-templated Ansible roles.** Move each service's `compose.yml` to `ansible/roles/walter-host/<service>/templates/`. Operator vars live in `group_vars/walter-vm.yml`.
 - **Option B — Per-service `.example` files + overlay loader.** Each service ships `compose.yml.example` with placeholders. Operator overrides discovered via three-tier lookup.
 
-**Choose Option B** for v0.5.0+ because:
+**Choose Option B** for v0.4.1+ because:
 
 1. **Stays in pure bash + Docker Compose.** No Ansible runtime dependency for the OSS adopter on day one.
 2. **Mirrors the precedent that already shipped.** `bin/walter-os syncthing-bootstrap` already uses the three-tier overlay-discovery pattern (`${WALTER_OPERATOR_SCRIPTS_DIR}` → `~/.config/walter-os/overlay/scripts/` → `~/config-personal/scripts/`). Extending it is a known, reviewed approach.
@@ -86,7 +86,7 @@ Any service-specific placeholder (e.g. `${PLANE_WORKSPACE_NAME}`) is documented 
 
 | Wave | Services | Why this order |
 |---|---|---|
-| **Wave 1 — stateless** (v0.5.0) | homepage, drawio, uptime-kuma | No persistent state. Rollback = redeploy. Lowest risk for the pilot. |
+| **Wave 1 — stateless** (v0.4.1) | homepage, drawio, uptime-kuma | No persistent state. Rollback = redeploy. Lowest risk for the pilot. |
 | **Wave 2 — read-mostly** (v0.5.x) | metabase, grafana (observability), n8n (workflows), penpot, postiz | Has state but state is recoverable from external sources. |
 | **Wave 3 — stateful core** (v0.6.0) | litellm, infisical, headscale, syncthing, restic | Critical state. Per-service migration with operator-supervised rollouts. |
 | **Wave 4 — most stateful** (v0.7.0) | plane, forgejo, synapse, openclaw | Largest blast radius. Last to migrate. |
@@ -158,7 +158,7 @@ The `diff` subcommand is critical: it tells the operator "your overlay is X comm
 - **Ansible-based deployment** (Option A from the issue). Future spec; operator can build it on top of the overlay-driven base if they want.
 - **Kubernetes / Nomad / Swarm orchestration.** Walter-host stays compose-native.
 - **Auto-merging upstream example updates into operator overlays.** Operator-driven only; the `diff` subcommand surfaces drift, doesn't resolve it.
-- **Multi-host walter-host** (services split across multiple VMs). Single-VM remains the v0.5.0–v0.7.0 baseline.
+- **Multi-host walter-host** (services split across multiple VMs). Single-VM remains the v0.4.1–v0.7.0 baseline.
 
 ## Recommended PR ordering
 

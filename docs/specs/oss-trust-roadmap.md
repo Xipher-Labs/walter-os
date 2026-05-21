@@ -2,7 +2,7 @@
 
 **Status**: ready for `/write-plan` PER-ITEM (this spec is the umbrella; each item gets its own spec when picked up)
 **Issue**: #1 (`OSS Trust Roadmap v0.3+ — runtime sandboxing, audit chain, signed receipts`)
-**Target releases**: v0.5.0 → v1.0
+**Target releases**: v0.4.1 → v1.0
 **Depends on**: v0.4.0 P0 + P1 closures (all in flight)
 
 ## Problem
@@ -28,10 +28,10 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
-| A-1 | **Network egress allowlist** — default deny, agent only reaches approved endpoints | v0.5.0 | 1-2d | `~/.config/walter-os/egress-allowlist.txt` parsed by a new `walter-os network-gate` daemon; wraps tool invocations |
-| A-2 | **Filesystem capability tokens** — scoped per session, time-bound, revocable | v0.5.0 | 2-3d | Per-tool fcap-equivalent token; signed by a PER-SESSION ephemeral Ed25519 key (NOT a long-lived operator key — see DEC-2 below and PR #88's per-item spec). |
+| A-1 | **Network egress allowlist** — default deny, agent only reaches approved endpoints | v0.4.1 | 1-2d | `~/.config/walter-os/egress-allowlist.txt` parsed by a new `walter-os network-gate` daemon; wraps tool invocations |
+| A-2 | **Filesystem capability tokens** — scoped per session, time-bound, revocable | v0.4.1 | 2-3d | Per-tool fcap-equivalent token; signed by a PER-SESSION ephemeral Ed25519 key (NOT a long-lived operator key — see DEC-2 below and PR #88's per-item spec). |
 | A-3 | **Process isolation via nsjail/firejail/sandbox-exec** | v0.5.x | 2-3d | Per-OS wrapper. Wrap hook + skill execution. |
-| A-4 | **Time-bounded sessions** — kill on max-time / idle | v0.5.0 | 1d | New `hooks/session-timeout.sh` reading `WALTER_SESSION_MAX_HOURS` |
+| A-4 | **Time-bounded sessions** — kill on max-time / idle | v0.4.1 | 1d | New `hooks/session-timeout.sh` reading `WALTER_SESSION_MAX_HOURS` |
 | A-5 | **Read-only `/tmp` and operator-overlay during runs** — bind-mount the operator's secret-bearing paths read-only by default | v0.5.x | 1-2d | Composes with A-3 |
 
 ### Layer B — Audit + observability (3 items)
@@ -48,24 +48,24 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 |---|---|---|---|---|
 | C-1 | **SLSA Level 3 provenance** — extend `release.yml` to emit + sign provenance attestations | v1.0 | 4-6h | GitHub Actions hosted runner already meets SLSA-L3; we just need the `actions/attest-build-provenance` step |
 | C-2 | **Reproducible builds** for bash/JS/Python release artifacts | v1.0 | days, multi-language | Assess scope per-language; bash scripts are trivially reproducible, JS bundles need lockfile + tooling pinning. Combined with C-1 in PR #95's spec. |
-| C-3 | **Pre-commit framework integration** for gitleaks (alongside the raw git hook) | v0.5.0 | 2-4h | `.pre-commit-config.yaml` ships; operator chooses |
+| C-3 | **Pre-commit framework integration** for gitleaks (alongside the raw git hook) | v0.4.1 | 2-4h | `.pre-commit-config.yaml` ships; operator chooses |
 
 ### Layer D — Community / governance (1 item)
 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
-| D-1 | **GitHub Security Advisories** partner registration | v0.5.0 | 1-2h (mostly process) | Pre-req for any CVE assignment; documented in SECURITY.md |
+| D-1 | **GitHub Security Advisories** partner registration | v0.4.1 | 1-2h (mostly process) | Pre-req for any CVE assignment; documented in SECURITY.md |
 
 ### Layer E — Follow-ups from v0.2.x / v0.3.x PRs (4 items)
 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
-| E-1 | **OpenSSF Passing Badge** filing | v0.5.0 | 2-4h | Pre-req for Silver |
+| E-1 | **OpenSSF Passing Badge** filing | v0.4.1 | 2-4h | Pre-req for Silver |
 | E-2 | **OpenSSF Silver Badge** filing | v0.6.0 | 2-4h | After Passing + Layer A items close |
-| E-3 | **`@types/*` allowlist for `minimumReleaseAge`** | v0.5.0 | 2h | Deferred from PR #60; needs `check-release-age.py` (already shipped) |
-| E-4 | **`walter-os justify revoke` CLI** | v0.5.0 | 2-4h | Deferred from PR #60; pairs with walter-debt-tracker spec (PR #77) |
+| E-3 | **`@types/*` allowlist for `minimumReleaseAge`** | v0.4.1 | 2h | Deferred from PR #60; needs `check-release-age.py` (already shipped) |
+| E-4 | **`walter-os justify revoke` CLI** | v0.4.1 | 2-4h | Deferred from PR #60; pairs with walter-debt-tracker spec (PR #77) |
 
-**16 items total.** All v1.0-blocking items target v0.5.0 → v0.6.0 (the next two minor releases). C-1 + C-2 close at v1.0.
+**16 items total.** All v1.0-blocking items target v0.4.1 → v0.6.0 (v0.4.1 is a patch on top of v0.4.0; v0.5.x and v0.6.0 are the two minors that follow). C-1 + C-2 close at v1.0.
 
 ## Cross-cutting decisions (DEC-1..DEC-4)
 
@@ -124,12 +124,12 @@ This issue closes when **all 16 items above** have shipped or been explicitly de
 
 Per-item ACs live in each item's own spec, filed when picked up. Recommended order:
 
-1. **v0.5.0 must-haves**: A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (network egress + capability tokens + session timeout + pre-commit framework + Security Advisories + Passing Badge + the two carryover follow-ups). These are the "ship in v0.5.0 or this roadmap is too slow" items.
+1. **v0.4.1 must-haves**: A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (network egress + capability tokens + session timeout + pre-commit framework + Security Advisories + Passing Badge + the two carryover follow-ups). These are the "ship in v0.4.1 or this roadmap is too slow" items.
 2. **v0.5.x flow**: A-3 (sandbox), A-5 (RO mounts), B-1 (Merkle log), B-2 (signed receipts).
 3. **v0.6.0 polish**: B-3 (telemetry), E-2 (Silver Badge).
 4. **v1.0 capstone**: C-1 (SLSA L3), C-2 (reproducible builds).
 
-## Architecture sketch (v0.5.0 milestone)
+## Architecture sketch (v0.4.1 milestone)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -200,7 +200,7 @@ The roadmap mitigates each of the listed gaps:
 
 Specs filed in this order (each its own follow-up PR):
 
-1. **v0.5.0 spec batch** — A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (8 specs, can be parallel)
+1. **v0.4.1 spec batch** — A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (8 specs, can be parallel)
 2. **v0.5.x batch** — A-3, A-5, B-1, B-2 (4 specs)
 3. **v0.6.0 batch** — B-3, E-2 (2 specs)
 4. **v1.0 batch** — C-1, C-2 (2 specs)
