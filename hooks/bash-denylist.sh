@@ -129,11 +129,19 @@ DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|
 # bash -c / sh -c with command substitution: `bash -c "$(curl ...)"`, etc.
 # This also catches `bash -c "$(cat /tmp/payload)"`. Mirror of python-c-variable.
 #
-# Whitespace-after-`-c` is OPTIONAL. Copilot review of #81 flagged that
-# requiring `[[:space:]]+` after `-c` left `bash -c'...'` / `sh -c"..."` (no
-# space — valid POSIX shell syntax) as a bypass. We now allow zero or more
-# whitespace between `-c` and the opening quote.
-DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?\$[{(]'
+# Match relaxations applied across R1 + R2 of #81:
+#   R1: whitespace-after-`-c` is OPTIONAL (covers `bash -c'...'`).
+#   R2: command substitution may appear with arbitrary intermediate chars
+#       between the opening quote and the `$(`/`${`/`$[` — i.e.
+#       `bash -c "echo hi; $(curl ...)"` is also caught, not just the
+#       immediately-adjacent form. Same shape as the shell-c-backtick
+#       relaxation: shell + `-c` + optional quote + any non-`$` chars + `$(...)`.
+#   R2: prefix is now ANY non-whitespace-non-pipe chars before the shell
+#       token, so `sudo bash -c "$(...)"`, `/bin/bash -c "$(...)"`,
+#       `env bash -c "$(...)"`, and `sudo /usr/bin/env bash -c "$(...)"`
+#       all match. Anchored at start-of-line OR a non-shell-name boundary
+#       (`[[:space:]|;|&|^]`) so the regex doesn't match `mybash -c`.
+DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^$]*\$[{([]'
 # Sibling pattern: backtick command substitution `bash -c "`curl …`"`. Codex
 # R2 of PR #63 flagged this gap (issue #3 P2-1). Backticks are still common
 # in older shell snippets / man pages / one-liners.
@@ -150,7 +158,10 @@ DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:spa
 # so bash leaves it alone — that's the point. SC2016 is a false positive
 # here; shellcheck can't distinguish regex backticks from shell-expansion
 # backticks in a quoted literal.)
-DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^`]*`'
+#
+# R2 of #81: extended to match `sudo bash -c`, `/bin/bash -c`,
+# `env bash -c`, etc. — same prefix shape as shell-c-variable.
+DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^`]*`'
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
 # without braces) OR a command-substitution `$(...)`. Deliberately does NOT
