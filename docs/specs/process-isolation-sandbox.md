@@ -1,9 +1,9 @@
 # Process isolation sandbox (OSS Trust A-3) — spec
 
 **Status**: ready for `/write-plan` after operator approval of per-OS profile defaults
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-3
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-3 (parent spec is in PR #83 — not yet on `main`)
 **Target release**: v0.5.x (after A-1 / A-2 / A-4 land)
-**Depends on**: `docs/specs/network-egress-allowlist.md` (A-1), `docs/specs/capability-tokens.md` (A-2), `docs/specs/time-bounded-sessions.md` (A-4)
+**Depends on**: `docs/specs/network-egress-allowlist.md` (A-1 — PR #86), `docs/specs/capability-tokens.md` (A-2 — PR #88), `docs/specs/time-bounded-sessions.md` (A-4 — PR #87). All three dependency specs are in flight and must merge before A-3 implements.
 
 ## Problem
 
@@ -14,7 +14,7 @@ A determined prompt-injection that reaches an "allowed" tool call (because it lo
 - Spawn long-running background processes (e.g. mining)
 - Signal / kill other operator processes
 
-A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with deny-by-default filesystem + signal scope.
+A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny-specific-paths + signal scope**. To avoid first-day frustration we use an opinionated allow-by-default + deny-dangerous-paths posture (see D-4 for the default policy and rationale) rather than a strict deny-by-default. Operators can tighten to deny-by-default via overlay profiles for high-sensitivity projects.
 
 ## Non-goals
 
@@ -116,10 +116,27 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with deny-b
 - [ ] `install.sh` checks for the per-OS sandbox provider:
   - Linux: `nsjail` (suggest `apt install nsjail` or build from source)
   - macOS: `sandbox-exec` (built-in; no install needed)
-  - Missing → `install.sh --upgrade` warns + skips sandbox wrapping until installed.
+  - **Missing during install** → `install.sh --upgrade` emits a
+    LOUD WARNING and writes a `~/.config/walter-os/sandbox-disabled`
+    sentinel so the operator knows the sandbox layer is not active.
+    `install.sh` does NOT silently skip — the message tells the
+    operator exactly how to remediate (install nsjail / use macOS).
+  - **Missing during runtime** (the hook fires but the provider has
+    been uninstalled since `install.sh` ran): hook emits `block`
+    (fail-CLOSED per D-7). This is the strict path — once Walter-OS
+    KNOWS sandbox should be active, missing-provider is treated as
+    a security regression, not a soft degradation.
+  - The two cases are deliberately different: at install time we
+    haven't promised the user anything yet; at runtime we have.
 - [ ] `daily-supply-chain-audit` adds `check_sandbox_state()`:
-  - Provider missing → `crit` finding (sandbox layer is down)
-  - Profile files modified since baseline → `high` finding (operator might have intentionally changed; can re-baseline via `walter-os baseline-sandbox-profiles`)
+  - Provider missing AND no `sandbox-disabled` sentinel → `crit`
+    finding (sandbox layer is down without operator acknowledgment)
+  - Provider missing WITH sentinel → `high` finding (operator
+    acknowledged at install time but hasn't installed the provider
+    since)
+  - Profile files modified since baseline → `high` finding (operator
+    might have intentionally changed; can re-baseline via
+    `walter-os baseline-sandbox-profiles`)
 
 ### AC-6 — Cap-token integration (D-5)
 - [ ] When a tool call carries a valid PASETO cap-token (A-2) declaring `scope.paths`, the skill profile is dynamically rewritten:
