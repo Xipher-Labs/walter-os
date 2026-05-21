@@ -138,3 +138,44 @@ SH
   [[ "$output" != *"external-hook-tampered"* ]]
   [ ! -f "$WALTER_CONFIG/external-hook-checksums.json" ]
 }
+
+# --- CLI hardening (Copilot-style follow-up): empty external tree + xargs ---
+
+@test "P1-07-CLI: baseline-external-hooks on an empty external tree writes {} not a synthetic hash" {
+  # Remove all hook scripts under external/ but keep the directory.
+  rm -rf "$WALTER_OS_HOME/external"
+  mkdir -p "$WALTER_OS_HOME/external"
+
+  run "$REPO_ROOT/bin/walter-os" baseline-external-hooks
+  [ "$status" -eq 0 ]
+
+  # Critical: the baseline must be exactly {} — NOT a synthetic
+  # "<hash>  -" entry from `xargs` running the hasher with no args
+  # (and the hasher then reading stdin and emitting a hash for empty
+  # input). The previous version produced a one-key baseline that
+  # would have caused spurious drift on the next audit run.
+  [ -f "$WALTER_CONFIG/external-hook-checksums.json" ]
+  content="$(cat "$WALTER_CONFIG/external-hook-checksums.json")"
+  # Acceptable forms: "{}" (xargs --no-run-if-empty path) or the
+  # "no external hook scripts" path which writes the same content.
+  [[ "$content" == "{}" || "$content" == "{}"$'\n' ]]
+}
+
+@test "P1-07-CLI: baseline-external-hooks output JSON has sorted keys (stable across jq versions)" {
+  # Create two hook files with non-alphabetical filenames.
+  mkdir -p "$WALTER_OS_HOME/external/zebra-skill/hooks/scripts" \
+           "$WALTER_OS_HOME/external/aardvark-skill/hooks/scripts"
+  echo '#!/bin/sh' > "$WALTER_OS_HOME/external/zebra-skill/hooks/scripts/z.sh"
+  echo '#!/bin/sh' > "$WALTER_OS_HOME/external/aardvark-skill/hooks/scripts/a.sh"
+
+  run "$REPO_ROOT/bin/walter-os" baseline-external-hooks
+  [ "$status" -eq 0 ]
+
+  # jq --sort-keys must put 'external/aardvark-skill/...' before
+  # 'external/zebra-skill/...' regardless of FS enumeration order.
+  baseline_content="$(cat "$WALTER_CONFIG/external-hook-checksums.json")"
+  aardvark_pos="$(printf '%s' "$baseline_content" | grep -bo 'aardvark' | head -1 | cut -d: -f1)"
+  zebra_pos="$(printf '%s' "$baseline_content" | grep -bo 'zebra' | head -1 | cut -d: -f1)"
+  [ -n "$aardvark_pos" ] && [ -n "$zebra_pos" ]
+  [ "$aardvark_pos" -lt "$zebra_pos" ]
+}

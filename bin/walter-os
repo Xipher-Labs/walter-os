@@ -263,7 +263,7 @@ cmd_baseline_hooks() {
   echo "✓ Hook checksums refreshed: $checksums"
 }
 
-# Re-snapshot external/**/hooks/scripts/*.sh after an intentional
+# Re-snapshot external/**/hooks/scripts/*.{sh,py,js} after an intentional
 # submodule bump (audit P1-07). Operators should run this only after
 # reviewing the diff in the submodule.
 cmd_baseline_external_hooks() {
@@ -282,15 +282,51 @@ cmd_baseline_external_hooks() {
   fi
   require_jq
   local baseline="${WALTER_CONFIG}/external-hook-checksums.json"
+
+  # Mirror the hardening applied to audit.sh check_external_hooks
+  # (Copilot review of PR #90):
+  # - --no-run-if-empty on GNU xargs (with a BSD fallback) so an empty
+  #   match set doesn't make the hasher read stdin and emit a synthetic
+  #   "<hash>  -" baseline entry.
+  # - Robust regex parse of the hasher output (the previous
+  #   split("  ") was sensitive to delimiter width and broke on paths
+  #   containing double spaces).
+  # - --sort-keys for deterministic baseline JSON regardless of jq
+  #   version or object-insertion order.
+  local -a xargs_cmd=(xargs -0)
+  if printf '' | xargs --no-run-if-empty -0 true 2>/dev/null; then
+    xargs_cmd+=(--no-run-if-empty)
+  else
+    # BSD xargs path (macOS): pre-check whether there's at least one match.
+    local first_file
+    first_file="$(find "${WALTER_OS_HOME}/external" \
+      -type f \
+      -path '*/hooks/scripts/*' \
+      \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
+      -print 2>/dev/null \
+      | head -1)"
+    if [[ -z "$first_file" ]]; then
+      # No external hook scripts → write an empty-object baseline.
+      printf '{}\n' > "$baseline"
+      echo "walter-os baseline-external-hooks: no external hook scripts found; wrote empty baseline at $baseline"
+      return 0
+    fi
+  fi
+
   find "${WALTER_OS_HOME}/external" \
     -type f \
     -path '*/hooks/scripts/*' \
     \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
     -print0 2>/dev/null \
     | LC_ALL=C sort -z \
-    | xargs -0 "${hasher_cmd[@]}" 2>/dev/null \
-    | jq -R 'split("  ") | {(.[1] | sub("^.*/external/"; "external/")): .[0]}' \
-    | jq -s 'add // {}' \
+    | "${xargs_cmd[@]}" "${hasher_cmd[@]}" 2>/dev/null \
+    | jq -R --slurp --sort-keys '
+        split("\n")
+        | map(select(length > 0))
+        | map(capture("^(?<hash>[0-9a-f]{64})[[:space:]]+\\*?(?<path>.+)$"))
+        | map({(.path | sub("^.*/external/"; "external/")): .hash})
+        | add // {}
+      ' \
     > "$baseline"
   echo "✓ External hook checksums refreshed: $baseline"
 }
