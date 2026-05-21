@@ -213,11 +213,28 @@ jobs:
         run: |
           set -euo pipefail
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}"
+          # Cosign v3+ ignores --output-signature when --bundle is set
+          # (the bundle is the new canonical format and carries the
+          # signature internally). We run two sign-blob invocations:
+          #
+          # 1. With --bundle: produces the bundle (preferred verification
+          #    format — single file with sig + cert + Rekor entry).
+          # 2. Without --bundle, with --output-signature: produces a raw
+          #    .sig file for v0.3.x-era verification scripts that don't
+          #    speak bundles.
+          #
+          # Both invocations use keyless OIDC; the second one re-signs
+          # the same bytes, so the Rekor transparency log has two
+          # entries — that is fine (both are auditable). When all
+          # consumers move to bundles we can drop step 2.
           cosign sign-blob --yes \
             "${ASSET_DIR}/${CHECKSUMS_FILE}" \
-            --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle" \
-            --output-signature "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
+            --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
+
+          cosign sign-blob --yes \
+            "${ASSET_DIR}/${CHECKSUMS_FILE}" \
+            --output-signature "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
 
       # Step F: Upload SBOM + checksums + signature/bundle. --clobber
