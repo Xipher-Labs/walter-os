@@ -30,6 +30,15 @@ cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
 financial-plan-builder, hiring-toolkit, founder-skills INDEX — are in
 PRs #55–#59 and land as the bundle epic completes.)
 
+### Fixed
+
+- `walter overlay --help` and `walter-os overlay --help` now reach the
+  subcommand-specific usage. Previously the universal help guard in
+  both frontends intercepted `--help` before dispatching, so the
+  overlay-specific help in `scripts/walter/subcommands/overlay.sh`
+  was unreachable through the public wrappers. Added bats coverage
+  for both entry points. Found by Codex review of PR #36. (PR #36)
+
 ### Out of scope for v0.3.0 (will retro-tag to v0.3.1 if needed)
 
 - PR #36 (overlay opener) — operator must merge via the GitHub UI.
