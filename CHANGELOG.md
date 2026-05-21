@@ -198,6 +198,19 @@ PRs #55–#59 and land as the bundle epic completes.)
   by `release-security.yml` remain verifiable with the previous
   identity regexp documented in that file.
 
+### Security (continued)
+
+- **Audit P1-01 closed.** The three sub-router Dockerfiles
+  (`gemini-sub-router`, `claude-sub-router`, `chatgpt-codex-router`)
+  no longer install npm packages with `@latest`. They now pin
+  `@google/gemini-cli@0.42.0`, `@anthropic-ai/claude-code@2.1.146`,
+  and `@openai/codex@0.132.0` respectively. New bats regression
+  `tests/oss/no-latest-tags-walter-host.bats` fails CI if any
+  `image: …:latest`, `image: …:stable`, or `npm install … @latest`
+  reappears under `setup/walter-host/services/`. The `openclaw`
+  install was already pinned to `openclaw@2026.5.7`; the test
+  enforces that too.
+
 ---
 
 ## [0.3.0] — 2026-05-20

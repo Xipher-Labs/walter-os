@@ -6,8 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Codex CLI globally
-RUN npm install -g @openai/codex@latest
+# Install Codex CLI globally. Pinned to a specific version to close
+# audit P1-01 (no `@latest` in runtime-installed deps with execution
+# context). Bump deliberately after diffing the release notes; do not
+# switch back to `@latest`.
+RUN npm install -g @openai/codex@0.132.0
 
 WORKDIR /app
 
