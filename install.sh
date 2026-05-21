@@ -1077,8 +1077,7 @@ _install_deps_linux() {
     if command -v "$dep" >/dev/null 2>&1; then
       # yq pre-installed flavor check — see _yq_is_mikefarah above.
       if [[ "$dep" == "yq" ]] && ! _yq_is_mikefarah; then
-        err "yq is installed but is NOT mikefarah/yq (Walter-OS hooks require"
-        err "  the Go-based mikefarah/yq, not the Python-based kislyuk/yq)."
+        err "yq is installed but is NOT mikefarah/yq. Walter-OS hooks require the Go-based mikefarah/yq, not the Python-based kislyuk/yq."
         err "  Detected: $(yq --version 2>&1 | head -1)"
         err "  Fix on Debian/Ubuntu:"
         err "    sudo apt-get remove -y yq    # drop the wrong one"
