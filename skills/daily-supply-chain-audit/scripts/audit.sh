@@ -38,6 +38,9 @@ CRIT_COUNT=0
 # Keep this in sync with the identical copy in bin/walter-os.
 _safe_expand_env_path() {
   local tok="$1"
+  # shellcheck disable=SC2016 # single-quoted '$VAR/' is INTENTIONAL —
+  # the case patterns must match the LITERAL `$NAME` text in $tok (which
+  # came from settings.json). Expansion is what we're protecting against.
   case "$tok" in
     '$HOME'/*)              printf '%s' "${HOME}${tok#\$HOME}" ;;
     '${HOME}'/*)            printf '%s' "${HOME}${tok#'${HOME}'}" ;;
