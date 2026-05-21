@@ -15,7 +15,7 @@ The 2026-05-11 audit identified 8 P2-severity findings (CVSS 3.0–6.0). Lower-i
 - **Coverage gaps in existing redactors**: missing Hetzner / Infisical / Vercel / Cloudflare token patterns (P2-06).
 - **Audit no-ops** that should be actual logic (P2-07).
 
-Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean across all severity tiers". Useful before any external audit / OpenSSF Silver Badge filing.
+Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean across all severity tiers". Useful before any external audit / OpenSSF Silver Badge filing. The Depends-on line above already notes that the P1 closures may not all be on `main` when this spec is read; "out of scope" / "not in P2 scope" is the precise framing rather than "already closed".
 
 ## Non-goals
 
@@ -97,11 +97,12 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 - [ ] `tests/audit/mcp-tool-drift.bats` (new) — mock an MCP, snapshot, modify the tool list, assert CRITICAL finding.
 
 ### AC-7 — P2-08 SQL pattern variants
-- [ ] `hooks/approval-gate.sh` `BLOCK_BASH_PATTERNS` SQL `DELETE FROM` regex extended to handle:
-  - `DELETE[[:space:]\n]+FROM` (any whitespace including newline)
-  - `delete from` (lowercase) — change to case-insensitive class `[Dd]`
-  - `DELETE[[:space:]]*/\*.*\*/[[:space:]]*FROM` (SQL comment separator)
-- [ ] `tests/hooks/approval-gate.bats` extended with 3 cases (newline, lowercase, comment-separator) covering each variant.
+**Audit before extending**: `hooks/approval-gate.sh`'s current `DELETE FROM` regex IS already case-insensitive (`[Dd][Ee]...`) and already uses `[[:space:]]+` between tokens. The implementer should re-read the current regex before assuming the "lowercase" and "any whitespace" variants are gaps; they may already be covered. The genuine gap is the **comment-separator** case (`DELETE/*…*/FROM`) — that's what this AC adds.
+
+- [ ] `hooks/approval-gate.sh` `BLOCK_BASH_PATTERNS` SQL `DELETE FROM` regex extended ONLY for the genuinely-missing case:
+  - `DELETE[[:space:]]*/\*[^*]*\*/[[:space:]]*FROM` (SQL comment-separator). The non-greedy `[^*]*\*` avoids backtracking on long inputs.
+- [ ] If audit shows the existing regex already handles `delete from` (lowercase) and `DELETE\nFROM` (newline whitespace) — confirm in the AC comment and skip the redundant additions; if it doesn't, also add them. Don't blind-patch what's already covered.
+- [ ] `tests/hooks/approval-gate.bats` extended with: the new comment-separator case + assertions for the existing-coverage cases (regression-pin them so a future cleanup of the regex can't accidentally drop the coverage).
 
 ### AC-8 — Audit ledger + CHANGELOG
 - [ ] `docs/operational/security-audit-2026-05-11.md` Status lines on P2-01..P2-08 with PR refs.
@@ -148,8 +149,8 @@ Closing all 8 brings cost-to-compromise across the residual tier up to "multi-st
 
 ## Refs
 
-- Issue #34 (Walter-OS risk assessment epic — this closes its P2 lines)
-- `docs/operational/security-audit-2026-05-11.md` P2-01..P2-08
-- `docs/specs/p1-hardening-epic.md` (the v0.4.0 P1 epic this follows)
-- `docs/specs/p0-06-lessons-sanitization.md` (the bounded-section framing pattern AC-3 reuses)
-- `docs/specs/oss-trust-roadmap.md` (the umbrella this P2 work composes with)
+- Issue #34 (Walter-OS risk assessment epic — this spec **tracks** the P2 lines; it doesn't close them on merge because this PR is spec-only with no audit-ledger / code changes. Closure happens on the impl PRs that follow.)
+- `docs/operational/security-audit-2026-05-11.md` P2-01..P2-08 (already on `main`).
+- P1 hardening epic — [PR #65](https://github.com/Xipher-Labs/walter-os/pull/65); post-merge in-tree: `docs/specs/p1-hardening-epic.md`. The v0.4.0 P1 epic this follows.
+- `docs/specs/p0-06-lessons-sanitization.md` (already on `main` — the bounded-section framing pattern AC-3 reuses).
+- OSS Trust umbrella — [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); post-merge in-tree: `docs/specs/oss-trust-roadmap.md`. This P2 work composes with the umbrella.
