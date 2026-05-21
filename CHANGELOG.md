@@ -23,6 +23,19 @@ cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
 
 ### Added (v0.4.0 candidates already on main)
 
+- `skills/heygen-cli/` — HeyGen avatar-video REST API skill. Bash
+  function library (`heygen.sh`) wrapping `curl` for `list_avatars`,
+  `list_voices`, `list_templates`, `get_video_status`,
+  `generate_video`, and `generate_from_template`. Pinned API
+  versions, fail-loud on missing `HEYGEN_API_KEY`, 401 / 429
+  surface-only handling (no automatic retry on paid endpoints),
+  fail-fast on invalid `--ratio`. State-changing endpoints rely on
+  the operator-confirmation convention in chat — a dedicated
+  `heygen-generate` category for `hooks/approval-gate.sh`'s
+  `CATEGORY_MIN_TIER` is a follow-up after this PR lands. Replaces
+  the unmaintained `heygen-mcp@0.0.3` PyPI package (anonymous
+  author, fails minReleaseAge gate). Closes #41.
+
 - `skills/track-pending/SKILL.md` — the `walter-pending.md` ledger
   convention. Closes #10. (PR #54)
 
