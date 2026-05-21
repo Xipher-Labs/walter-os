@@ -30,51 +30,94 @@
 }
 
 # ---------------------------------------------------------------------------
+# admin_auth_gate snippet — defense-in-depth for admin dashboards.
+#
+# Closes external review F2 (issue #116). Every admin-surface site
+# imports this snippet; it returns 403 unless the request EITHER:
+#   - originates from a Tailscale tailnet / LAN / loopback IP, OR
+#   - carries a Cloudflare Access JWT header.
+#
+# A bug in any individual dashboard's per-app auth (Grafana, n8n,
+# Plane, etc.) cannot expose admin access to the public internet —
+# requests without one of the two auth signals are dropped at the
+# proxy layer.
+#
+# Configurable via the operator's personal.env:
+#   WALTER_TAILNET_CIDR  — defaults to Tailscale CGNAT (100.64.0.0/10)
+#   WALTER_LAN_CIDR      — defaults to private 192.168.0.0/16
+#
+# Sites that are GENUINELY public (Matrix federation, PostHog event
+# ingestion, etc.) deliberately DO NOT import this — they have their
+# own auth model + are documented as public-facing.
+# ---------------------------------------------------------------------------
+
+(admin_auth_gate) {
+  @not_authed {
+    not remote_ip ${WALTER_TAILNET_CIDR:-100.64.0.0/10} ${WALTER_LAN_CIDR:-192.168.0.0/16} 10.0.0.0/8 127.0.0.0/8 ::1
+    not header CF-Access-Authenticated-User-Email *
+  }
+  handle @not_authed {
+    respond "403 — admin endpoint: requires Tailscale tailnet or Cloudflare Access" 403 {
+      close
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
 # CORE SERVICES
 # ---------------------------------------------------------------------------
 
 # Plane — project management
 plane.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy plane-proxy:80
 }
 
 # Forgejo — git hosting
 git.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy forgejo:3000
 }
 
 # Infisical — secrets manager
 secrets.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy infisical:8080
 }
 
 # LiteLLM — LLM gateway
 llm.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy litellm:4000
 }
 
 # Grafana — dashboards
 grafana.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy grafana:3000
 }
 
 # n8n — workflow automation
 n8n.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy n8n:5678
 }
 
 # Uptime Kuma — uptime monitoring
 status.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy uptime-kuma:3001
 }
 
 # Homepage — service dashboard
 home.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy homepage:3000
 }
 
 # Syncthing — file sync web UI
 sync.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy syncthing:8384
 }
 
@@ -85,11 +128,13 @@ headscale.${WALTER_DOMAIN} {
 
 # Headscale Admin UI
 headscale-admin.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy headscale-admin:80
 }
 
 # WireGuard web UI
 vpn.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy wg-easy:51821
 }
 
@@ -114,11 +159,13 @@ posthog.${WALTER_DOMAIN} {
 
 # Postiz — social media scheduling (promoted from devrel profile in v0.2.0)
 postiz.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy postiz:3000
 }
 
 # Metabase — analytics / BI dashboards (promoted from devrel profile in v0.2.0)
 metabase.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy metabase:3000
 }
 
@@ -128,11 +175,13 @@ metabase.${WALTER_DOMAIN} {
 
 # Penpot — design tool
 penpot.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy penpot-frontend:8080
 }
 
 # Draw.io — diagrams
 draw.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy drawio:8080
 }
 
@@ -142,6 +191,7 @@ draw.${WALTER_DOMAIN} {
 
 # OpenClaw — personal AI assistant admin UI (Phase 2)
 claw.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy openclaw:18789
 }
 
