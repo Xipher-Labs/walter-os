@@ -171,22 +171,28 @@ SH
   run "$REPO_ROOT/bin/walter-os" baseline-external-hooks
   [ "$status" -eq 0 ]
 
-  # jq --sort-keys must put 'external/aardvark-skill/...' before
-  # 'external/zebra-skill/...' regardless of FS enumeration order.
-  # Parse the JSON with jq directly (already a setup() prereq) instead
-  # of byte-offset comparison via grep -bo — Copilot R1 of #96.
+  # The invariant: the BASELINE FILE ON DISK must be serialized with
+  # sorted keys (jq --sort-keys during baseline emission). Copilot R2
+  # of #96: my earlier check used 'jq -r keys[]' which sorts the
+  # output regardless of on-disk order — making the test pass even
+  # if the baseline JSON was unsorted. Fix: use 'keys_unsorted[]'
+  # which preserves the literal JSON-source key order, so the
+  # comparison actually checks on-disk serialization order.
   #
   # Note: setup() pre-stages a third file under fake-skill/, so the
-  # baseline ends up with 3 keys total. The deterministic invariant
-  # we care about is the ORDERING — sorted lexicographically,
-  # 'external/aardvark-skill/...' must come BEFORE
-  # 'external/zebra-skill/...' regardless of FS enumeration order.
+  # baseline ends up with 3 keys total. After sorted serialization,
+  # the order on disk MUST be:
+  #   external/aardvark-skill/...   ← first (a < f < z)
+  #   external/fake-skill/...       ← second (the setup() file)
+  #   external/zebra-skill/...      ← last
+  # If jq --sort-keys is ever removed from cmd_baseline_external_hooks,
+  # this assertion will fail because keys_unsorted[] will return them
+  # in FS-enumeration order (which is platform-dependent and almost
+  # never alphabetical).
   local first_key last_key
-  first_key="$(jq -r 'keys | first' "$WALTER_CONFIG/external-hook-checksums.json")"
-  last_key="$(jq -r 'keys | last' "$WALTER_CONFIG/external-hook-checksums.json")"
+  first_key="$(jq -r 'keys_unsorted | first' "$WALTER_CONFIG/external-hook-checksums.json")"
+  last_key="$(jq -r 'keys_unsorted | last' "$WALTER_CONFIG/external-hook-checksums.json")"
 
-  # First key starts with 'a' (aardvark < fake-skill < zebra).
-  # Last key starts with 'z'.
   [[ "$first_key" == external/aardvark-skill/* ]]
   [[ "$last_key" == external/zebra-skill/* ]]
 }
