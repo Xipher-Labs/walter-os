@@ -281,3 +281,21 @@ SH
   [ "$status" -eq 0 ]
   [ "$output" = "/tmp/walter-test-home/.config/walter-os/overlay" ]
 }
+
+@test "walter overlay --help reaches the subcommand help (not the universal guard)" {
+  run env HOME="/tmp/walter-test-home" WALTER_OS_HOME="${REPO_ROOT}" "${WALTER_BIN}" overlay --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"configured overlay opener"* ]]
+  [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]]
+  [[ "$output" == *"--print"* ]]
+}
+
+@test "walter-os overlay --help reaches the subcommand help (not the universal guard)" {
+  run env HOME="/tmp/walter-test-home" WALTER_OS_HOME="${REPO_ROOT}" "${WALTER_OS_BIN}" overlay --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"configured overlay opener"* ]]
+  [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]]
+  [[ "$output" == *"--print"* ]]
+}

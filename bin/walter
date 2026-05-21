@@ -92,7 +92,7 @@ shift || true
 # `--help` handler (the ones that need it) get the args passed through.
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
-    new|status|deploy|logs|alert|doctor|secrets|vm|providers)
+    new|status|deploy|logs|alert|doctor|secrets|vm|providers|overlay)
       ;; # subcommand handles its own help
     *)
       usage; exit 0 ;;
