@@ -991,7 +991,12 @@ services:
           mkdir -p /workspace/.npm-global
           OC_VER=2026.5.7
           OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
-          OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} --silent 2>/dev/null | tail -1)
+          # --registry=... pins the source so a persisted /workspace/.npmrc
+          # can't redirect dependency downloads (Copilot R3 #127).
+          # 2>&1 keeps stderr visible if the pack itself fails — easier to
+          # debug a first-boot regression than silenced /dev/null was.
+          OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} \
+            --registry=https://registry.npmjs.org/ --silent 2>&1 | tail -1)
           if [ -z "$OC_TARBALL" ] || [ ! -f "/tmp/$OC_TARBALL" ]; then
             echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
             exit 1
