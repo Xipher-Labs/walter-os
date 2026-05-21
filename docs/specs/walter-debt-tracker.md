@@ -2,7 +2,7 @@
 
 **Status**: ready for `/write-plan` after operator approval
 **Issue**: #2 (`Walter-OS technical debt tracker: .walter-debt.md + walter-os debt-report CLI`)
-**Target release**: v0.5.0 (alongside multi-model wizard #24)
+**Target release**: v0.4.1 (alongside multi-model wizard #24)
 **Depends on**: existing `walter-os justify` flow + `walter-os.toml` `protection_level` (both already in main).
 
 ## Problem
@@ -20,7 +20,7 @@ For hackathons especially: the team that ships in 48h needs to know in week 3 (w
 
 - A general-purpose project-management tool. This is *specifically* about debt that the audit + protection-level system already touched.
 - Tracking arbitrary TODO comments in code. Not in scope — use `track-pending` skill for that.
-- Cross-repo debt aggregation. v0.5.0 stays per-repo; cross-repo rollup is a Control Tower (Phase V) follow-up.
+- Cross-repo debt aggregation. v0.4.1 stays per-repo; cross-repo rollup is a Control Tower (Phase V) follow-up.
 - Replacing `walter-os justify`. We surface its output, not replace it.
 
 ## Decisions (proposed)

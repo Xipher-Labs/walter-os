@@ -2,7 +2,7 @@
 
 **Status**: ready for `/write-plan` after operator approval
 **Issue**: #27 (`[FEAT] -SECURITY- add recon and vuln-scanning profile`)
-**Target release**: v0.5.0 (alongside multi-model wizard #24 and walter-debt tracker #2)
+**Target release**: v0.4.1 (alongside multi-model wizard #24 and walter-debt tracker #2)
 **Depends on**: nothing new in main — uses the existing MCP-profile pattern.
 
 ## Problem
@@ -30,7 +30,7 @@ Pattern reference: the existing repo already splits Claude Code's settings into 
 | D-1 | **New settings profile: `pentest`** alongside `default` and `high-risk`. Lives in `~/.claude/settings.pentest.json` and `~/.codex/config.pentest.toml`. Activated via `walter-os profile pentest` — extends the existing `walter-os profile {default,high-risk}` swap pattern to a third profile name. Requires the same code-path additions in `cmd_profile` for the new profile name. | Same swap pattern, third tier. |
 | D-2 | **CLI-skills, NOT MCPs.** Walter-OS vendors `skills/nuclei-cli/`, `skills/httpx-cli/`, `skills/subfinder-cli/`, `skills/trivy-cli/`, `skills/grype-cli/`. No third-party MCP supply chain. | Same rationale as `heygen-cli`, `hcloud-cli` etc. CLI is the official surface for all these tools; MCPs would just be uncontrolled wrappers. |
 | D-3 | **Authorization gate ALWAYS required for any function that hits a third-party target.** This applies to recon tools whether the call is read-only (subfinder, httpx, theHarvester, nuclei probes) or arguably state-changing — the risk is unauthorized scanning, not state mutation. The gate refuses to run against a target unless the operator explicitly types the target hostname AND a one-line authorization note ("operator owns walter.example", "bug bounty program at hackerone.com/foo", etc.). | Legal cover. Recon tools are PRIMARILY read-only but the risk class is "unauthorized probing" — characterizing them as "state-changing" would mis-frame the threat. The note gets logged. |
-| D-4 | **Greenbone/OpenVAS deferred to a `heavy-pentest` profile.** Documented as opt-in, RAM/storage expectations called out. Not part of v0.5.0. | Greenbone is a separate concern; folding it in delays the lightweight CLI ship. |
+| D-4 | **Greenbone/OpenVAS deferred to a `heavy-pentest` profile.** Documented as opt-in, RAM/storage expectations called out. Not part of v0.4.1. | Greenbone is a separate concern; folding it in delays the lightweight CLI ship. |
 | D-5 | **Default profile gains `trivy` + `grype` as `info`-only.** These are container/dep CVE scanners on the operator's OWN artifacts (Docker images they built, repos they own) — no third-party target involved. Safe to run in default. | Catches CVEs in operator's own supply chain without flipping to pentest profile. |
 | D-6 | **`pentest` profile, when active, makes approval-gate stricter, not looser.** Every nuclei/httpx invocation is classified by `_classify_command` (new patterns: `nuclei-scan`, `httpx-probe`, `subfinder-enum`, `amass-enum`, `theharvester-enum`) and the corresponding `CATEGORY_MIN_TIER` entries set the tier minimum to `high`. CATEGORY_MIN_TIER is a TIER-MINIMUM matrix (low/medium/high) — recon tools require an agent at tier `high` (currently only `reviewer` per `~/.config/walter-os/trust-tiers.yml`) before the gate's classification path even runs. The classifier additions are part of this spec. | The profile UNLOCKS the tooling but does NOT loosen the gate; reflexive guardrails remain. Both halves are required — adding entries to `CATEGORY_MIN_TIER` without matching `_classify_command` patterns is a no-op (the tier check only applies to categories the classifier emits). |
 | D-7 | **Daily-supply-chain-audit checks the recon tools too.** When the `pentest` profile is active, the audit cycles through trivy/grype/nuclei version pinning + CVE checks. | Consistency: every tool in any profile is pinned + scanned. |
@@ -46,9 +46,9 @@ Pattern reference: the existing repo already splits Claude Code's settings into 
 | **subfinder** | Subdomain enumeration via passive sources (Censys, Shodan, ChaosDB, etc.). | **pentest** | Same maintainer. Passive sources = no direct scan of target. |
 | **amass** | Subdomain enum + active brute-force + ASN mapping. | **pentest** (deeper option) | More features than subfinder but slower; ship both, operator picks. |
 | **theHarvester** | OSINT email + subdomain harvester from search engines. | **pentest** | Passive sources only; classic recon. |
-| **Greenbone/OpenVAS** | Full vulnerability management platform — heavy agent, daily NVT feed (1GB+), Postgres backend. | **`heavy-pentest`** (deferred) | Heavyweight; v0.5.0 spec defers it. |
+| **Greenbone/OpenVAS** | Full vulnerability management platform — heavy agent, daily NVT feed (1GB+), Postgres backend. | **`heavy-pentest`** (deferred) | Heavyweight; v0.4.1 spec defers it. |
 
-Selection for v0.5.0:
+Selection for v0.4.1:
 - **Default profile**: add `trivy`, `grype` skills.
 - **`pentest` profile**: `nuclei`, `httpx`, `subfinder`, `amass`, `theHarvester`.
 - **Deferred**: Greenbone/OpenVAS to a future `heavy-pentest` profile.
@@ -105,9 +105,9 @@ Each skill follows the heygen-cli / hcloud-cli template:
 ### AC-7 — Heavy-pentest profile placeholder
 - [ ] `docs/operational/heavy-pentest-profile.md` (stub) documents the deferred Greenbone/OpenVAS path with:
   - Resource expectations (4GB RAM, 5GB storage, daily NVT feed)
-  - Why deferred (operational overhead beyond v0.5.0 scope)
+  - Why deferred (operational overhead beyond v0.4.1 scope)
   - When to revisit (operator running > 10 self-hosted services + wanting deep auth scans)
-- [ ] No code shipped for AC-7 in v0.5.0.
+- [ ] No code shipped for AC-7 in v0.4.1.
 
 ## Architecture
 
@@ -151,8 +151,8 @@ Each skill follows the heygen-cli / hcloud-cli template:
 ## Out of scope
 
 - **Greenbone/OpenVAS.** Deferred to `heavy-pentest` profile, future release.
-- **Burp Suite / OWASP ZAP integration.** Both are GUI-heavy; CLI integration is awkward; not v0.5.0.
-- **Auto-generated bug-bounty submission reports.** Skill follow-up, not in v0.5.0.
+- **Burp Suite / OWASP ZAP integration.** Both are GUI-heavy; CLI integration is awkward; not v0.4.1.
+- **Auto-generated bug-bounty submission reports.** Skill follow-up, not in v0.4.1.
 - **Phishing simulation tooling.** Different threat model + much higher operator-error blast radius. Separate epic.
 
 ## Recommended PR ordering

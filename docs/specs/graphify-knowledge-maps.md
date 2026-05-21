@@ -3,7 +3,7 @@
 **Status**: ready for `/write-plan` after operator approval of pilot scope
 **Issue**: #31 (`[FEAT] -LEARNING- add Graphify knowledge maps`)
 **Tier**: 3 (multi-week pilot, opt-in only)
-**Target release**: v0.6.0 (after the v0.4.0 / v0.5.0 cycle stabilizes)
+**Target release**: v0.6.0 (after the v0.4.0 / v0.4.1 cycle stabilizes)
 **Depends on**: existing supply-chain audit + the env-allowlist parser (P1-09).
 
 ## Problem

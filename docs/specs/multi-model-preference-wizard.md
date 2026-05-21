@@ -3,7 +3,7 @@
 **Status**: ready for `/write-plan` after operator approval
 **Issue**: #24 (`[FEAT] -OPERATIONS- multi-model preference wizard + domain-routing workflow`)
 **Tier**: 2 (high-value feature; operator-flagged priority)
-**Target release**: **v0.5.0** (depends on v0.4.0 P1 hardening landing + OpenRouter merged — both in flight)
+**Target release**: **v0.4.1** (depends on v0.4.0 P1 hardening landing + OpenRouter merged — both in flight)
 **Depends on**: PR #63 (OpenRouter routes merged into main — done)
 
 ## Problem
@@ -176,7 +176,7 @@ operator wants a single entry point; that's out of scope here.
 - **AC-5 (`status --models`)** depends on AC-3 (needs at least one skill to emit `domain` tags).
 - **AC-6 + AC-7** are the closing PR.
 
-Recommended PR ordering (8 PRs in v0.5.0):
+Recommended PR ordering (8 PRs in v0.4.1):
 
 1. AC-1 — env vars + `model-router.sh` lib + bats
 2. AC-2 — `setup/personal-overlay-init.sh` wizard + `.env.example`
@@ -192,14 +192,14 @@ Each PR is small (≤200 LOC), runs the 3-round review, and references this spec
 ## Out of scope
 
 - **Local Ollama wiring (`local-ollama` model alias).** Requires Phase L homelab node + LiteLLM `ollama/*` config block. Tracked in `docs/specs/local-llm-node.md`.
-- **Auto-suggest preference based on operator history.** Future feature; not v0.5.0.
-- **Per-repo overrides via `walter-os.toml`.** Could ship later; v0.5.0 stays at operator-global level.
-- **GUI for editing preferences.** Control Tower (Phase V) is the natural home; not v0.5.0.
+- **Auto-suggest preference based on operator history.** Future feature; not v0.4.1.
+- **Per-repo overrides via `walter-os.toml`.** Could ship later; v0.4.1 stays at operator-global level.
+- **GUI for editing preferences.** Control Tower (Phase V) is the natural home; not v0.4.1.
 
 ## Open questions for the operator
 
 1. **Should `WALTER_MODEL_OVERRIDE` apply globally to every domain, or only when no per-domain pref matches?** Default proposed: applies globally except PHI lock.
-2. **Should `walter status --models` show counts only, or also a "drift" alert when actual usage diverges from declared preference?** Default proposed: counts only in v0.5.0; drift alerting in a follow-up.
+2. **Should `walter status --models` show counts only, or also a "drift" alert when actual usage diverges from declared preference?** Default proposed: counts only in v0.4.1; drift alerting in a follow-up.
 3. **Should the wizard offer a "use sensible defaults — skip" option for first-time operators?** Default proposed: yes, with the defaults from AC-1.
 
 ## Refs
