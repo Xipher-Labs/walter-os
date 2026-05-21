@@ -325,16 +325,35 @@ check_preflight() {
     exit 4
   fi
 
+  # yq presence handling (Codex R2 #125 MAJOR — flavor check + ordering):
+  # Three cases the preflight needs to disambiguate:
+  #   (a) yq missing entirely: Step 1's _install_deps_{macos,linux} will
+  #       install mikefarah/yq via brew/snap, so we WARN here and let the
+  #       wizard continue. Hard-exiting here would prevent the very install
+  #       step that's supposed to put yq on PATH.
+  #   (b) yq present + mikefarah flavor: ok, proceed.
+  #   (c) yq present + WRONG flavor (kislyuk/Python yq from apt): hard-exit
+  #       with remediation. Without this check, an apt-yq machine would
+  #       pass preflight + fail at hook-runtime when approval-gate.sh
+  #       tries mikefarah-only syntax.
   if ! command -v yq >/dev/null 2>&1; then
-    # Hard dependency at RUNTIME (approval-gate.sh fails CLOSED if yq
-    # is missing — audit P1-05). At install-plan time (--dry-run),
-    # only warn so the operator can still preview the plan.
     if [[ $DRY_RUN -eq 1 ]]; then
       warn "yq missing (would be required on real install). ${_pkg_hint_yq}"
-      warn "DRY-RUN: continuing past the missing yq so the install plan"
-      warn "         can be previewed. A real install would have exited here."
+      warn "DRY-RUN: continuing past the missing yq so the install plan can be previewed."
     else
-      err "yq required (approval-gate hard dep). ${_pkg_hint_yq}"
+      warn "yq missing. Step 1 will install mikefarah/yq via ${_pkg_hint_yq%%  #*}."
+    fi
+  else
+    # Flavor check using the same helper Step 1's install path uses.
+    # Defined inline here so check_preflight doesn't depend on
+    # _install_deps_linux being sourced first.
+    if ! (yq --version 2>&1 | grep -qi 'mikefarah'); then
+      err "yq is installed but NOT mikefarah/yq (Walter-OS hooks require it)."
+      err "  Detected: $(yq --version 2>&1 | head -1)"
+      err "  Fix:"
+      err "    sudo apt-get remove -y yq     # Debian/Ubuntu: drop kislyuk/yq"
+      err "    sudo snap install yq          # then install mikefarah/yq"
+      err "  Or download the binary: https://github.com/mikefarah/yq/releases"
       exit 4
     fi
   fi

@@ -75,3 +75,25 @@ setup() {
   # docker via a separate path — assert only on `yq` being present.
   [[ $(grep -cE 'local required_deps=\([^)]*\byq\b' "$INSTALL_SH") -ge 2 ]]
 }
+
+# -----------------------------------------------------------------------
+# Codex R2 #125: check_preflight ordering + flavor check
+# -----------------------------------------------------------------------
+# Without these fixes, check_preflight hard-exited on missing yq BEFORE
+# Step 1 (which has the install path) ever ran, breaking fresh installs.
+# Also: check_preflight didn't validate flavor, so an apt-yq machine
+# would pass preflight + fail at hook-runtime.
+
+@test "check_preflight does NOT hard-exit on missing yq (Step 1 installs)" {
+  # On the missing-yq path, check_preflight emits `warn`, not `err+exit`.
+  grep -qE 'warn "yq missing\. Step 1 will install' "$INSTALL_SH"
+  # And the surrounding code does NOT exit on the missing-yq branch.
+  ! grep -qE 'yq required \(approval-gate hard dep\)' "$INSTALL_SH"
+}
+
+@test "check_preflight runs flavor check when yq IS on PATH" {
+  # If yq is present, preflight runs the mikefarah-flavor check inline.
+  grep -qE "yq --version 2>&1 \| grep -qi 'mikefarah'" "$INSTALL_SH"
+  # And hard-exits with remediation for the wrong-flavor case.
+  grep -qE 'yq is installed but NOT mikefarah/yq' "$INSTALL_SH"
+}
