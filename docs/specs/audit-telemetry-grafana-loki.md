@@ -25,16 +25,17 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
 
 | # | Decision | Why |
 |---|---|---|
-| D-1 | **Promtail tails `~/.config/walter-os/audit/chain-*.jsonl`** on every host running Walter-OS. Tail config ships with the walter-host observability stack. | Promtail is already in the stack. No new agent. |
+| D-1 | **Promtail tails the operator's audit chain.** The chain lives on the host at `~/.config/walter-os/audit/chain-*.jsonl`; when Promtail runs in a container (the default in the walter-host observability stack), the operator bind-mounts that host dir to `/var/log/walter-audit/` inside the container, and Promtail's `__path__` is the container-side path. AC-1 below pins both halves of the mount. | Promtail is already in the stack. No new agent. |
 | D-2 | **Per-host label**: `host=<short-hostname>` added to every shipped row. | Cross-host queries can filter. |
 | D-3 | **Loki retention = 30d default**, operator-configurable via `WALTER_AUDIT_LOKI_RETENTION_DAYS`. | 30d covers most "what happened last week" queries. Operator can extend for compliance reasons. |
 | D-4 | **Walter-OS audit dashboard** at `setup/walter-host/services/observability/grafana/dashboards/walter-audit.json` (provisioned automatically). Pre-built panels: | Operator gets useful queries out of the box. |
-|   | - Tool-call rate per hour                                  |  |
-|   | - Block rate per hour (with `decision_source` breakdown)   |  |
+|   | - Tool-call rate (events/sec, 5-min sliding window)        |  |
+|   | - Block rate (events/sec, 5-min sliding, by `decision_source`) |  |
 |   | - Top 10 blocked tools (week)                              |  |
 |   | - Top 10 block reasons (week)                              |  |
-|   | - Session count by host                                    |  |
-|   | - Active sessions (≥ 1 call in last 30 min)               |  |
+|   | - Audit-event count by host (24h)                          |  |
+|   | - Distinct sessions seen by host (24h)                     |  |
+|   | - Active sessions (≥ 1 call in last 30 min)                |  |
 | D-5 | **Local-only mode**: when `WALTER_AUDIT_LOKI_DISABLE=1`, Promtail tails for the audit chain are disabled. Operator who doesn't want telemetry even to their own walter-host can opt out. | Same posture as Rekor opt-in. Walter-OS doesn't push telemetry the operator hasn't accepted. |
 | D-6 | **Promtail config lives in repo**: `setup/walter-host/services/observability/promtail/walter-audit-tail.yml`. Operator can edit (or extend) but won't be regenerated. | Mirrors the existing observability provisioning pattern. |
 | D-7 | **Integrity preserved in Loki**: Promtail forwards the row VERBATIM including `prev_hash` + `sig`. Loki stores the line as-is. `walter-os audit verify-chain --from-loki <range>` reconstructs the chain from Loki and re-verifies. | Telemetry is a derived view, NOT a re-format. Original integrity is reproducible from the stored log. |
@@ -60,7 +61,8 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
   - Top blocked tools (instant query):
     `topk(10, sum by (tool) (rate(({app="walter-os", kind="audit-chain"} | json | decision="block")[7d])))`
   - Top block reasons: same shape on `decision_reason` label.
-  - Sessions per host: `count by (host) (count_over_time({app="walter-os", kind="audit-chain"}[24h]))`
+  - Audit-event count per host (24h): `count by (host) (count_over_time({app="walter-os", kind="audit-chain"}[24h]))` — note this is total audit-chain rows per host, NOT distinct sessions. Use the next panel for distinct sessions.
+  - Distinct sessions per host (24h): `count by (host) (count by (host, session_id) (count_over_time({app="walter-os", kind="audit-chain"} | json | __error__="" [24h])))` — outer `count by (host)` collapses to a count of unique `session_id`s seen on each host.
   - Active sessions (last activity ≤ 30 min ago):
     `count by (session_id) (last_over_time({app="walter-os", kind="audit-chain"} | json | unwrap ts [30m]))`
 - [ ] Dashboard auto-provisioned by Grafana's `provisioning/dashboards/` directory (already wired in the existing stack).
