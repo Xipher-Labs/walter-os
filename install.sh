@@ -288,16 +288,55 @@ check_preflight() {
     ok "Codex CLI: $(codex --version 2>/dev/null || echo unknown)"
   fi
 
+  # Hard-dependency preflight. `--check` does NOT go through this code
+  # path — it returns from main() via check_requirements() before
+  # reaching here, with its own (correct) hard-fail semantics. This
+  # block runs on install AND on `--dry-run` (no --check). Under
+  # --dry-run we WARN about missing YQ so the operator can preview
+  # the install plan on a machine that doesn't yet have it (yq is
+  # only required at RUNTIME by approval-gate.sh — dry-run doesn't
+  # run that hook). jq stays a HARD exit even under --dry-run
+  # because downstream step-0 helpers (merge_claude_mcp_servers,
+  # merge_claude_hooks at install.sh:461 and :526) hard-`return 1`
+  # without jq, and `set -e` would propagate that as a script-level
+  # abort — so warning here would just delay the failure to a less
+  # obvious point. Better to fail fast with a clear message.
+  #
+  # OS-specific install hints: pick brew vs apt/snap based on
+  # `uname -s` so the hint matches the operator's machine.
+  local _pkg_hint_jq _pkg_hint_yq
+  case "$(uname -s)" in
+    Darwin)
+      _pkg_hint_jq="brew install jq"
+      _pkg_hint_yq="brew install yq"
+      ;;
+    Linux)
+      _pkg_hint_jq="sudo apt install jq  # or: sudo dnf install jq"
+      _pkg_hint_yq="sudo snap install yq  # or: see https://github.com/mikefarah/yq#install"
+      ;;
+    *)
+      _pkg_hint_jq="install jq via your OS package manager"
+      _pkg_hint_yq="install yq via your OS package manager"
+      ;;
+  esac
+
   if ! command -v jq >/dev/null 2>&1; then
-    err "jq required. Install: brew install jq"
+    err "jq required. ${_pkg_hint_jq}"
     exit 4
   fi
 
   if ! command -v yq >/dev/null 2>&1; then
-    # Hard dependency — approval-gate.sh fails CLOSED if yq is missing.
-    # See: docs/operational/security-audit-2026-05-11.md P1-05
-    err "yq required (approval-gate hard dep). Install: brew install yq"
-    exit 4
+    # Hard dependency at RUNTIME (approval-gate.sh fails CLOSED if yq
+    # is missing — audit P1-05). At install-plan time (--dry-run),
+    # only warn so the operator can still preview the plan.
+    if [[ $DRY_RUN -eq 1 ]]; then
+      warn "yq missing (would be required on real install). ${_pkg_hint_yq}"
+      warn "DRY-RUN: continuing past the missing yq so the install plan"
+      warn "         can be previewed. A real install would have exited here."
+    else
+      err "yq required (approval-gate hard dep). ${_pkg_hint_yq}"
+      exit 4
+    fi
   fi
 
   local missing=()
