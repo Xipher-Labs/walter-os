@@ -56,11 +56,17 @@ count_checks() {
 }
 
 @test "AC5: bare --tier (no number) runs same as no flag" {
-  # Sanity: bare `doctor` and `doctor --tier` (when tier not provided
-  # as a separate arg) should behave the same — full check set.
+  # Sanity: `doctor` (no flag) and `doctor --tier` (flag with no
+  # value following) should behave identically — both produce the
+  # full unfiltered check set. This validates the arg parser's
+  # tier_filter="${2:-}" fallback and the tier_check empty-filter
+  # short-circuit.
   run "${WALTER_OS_BIN}" doctor
-  base_count=$(count_checks "$output")
-  [ "$base_count" -ge 1 ]
+  no_flag_count=$(count_checks "$output")
+  run "${WALTER_OS_BIN}" doctor --tier
+  bare_tier_count=$(count_checks "$output")
+  [ "$no_flag_count" -ge 1 ]
+  [ "$bare_tier_count" -eq "$no_flag_count" ]
 }
 
 # -----------------------------------------------------------------------
