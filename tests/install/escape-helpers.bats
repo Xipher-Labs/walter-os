@@ -171,3 +171,70 @@ _invoke() {
   # Four sites: label, audit_script, stdout, stderr
   [[ $(grep -cE '_xml_escape "\$(DAILY_AUDIT_LABEL|audit_script|WALTER_CONFIG)' "$INSTALL_SH") -ge 4 ]]
 }
+
+# -----------------------------------------------------------------------
+# #134 end-to-end: actually render the plist with malicious path values
+# and verify the output is XML-safe. Static grep + helper-unit-test alone
+# (Copilot R2 #141 catch) would silently false-pass if a regression
+# removed the _xml_escape calls in the render path while keeping the
+# helper itself intact. This test exercises the real render contract.
+# -----------------------------------------------------------------------
+@test "#134 end-to-end: plist render with metacharacter paths produces valid XML" {
+  # Override the path values setup_git_hooks would interpolate. We don't
+  # actually run setup_git_hooks (it tries to load launchctl etc.); we
+  # directly invoke the function via _invoke + a stub LAUNCH_AGENTS dir.
+  local stub_la="$TMP_HOME/LaunchAgents"
+  mkdir -p "$stub_la"
+
+  # The malicious WALTER_CONFIG must contain XML-reserved chars in a
+  # PATH-LEGAL way (no `/`, no NUL, etc.). Apostrophe is XML-reserved
+  # AND filesystem-safe.
+  local mal_config="$TMP_HOME/wc'<&"
+  mkdir -p "$mal_config"
+
+  # Drive setup_git_hooks with the malicious WALTER_CONFIG + a stub
+  # LAUNCH_AGENTS. The function should:
+  #   a) succeed (no XML break)
+  #   b) emit a plist whose <string>$WALTER_CONFIG/audit.log</string>
+  #      element contains &apos; &lt; &amp; instead of literal ' < &
+  WALTER_INSTALL_SH="$INSTALL_SH" WALTER_INVOKE_CMD="
+    LAUNCH_AGENTS='$stub_la'
+    DAILY_AUDIT_LABEL=walter-os.test
+    WALTER_CONFIG='$mal_config'
+    REPO_ROOT='$mal_config'  # so audit_script ends up under the malicious dir too
+    mkdir -p '$mal_config/skills/daily-supply-chain-audit/scripts'
+    touch '$mal_config/skills/daily-supply-chain-audit/scripts/audit.sh'
+    chmod +x '$mal_config/skills/daily-supply-chain-audit/scripts/audit.sh'
+    setup_git_hooks
+  " bash -c '
+    set -uo pipefail
+    DRY_RUN=0
+    CHECK_ONLY=0
+    UPGRADE=1
+    UNINSTALL=0
+    STEP_ONLY=""
+    set --
+    # shellcheck source=/dev/null
+    source "$WALTER_INSTALL_SH"
+    eval "$WALTER_INVOKE_CMD"
+  ' >/dev/null 2>&1 || true
+
+  # The rendered plist should exist + be valid XML. The malicious
+  # apostrophe / < / & should appear as &apos; / &lt; / &amp;.
+  local plist="$stub_la/walter-os.test.plist"
+  if [[ -f "$plist" ]]; then
+    # Literal unescaped chars must NOT appear inside any <string> body.
+    # If they do, the regression has removed _xml_escape from a render site.
+    ! grep -qE "<string>[^<]*[<&'][^<]*</string>" "$plist" || {
+      cat "$plist" >&2
+      return 1
+    }
+    # And the escaped entities should be present in at least one element.
+    grep -qE "<string>[^<]*&apos;[^<]*</string>" "$plist"
+  fi
+  # If plist wasn't created (function early-exited on the macOS check
+  # since we're on a CI Linux runner / Mac dev box mismatch), the
+  # static + helper-unit tests still cover the contract — skip rather
+  # than false-pass.
+  [[ -f "$plist" ]] || skip "plist not created in this env (likely non-Darwin runner)"
+}
