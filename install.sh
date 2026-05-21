@@ -976,25 +976,53 @@ _install_deps_linux() {
     return 0
   fi
 
+  # _yq_is_mikefarah — validate the locally-installed yq is mikefarah/yq
+  # (Go-based; the YAML processor Walter-OS hooks expect), not the
+  # Python-based kislyuk/yq that Debian/Ubuntu's `apt install yq` ships.
+  # The two share a binary name but have incompatible syntax — the wrong
+  # one makes approval-gate.sh fail closed at runtime, which is exactly
+  # the breakage this dep guard is supposed to prevent. Copilot R2 #125.
+  _yq_is_mikefarah() {
+    yq --version 2>&1 | grep -qi 'mikefarah'
+  }
+
   for dep in "${required_deps[@]}"; do
     if command -v "$dep" >/dev/null 2>&1; then
+      # yq pre-installed flavor check — see _yq_is_mikefarah above.
+      if [[ "$dep" == "yq" ]] && ! _yq_is_mikefarah; then
+        err "yq is installed but is NOT mikefarah/yq (Walter-OS hooks require"
+        err "  the Go-based mikefarah/yq, not the Python-based kislyuk/yq)."
+        err "  Detected: $(yq --version 2>&1 | head -1)"
+        err "  Fix on Debian/Ubuntu:"
+        err "    sudo apt-get remove -y yq    # drop the wrong one"
+        err "    sudo snap install yq         # install mikefarah/yq"
+        err "  Or install the binary directly:"
+        err "    https://github.com/mikefarah/yq/releases (look for yq_linux_*)"
+        exit 1
+      fi
       ok "$dep already installed"
     else
-      # yq has a special case: the Debian/Ubuntu `yq` package is a
-      # different YAML processor (Python-based) than mikefarah/yq (Go-based)
-      # — Walter-OS hooks expect mikefarah/yq. Use snap for parity with
-      # the install hints elsewhere in install.sh (line 150, 315). Issue
-      # #125 R1.1 (Copilot R1 on PR #125).
+      # yq install — Debian/Ubuntu's `apt install yq` is a different tool
+      # (kislyuk/yq, Python-based) than the Go-based mikefarah/yq that
+      # Walter-OS hooks expect. Use snap (which serves the correct flavor)
+      # in the auto-install path; print a concrete binary-download fallback
+      # if snap is unavailable (common on minimal Debian/Ubuntu images).
+      # Copilot R2 #125.
       if [[ "$dep" == "yq" ]]; then
         if [[ $DRY_RUN -eq 1 ]]; then
-          dry "would run: sudo snap install yq  (mikefarah/yq — different package than apt's yq)"
+          dry "would run: sudo snap install yq  (mikefarah/yq — NOT apt's yq)"
         elif command -v snap >/dev/null 2>&1; then
           say "Installing $dep via snap (mikefarah/yq)..."
           sudo snap install yq
           ok "Installed $dep"
         else
-          err "yq requires snap on Linux (the apt 'yq' package is a different tool)."
-          err "  Install snap or download mikefarah/yq directly: https://github.com/mikefarah/yq#install"
+          err "yq install path needs snap, but snap is not installed."
+          err "  Option A (preferred): enable snap, then re-run:"
+          err "    sudo apt-get install -y snapd  # Debian/Ubuntu"
+          err "  Option B (direct binary download — pick your arch):"
+          err "    sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \\"
+          err "      -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq"
+          err "  Verify after either: yq --version  # must say 'mikefarah'"
           exit 1
         fi
       else
