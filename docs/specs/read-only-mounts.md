@@ -1,15 +1,17 @@
-# Read-only mounts during runs (OSS Trust A-5) — spec
+# Invisible secret-bearing mounts during runs (OSS Trust A-5) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-5
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-5 (parent spec is in PR #83 — not yet on `main`)
 **Target release**: v0.5.x (after A-3 sandbox lands; this is a refinement layer above A-3)
-**Depends on**: `docs/specs/process-isolation-sandbox.md` (A-3 — provides the bind-mount mechanism)
+**Depends on**: `docs/specs/process-isolation-sandbox.md` (A-3 — PR #92 — provides the bind-mount mechanism). A-3 must merge before A-5 implements.
 
 ## Problem
 
 A-3 sandbox profiles already restrict filesystem access. But the existing profiles allow READ on operator-overlay + walter-os-state directories because hooks need to read config. That's fine, but READ-during-allowed-window is enough to exfiltrate secrets via a successfully-allowed Bash call (e.g. operator approves `cat config.txt` for a legitimate reason; that allow happens to also approve `cat ~/.config/walter-os/state/session-<uuid>.key`).
 
-A-5 adds a finer scope: ALL secret-bearing paths are bind-mounted read-only-and-INVISIBLE during high-tier sandbox runs, so even a successful exfil attempt returns empty / missing-file.
+A-5 adds a finer scope: ALL secret-bearing paths are bind-mounted as EMPTY placeholders during high-tier sandbox runs, so even a successful exfil attempt returns empty / missing-file.
+
+**Terminology**: this layer is INVISIBILITY (the path looks not-secret-bearing), NOT read-only-and-invisibility. The mechanism is "bind-mount an empty placeholder over the real path", which the sandbox can then leave read-write OR read-only on top — that's an orthogonal choice (default: read-only mounts so a write doesn't accidentally pollute the placeholder). Renaming the spec file is impractical mid-flight; future readers should treat "read-only-mounts" as a shorthand for the invisibility pattern.
 
 This is the difference between "you can read config" and "config is not at this path right now."
 
@@ -24,8 +26,8 @@ This is the difference between "you can read config" and "config is not at this 
 | # | Decision | Why |
 |---|---|---|
 | D-1 | **Apply only to high-tier sandbox runs** (skill profile, when the corresponding tool call is classified `high` by `approval-gate.sh CATEGORY_MIN_TIER`). | Low-tier ops legitimately need wider read; high-tier is where the blast radius matters. |
-| D-2 | **Invisible-mount strategy**: bind-mount an EMPTY directory over each protected path. The path APPEARS to exist (so existence checks don't break) but contains nothing. | Tools that test "does ~/.ssh exist?" → yes, dir exists, contents empty. Tools that test "is ~/.ssh/id_rsa readable?" → fail. |
-| D-3 | **Protected paths (default)**: `~/.ssh/`, `~/.aws/`, `~/.gnupg/`, `~/.config/walter-os/state/`, `~/.config/walter-os/overlay/personal.env`, `~/.config/op/` (1Password CLI), `~/.local/share/keyrings/`, `~/.docker/config.json`. | Common secret-bearing locations. Operator extends per overlay. |
+| D-2 | **Invisible-mount strategy**: bind-mount an empty PLACEHOLDER over each protected path. The TYPE of the placeholder must match the type of the protected path: for DIRECTORY targets (`~/.ssh/`, `~/.aws/`, `~/.gnupg/`, etc.) use an empty directory; for FILE targets (`~/.docker/config.json`, `~/.config/walter-os/overlay/personal.env`) use an empty file. Linux `mount --bind` rejects dir→file mounts, so the implementation MUST stat the source and pick the matching empty placeholder. The path APPEARS to exist (existence checks pass) but is empty / has no real content. Mounted read-only by default so a write to the placeholder doesn't pollute the temp dir. | Tools that test "does ~/.ssh exist?" → yes, dir exists, contents empty. Tools that test "is ~/.ssh/id_rsa readable?" → fail. Tools that test "does ~/.docker/config.json exist?" → yes, file exists, contents empty. |
+| D-3 | **Protected paths (default)** — categorized by type so AC-1 can pick the right placeholder:<br>**Directories**: `~/.ssh/`, `~/.aws/`, `~/.gnupg/`, `~/.config/walter-os/state/`, `~/.config/op/` (1Password CLI), `~/.local/share/keyrings/`.<br>**Files**: `~/.config/walter-os/overlay/personal.env`, `~/.docker/config.json`.<br>Categorization at policy-load time; if a target's type changes (operator promotes a file to a dir), the loader emits a WARN and uses the new type. | Common secret-bearing locations. Operator extends per overlay. |
 | D-4 | **Operator extension via `~/.config/walter-os/overlay/sandbox-invisible-paths.txt`** — one path per line. Comments allowed. | Same shape as env-allowlist.txt + egress-allowlist.txt. |
 | D-5 | **`walter-skill-default` profile (from A-3) gains an inheritance hook**: when invoking via `walter_sandbox_run walter-skill-default --high-tier`, the wrapper layers the invisible mounts on top. | Single shim entry point; A-5 is a flag, not a separate profile. |
 | D-6 | **Bypass: same two-factor pattern**. `WALTER_SANDBOX_INVISIBLE_BYPASS=1` + `--allow-secret-read` in the command. Logged. | Operator can override for a one-off legitimate cross-secret task. |
