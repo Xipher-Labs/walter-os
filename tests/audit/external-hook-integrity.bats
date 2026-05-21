@@ -138,3 +138,61 @@ SH
   [[ "$output" != *"external-hook-tampered"* ]]
   [ ! -f "$WALTER_CONFIG/external-hook-checksums.json" ]
 }
+
+# --- CLI hardening (Copilot-style follow-up): empty external tree + xargs ---
+
+@test "P1-07-CLI: baseline-external-hooks on an empty external tree writes {} not a synthetic hash" {
+  # Remove all hook scripts under external/ but keep the directory.
+  rm -rf "$WALTER_OS_HOME/external"
+  mkdir -p "$WALTER_OS_HOME/external"
+
+  run "$REPO_ROOT/bin/walter-os" baseline-external-hooks
+  [ "$status" -eq 0 ]
+
+  # Critical: the baseline must be exactly {} — NOT a synthetic
+  # "<hash>  -" entry from `xargs` running the hasher with no args
+  # (and the hasher then reading stdin and emitting a hash for empty
+  # input). The previous version produced a one-key baseline that
+  # would have caused spurious drift on the next audit run.
+  [ -f "$WALTER_CONFIG/external-hook-checksums.json" ]
+  content="$(cat "$WALTER_CONFIG/external-hook-checksums.json")"
+  # Acceptable forms: "{}" (xargs --no-run-if-empty path) or the
+  # "no external hook scripts" path which writes the same content.
+  [[ "$content" == "{}" || "$content" == "{}"$'\n' ]]
+}
+
+@test "P1-07-CLI: baseline-external-hooks output JSON has sorted keys (stable across jq versions)" {
+  # Create two hook files with non-alphabetical filenames.
+  mkdir -p "$WALTER_OS_HOME/external/zebra-skill/hooks/scripts" \
+           "$WALTER_OS_HOME/external/aardvark-skill/hooks/scripts"
+  echo '#!/bin/sh' > "$WALTER_OS_HOME/external/zebra-skill/hooks/scripts/z.sh"
+  echo '#!/bin/sh' > "$WALTER_OS_HOME/external/aardvark-skill/hooks/scripts/a.sh"
+
+  run "$REPO_ROOT/bin/walter-os" baseline-external-hooks
+  [ "$status" -eq 0 ]
+
+  # The invariant: the BASELINE FILE ON DISK must be serialized with
+  # sorted keys (jq --sort-keys during baseline emission). Copilot R2
+  # of #96: my earlier check used 'jq -r keys[]' which sorts the
+  # output regardless of on-disk order — making the test pass even
+  # if the baseline JSON was unsorted. Fix: use 'keys_unsorted[]'
+  # which preserves the literal JSON-source key order, so the
+  # comparison actually checks on-disk serialization order.
+  #
+  # Note: setup() pre-stages a third file under fake-skill/, so the
+  # baseline ends up with 3 keys total. After sorted serialization,
+  # the order on disk MUST be:
+  #   external/aardvark-skill/...   ← first (a < f < z)
+  #   external/fake-skill/...       ← second (the setup() file)
+  #   external/zebra-skill/...      ← last
+  # If jq --sort-keys is ever removed from cmd_baseline_external_hooks,
+  # this assertion will fail because keys_unsorted[] will return them
+  # in FS-enumeration order (which is platform-dependent and almost
+  # never alphabetical).
+  local first_key last_key
+  first_key="$(jq -r 'keys_unsorted | first' "$WALTER_CONFIG/external-hook-checksums.json")"
+  last_key="$(jq -r 'keys_unsorted | last' "$WALTER_CONFIG/external-hook-checksums.json")"
+
+  [[ "$first_key" == external/aardvark-skill/* ]]
+  [[ "$last_key" == external/zebra-skill/* ]]
+}
