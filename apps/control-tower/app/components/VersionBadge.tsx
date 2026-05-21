@@ -16,9 +16,22 @@ import { getVersionInfo } from "@/lib/version";
 // NEXT_PUBLIC_WALTER_REPO_URL. We intentionally avoid a hardcoded fallback
 // to any specific GitHub org so the Control Tower doesn't ship a personal
 // identifier or a wrong-fork URL — see W-5 / R2-3 in the OSS launch spec
-// and the depersonalization re-audit. If the env var is unset, the update
-// badge is rendered without a link target.
-const REPO_URL = process.env.NEXT_PUBLIC_WALTER_REPO_URL ?? null;
+// and the depersonalization re-audit. If the env var is unset OR empty,
+// the update badge is rendered without a link target.
+//
+// Normalization (Copilot R2 of #73):
+//   1. Treat empty-string / whitespace-only as unset (.env files commonly
+//      ship `KEY=` which becomes `""`, not `undefined`).
+//   2. Strip trailing slash so `https://example.com/foo/` and
+//      `https://example.com/foo` produce the same CHANGELOG_URL — avoids
+//      the `.../foo//blob/main/CHANGELOG.md` double-slash artifact.
+function _normalizeRepoUrl(raw: string | undefined | null): string | null {
+  if (raw === undefined || raw === null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  return trimmed.replace(/\/+$/, "");
+}
+const REPO_URL = _normalizeRepoUrl(process.env.NEXT_PUBLIC_WALTER_REPO_URL);
 const CHANGELOG_URL = REPO_URL ? `${REPO_URL}/blob/main/CHANGELOG.md` : null;
 
 export default function VersionBadge() {
