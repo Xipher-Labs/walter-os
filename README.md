@@ -8,7 +8,7 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.4.0--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.4.4--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
 [![Audit: 6/6 P0 closed](https://img.shields.io/badge/audit-6%2F6_P0_closed-brightgreen.svg)](docs/operational/security-audit-2026-05-11.md)
 
@@ -46,16 +46,23 @@ overlay before it does anything useful for you.
 
 ## Status: alpha — read this before relying on it
 
-> **This is v0.4.0-alpha (in-flight). Things iterate fast, things break,
+> **This is v0.4.4-alpha (latest tested). Things iterate fast, things break,
 > things get corrected on the fly while other work is in-flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
 > and is in the process of being generalized for OSS adoption.
 > v0.2.0 was the first release intended for third parties. v0.3.0
 > shipped process-hygiene + depersonalization cleanup plus the first
-> founder-skills (track-pending). v0.4.0 (this release, in-flight) adds
-> the rest of the founder-skills bundle, OpenRouter as a LiteLLM fallback
-> provider, and closes the remaining audit P0 + P1 findings.
+> founder-skills (track-pending). v0.4.0 added the rest of the
+> founder-skills bundle + OpenRouter LiteLLM fallback + audit P0/P1
+> closures. v0.4.3 landed the OSS Trust spec batch (11 specs / no
+> behavior change). **v0.4.4 (this release) closes the 2026-05-21
+> external-review remediation:** the severity-gate framework spec
+> (PR #114), the BLOCKER audit-hook content-hashing + RCE fix (#124),
+> defense-in-depth admin auth on 17 dashboards (#130), npm-install
+> integrity + lifecycle-script blocking for OpenClaw (#127), and six
+> other security/operational fixes. See `CHANGELOG.md` for the full
+> set + the related follow-up issues opened during the cycle.
 
 ### What's new since v0.3.0
 
@@ -1655,7 +1662,7 @@ reproducibility.
 
 ## Known limitations and alpha status
 
-Walter-OS is **alpha software** (v0.4.0-alpha, in-flight). Expect breaking changes between
+Walter-OS is **alpha software** (v0.4.4-alpha, latest tested). Expect breaking changes between
 minor versions. The following limitations are known and tracked:
 
 - **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
