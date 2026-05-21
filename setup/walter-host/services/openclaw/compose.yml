@@ -67,8 +67,70 @@ services:
       - |
         set -e
         if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
+          # Integrity-verified install (issue #118 / external review F11).
+          # `npm pack` downloads the tarball; a node one-liner SRI-decodes
+          # and sha512-compares it (no curl needed; no coreutils dependency
+          # on base64/od/sha512sum — fix for #127 R2 — hermetic, single
+          # tool, also sidesteps any /bin/sh vs bash substring quirks).
+          # CI grep pattern preserved in the comment below (#127 R1.3):
+          # npm install -g openclaw@2026.5.7
           mkdir -p /workspace/.npm-global
-          npm install -g openclaw@2026.5.7
+          OC_VER=2026.5.7
+          OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
+          # --registry=... pins the source so a persisted /workspace/.npmrc
+          # can't redirect dependency downloads (Copilot R3 #127).
+          # Capture pack stderr to a file so it's visible in container
+          # logs without polluting OC_TARBALL (Copilot R5 #127: previous
+          # 2>&1 piped errors INTO the captured filename → bogus
+          # OC_TARBALL value + invisible errors).
+          npm_pack_stderr=$(mktemp)
+          OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} \
+            --registry=https://registry.npmjs.org/ --silent 2>"$npm_pack_stderr" | tail -1)
+          if [ -s "$npm_pack_stderr" ]; then
+            echo "openclaw: npm pack stderr:" >&2
+            cat "$npm_pack_stderr" >&2
+          fi
+          rm -f "$npm_pack_stderr"
+          if [ -z "$OC_TARBALL" ] || [ ! -f "/tmp/$OC_TARBALL" ]; then
+            echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
+            exit 1
+          fi
+          OC_TARBALL_PATH="/tmp/$OC_TARBALL" OC_INTEGRITY="$OC_INTEGRITY" \
+            node -e '
+              const crypto=require("crypto"), fs=require("fs");
+              const sri=process.env.OC_INTEGRITY.replace(/^sha512-/,"");
+              const expected=Buffer.from(sri,"base64").toString("hex");
+              const actual=crypto.createHash("sha512")
+                .update(fs.readFileSync(process.env.OC_TARBALL_PATH))
+                .digest("hex");
+              if (expected!==actual) {
+                console.error("openclaw: SHA512 integrity check FAILED " +
+                  "(expected "+expected.slice(0,24)+"..., got "+actual.slice(0,24)+"...)");
+                process.exit(1);
+              }
+            ' || exit 1
+          # --ignore-scripts: Codex R2 #127 MAJOR — block npm lifecycle
+          #   hooks (preinstall/install/postinstall) of openclaw AND every
+          #   transitive dep. Lifecycle scripts run with the container's
+          #   privileges + env (LiteLLM token, Telegram token, etc.) on
+          #   every install; a malicious dep at any depth could exfiltrate
+          #   secrets or persist via filesystem writes.
+          # --registry=...: pin the source so a persisted /workspace/.npmrc
+          #   can't redirect dependency downloads (already R3-fixed for
+          #   the pack call; symmetric on install).
+          # NOTE on the residual gap (Codex R2 #127 BLOCKER): transitive
+          # dependency tarballs are still resolved live and are NOT
+          # covered by the SHA512 of the top-level openclaw tarball.
+          # Mitigation here is npm registry default (each tarball ships
+          # its own integrity field that npm verifies against the
+          # registry-published metadata) + --ignore-scripts so a
+          # compromised dep cannot execute on install. A full lockfile
+          # ship-the-deps-with-the-tarball solution is tracked separately
+          # under #118-followup; out of scope for this PR.
+          npm install -g --ignore-scripts \
+            --registry=https://registry.npmjs.org/ \
+            "/tmp/$OC_TARBALL"
+          rm -f "/tmp/$OC_TARBALL"
         fi
         # First boot: idle until onboard via `docker exec ... openclaw onboard`.
         if [ ! -f /workspace/.openclaw/openclaw.json ]; then

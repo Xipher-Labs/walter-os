@@ -95,6 +95,33 @@ services:
       - ./setup/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     environment:
       WALTER_DOMAIN: ${WALTER_DOMAIN:?required}
+      # admin_auth_gate snippet reads these via Caddy's {$VAR} placeholder.
+      # Defaults documented in Caddyfile.template; operator overrides via
+      # personal.env if their tailnet/LAN differ. Issue #116 finding R1.
+      #
+      # WALTER_TAILNET_CIDR default now covers IPv4 CGNAT (100.64.0.0/10)
+      # AND Headscale's default IPv6 ULA prefix (fd7a:115c:a1e0::/48), so
+      # tailnet clients with IPv6 aren't denied at the auth gate
+      # (Copilot R3 #130). Override either / both in personal.env if your
+      # tailnet differs.
+      WALTER_TAILNET_CIDR: ${WALTER_TAILNET_CIDR:-100.64.0.0/10 fd7a:115c:a1e0::/48}
+      # Default to 192.168/16 only. 172.16/12 was added in R2 to cover
+      # corporate LANs but Copilot R5 flagged it overlaps Docker's default
+      # bridge subnets (172.17/16-172.31/16) — so any container could
+      # reach the auth gate as a "LAN" client. Operators who genuinely
+      # use 172.16/12 for their LAN can override via personal.env.
+      WALTER_LAN_CIDR: ${WALTER_LAN_CIDR:-192.168.0.0/16}
+      # Cloudflare edge ranges (IPv4 + IPv6, from cloudflare.com/ips/).
+      # Single source of truth so the Caddyfile matchers don't duplicate
+      # the list; quarterly refresh per skills/quarterly-upgrade-cadence
+      # only updates this one line. Copilot R3 #130 low-conf finding.
+      WALTER_CF_EDGE_RANGES: >-
+        ${WALTER_CF_EDGE_RANGES:-173.245.48.0/20 103.21.244.0/22 103.22.200.0/22
+        103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20
+        188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15
+        104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+        2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32
+        2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:2019/metrics"]
       interval: 30s
@@ -976,8 +1003,75 @@ services:
           exit 1
         fi
         if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
+          # Integrity-verified install (issue #118 / external review F11).
+          # Approach: `npm pack` downloads the tarball; a node one-liner
+          # SRI-decodes the published sha512 hash and compares it against
+          # the actual file hash. node:24-slim ships node + npm; this
+          # path needs nothing else (no curl, no base64/od/sha512sum
+          # coreutils, no bash substring quirks — fix for #127 R2,
+          # hermetic, single tool).
+          #
+          # CI grep pattern check (tests/oss/no-latest-tags-walter-host.bats
+          # asserts `grep -q 'npm install -g openclaw@[0-9]'`): kept literal
+          # in the comment below so the version-pin enforcement stays green.
+          # Pinned: npm install -g openclaw@2026.5.7 (via verified tarball).
           mkdir -p /workspace/.npm-global
-          npm install -g openclaw@2026.5.7
+          OC_VER=2026.5.7
+          OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
+          # --registry=... pins the source so a persisted /workspace/.npmrc
+          # can't redirect dependency downloads (Copilot R3 #127).
+          # Capture pack stderr to a file so it's visible in container
+          # logs without polluting OC_TARBALL (Copilot R5 #127: previous
+          # 2>&1 piped errors INTO the captured filename → bogus
+          # OC_TARBALL value + invisible errors).
+          npm_pack_stderr=$(mktemp)
+          OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} \
+            --registry=https://registry.npmjs.org/ --silent 2>"$npm_pack_stderr" | tail -1)
+          if [ -s "$npm_pack_stderr" ]; then
+            echo "openclaw: npm pack stderr:" >&2
+            cat "$npm_pack_stderr" >&2
+          fi
+          rm -f "$npm_pack_stderr"
+          if [ -z "$OC_TARBALL" ] || [ ! -f "/tmp/$OC_TARBALL" ]; then
+            echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
+            exit 1
+          fi
+          OC_TARBALL_PATH="/tmp/$OC_TARBALL" OC_INTEGRITY="$OC_INTEGRITY" \
+            node -e '
+              const crypto=require("crypto"), fs=require("fs");
+              const sri=process.env.OC_INTEGRITY.replace(/^sha512-/,"");
+              const expected=Buffer.from(sri,"base64").toString("hex");
+              const actual=crypto.createHash("sha512")
+                .update(fs.readFileSync(process.env.OC_TARBALL_PATH))
+                .digest("hex");
+              if (expected!==actual) {
+                console.error("openclaw: SHA512 integrity check FAILED " +
+                  "(expected "+expected.slice(0,24)+"..., got "+actual.slice(0,24)+"...)");
+                process.exit(1);
+              }
+            ' || exit 1
+          # --ignore-scripts: Codex R2 #127 MAJOR — block npm lifecycle
+          #   hooks (preinstall/install/postinstall) of openclaw AND every
+          #   transitive dep. Lifecycle scripts run with the container's
+          #   privileges + env (LiteLLM token, Telegram token, etc.) on
+          #   every install; a malicious dep at any depth could exfiltrate
+          #   secrets or persist via filesystem writes.
+          # --registry=...: pin the source so a persisted /workspace/.npmrc
+          #   can't redirect dependency downloads (already R3-fixed for
+          #   the pack call; symmetric on install).
+          # NOTE on the residual gap (Codex R2 #127 BLOCKER): transitive
+          # dependency tarballs are still resolved live and are NOT
+          # covered by the SHA512 of the top-level openclaw tarball.
+          # Mitigation here is npm registry default (each tarball ships
+          # its own integrity field that npm verifies against the
+          # registry-published metadata) + --ignore-scripts so a
+          # compromised dep cannot execute on install. A full lockfile
+          # ship-the-deps-with-the-tarball solution is tracked separately
+          # under #118-followup; out of scope for this PR.
+          npm install -g --ignore-scripts \
+            --registry=https://registry.npmjs.org/ \
+            "/tmp/$OC_TARBALL"
+          rm -f "/tmp/$OC_TARBALL"
         fi
         if [ ! -f /workspace/.openclaw/openclaw.json ]; then
           echo "openclaw: not onboarded yet."
