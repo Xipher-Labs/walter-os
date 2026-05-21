@@ -53,16 +53,18 @@ setup() {
 # -----------------------------------------------------------------------
 # AC10: walter-os subcommands referenced in prompts exist in bin/walter-os
 #
-# A subcommand reference is a line where `walter-os <word>` appears in
-# a way that looks like a command invocation, not prose. We require
-# either a leading `$ ` prompt indicator OR the line to be indented
-# (typical for code blocks inside the prompt's fenced block).
-#
-# Words known to appear in PROSE (not commands) are excluded:
+# Implementation: grep ALL occurrences of `walter-os <word>` across the
+# prompt files (no context filter — every match is a candidate), then
+# subtract a curated allowlist of words that are common in English prose
+# right after the literal "walter-os":
 #   clone | repo | symlinked | config | directory | settings | path
 # These are nouns/adjectives that happen to follow "walter-os" in
 # contextual text like "from the walter-os clone:" or "walter-os repo
-# purpose".
+# purpose" — not subcommand invocations.
+#
+# This approach trades false-negative risk (a real misspelled subcommand
+# that happens to match an allowlist word would slip through) for false-
+# positive simplicity. The allowlist is small and reviewed in this file.
 # -----------------------------------------------------------------------
 @test "AC10: every walter-os <subcmd> in prompts exists in bin/walter-os" {
   # Capture lines that contain `walter-os <word>` in a code-block-like
@@ -95,6 +97,55 @@ setup() {
   if [ -n "$missing" ]; then
     printf "walter-os subcommands missing from dispatch:%b\nsubcommands found in prompts (after prose filter):\n%s\n" \
       "$missing" "$prompt_subs" >&2
+    return 1
+  fi
+}
+
+
+# -----------------------------------------------------------------------
+# AC10b: nested walter-os <parent> <sub> commands also exist
+#
+# AC10 above only checks first-token dispatch. The prompts also use
+# nested forms like `walter-os agents list` or `walter-os profile
+# high-risk`, whose parents delegate to a sub-script. Drift in the
+# nested layer slipped past AC10 historically (closed Copilot finding
+# R1 #4 — `walter-os agents bootstrap-plane-labels` was undocumented).
+#
+# We validate the nested subcommands for the parents the prompts
+# actually use. The map below is maintained in this test file; adding
+# a new parent dispatcher to the prompts means extending this map.
+# -----------------------------------------------------------------------
+@test "AC10b: nested walter-os <parent> <sub> usages are valid" {
+  # Parent → space-separated list of valid sub-commands.
+  # Sourced from each dispatcher script's case statement.
+  # Uses a flat function with case dispatch (not `declare -A`) for
+  # portability across bash 3.2 (macOS default) and bash 4+ (Linux).
+  valid_subs_for() {
+    case "$1" in
+      agents)            echo "list run-once pause resume status" ;;
+      profile)           echo "default high-risk" ;;
+      profile-bootstrap) echo "init status sync-shared" ;;
+      *)                 echo "" ;;
+    esac
+  }
+
+  parents="agents profile profile-bootstrap"
+  missing=""
+  for parent in $parents; do
+    valid=$(valid_subs_for "$parent")
+    [ -z "$valid" ] && continue
+    while IFS= read -r used_sub; do
+      [ -z "$used_sub" ] && continue
+      case " $valid " in
+        *" $used_sub "*) ;;
+        *) missing="${missing}"$'\n'"  ✗ walter-os ${parent} ${used_sub}" ;;
+      esac
+    done < <(grep -hoE "walter-os ${parent} [a-z][a-z0-9-]*" "$PROMPT_DIR"/tier-*.md 2>/dev/null \
+              | awk '{print $3}' | sort -u)
+  done
+
+  if [ -n "$missing" ]; then
+    printf "Nested walter-os subcommands in prompts that don't exist:%s\n" "$missing" >&2
     return 1
   fi
 }

@@ -113,9 +113,9 @@ The operator creates (via Plane UI, manual):
 Ask the operator to confirm the workspace + projects + labels are
 created.
 
-Walter-OS does NOT ship a `walter-os agents bootstrap-plane-labels`
-subcommand today (the real `walter-os agents` only supports
-`{list|run-once|pause|resume|status}` — see `scripts/agents/main.sh`).
+Walter-OS does NOT ship a CLI subcommand for bootstrapping Plane
+labels today. The real `walter-os agents` dispatcher only supports
+`{list|run-once|pause|resume|status}` (see `scripts/agents/main.sh`).
 The operator creates the labels by hand from the Plane settings UI,
 or via direct API calls using `curl` + the token in Infisical at
 `walter-vm-internal/prod/plane/PLANE_API_TOKEN`.
@@ -134,8 +134,8 @@ If you want to script it inline, here's the minimum:
       -d "{\"name\": \"lane:${lane}\"}"
   done
 
-A real `walter-os agents bootstrap-plane-labels` subcommand is a
-reasonable future enhancement; not in scope for this tier.
+A dedicated CLI subcommand for label bootstrapping is a reasonable
+future enhancement; not in scope for this tier.
 
 ================================================================================
 STEP 3 — TRUST TIERS
@@ -153,10 +153,12 @@ Write the trust tier config:
 Ask if the operator wants to override any. Recommended: accept
 defaults on first install, adjust later after seeing behavior.
 
-Verify the trust tiers load:
-  walter-os agents trust list
-  # (if subcommand doesn't exist yet, simply cat the file:
-  #  cat ~/.config/walter-os/trust-tiers.yml — and expect a 6-row YAML)
+Verify the trust tiers loaded — no dedicated subcommand exists for
+this today, so just read the file:
+  cat ~/.config/walter-os/trust-tiers.yml
+  # expect: a 6-row YAML with one line per agent (reviewer, triage,
+  # researcher, coder, liaison, janitor) each mapped to a tier
+  # (high|medium|low).
 
 ================================================================================
 STEP 4 — APPROVAL GATE
