@@ -9,12 +9,17 @@
 
 ## Summary
 
-| Severity | Count |
-|---|---|
-| P0 (block release) | 6 |
-| P1 (fix soon) | 9 |
-| P2 (track) | 8 |
-| **Total** | **23** |
+| Severity | Count | Closed |
+|---|---|---|
+| P0 (block release) | 6 | 5 (P0-01 / P0-02 / P0-03 / P0-04 / P0-05 — see "Status" line per finding) |
+| P1 (fix soon) | 9 | 1 (P1-04 via PR #45) |
+| P2 (track) | 8 | 0 |
+| **Total** | **23** | **6** |
+
+**Remaining P0**: P0-06 — `load-lessons.sh` / `preserve-lessons.sh`
+indirect prompt injection. Awaiting operator decision on sanitization
+approach (proposal at `docs/specs/p0-06-lessons-sanitization.md`).
+Implementation will follow.
 
 ---
 
@@ -24,8 +29,10 @@
 
 ### P0-01 — Heredoc injection in `run.sh` RUNNER generation: Plane description can break out of `WALTER_USER` block and inject shell code into the generated runner script
 
-**Category**: 2 (Prompt injection) / 4 (Shell injection)  
-**File**: `scripts/agents/run.sh:213-224`
+**Status**: ✅ **Fixed in `main`** (no PR ref — already landed by the time this audit was reviewed). The RUNNER heredoc is now quoted (`<<'RUNNER_EOF'`) and prompts travel via temp files referenced inside the runner (`SYSFILE`/`USERFILE`), so Plane description content never expands into the generated script body. See `scripts/agents/run.sh:380-419`.
+
+**Category**: 2 (Prompt injection) / 4 (Shell injection)
+**File**: `scripts/agents/run.sh:213-224` (pre-fix); current location `scripts/agents/run.sh:380-419`
 
 **Description**: The temp RUNNER script is generated using an UNQUOTED outer heredoc (`<<RUNNER_EOF`). `$SYSTEM_PROMPT` and `$USER_PROMPT` are shell-expanded into the runner file's body at generation time. `$USER_PROMPT` contains `$DESC` (Plane issue description), which is attacker-supplied content from the Plane API. If a Plane issue description contains the string `WALTER_USER` on a line by itself, it terminates the inner quoted heredoc early, causing everything after that line to be interpreted as shell commands in the generated RUNNER script — which is then executed as `bash "$RUNNER"` under the watchdog.
 
@@ -50,8 +57,10 @@
 
 ### P0-02 — `matches_standing_approval` yq expression injection via `WALTER_AGENT_NAME` environment variable
 
-**Category**: 1 (Tool injection) / 4 (Shell injection)  
-**File**: `hooks/approval-gate.sh:145`
+**Status**: ✅ **Fixed in `main`**. The function now allowlists `$agent` against `{triage, researcher, coder, reviewer, janitor, liaison, test-agent, unknown}` BEFORE passing it to yq (`hooks/approval-gate.sh:272-275`). Any other value returns 1 (no match) without yq invocation.
+
+**Category**: 1 (Tool injection) / 4 (Shell injection)
+**File**: `hooks/approval-gate.sh:145` (pre-fix); current location `hooks/approval-gate.sh:263-279`
 
 **Description**:
 ```bash
@@ -75,8 +84,10 @@ esac
 
 ### P0-03 — `approval-gate.sh` fails OPEN when `jq` is missing (hook mode)
 
-**Category**: 3 (Authentication bypass)  
-**File**: `hooks/approval-gate.sh:261-267`
+**Status**: ✅ **Fixed in `main`**. When `jq` is absent the hook now emits `{"decision":"block"}` (fail-closed) with the message `approval-gate: jq missing — failing closed for safety. Install jq to proceed.` (`hooks/approval-gate.sh:558-562`).
+
+**Category**: 3 (Authentication bypass)
+**File**: `hooks/approval-gate.sh:261-267` (pre-fix); current location `hooks/approval-gate.sh:558-562`
 
 **Description**: When `jq` is not installed, the hook emits `{"decision":"allow"}` and exits 0 for ALL operations, including destructive ones. The comment says "fail-open to not block legit work." But this means an attacker who removes or shadows `jq` (or runs on a machine without it) bypasses all approval-gate enforcement entirely. The approval gate is the primary guard against agent-initiated fund drain, schema destruction, and force pushes.
 
@@ -88,8 +99,10 @@ esac
 
 ### P0-04 — `doctor.sh` `eval` with `WALTER_OS_HOME` env var — shell injection path
 
-**Category**: 4 (Privilege escalation) / Shell injection  
-**File**: `scripts/walter/subcommands/doctor.sh:10,20,31-35`
+**Status**: ✅ **Fixed in `main`**. `doctor.sh` no longer `eval`s check commands; it uses `bash -c` with positional arguments to isolate each check and prevent injection from operator-controlled env vars (`scripts/walter/subcommands/doctor.sh:11,38`).
+
+**Category**: 4 (Privilege escalation) / Shell injection
+**File**: `scripts/walter/subcommands/doctor.sh:10,20,31-35` (pre-fix)
 
 **Description**: `doctor.sh` sets `WALTER_OS_HOME` from env (`${WALTER_OS_HOME:-...}`) and then passes it directly into `eval`-evaluated check commands via single-quoted shell strings:
 ```bash
@@ -106,7 +119,9 @@ If `WALTER_OS_HOME` contains a single quote followed by shell metacharacters (e.
 
 ### P0-05 — `external/marchetto-agent-skills` submodules tracked by branch, not commit hash — supply chain attack vector
 
-**Category**: 8 (Supply chain)  
+**Status**: ✅ **Fixed in `main`**. Both external submodules in `.gitmodules` now pin to specific commit hashes with explicit comments (`# DO NOT add 'branch =' — that enables --remote drift`). The `external/vercel-agent-skills` pins to `ce3e64e4...` and `external/marchetto-agent-skills` pins to `871b3bd3...`.
+
+**Category**: 8 (Supply chain)
 **File**: `.gitmodules`, `git submodule status`
 
 **Description**: Both external submodules are pinned to `heads/main` (the tip of a mutable branch), not to an immutable commit hash:
@@ -188,7 +203,7 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 ### P1-04 — `syncthing-bootstrap.sh` `sapi()` passes `$body` interpolated into remote SSH shell string — potential SSH command injection
 
 **Category**: 4 (Shell injection)  
-**File**: `scripts/syncthing-bootstrap.sh:78`
+**File**: removed (the vulnerable script was deleted from OSS in the syncthing-script-extraction change; P1-04 is resolved for the OSS surface; see `skills/syncthing-cli/SKILL.md`)
 
 **Description**:
 ```bash

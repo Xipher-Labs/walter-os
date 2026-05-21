@@ -5,9 +5,12 @@ argument-hint: <spec-slug>
 
 Pre-flight checks (all must pass):
 
-1. Branch flow: current branch must be `feature/$ARGUMENTS`. Target
-   branch follows the next-level rule (feature → dev → staging → main).
-   The `branch-flow-guard.sh` hook enforces this.
+1. Branch flow: current branch must be `feature/$ARGUMENTS` (or
+   `fix/$ARGUMENTS` / `chore/$ARGUMENTS`). Target branch follows
+   `WALTER_BRANCH_FLOW`: default (`single-tier`) → `main`;
+   `three-stage` → `dev`. See ADR 0013. The
+   `branch-flow-guard.sh` hook blocks direct pushes to protected
+   branches in both modes.
 2. Tests: full suite passes locally.
 3. Lint, typecheck, format: clean.
 4. `definition-of-done-validator` skill: every AC in
@@ -51,7 +54,7 @@ Generate PR description from this template:
 - [x] Reviewer approved
 - [x] Security auditor approved (if applicable)
 - [x] No secrets in diff
-- [x] Branch flow respected (feature → dev → staging → main)
+- [x] Branch flow respected (feature → main; ADR 0013)
 
 Closes <ticket-id>
 Refs: docs/specs/$ARGUMENTS.md
