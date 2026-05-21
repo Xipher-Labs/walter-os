@@ -26,7 +26,7 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
 | D-3 | **Session start = first invocation in a working directory after a gap of `> WALTER_SESSION_MAX_IDLE_MIN`.** Tracked via `~/.config/walter-os/state/session-<repo-hash>.json` (start-time + last-activity timestamps). Limits (`max_hours`, `max_idle_min`) come from the env vars NOT the state file — the state file only carries the activity timestamps and per-session UUID. | "Session" is operator-implicit; we don't try to be smarter. A different repo or a gap longer than the idle threshold starts a new session. |
 | D-4 | **End behavior**: hook emits a `block` with `permissionDecisionReason: "Walter-OS session expired at HH:MM (<trigger>=<limit>). Type /session restart to begin a new session, or close this terminal."`. `<trigger>` is `max-hours` or `max-idle`; `<limit>` is the **effective** limit at hook-fire time (the operator-configured value, or the PHI cap from D-6 when `WALTER_PHI_MODE=1` is in effect). | Clear, actionable, doesn't kill the terminal. Reflects which limit actually fired AND with which value — an operator who set `WALTER_SESSION_MAX_HOURS=4` doesn't get a misleading "max-hours=8" message. |
 | D-5 | **`/session` slash command** in `commands/session.md` exposes `status`, `restart`, `extend <hours>`. `extend` REQUIRES an explicit reason (logged), capped at +2 hours per extension. | Operator can override for a legitimate long-running task; the extension is auditable. |
-| D-6 | **PHI override**: when the `medical-data-compliance` skill is active (signaled by `WALTER_PHI_MODE=1` exported by that skill's activation hook — the canonical signal also used by `scripts/agents/lib/llm.sh` for PHI routing), max-hours hard-cap at 4 and max-idle at 30 min, unmodifiable by `/session extend`. | PHI sessions need tighter blast-radius. Independent of operator-set defaults. Picks a single existing PHI-mode signal so implementers don't build against a non-existent `WALTER_MODEL_PHI` flag. |
+| D-6 | **PHI override**: when the `medical-data-compliance` skill is active, max-hours hard-cap at 4 and max-idle at 30 min, unmodifiable by `/session extend`. The skill signals PHI-mode via `WALTER_PHI_MODE=1` exported from its activation hook. **Both pieces are new in this spec / the medical-data-compliance skill's roll-out** (the signal is not in `scripts/agents/lib/llm.sh` today; earlier drafts of this spec implied the env var was already wired — that was wrong). When `medical-data-compliance` ships, BOTH this hook AND `scripts/agents/lib/llm.sh` read the same `WALTER_PHI_MODE` env var so PHI sessions get the limit AND route to local-LLM-only consistently. | PHI sessions need tighter blast-radius. Independent of operator-set defaults. A single canonical PHI-mode signal name prevents implementers from building against a different / non-existent flag like `WALTER_MODEL_PHI`. |
 | D-7 | **Daily-audit reminder**: if `~/.config/walter-os/state/session-*.json` files exist with start-time > 24h ago (i.e. session-state didn't get cleaned up), emit `info` finding. | Catches operator-forgot-to-restart-after-extend scenarios. |
 
 ## Acceptance criteria
@@ -47,13 +47,16 @@ properties:
    to the previous tick (a rewind to "now" would otherwise reset
    the wall-clock window). `last_activity_at` follows the same
    floor. The state-dir lives under `~/.config/walter-os/state/`
-   which is required to be mode `0700` (enforced by the daily
-   audit's existing `check_state_dir_perms()`); if the perms
-   change, the audit fires a `high` finding. Additionally,
-   `daily-supply-chain-audit` extends `check_skill_scripts()` to
-   include `session-*.json` checksum baselines — a state-file
-   rewrite between sessions surfaces as a `medium` finding the
-   next audit run.
+   which **this spec REQUIRES be mode `0700`**. The mode-0700
+   enforcement is NOT yet in the daily audit today
+   (`check_state_dir_perms()` is referenced as a future function;
+   adding it is part of this spec's AC-4 below — same pattern as
+   the existing `check_skill_scripts()`). Additionally, the daily
+   audit's `check_skill_scripts()` is extended to include
+   `session-*.json` checksum baselines — a state-file rewrite
+   between sessions surfaces as a `medium` finding the next audit
+   run. Both audit additions are AC-4 items in this spec;
+   referenced as "existing" was wrong in the earlier draft.
 
 The combination — env-driven limits + monotonic-timestamp guard +
 mode-0700 + daily checksum diff — means the timestamps in the
