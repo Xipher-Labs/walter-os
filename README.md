@@ -8,7 +8,7 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.2.0--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.3.0--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
 
 </div>
@@ -45,13 +45,14 @@ overlay before it does anything useful for you.
 
 ## Status: alpha — read this before relying on it
 
-> **This is v0.2.0-alpha. Things iterate fast, things break, things get
+> **This is v0.3.0-alpha. Things iterate fast, things break, things get
 > corrected on the fly while other work is in flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
 > and is in the process of being generalized for OSS adoption.
-> v0.2.0 is the first release intended for third parties; v0.3.0 will fill
-> founder-toolkit gaps; v0.4.0+ stabilizes APIs.
+> v0.2.0 was the first release intended for third parties; v0.3.0 lands
+> process-hygiene + depersonalization cleanup plus the start of the
+> founder-toolkit; v0.4.0+ continues founder-skills coverage and tightens APIs.
 >
 > **What this means for adopters:**
 >
@@ -1552,14 +1553,14 @@ reproducibility.
 
 ## Known limitations and alpha status
 
-Walter-OS is **alpha software** (v0.2.0-alpha). Expect breaking changes between
+Walter-OS is **alpha software** (v0.3.0-alpha). Expect breaking changes between
 minor versions. The following limitations are known and tracked:
 
 - **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
   stack is designed for a single node. Multi-VM deployments require manual
   configuration work not covered by this repo.
 - **No mobile management UI**: Control Tower is a desktop browser application.
-  Mobile access to the Walter Council is not supported in v0.2.
+  Mobile access to the Walter Council is not supported in v0.3.
 - **Manual service updates**: `docker compose pull` only updates services with
   `latest` or non-pinned tags. Pinned services (the majority) require manual
   tag bumps in the compose files.
