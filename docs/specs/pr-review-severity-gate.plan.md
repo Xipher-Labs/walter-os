@@ -183,7 +183,7 @@ Helpers needed:
 - `_pr_touches_safe_path()` — diff list intersected with safe-path globs
 - `_unresolved_threads()` — GraphQL count of `reviewThreads.nodes[].isResolved == false`
 
-**Verify**: AC7 PASS (9/9 conditions tested).
+**Verify**: AC7 PASS — 11 fixtures, all GREEN (1 positive MERGE_APPROVED + 10 blocking slugs: no-opt-in / insufficient-rounds / blocker-present / major-present / ci-not-clean / loc-cap-exceeded / safe-path-touched / unresolved-threads / opt-out-kill-switch / follow-up-issue-create-failed). Matches the 8-condition gate (C1-C8) + 2 extra slugs (opt-out + issue-create failure) from the action sequence.
 
 ### C2. Implement opt-in marker parsing
 

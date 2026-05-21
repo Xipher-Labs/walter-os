@@ -56,7 +56,7 @@ Auto-merge is disabled by default. A repo opts in by committing an `auto-merge-e
 
 Repos without the marker file → auto-merge gate refuses (returns `MERGE_BLOCKED:no-opt-in` — same `MERGE_BLOCKED:<reason-slug>` notation as spec AC7 / Decision 4), falling back to the current manual-merge behavior.
 
-### Decision 4 — Nine-condition gate (all must hold)
+### Decision 4 — Eight-condition gate (C1-C8, all must hold)
 
 `walter-os pr-auto-merge <pr-num>` checks:
 
