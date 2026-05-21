@@ -980,12 +980,31 @@ _install_deps_linux() {
     if command -v "$dep" >/dev/null 2>&1; then
       ok "$dep already installed"
     else
-      if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: sudo apt-get install -y $dep"
+      # yq has a special case: the Debian/Ubuntu `yq` package is a
+      # different YAML processor (Python-based) than mikefarah/yq (Go-based)
+      # — Walter-OS hooks expect mikefarah/yq. Use snap for parity with
+      # the install hints elsewhere in install.sh (line 150, 315). Issue
+      # #125 R1.1 (Copilot R1 on PR #125).
+      if [[ "$dep" == "yq" ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: sudo snap install yq  (mikefarah/yq — different package than apt's yq)"
+        elif command -v snap >/dev/null 2>&1; then
+          say "Installing $dep via snap (mikefarah/yq)..."
+          sudo snap install yq
+          ok "Installed $dep"
+        else
+          err "yq requires snap on Linux (the apt 'yq' package is a different tool)."
+          err "  Install snap or download mikefarah/yq directly: https://github.com/mikefarah/yq#install"
+          exit 1
+        fi
       else
-        say "Installing $dep via apt-get..."
-        sudo apt-get install -y "$dep"
-        ok "Installed $dep"
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: sudo apt-get install -y $dep"
+        else
+          say "Installing $dep via apt-get..."
+          sudo apt-get install -y "$dep"
+          ok "Installed $dep"
+        fi
       fi
     fi
   done
