@@ -14,6 +14,7 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | [`walter-os-oss-security-hardening.md`](walter-os-oss-security-hardening.md) | OSS security hardening gates and supply-chain controls. |
 | [`walter-bridge-litellm-expansion.md`](walter-bridge-litellm-expansion.md) | LiteLLM/provider expansion for the Walter bridge. |
 | [`openclaw.md`](openclaw.md) | OpenClaw gateway trust model and runtime contract. |
+| [`oss-trust-v0.5.0-small-batch.md`](oss-trust-v0.5.0-small-batch.md) | OSS Trust roadmap small-batch: C-3 pre-commit framework, D-1 GitHub Security Advisories partner, E-3 `@types/*` allowlist, E-4 `walter-os justify revoke` CLI. |
 
 ## Worked Examples
 
