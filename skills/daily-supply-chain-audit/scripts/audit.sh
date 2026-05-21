@@ -144,7 +144,9 @@ check_hooks() {
 
   local checksums="${WALTER_CONFIG}/hook-checksums.json"
 
-  # First run — snapshot v2 directly.
+  # First run — snapshot v2 directly. Uses the SAME inline-detection
+  # heuristic as bin/walter-os cmd_baseline_hooks (Copilot R1 #124 R1.1)
+  # and atomic write via .tmp + mv (Copilot R1 #124 R1.6).
   if [[ ! -f "$checksums" ]]; then
     mkdir -p "$(dirname "$checksums")"
     local result; result=$(jq -n '{version: 2, hooks: []}')
@@ -153,14 +155,21 @@ check_hooks() {
     local i=0
     while [[ $i -lt $n ]]; do
       local cmd; cmd=$(jq -r ".[$i].command" <<<"$hooks_array")
-      local path; path=$(awk '{print $1}' <<<"$cmd")
+      local first_tok; first_tok=$(awk '{print $1}' <<<"$cmd")
+      local path=""
+      case "$first_tok" in
+        /*|./*|../*|~/*|\$*)
+          local resolved="${first_tok/#\~/$HOME}"
+          [[ -f "$resolved" ]] && path="$resolved"
+          ;;
+      esac
       local sha=""
-      [[ -n "$path" && -f "$path" ]] && sha=$(_audit_hash_file "$path")
+      [[ -n "$path" ]] && sha=$(_audit_hash_file "$path")
       result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
         '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
       i=$((i + 1))
     done
-    echo "$result" | jq --sort-keys '.' > "$checksums"
+    echo "$result" | jq --sort-keys '.' > "${checksums}.tmp" && mv "${checksums}.tmp" "$checksums"
     return 0
   fi
 
@@ -190,7 +199,12 @@ check_hooks() {
     path=$(jq -r '.path' <<<"$entry")
     stored_sha=$(jq -r '.sha256' <<<"$entry")
 
-    [[ -z "$path" ]] && continue  # inline command, no content check
+    # Skip if baseline already recorded this as inline (no path). Also
+    # protects against the case where stored_sha is empty — the baseline
+    # acknowledged the file wasn't resolvable at baseline time, so we
+    # shouldn't flag it as "missing now" (Copilot R1 #124 R1.6 / R1.2).
+    [[ -z "$path" ]] && continue
+    [[ -z "$stored_sha" ]] && continue
 
     if [[ ! -f "$path" || ! -r "$path" ]]; then
       finding high "hook-file-missing" \
@@ -200,22 +214,36 @@ check_hooks() {
     fi
 
     local current_sha; current_sha=$(_audit_hash_file "$path")
-    if [[ -n "$stored_sha" && "$current_sha" != "$stored_sha" ]]; then
+    if [[ "$current_sha" != "$stored_sha" ]]; then
       finding crit "hook-content-modified" \
         "Hook script CONTENT changed in place (path unchanged): $path. Stored sha: ${stored_sha:0:12}..., current sha: ${current_sha:0:12}..." \
         "REVIEW DIFF: git diff $path. If intentional: walter-os baseline-hooks"
     fi
   done <<< "$entries"
 
-  # Command-string-level drift (added/removed entries)
+  # Command-set drift — split into added/removed for proper severity
+  # (Copilot R1 #124 R1.5: spec says removed=medium, added/changed=high).
   local stored_cmds current_cmds
-  stored_cmds=$(jq -S '[.hooks[].command]' "$checksums")
-  current_cmds=$(jq -S '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings")
-  if [[ "$stored_cmds" != "$current_cmds" ]]; then
-    finding high "hooks-modified" \
-      "Hook command set in $settings differs from baseline (added/removed/renamed entry)" \
-      "Inspect new hooks. If safe: walter-os baseline-hooks"
-  fi
+  stored_cmds=$(jq -r '.hooks[].command' "$checksums" 2>/dev/null | sort -u)
+  current_cmds=$(jq -r '.hooks // {} | .. | objects | select(has("command")) | .command' "$settings" 2>/dev/null | sort -u)
+
+  local added removed
+  added=$(comm -23 <(echo "$current_cmds") <(echo "$stored_cmds"))
+  removed=$(comm -13 <(echo "$current_cmds") <(echo "$stored_cmds"))
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    finding high "hook-added" \
+      "Hook command added in $settings since baseline: $cmd" \
+      "Inspect the new hook. If safe: walter-os baseline-hooks"
+  done <<< "$added"
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    finding medium "hook-removed" \
+      "Hook command removed from $settings since baseline: $cmd" \
+      "If intentional: walter-os baseline-hooks"
+  done <<< "$removed"
 }
 
 # ---------- 4. MCP scanners ----------

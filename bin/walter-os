@@ -310,11 +310,22 @@ cmd_baseline_hooks() {
   local i=0
   while [[ $i -lt $n ]]; do
     local cmd; cmd=$(jq -r ".[$i].command" <<<"$hooks_array")
-    local path; path=$(awk '{print $1}' <<<"$cmd")
+    # Resolve path: ONLY treat the first token as a file path if it
+    # LOOKS like one (starts with /, ./, ~/, or a $ env-var). Anything
+    # else (echo, /bin/sh -c "...", inline expressions) is treated as
+    # an inline command — path="" → audit skips content check + does
+    # not emit "hook-file-missing". Copilot R1 #124 R1.1.
+    local first_tok; first_tok=$(awk '{print $1}' <<<"$cmd")
+    local path=""
+    case "$first_tok" in
+      /*|./*|../*|~/*|\$*)
+        # Expand ~ to $HOME (sh-style)
+        local resolved="${first_tok/#\~/$HOME}"
+        [[ -f "$resolved" ]] && path="$resolved"
+        ;;
+    esac
     local sha=""
-    if [[ -n "$path" && -f "$path" ]]; then
-      sha=$(_hash_file "$path")
-    fi
+    [[ -n "$path" ]] && sha=$(_hash_file "$path")
     result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
       '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
     i=$((i + 1))

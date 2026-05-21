@@ -186,8 +186,12 @@ EOF
 
   rm -f "$AUDIT_FINDINGS"
   run_check_hooks
-  # Should not emit any CRIT.
-  run jq -s 'map(select(.severity == "crit")) | length' "$AUDIT_FINDINGS"
-  [ "$status" -eq 0 ]
-  [ "$output" -eq 0 ]
+  # Must not emit CRIT OR HIGH for inline commands (Copilot R1 #124 R1.3).
+  # The original assertion only checked CRIT, which would have let a
+  # bogus HIGH "hook-file-missing" slip through.
+  if [ -s "$AUDIT_FINDINGS" ]; then
+    run jq -s 'map(select(.severity == "crit" or .severity == "high")) | length' "$AUDIT_FINDINGS"
+    [ "$status" -eq 0 ]
+    [ "$output" -eq 0 ]
+  fi
 }

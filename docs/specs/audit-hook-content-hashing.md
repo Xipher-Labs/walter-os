@@ -36,7 +36,7 @@ This spec extends the same posture to the `~/.claude/settings.json`-registered i
 - **G1.** Detect in-place modification of any hook script referenced by `~/.claude/settings.json` (file content changed, path unchanged).
 - **G2.** Preserve existing path-drift detection (added/removed/renamed hooks still fire HIGH).
 - **G3.** Drift on content of a registered hook = **CRIT** severity (the most severe, since this is the security-barrier-tampering case).
-- **G4.** Baseline migration: existing `hook-checksums.json` (current schema: JSON array of strings) auto-migrates to the new schema on first `baseline-hooks` run after this change ships, OR on first `check_hooks` run that finds old-format data.
+- **G4.** Baseline migration: existing `hook-checksums.json` (current schema: JSON array of strings) auto-migrates to the new schema on first `baseline-hooks` run after this change ships. `check_hooks` does NOT auto-migrate (it stays read-mostly per the principle "audit reports, baseline mutates" — see ADR 0016 alternative C for the rejection rationale).
 - **G5.** Idempotency: `baseline-hooks` produces deterministic output (same input → same JSON, byte-for-byte).
 - **G6.** Cross-platform: works on macOS (BSD `shasum`) AND Linux (`sha256sum`), exactly mirroring `cmd_baseline_external_hooks`.
 - **G7.** No regression on the existing `check_hooks` HIGH detection for added/removed/renamed hooks.
