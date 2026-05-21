@@ -206,9 +206,17 @@ wizard_step() {
 }
 
 run() {
-  # SECURITY: callers pass pre-quoted shell snippets built from readonly
-  # paths ($REPO_ROOT, $CLAUDE_HOME, $WALTER_CONFIG, $HOME). Do NOT add
-  # callers that interpolate user-supplied strings without printf '%q'.
+  # DEPRECATED — use run_args (array form) for new code. Kept for backward
+  # compatibility with existing call sites that need shell-snippet semantics
+  # (heredocs, redirects, conditional chains). Issue #119 / external review F9.
+  #
+  # CAUTION: eval expansion of "$@" makes this dangerous if any argument is
+  # derived from user input. Today's callers pass interpolations of $REPO_ROOT,
+  # $HOME, and operator-controlled config — all trusted — but the function
+  # itself is an injection vector waiting for a misuse. Prefer:
+  #   - run_args cmd "$arg1" "$arg2"   for direct command execution
+  #   - run_sh '...'                   when shell-snippet semantics are unavoidable
+  #   - write_file "$dest" "$content"  for the "cat > file <<EOF" pattern
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "$*"
   else
@@ -217,11 +225,39 @@ run() {
   fi
 }
 
+# run_args — preferred form. Takes an argv array; each arg passed verbatim
+# to exec without shell interpretation. Safe even if args contain ';', '|',
+# '$(...)', backticks, etc. Issue #119.
 run_args() {
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "$*"
   else
     "$@"
+  fi
+}
+
+# run_sh — explicit shell-snippet evaluator. ONLY for redirects, pipes,
+# heredocs, conditional chains that genuinely require shell semantics.
+# Argument is a single string passed to `bash -c`. Every call site MUST
+# include an inline comment justifying the shell-snippet need + confirming
+# all interpolated values are operator-controlled / sanitized. Issue #119.
+run_sh() {
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "$1"
+  else
+    bash -c "$1"
+  fi
+}
+
+# write_file — replaces the `cat > '$dest' <<EOF ... EOF` pattern. Takes
+# a destination path and content as separate args, writes via printf
+# (no eval, no second-pass variable expansion). Issue #119.
+write_file() {
+  local dest="$1" content="$2"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "write_file: $dest ($(printf '%s' "$content" | wc -c | tr -d ' ') bytes)"
+  else
+    printf '%s' "$content" > "$dest"
   fi
 }
 
@@ -363,7 +399,7 @@ do_uninstall() {
       local target
       target="$(readlink "$link" 2>/dev/null || true)"
       if [[ "$target" == "$REPO_ROOT/"* ]]; then
-        run "rm -- '$link'"
+        run_args rm -- "$link"
         ok "Unlinked $link"
       fi
     done < <(find "$dir" -maxdepth 1 -type l)
@@ -371,7 +407,7 @@ do_uninstall() {
 
   for f in "$CLAUDE_HOME/CLAUDE.md" "$CODEX_HOME/AGENTS.md"; do
     if [[ -L "$f" ]] && [[ "$(readlink "$f")" == "$REPO_ROOT/"* ]]; then
-      run "rm -- '$f'"
+      run_args rm -- "$f"
       ok "Unlinked $f"
     fi
   done
@@ -402,8 +438,16 @@ do_uninstall() {
 
   local plist="$LAUNCH_AGENTS/$DAILY_AUDIT_LABEL.plist"
   if [[ -f "$plist" ]]; then
-    run "launchctl unload '$plist' 2>/dev/null || true"
-    run "rm -- '$plist'"
+    # `launchctl unload` returns non-zero if the agent isn't loaded —
+    # we deliberately ignore that. Wrapping in run_args + || true keeps
+    # us out of eval territory (issue #119). $plist is operator/system
+    # controlled, but we still avoid the run() eval path on principle.
+    if [[ $DRY_RUN -eq 1 ]]; then
+      dry "launchctl unload $plist (errors ignored)"
+    else
+      launchctl unload "$plist" 2>/dev/null || true
+    fi
+    run_args rm -- "$plist"
     ok "Removed launchd job"
   fi
 
@@ -419,7 +463,7 @@ ensure_dirs() {
              "$WALTER_CONFIG" \
              "$LAUNCH_AGENTS"; do
     if [[ ! -d "$dir" ]]; then
-      run "mkdir -p '$dir'"
+      run_args mkdir -p "$dir"
       ok "Created $dir"
     fi
   done
@@ -439,14 +483,14 @@ link_safe() {
       return 0
     fi
     warn "Replacing existing symlink: $dest (was → $current)"
-    run "rm -- '$dest'"
+    run_args rm -- "$dest"
   elif [[ -e "$dest" ]]; then
     local backup
     backup="${dest}.pre-walter-os.$(date +%s)"
     warn "Backing up existing $dest → $backup"
-    run "mv -- '$dest' '$backup'"
+    run_args mv -- "$dest" "$backup"
   fi
-  run "ln -s '$src' '$dest'"
+  run_args ln -s "$src" "$dest"
   ok "Linked: $dest → $src"
 }
 
@@ -717,7 +761,7 @@ write_codex_config() {
     local backup
     backup="${dest}.bak.$(date +%s)"
     warn "Existing config will be backed up: $backup"
-    run "cp -- '$dest' '$backup'"
+    run_args cp -- "$dest" "$backup"
   fi
 
   if [[ $DRY_RUN -eq 1 ]]; then
@@ -737,14 +781,20 @@ write_codex_config() {
 write_env_file() {
   step "Walter-OS env file (~/.config/walter-os/env)"
   local dest="${WALTER_CONFIG}/env"
-  run "cat > '$dest' <<EOF_WALTER_ENV
+  # write_file pattern — no eval. The heredoc body was previously
+  # passed to run "..." which did a SECOND-pass eval, dangerous if any
+  # interpolation introduced metacharacters. Issue #119.
+  local content
+  content="$(cat <<EOF_WALTER_ENV
 # Walter-OS env — sourced by hooks, CLI, and helper scripts.
 # Generated by install.sh. Re-run 'walter-os sync' or './install.sh --upgrade'
 # to refresh.
 
 export WALTER_OS_HOME='${REPO_ROOT}'
-export PATH=\"\\\${WALTER_OS_HOME}/bin:\\\${PATH}\"
-EOF_WALTER_ENV"
+export PATH="\${WALTER_OS_HOME}/bin:\${PATH}"
+EOF_WALTER_ENV
+)"
+  write_file "$dest" "$content"
   ok "Wrote $dest (WALTER_OS_HOME=$REPO_ROOT)"
   warn "Add this to ~/.zshrc to make 'walter-os' CLI available everywhere:"
   warn "  [[ -f \$HOME/.config/walter-os/env ]] && source \$HOME/.config/walter-os/env"
@@ -803,7 +853,7 @@ copy_trust_tiers_template() {
     return 0
   fi
 
-  run "cp -- '$src' '$dest'"
+  run_args cp -- "$src" "$dest"
   ok "Copied trust-tiers.yml to $dest"
   warn "  Review and customise: \$EDITOR $dest"
 }
@@ -824,10 +874,13 @@ install_daily_audit() {
     return 0
   fi
 
-  run "cat > '$plist' <<EOF
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
+  # write_file pattern — no eval. The plist body was previously
+  # passed to run "..." which did a SECOND-pass eval (issue #119).
+  local plist_content
+  plist_content="$(cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
 <dict>
   <key>Label</key><string>$DAILY_AUDIT_LABEL</string>
   <key>ProgramArguments</key>
@@ -848,9 +901,15 @@ install_daily_audit() {
   </dict>
 </dict>
 </plist>
-EOF"
-  run "launchctl unload '$plist' 2>/dev/null || true"
-  run "launchctl load '$plist'"
+EOF
+)"
+  write_file "$plist" "$plist_content"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "launchctl unload $plist (errors ignored)"
+  else
+    launchctl unload "$plist" 2>/dev/null || true
+  fi
+  run_args launchctl load "$plist"
   ok "Daily audit scheduled at 08:30"
 }
 
