@@ -53,7 +53,7 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 | **BLOCKER** | Touches an auto-escalation path OR introduces a security/safety regression. Never permits auto-merge. | Finding in `auth/`, `crypto/`, money flows, PHI; leaked secret; broken safety hook. |
 | **MAJOR** | Real logic bug, broken test, regression in existing functionality, or violation of an `AGENTS.md` hard rule. Blocks auto-merge until resolved. | Failing unit test; logic mismatch between prompt and code (R4 #1-#2 on #111); regression on a previously passing test. |
 | **MINOR** | Doc accuracy, prose nit, comment drift, portability quirk, test thoroughness improvement with no current false-negative, dead code. Eligible for auto-merge after gate. | `\s` → `[[:space:]]`; stale comment block; ADR claim doesn't match impl; AC doesn't validate deep nesting. |
-| **COSMETIC** | Formatting, indentation, spelling, variable-name preference, ordering of unrelated items. Eligible for auto-merge once ALL other gate conditions (C1, C2≥N rounds, C3-C9) are met — COSMETIC doesn't bypass the round threshold; it bypasses MINOR's deferral-to-follow-up (cosmetic items merge cleanly without a follow-up issue). | Trailing whitespace; renamed `cmd` → `command`; alphabetize unrelated import. |
+| **COSMETIC** | Formatting, indentation, spelling, variable-name preference, ordering of unrelated items. Eligible for auto-merge once ALL gate conditions (C1-C9) are met — COSMETIC respects the same round threshold as MINOR (C2 ≥ N rounds). Both MINOR and COSMETIC items are bundled into the single follow-up issue created by C8 — neither severity bypasses the visibility requirement. | Trailing whitespace; renamed `cmd` → `command`; alphabetize unrelated import. |
 
 ### 4.2 Classifier — deterministic rules + LLM fallback
 
@@ -70,13 +70,23 @@ Order of evaluation:
    ```
    auth/** | crypto/** | programs/** | migrations/** | hooks/**
    AGENTS.md | install.sh | mcp/servers.json
+   personal/health/** | **/medical/** | **/phi/**
    **/secrets/** | **/.env*
    ```
-   → BLOCKER. No further evaluation.
+   → BLOCKER. No further evaluation. Path globs derived from AGENTS.md
+   "Things agents must NEVER do" + "Blocked for ALL tiers" + the
+   auto-escalation-to-major triggers (auth/, crypto/, money, PHI,
+   `personal/health/*`, audit logs, prod migrations).
 
-2. **Keyword-based MAJOR triggers** in the finding body:
-   - `fail`, `failing test`, `broken`, `regression`, `leak`, `expose`, `vulnerabilit`, `bypass`, `unsafe` (case-insensitive, word boundary)
-   - Verb phrases: `would cause`, `breaks`, `will fail`, `currently does not work`
+2. **Keyword-based MAJOR triggers** in the finding body. Each token in
+   the list below is matched as a **prefix** against words in the finding
+   (case-insensitive); the prefix style is intentional so word-stem
+   variants (`vulnerability` / `vulnerabilities`; `expose` / `exposed` /
+   `exposes`) all hit the same rule without enumerating every form.
+   - Prefix tokens: `fail`, `broken`, `regression`, `leak`, `expose`,
+     `vulnerabilit`, `bypass`, `unsafe`, `crash`
+   - Verb phrases (literal substring, case-insensitive): `would cause`,
+     `will fail`, `currently does not work`, `breaks the`, `failing test`
    → MAJOR.
 
 3. **Path-based COSMETIC bias** for findings only touching docs:
@@ -132,7 +142,7 @@ When C1-C9 hold:
 # Empty file = accept all defaults. Below is the full schema with defaults.
 
 enabled: true                              # opt-out kill switch
-required_review_rounds: 3                  # rounds before MINOR-only auto-merge
+required_review_rounds: 3                  # rounds before auto-merge of MINOR+COSMETIC-only state
 loc_cap:
   additions: 1500
   deletions: 500
@@ -141,7 +151,9 @@ classifier_overrides:                      # per-repo additions to the BLOCKER p
   major_keywords: []
 follow_up_issue:
   labels: [auto-merge-deferred, copilot-review]
-  title_prefix: "[CHORE] -OPERATIONS- deferred MINORs from PR #"
+  # Severity-neutral prefix — the issue captures both MINOR and COSMETIC
+  # deferrals per C8.
+  title_prefix: "[CHORE] -OPERATIONS- deferred review findings from PR #"
 audit_log:                                 # where the classifier writes its decisions
   path: ~/.config/walter-os/state/auto-merge-log.jsonl
 llm_fallback:                              # cost caps for the UNCLASSIFIED → LLM path
@@ -188,14 +200,14 @@ Repos without this file → no auto-merge, manual operator merge as today.
 | Classifier mis-classifies a real bug as MINOR | Med | Med | Triple gate (3 rounds + LOC cap + path exclusion) + weekly digest forces visibility + operator can patch rules |
 | Loop becomes ritual sans value, operator disables everything | Low | High | Telemetry shows real value; if turned off, manual merge still works |
 | Codex and Copilot disagree on severity | Med | Low | Worst-of: any classifier saying BLOCKER → BLOCKER. Disagreement = upgrade severity. |
-| MINOR findings accumulate invisible debt | High | Med | Auto-created follow-up issue is mandatory; >50 open follow-ups trigger an alert in the audit log |
+| MINOR findings accumulate invisible debt | High | Med | Auto-created follow-up issue is mandatory; an open-follow-up backlog alert is tracked as an out-of-scope follow-up (F1 weekly digest covers near-term visibility; F2 dashboard formalizes the count-and-threshold mechanic). |
 | `auto-merge-enabled` accidentally committed by a fork | Low | Med | The file's presence is operator-intent; fork inheriting it is operator's responsibility. Worst case: the fork auto-merges its own PRs, doesn't affect upstream. |
 | LLM fallback hallucinates a severity | Low | Med | Cost-cap fail-safes to MAJOR; audit log + monthly review |
 | Branch-protection rule changes silently break the gate | Med | Low | Gate logs the exact GitHub API error; operator notified via the same audit log path |
 
 ## 8. Open questions for operator
 
-- **Q1**: should COSMETIC findings skip the 3-round minimum entirely (auto-merge on first round)? Proposed: yes per §4.1, but operator's call.
+- **Q1**: should COSMETIC findings skip the 3-round minimum entirely (auto-merge on first round)? **Currently locked: NO** — §4.1 and C2 treat COSMETIC the same as MINOR for the round threshold. This question is preserved as an open lever the operator may choose to unlock later (it would require relaxing C2's "unconditional N rounds" semantics in the ADR + amending §4.1).
 - **Q2**: per-repo `auto-merge-enabled` override OR per-context (walter-os-personal vs walter-os-work) inheritance? Proposed: per-repo only (G4) — simpler, no inheritance ambiguity. Operator copies the file per repo.
 - **Q3**: should the gate be allowed to convert a MAJOR finding to MINOR after the operator resolves the underlying issue (without a new finding from Copilot)? Proposed: no — operator's "resolve" via the GitHub UI is sufficient; the gate doesn't second-guess the operator.
 

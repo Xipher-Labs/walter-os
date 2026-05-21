@@ -143,7 +143,7 @@ Skip the four-tier taxonomy, just produce one bit.
 - 3-round-converged docs-drift PRs (the #111 case) merge automatically with a single follow-up issue listing every deferred MINOR.
 - Operator's review-merge time scales with the number of MAJOR-and-above findings, not with the number of total findings.
 - Per-repo opt-in keeps the blast radius contained — adopters opt in on safe repos first.
-- BLOCKER findings (the actual safety case) get more attention, not less: they explicitly close the PR + spin off a high-priority issue, rather than being lost in a 4-round noise floor.
+- BLOCKER findings (the actual safety case) get more attention, not less: the gate posts a diagnostic comment + creates a high-priority follow-up issue, while explicitly NOT auto-closing the PR (closure remains an operator decision per Decision 4). They rise above the 4-round noise floor through the dedicated comment + issue, not by being silently dropped.
 - Severity classification becomes a first-class concept — usable in dashboards, weekly digests, trend analysis.
 
 **Negative:**
@@ -166,7 +166,7 @@ Skip the four-tier taxonomy, just produce one bit.
 
 ## Open questions (non-blocking)
 
-- **Q1**: should COSMETIC findings skip the round threshold entirely? Proposed: yes — formatting/typo fixes don't need 3 rounds. Operator can adjust via `auto-merge-enabled` schema if disagrees.
+- **Q1**: should COSMETIC findings skip the round threshold entirely? **Currently locked: NO** — Decision 4 makes C2 (≥ N rounds) an unconditional gate requirement, and §4.1 of the spec aligns COSMETIC with MINOR on the round threshold. The question is preserved as a future lever the operator may choose to unlock — doing so would require explicitly relaxing C2's "unconditional" semantics here and amending §4.1 of the spec.
 - **Q2**: how do we handle a PR where the operator wants to defer something the classifier called MAJOR? Proposed: operator manually merges (existing path), OR adjusts the keyword list in `auto-merge-enabled` so the future PR's classifier won't flag the same pattern as MAJOR. We don't allow per-PR severity override — keeps the gate auditable.
 - **Q3**: should we gate auto-merge on time-since-last-Copilot-review (e.g. wait 1 hour after the last review to ensure no follow-up findings)? Proposed: no — adds latency without safety value; the round-count check already implies the reviews are stable. Time-based gates can be a follow-up if proven necessary.
 

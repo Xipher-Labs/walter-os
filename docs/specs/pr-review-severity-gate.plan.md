@@ -243,7 +243,7 @@ with the bounded version:
 
 ### E3. ADR 0015 final
 
-`docs/decisions/0015-pr-review-severity-gate.md` — already drafted in the upfront ADR commit, refined as the design surfaces edge cases during implementation. Final form documents the locked design + 4 rejected alternatives (always auto-merge, fully manual, per-PR label, time-based auto-merge).
+`docs/decisions/0015-pr-review-severity-gate.md` — already drafted in the upfront ADR commit, refined as the design surfaces edge cases during implementation. Final form documents the locked design + 5 rejected alternatives (always auto-merge, fully manual, per-PR label, time-based auto-merge, single-bit classifier without severity tiers).
 
 **Verify**: AC12 PASS.
 
@@ -290,7 +290,8 @@ Uses a forked test repo (e.g. `Xipher-Labs/walter-os-auto-merge-test`) seeded wi
 
 ## Commit strategy
 
-One commit per task (~18 commits). Conventional commit messages.
+One commit per task (~20 commits — matches the 20-task total in the
+header). Conventional commit messages.
 
-PR title: `[FEAT] -OPERATIONS- pr-review-severity-gate + bounded auto-merge`
-(matches `hooks/pr-title-validator.sh` convention).
+PR title: `[FEAT] -OPERATIONS- severity-gate + bounded auto-merge spec`
+(matches `hooks/pr-title-validator.sh` convention — body ≤ 60 chars).
