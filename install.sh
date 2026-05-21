@@ -352,7 +352,16 @@ check_preflight() {
     if [[ $DRY_RUN -eq 1 ]]; then
       warn "yq missing (would be required on real install). ${_pkg_hint_yq}"
       warn "DRY-RUN: continuing past the missing yq so the install plan can be previewed."
+    elif [[ $UPGRADE -eq 1 ]]; then
+      # Codex R5 #125 BLOCKER fix: `--upgrade` runs run_step_0 only (no
+      # step_1, no install-deps helper). If yq is missing here, no later
+      # step will install it — the upgrade would complete with a broken
+      # approval-gate hook dep. Hard-exit on missing yq in upgrade mode.
+      err "yq required (approval-gate hard dep) and --upgrade does not run Step 1."
+      err "  Install yq first, then re-run: ${_pkg_hint_yq}"
+      exit 4
     else
+      # Full-install path: step_1 will run after this and provision yq.
       warn "yq missing. Step 1 will install mikefarah/yq via ${_pkg_hint_yq%%  #*}."
     fi
   else
