@@ -60,12 +60,15 @@ Register Walter-OS for GitHub Security Advisories. Update `SECURITY.md` to direc
 - [ ] Operator (manual action, NOT code) enables GHSA in repo settings: `Settings → Security → Code security → Private vulnerability reporting → Enable`.
 - [ ] `SECURITY.md` updated:
   - Primary disclosure: `https://github.com/Xipher-Labs/walter-os/security/advisories/new`
-    (mixed-case `Xipher-Labs` — the canonical org-slug casing used by every
-    other github.com URL in this repo, e.g. `docs/security/verification.md`'s
-    `--certificate-identity-regexp` and the GitHub Actions release workflow).
-    GitHub URLs are case-insensitive on the path but the rendered link
-    text should match the org's canonical casing for readability and
-    for tools that compare strings.
+    The repo today is INCONSISTENT — README.md, CONTRIBUTING.md, and
+    CHANGELOG.md use lowercase `xipher-labs` in several `github.com`
+    URLs; `docs/security/verification.md` (cosign identity regexp) and
+    the release workflow's signing identity use mixed-case
+    `Xipher-Labs` (the canonical org slug GitHub's API returns).
+    GitHub URLs resolve case-insensitively on the path, so both work.
+    The new GHSA URL uses the canonical mixed-case form here for
+    parity with the cosign identity. A follow-up doc-only PR
+    normalizes the lowercase URLs after this lands.
   - Secondary: existing email
   - Coordinated-disclosure timeline (90d default; faster for critical)
 - [ ] `.github/SECURITY.md` is a **duplicate file** (NOT a symlink),
@@ -96,10 +99,14 @@ Deferred from PR #60.
 
 ### Decision
 
-Hardcoded allowlist of npm scopes that bypass the minimum-release-age check (with rationale documented):
+Default allowlist of npm scopes that bypass the minimum-release-age check (with rationale documented). The DEFAULT is set in code; the operator can EXTEND or REPLACE it via env var.
+
 - `@types/*` — TypeScript type stubs, published by community + DT bot
 - `@walter-os/*` — internal scope (operator-owned packages, future)
-- Any operator-extended scope via `WALTER_AUDIT_RELEASE_AGE_ALLOWLIST_SCOPES` env var
+- **Operator overrides**:
+  - `WALTER_AUDIT_RELEASE_AGE_ALLOWLIST_SCOPES_EXTRA=<comma-sep-scopes>` — APPENDS to the default list (e.g. `@stryker-mutator/*` for operators who trust that publisher).
+  - `WALTER_AUDIT_RELEASE_AGE_ALLOWLIST_SCOPES_REPLACE=<comma-sep-scopes>` — REPLACES the default list entirely (set to an empty string to disable scope-allowlisting completely; this is what the threat-model row means by "operator can clear the allowlist via env var" — it's the explicit replace-with-empty path, NOT mutation of the in-code default).
+- Precedence: `_REPLACE` wins over the default + `_EXTRA`. If both `_REPLACE` and `_EXTRA` are set, `_REPLACE` is used and `_EXTRA` is ignored with a stderr WARN (operator misconfiguration; fail-loud).
 
 ### Acceptance criteria
 
@@ -115,7 +122,7 @@ Hardcoded allowlist of npm scopes that bypass the minimum-release-age check (wit
 
 `@types/*` is a documented-safe scope (DefinitelyTyped curators + automated bot publishing). The allowlist applies per-SCOPE: skipping `check-release-age` for `@types/*` means a hypothetical `@types/malicious-package` published from a compromised DefinitelyTyped maintainer account would NOT trip the release-age gate. The remaining defenses on that path today are limited and worth stating accurately:
 
-- Snyk `mcp-scan` IF the operator has it installed (`skills/daily-supply-chain-audit/scripts/audit.sh` calls it only when `command -v mcp-scan` succeeds — see line 136). Not present on every host.
+- Snyk `mcp-scan` IF the operator has it installed (`skills/daily-supply-chain-audit/scripts/audit.sh`'s `check_mcp_scan()` function — calls `mcp-scan --json` only when `command -v mcp-scan` succeeds; the rest is silent skip with an info-finding). Not present on every host. Referencing the function name rather than a line number so this note doesn't drift when the script grows.
 - The static pinning + frontmatter + cross-reference lints (semgrep is wired into CI for the Walter-OS REPO itself, NOT for inspecting third-party `@types/*` payloads at audit time — `nosemgrep` comments in `check-release-age.py` are about the linter's view of Walter-OS source, not third-party-package scanning).
 - Operator's own review of the diff when a `@types/*` change shows up in `pnpm install` output.
 
