@@ -1,9 +1,12 @@
 # Process isolation sandbox (OSS Trust A-3) — spec
 
 **Status**: ready for `/write-plan` after operator approval of per-OS profile defaults
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-3 (parent spec is in PR #83 — not yet on `main`)
+**Parent**: OSS Trust roadmap Layer A item A-3 — umbrella roadmap is in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); once merged the in-tree path is `docs/specs/oss-trust-roadmap.md`.
 **Target release**: v0.5.x (after A-1 / A-2 / A-4 land)
-**Depends on**: `docs/specs/network-egress-allowlist.md` (A-1 — PR #86), `docs/specs/capability-tokens.md` (A-2 — PR #88), `docs/specs/time-bounded-sessions.md` (A-4 — PR #87). All three dependency specs are in flight and must merge before A-3 implements.
+**Depends on** (all in flight — must merge before A-3 implements):
+- A-1 network egress allowlist — [PR #86](https://github.com/Xipher-Labs/walter-os/pull/86) (post-merge file: `docs/specs/network-egress-allowlist.md`)
+- A-2 capability tokens — [PR #88](https://github.com/Xipher-Labs/walter-os/pull/88) (post-merge file: `docs/specs/capability-tokens.md`)
+- A-4 time-bounded sessions — [PR #87](https://github.com/Xipher-Labs/walter-os/pull/87) (post-merge file: `docs/specs/time-bounded-sessions.md`)
 
 ## Problem
 
@@ -28,7 +31,7 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 | # | Decision | Why |
 |---|---|---|
 | D-1 | **Wrap per-OS primitives**: Linux → `nsjail`, macOS → `sandbox-exec`, WSL → `nsjail`. Operator can override to `firejail` on Linux via `WALTER_SANDBOX_PROVIDER=firejail`. | Per parent D-1. No invented sandbox; we use mature tools. |
-| D-2 | **Single uniform shim**: `scripts/walter/lib/sandbox.sh` exposes `walter_sandbox_run <profile> <cmd> [args...]`. Internally resolves the per-OS invocation. | Skills + hooks don't care which sandbox is active; they call the shim. |
+| D-2 | **Single uniform shim**: `scripts/walter/lib/sandbox.sh` exposes `walter_sandbox_run <profile> <cmd...>` (positional args; the `<cmd...>` collects the executable plus its args — identical to the AC-1 signature). Internally resolves the per-OS invocation. | Skills + hooks don't care which sandbox is active; they call the shim. |
 | D-3 | **Two profiles for v0.5.x**: `walter-hook-default` (for PreToolUse hooks — read-only repo + read-only operator overlay + no net) and `walter-skill-default` (for skill executions — read-write repo + read-only overlay + network per A-1 allowlist). | Most hooks don't need write or net. Skills are the place real work happens. |
 | D-4 | **Default policy: allow most, deny dangerous**. From parent D-1 open question — `walter-skill-default` denies: write outside cwd repo + parent (limit 1 level up); access to `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/` (session keys live here), `~/.gnupg/`, `*.pem`, `*.key`; signal to PIDs outside the sandboxed tree. Allows everything else by default. | Reflects parent D-1 second option. Lower footgun for first-time adopters. Operator hardens per project via overlay profile. |
 | D-5 | **`walter-skill-default` honors the `cap_token` IF present**: if the calling tool has a valid PASETO cap-token (A-2) declaring `scope.paths`, the sandbox tightens to those paths. No cap → fall back to the D-4 default-allow-but-deny-sensitive policy. | Composes with A-2. A high-tier op that already required a cap also benefits from path-tightened sandbox. |
