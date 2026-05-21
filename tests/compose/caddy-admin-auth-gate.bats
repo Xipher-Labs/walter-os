@@ -28,11 +28,31 @@ PUBLIC_SITES="headscale posthog matrix chat-matrix chat"
 }
 
 # -----------------------------------------------------------------------
-# AC2: snippet has the @not_authed matcher with both negations
+# AC2: snippet's deny logic requires NEITHER an internal IP NOR a
+# valid CF-edge-IP + CF-Access-header pair. Refined for Copilot R2
+# #130 R2.3: assert all three deny paths exist (not in tailnet, CF
+# edge without header, IPv6 coverage). Old broad-grep version could
+# pass even if the assertions moved out of the snippet.
 # -----------------------------------------------------------------------
-@test "AC2: snippet rejects requests without Tailscale IP AND CF Access header" {
-  grep -qE 'not remote_ip.*WALTER_TAILNET_CIDR' "$CADDYFILE"
+@test "AC2: deny path 1 — request from outside tailnet AND outside CF edge → 403" {
+  grep -qE '@deny_not_in_any_allowlist' "$CADDYFILE"
+  grep -qE 'not remote_ip.*WALTER_TAILNET_CIDR.*WALTER_LAN_CIDR' "$CADDYFILE"
+}
+
+@test "AC2: deny path 2 — CF edge IP without CF Access header → 403" {
+  grep -qE '@deny_cf_edge_without_header' "$CADDYFILE"
   grep -qE 'not header CF-Access-Authenticated-User-Email' "$CADDYFILE"
+}
+
+@test "AC2: snippet includes CF IPv4 ranges (representative samples)" {
+  grep -qE '173\.245\.48\.0/20' "$CADDYFILE"
+  grep -qE '104\.16\.0\.0/13' "$CADDYFILE"
+  grep -qE '162\.158\.0\.0/15' "$CADDYFILE"
+}
+
+@test "AC2: snippet includes CF IPv6 ranges" {
+  grep -qE '2400:cb00::/32' "$CADDYFILE"
+  grep -qE '2606:4700::/32' "$CADDYFILE"
 }
 
 # -----------------------------------------------------------------------
