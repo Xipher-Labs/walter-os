@@ -101,6 +101,23 @@ PRs #55–#59 and land as the bundle epic completes.)
   bats tests in `tests/hooks/approval-gate.bats` (P1-05 fail-closed
   + two P1-06 lockdown cases) pin the behavior.
 
+- **Audit P1-07 closed.** External submodule hook scripts (the
+  `external/**/hooks/scripts/*.sh` tree, e.g. `learn-by-mistake`) are
+  now under the daily-audit integrity perimeter. New
+  `check_external_hooks()` in
+  `skills/daily-supply-chain-audit/scripts/audit.sh` snapshots the
+  sha256 of every external hook file on first run and emits a
+  CRITICAL `external-hook-tampered` finding on any subsequent drift
+  (modified, added, or removed). `check_skill_scripts()` is also
+  extended to scan `external/` for `curl|bash` and sensitive-fs-
+  access patterns. New `walter-os baseline-external-hooks` CLI
+  subcommand re-snapshots after an intentional submodule SHA bump.
+  Side fix: `${level^^}` and `${sev,,}` parameter-expansion forms in
+  `audit.sh` use bash 4+ syntax — replaced with `tr` so the audit
+  runs cleanly on macOS bash 3.2. Regression test
+  `tests/audit/external-hook-integrity.bats` (6 cases) pins the
+  behavior.
+
 - **Audit P1-09 closed.** `hooks/daily-audit-gate.sh` no longer `source`s
   `$WALTER_CONFIG/env` directly. New
   `scripts/walter/lib/env-loader.sh` exports a
