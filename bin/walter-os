@@ -1163,8 +1163,13 @@ cmd_doctor() {
   _secrets_runtime_probe() {
     local secrets="${WALTER_CONFIG}/secrets.env"
     local has_infisical_id=0
-    if [[ -n "${INFISICAL_MACHINE_IDENTITY_CLIENT_ID:-}" ]] \
-        || ([[ -f "${WALTER_CONFIG}/env" ]] && grep -qE '^INFISICAL_MACHINE_IDENTITY_CLIENT_ID=.+' "${WALTER_CONFIG}/env" 2>/dev/null); then
+    # Canonical var: INFISICAL_CLIENT_ID (matches scripts/secrets-bootstrap.sh
+    # + scripts/walter/lib/providers/detect.sh + install.sh step 8). The
+    # earlier probe used INFISICAL_MACHINE_IDENTITY_CLIENT_ID which doesn't
+    # exist anywhere else in the repo — would have left clean Infisical
+    # installs reporting ✗ instead of ✓. Codex R2 #131 catch.
+    if [[ -n "${INFISICAL_CLIENT_ID:-}" ]] \
+        || ([[ -f "${WALTER_CONFIG}/env" ]] && grep -qE '^INFISICAL_CLIENT_ID=.+' "${WALTER_CONFIG}/env" 2>/dev/null); then
       has_infisical_id=1
     fi
     if [[ "$has_infisical_id" -eq 1 ]]; then

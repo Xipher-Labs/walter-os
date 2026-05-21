@@ -45,7 +45,7 @@ quarterly upgrade cadence (`skills/quarterly-upgrade-cadence`).
 
 - No write access to the host outside its own volumes.
 - No network access to the rest of the operator's tailnet by default — the observability containers sit on `obs_net` and only Grafana exposes a Caddy-mediated public surface (`grafana.${WALTER_DOMAIN}`, guarded by `admin_auth_gate`).
-- No ability to start / stop other containers despite holding the Docker socket — promtail only uses the socket to list containers for log discovery (it doesn't invoke `docker run`, `exec`, etc.).
+- Out of scope: any "what promtail CAN'T do" claims via the Docker socket. As noted above, a `:ro` bind on the socket does NOT restrict the Docker API — promtail's process is technically free to issue `docker run`, `exec`, `start`, `stop`, etc. We don't expect the *image* to do so (it's grafana/promtail upstream; container discovery is read-only by intent), but a compromise of the running promtail binary OR a malicious sidecar in the same container would have full daemon access. The hardening lever is "don't trust the container image" — pin by digest, monitor the daily audit. The mitigation lever — using a Docker socket proxy that exposes only read-only API endpoints — is tracked as a separate hardening task.
 
 ## Related
 
