@@ -219,13 +219,17 @@ check_tool_definitions() {
   fi
 
   if [[ ! -f "$baseline" ]]; then
-    # Atomic write (Copilot R1 #129 R1.3) — consistent with
-    # cmd_baseline_mcp_tools' .tmp + mv pattern.
-    # `printf '%s\n'` instead of `echo` (Copilot R3 #129 L2) — echo's
-    # handling of `-n`, `-e`, and backslash escapes is implementation-
-    # defined, which is unsafe for a security-sensitive baseline.
+    # Atomic write. `mktemp -p` puts the temp file in the same
+    # directory as the destination so the final `mv` is atomic (same
+    # filesystem). Per-process unique name prevents the race Codex R2
+    # #129 flagged: concurrent `walter-os baseline-mcp-tools` + this
+    # check_tool_definitions first-run shared `${baseline}.tmp` and
+    # could clobber each other.
+    # printf '%s\n' (Copilot R3 #129) — echo's escape handling is
+    # implementation-defined, unsafe for security-critical baseline.
     mkdir -p "$(dirname "$baseline")"
-    printf '%s\n' "$current" > "${baseline}.tmp" && mv "${baseline}.tmp" "$baseline"
+    local tmp; tmp="$(mktemp "${baseline}.tmp.XXXXXX")"
+    printf '%s\n' "$current" > "$tmp" && mv "$tmp" "$baseline"
     return 0
   fi
 
@@ -253,6 +257,19 @@ check_tool_definitions() {
 
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
+    # Codex R2 #129 BLOCKER fix: compare the FULL per-server JSON object
+    # (sorted keys) — not just command/args/trust. Other fields like
+    # `url`, `headers`, `env`, `disabled`, `load`, `contexts` describe
+    # the server's behavior + can be malicious-takeover vectors (e.g.
+    # silently flipping `disabled: true` → `false` on a high-trust server,
+    # or changing `url` to an attacker-controlled proxy). Any whole-object
+    # difference now emits a finding.
+    local cur_full sto_full
+    cur_full="$(jq --sort-keys --arg n "$name" '.[$n]' <<<"$current")"
+    sto_full="$(jq --sort-keys --arg n "$name" '.[$n]' <<<"$stored")"
+    [[ "$cur_full" == "$sto_full" ]] && continue
+
+    # Identify which fields changed for a more actionable finding message.
     local cur_cmd cur_args cur_trust sto_cmd sto_args sto_trust
     cur_cmd="$(jq -r --arg n "$name" '.[$n].command // ""' <<<"$current")"
     cur_args="$(jq -c --arg n "$name" '.[$n].args // []' <<<"$current")"
@@ -265,11 +282,18 @@ check_tool_definitions() {
       finding high "mcp-server-cmd-changed" \
         "MCP server '$name' command/args changed since baseline" \
         "REVIEW: jq '.servers.\"$name\"' $registry. If safe: walter-os baseline-mcp-tools"
-    fi
-    if [[ "$cur_trust" != "$sto_trust" ]]; then
+    elif [[ "$cur_trust" != "$sto_trust" ]]; then
       finding medium "mcp-server-trust-changed" \
         "MCP server '$name' trust level changed: '$sto_trust' → '$cur_trust'" \
         "Verify intentional. If safe: walter-os baseline-mcp-tools"
+    else
+      # Whole-object diff but command/args/trust unchanged — must be one
+      # of: url, headers, env, disabled, load, contexts, verified_at, or
+      # any future-added field. Emit HIGH because we don't know the
+      # semantics (config-takeover vectors live in this bucket).
+      finding high "mcp-server-config-changed" \
+        "MCP server '$name' config changed since baseline (fields other than command/args/trust)" \
+        "REVIEW: diff <(jq '.servers.\"$name\"' $baseline) <(jq '.servers.\"$name\"' $registry). If safe: walter-os baseline-mcp-tools"
     fi
   done < <(comm -12 <(echo "$current_names") <(echo "$stored_names"))
 }

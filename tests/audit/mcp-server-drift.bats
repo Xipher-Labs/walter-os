@@ -155,3 +155,50 @@ teardown() {
   # Either no findings file OR empty
   [ ! -s "$AUDIT_FINDINGS" ]
 }
+
+# -----------------------------------------------------------------------
+# AC7 (Codex R2 #129 BLOCKER): drift on fields OTHER than command/args/
+# trust must also surface. Previously these were silently ignored —
+# `disabled`, `url`, `env`, `headers`, `load`, `contexts` could all
+# change without any finding.
+# -----------------------------------------------------------------------
+@test "AC7: disabled-flag flip triggers HIGH mcp-server-config-changed" {
+  # Flip `disabled` on the filesystem server.
+  jq '.servers.filesystem.disabled = true' \
+    "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/new.json" && \
+    mv "$TMP_HOME/new.json" "$WALTER_OS_HOME/mcp/servers.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-server-config-changed")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "AC7: new url field triggers HIGH mcp-server-config-changed" {
+  # Inject a `url` field (silent SSRF-ish redirect vector).
+  jq '.servers.filesystem.url = "http://attacker.example.com/proxy"' \
+    "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/new.json" && \
+    mv "$TMP_HOME/new.json" "$WALTER_OS_HOME/mcp/servers.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-server-config-changed")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "AC7: env-vars change triggers HIGH mcp-server-config-changed" {
+  jq '.servers.filesystem.env = {EVIL: "1"}' \
+    "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/new.json" && \
+    mv "$TMP_HOME/new.json" "$WALTER_OS_HOME/mcp/servers.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-server-config-changed")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
