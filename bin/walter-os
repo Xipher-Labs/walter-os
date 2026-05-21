@@ -283,7 +283,13 @@ cmd_baseline_mcp_tools() {
   fi
   local baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
   mkdir -p "$(dirname "$baseline")"
-  jq --sort-keys '.servers // {}' "$registry" > "${baseline}.tmp" && mv "${baseline}.tmp" "$baseline"
+  # Codex R3 #129: symmetric fix to audit.sh's mktemp baseline write —
+  # concurrent runs of `walter-os baseline-mcp-tools` (or this command +
+  # check_tool_definitions first-run) would share `${baseline}.tmp` and
+  # could clobber. Use a unique per-process tmp file in the same dir
+  # so the final mv stays atomic on the same filesystem.
+  local tmp; tmp="$(mktemp "${baseline}.tmp.XXXXXX")"
+  jq --sort-keys '.servers // {}' "$registry" > "$tmp" && mv "$tmp" "$baseline"
   local n
   n="$(jq 'length' "$baseline")"
   echo "✓ MCP server snapshot refreshed ($n servers): $baseline"
