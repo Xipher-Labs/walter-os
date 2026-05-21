@@ -1161,11 +1161,13 @@ cmd_doctor() {
 
   # Tier 3: VM-side credentials (validated locally, the actual service
   # health checks run from the VM via the tier-3.md prompt's verify
-  # commands).
-  tier_check 3 "WALTER_DOMAIN env set (Tier III)" \
-    bash -c 'test -n "${WALTER_DOMAIN:-}"'
-  tier_check 3 "HCLOUD_TOKEN env set (Tier III)" \
-    bash -c 'test -n "${HCLOUD_TOKEN:-}"'
+  # commands). We use a small helper to avoid `bash -c` wrappers
+  # (shellcheck SC2016 flags single-quoted expansions even when that's
+  # exactly what we want).
+  _env_nonempty() { [[ -n "${!1:-}" ]]; }
+
+  tier_check 3 "WALTER_DOMAIN env set (Tier III)" _env_nonempty WALTER_DOMAIN
+  tier_check 3 "HCLOUD_TOKEN env set (Tier III)" _env_nonempty HCLOUD_TOKEN
 
   # Tier 4: Council prerequisites.
   tier_check 4 "trust-tiers.yml present (Tier IV)" \
