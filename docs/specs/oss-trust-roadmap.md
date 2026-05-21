@@ -22,14 +22,14 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 - **Replacing GitHub Actions** for SLSA L3. Actions has GitHub-hosted runners with SLSA-L3 attestation baked in; we use that, not a self-built provenance stack.
 - **Solving for cross-OS reproducibility.** Linux + macOS + WSL are the targets; Windows-native is operator-overlay territory.
 
-## Roadmap (4 layers × 12 items)
+## Roadmap (5 layers, 16 items total)
 
 ### Layer A — Runtime sandboxing (5 items)
 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
 | A-1 | **Network egress allowlist** — default deny, agent only reaches approved endpoints | v0.5.0 | 1-2d | `~/.config/walter-os/egress-allowlist.txt` parsed by a new `walter-os network-gate` daemon; wraps tool invocations |
-| A-2 | **Filesystem capability tokens** — scoped per session, time-bound, revocable | v0.5.0 | 2-3d | Per-tool fcap-equivalent token; signed by operator's local key |
+| A-2 | **Filesystem capability tokens** — scoped per session, time-bound, revocable | v0.5.0 | 2-3d | Per-tool fcap-equivalent token; signed by a PER-SESSION ephemeral Ed25519 key (NOT a long-lived operator key — see DEC-2 below and PR #88's per-item spec). |
 | A-3 | **Process isolation via nsjail/firejail/sandbox-exec** | v0.5.x | 2-3d | Per-OS wrapper. Wrap hook + skill execution. |
 | A-4 | **Time-bounded sessions** — kill on max-time / idle | v0.5.0 | 1d | New `hooks/session-timeout.sh` reading `WALTER_SESSION_MAX_HOURS` |
 | A-5 | **Read-only `/tmp` and operator-overlay during runs** — bind-mount the operator's secret-bearing paths read-only by default | v0.5.x | 1-2d | Composes with A-3 |
@@ -47,7 +47,7 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
 | C-1 | **SLSA Level 3 provenance** — extend `release.yml` to emit + sign provenance attestations | v1.0 | 4-6h | GitHub Actions hosted runner already meets SLSA-L3; we just need the `actions/attest-build-provenance` step |
-| C-2 | **Reproducible builds** for bash/JS/Python release artifacts | v1.0+ | days, multi-language | Assess scope per-language; bash scripts are trivially reproducible, JS bundles need lockfile + tooling pinning |
+| C-2 | **Reproducible builds** for bash/JS/Python release artifacts | v1.0 | days, multi-language | Assess scope per-language; bash scripts are trivially reproducible, JS bundles need lockfile + tooling pinning. Combined with C-1 in PR #95's spec. |
 | C-3 | **Pre-commit framework integration** for gitleaks (alongside the raw git hook) | v0.5.0 | 2-4h | `.pre-commit-config.yaml` ships; operator chooses |
 
 ### Layer D — Community / governance (1 item)
@@ -67,9 +67,14 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 
 **16 items total.** All v1.0-blocking items target v0.5.0 → v0.6.0 (the next two minor releases). C-1 + C-2 close at v1.0.
 
-## Decisions (the design questions the issue body left open)
+## Cross-cutting decisions (DEC-1..DEC-4)
 
-### D-1 — Sandbox primitives: WRAP, don't build
+Renamed from `D-1..D-4` (in earlier drafts) to **`DEC-1..DEC-4`** to avoid
+clashing with the roadmap-item ID `D-1` (Layer D's "GitHub Security Advisories"
+item). Per-item specs that reference these design choices use the DEC-N
+prefix. Roadmap items use their layer-letter prefix (A-1, B-2, C-1, D-1, E-2).
+
+### DEC-1 — Sandbox primitives: WRAP, don't build
 
 Wrap per-OS primitives:
 - **Linux**: nsjail (preferred — fine-grained capabilities) or firejail (operator-friendlier)
@@ -80,23 +85,31 @@ Walter-OS ships a `scripts/walter/lib/sandbox.sh` shim that exposes a uniform `w
 
 **Rejected**: building a custom seccomp-bpf filter. Too much surface; the per-OS primitives are mature.
 
-### D-2 — Capability-token format: PASETO v4
+### DEC-2 — Capability-token format: PASETO v4 design, raw Ed25519 wire
 
-PASETO (Platform-Agnostic SEcurity TOkens) v4 over JWT:
-- **JWT** is well-known but has been historically misused (alg=none, key confusion). PASETO closes those gaps by design.
-- **UUID + audit log**: trivial but unsigned; doesn't bind the token to a public-key identity.
-- **PASETO v4**: Ed25519 signatures, no algorithm confusion possible, modern cryptographic primitives, simple format.
+PASETO (Platform-Agnostic SEcurity TOkens) v4 is the **design inspiration** —
+per-session ephemeral Ed25519, no algorithm-confusion surface, signed
+claims-over-JSON. JWT is the rejected alternative (alg=none, key-confusion
+history). UUID + audit-log is the other rejected alternative (unsigned,
+no public-key binding).
 
-The per-session ephemeral key (Ed25519) is generated at session start, stored at `~/.config/walter-os/state/session-<uuid>.key`, deleted on session end (or after max idle). Capability tokens are PASETO-v4-signed claims about (operator, session, scope, expiry).
+Implementation note: capability tokens emit FULL PASETO v4 public tokens
+(payload + footer + signature). The audit-chain rows (B-1 + B-2) emit
+raw Ed25519 signatures over RFC 8785 JCS, NOT PASETO tokens — the
+"detached signature" form is undefined in the PASETO spec and would be
+ambiguous across language implementations. See `docs/specs/audit-chain-merkle-and-receipts.md`
+for the JCS canonicalization details.
 
-### D-3 — Tamper-evident log: hybrid local + Rekor for public attestation
+The per-session ephemeral key (Ed25519) is generated at session start, stored at `~/.config/walter-os/state/session-<uuid>.key`, deleted on session end (or after max idle). Capability tokens (A-2) are PASETO-v4-signed claims about (operator, session, scope, expiry); audit-chain rows (B-1 + B-2) are raw Ed25519 signatures over the JCS-canonicalized row payload.
+
+### DEC-3 — Tamper-evident log: hybrid local + Rekor for public attestation
 
 - **Local Merkle hash-chain** over `~/.config/walter-os/audit/<date>.jsonl` files. Each row's last field is `prev_hash = sha256(prev_row_normalized)`. `walter-os audit verify-chain` walks the chain end-to-end.
 - **Optional Sigstore Rekor upload** of daily-summary hashes (NOT per-row content; just the daily root hash + timestamp). Operator can opt in via `WALTER_AUDIT_REKOR_UPLOAD=1`. Public attestation that THIS operator was running THIS audit chain at THIS time. No log content leaves the machine.
 
 **Rejected**: full per-row Rekor upload. Privacy + cost; daily root hash is enough for tamper detection.
 
-### D-4 — Reproducible builds: scope to release-security pipeline
+### DEC-4 — Reproducible builds: scope to release-security pipeline
 
 The full multi-language reproducible-build matrix is too much work for v1.0. Instead:
 
