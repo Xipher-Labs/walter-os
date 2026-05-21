@@ -19,7 +19,7 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   # bash < 4, stop. Without this, a candidate path that itself resolves to
   # bash 3.2 (e.g., symlink chain) would loop forever. Codex review of #81.
   if [[ "${WALTER_BASH_DENYLIST_REEXEC:-0}" == "1" ]]; then
-    printf '%s\n' '{"decision":"block","reason":"bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 and ensure it is first on PATH or at /opt/homebrew/bin/bash."}'
+    printf '%s\n' '{"decision":"block","reason":"bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 at /opt/homebrew/bin/bash or /usr/local/bin/bash (the two paths this hook probes)."}'
     exit 0
   fi
   # Use BASH_SOURCE[0] (the script's actual path) rather than $0, which can
@@ -129,19 +129,23 @@ DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|
 # bash -c / sh -c with command substitution: `bash -c "$(curl ...)"`, etc.
 # This also catches `bash -c "$(cat /tmp/payload)"`. Mirror of python-c-variable.
 #
-# Match relaxations applied across R1 + R2 of #81:
+# Match relaxations applied across R1, R2, R3 of #81:
 #   R1: whitespace-after-`-c` is OPTIONAL (covers `bash -c'...'`).
-#   R2: command substitution may appear with arbitrary intermediate chars
-#       between the opening quote and the `$(`/`${`/`$[` — i.e.
-#       `bash -c "echo hi; $(curl ...)"` is also caught, not just the
-#       immediately-adjacent form. Same shape as the shell-c-backtick
-#       relaxation: shell + `-c` + optional quote + any non-`$` chars + `$(...)`.
-#   R2: prefix is now ANY non-whitespace-non-pipe chars before the shell
-#       token, so `sudo bash -c "$(...)"`, `/bin/bash -c "$(...)"`,
-#       `env bash -c "$(...)"`, and `sudo /usr/bin/env bash -c "$(...)"`
-#       all match. Anchored at start-of-line OR a non-shell-name boundary
-#       (`[[:space:]|;|&|^]`) so the regex doesn't match `mybash -c`.
-DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^$]*\$[{([]'
+#   R2: prefix allows sudo / env-wrapper / absolute-path variants
+#       (`sudo bash -c`, `/bin/bash -c`, `env bash -c`).
+#   R3 (this revision): middle segment uses `.*` (NOT `[^$]*`) so a
+#       harmless `$VAR` before the dangerous `$(`/`${`/`$[` no longer
+#       creates a bypass — e.g. `bash -c "echo $HOME; $(curl ...)"`.
+#       Greedy `.*` still terminates at the last `$[{([]` in input.
+#   R3: opening-quote class also includes `$` so ANSI-C quoted forms
+#       (`bash -c $'echo hi; $(curl ...)'`) are caught — the `$'` is
+#       the opening "quote" in that syntax.
+# Boundary: anchor at start-of-line or after a shell-statement-
+# separator character (whitespace, `;`, `|`, `&` — the literals
+# inside `[[:space:]|;&]` are valid pre-shell-token contexts; the
+# `|` and `;` and `&` are CHARACTERS-IN-CLASS, not regex alternation).
+# This ensures `mybash -c` is NOT matched.
+DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\''$]?.*\$[{([]'
 # Sibling pattern: backtick command substitution `bash -c "`curl …`"`. Codex
 # R2 of PR #63 flagged this gap (issue #3 P2-1). Backticks are still common
 # in older shell snippets / man pages / one-liners.
@@ -161,7 +165,7 @@ DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-
 #
 # R2 of #81: extended to match `sudo bash -c`, `/bin/bash -c`,
 # `env bash -c`, etc. — same prefix shape as shell-c-variable.
-DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^`]*`'
+DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\''$]?[^`]*`'
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
 # without braces) OR a command-substitution `$(...)`. Deliberately does NOT
