@@ -26,18 +26,16 @@ teardown() {
 # Helper: source install.sh under a stub env that loads the helpers
 # without running the full installer.
 #
-# Copilot R2 #138: pass INSTALL_SH as a positional arg to `bash -c`
-# rather than interpolating its path into the script body. The previous
-# `source '$INSTALL_SH'` form broke under the exact adversarial
-# clone-path scenario (#133) these tests are supposed to validate —
-# a single quote in the install.sh path would terminate the literal.
-# Now: INSTALL_SH arrives as $1 inside the inner bash; the source line
-# uses double-quoted `"$1"` which tolerates any character in the path.
+# Copilot R2 #138 + R1 #141: pass INSTALL_SH + the command string via
+# ENV VARS (NOT bash -c positional args + NOT string interpolation
+# into the script body). The previous `source '$INSTALL_SH'` form
+# broke under quoted paths (a single quote in the install.sh path
+# terminated the literal). Env vars work for any path — `source "$VAR"`
+# inside the inner bash tolerates everything.
 _invoke() {
-  # Pass INSTALL_SH + the command string via env vars (NOT bash -c
-  # positional args), then save+clear $1,$2 inside the inner shell
-  # before sourcing — install.sh parses positional args at source
-  # time + would treat our INSTALL_SH path as "Unknown arg" otherwise.
+  # `set --` clears positional args before sourcing — install.sh
+  # parses $@ at source time and would otherwise see whatever
+  # positional args the bats caller had as install.sh's own args.
   WALTER_INSTALL_SH="$INSTALL_SH" WALTER_INVOKE_CMD="$1" \
   bash -c '
     set -uo pipefail
@@ -101,8 +99,14 @@ _invoke() {
   # real worktree's REPO_ROOT, which has no metacharacters — so it would
   # silently pass even if the integration broke under a quoted path.
   # This version actually exercises the #133 exploit scenario.
+  # Copilot R2 #141 catch: the canary must appear IN the malicious
+  # path so that a regression which falls back to literal single-
+  # quote interpolation actually attempts to execute the canary-touch
+  # payload. The previous version of this test had a $canary variable
+  # but never embedded it in the dir name — so the assertion was a
+  # tautology (no payload could ever touch the canary).
   local canary="$TMP_HOME/env-file-canary"
-  local malicious_dir="$TMP_HOME/foo with spaces and apostrophe'name"
+  local malicious_dir="$TMP_HOME/foo'; touch $canary; #"
   mkdir -p "$malicious_dir"
   cp "$INSTALL_SH" "$malicious_dir/install.sh"
 
@@ -114,9 +118,10 @@ _invoke() {
   # we regressed to the pre-#133 `'${REPO_ROOT}'` template).
   ! grep -qE "^export WALTER_OS_HOME='" "$env_file"
 
-  # Source in a clean subshell + verify the canary was NOT touched
-  # (the malicious dir name didn't escape into shell-context).
-  bash -c "source '$env_file'; true"
+  # Source in a clean subshell + verify the canary was NOT touched —
+  # if _shell_quote regressed, sourcing would execute `touch $canary`
+  # from the injected payload.
+  bash -c "source '$env_file'; true" >/dev/null 2>&1 || true
   [ ! -e "$canary" ]
 
   # And WALTER_OS_HOME (post-source) equals the malicious path verbatim.
