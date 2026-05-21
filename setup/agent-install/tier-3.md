@@ -220,11 +220,24 @@ SSH to the VM:
   vi .env.local   # fill: WALTER_DOMAIN, CF_API_TOKEN, postgres
                   # passwords, LITELLM_MASTER_KEY, etc.
 
-Generate strong passwords with the helper:
-  walter-os secrets-bootstrap
+Generate strong passwords for the placeholders. Walter-OS does not
+ship a password generator subcommand (the legacy `walter-os
+secrets-bootstrap` was a Bitwarden template helper and is now
+deprecated). Use the standard tools:
 
-Confirm .env.local looks right (good moment to also push the secrets
-to Infisical for backup once Infisical is up — Step 6 covers that).
+  # one-off, copy each into the matching .env.local line
+  openssl rand -hex 32     # for POSTGRES_PASSWORD, LITELLM_MASTER_KEY, etc.
+  openssl rand -base64 24  # for tokens that need URL-safe chars
+
+For the actual runtime secrets flow (Infisical machine identity + OS
+keychain), Walter-OS uses:
+  walter-os secrets-identity-init   # one-time bootstrap
+                                    # (sets up Infisical client_id +
+                                    #  client_secret in OS credential store)
+
+That subcommand is what gets called after Infisical is up (Step 7).
+
+Confirm .env.local looks right before bringing services up.
 
 ================================================================================
 STEP 6 — START THE STACK
