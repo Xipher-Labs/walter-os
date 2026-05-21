@@ -10,7 +10,7 @@
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-v0.4.0--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
-[![Audit: 6/6 P0](https://img.shields.io/badge/audit-6%2F6_P0_closed-brightgreen.svg)](docs/operational/security-audit-2026-05-11.md)
+[![Audit: 6/6 P0 closed](https://img.shields.io/badge/audit-6%2F6_P0_closed-brightgreen.svg)](docs/operational/security-audit-2026-05-11.md)
 
 </div>
 
@@ -47,14 +47,14 @@ overlay before it does anything useful for you.
 ## Status: alpha — read this before relying on it
 
 > **This is v0.4.0-alpha (in-flight). Things iterate fast, things break,
-> things get corrected on the fly while other work is in flight.**
+> things get corrected on the fly while other work is in-flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
 > and is in the process of being generalized for OSS adoption.
 > v0.2.0 was the first release intended for third parties. v0.3.0
 > shipped process-hygiene + depersonalization cleanup plus the first
-> founder-toolkit skill. v0.4.0 (this release, in flight) adds the rest
-> of the founder-skills bundle, OpenRouter as a LiteLLM fallback
+> founder-skills (track-pending). v0.4.0 (this release, in-flight) adds
+> the rest of the founder-skills bundle, OpenRouter as a LiteLLM fallback
 > provider, and closes the remaining audit P0 + P1 findings.
 
 ### What's new since v0.3.0
@@ -64,8 +64,12 @@ overlay before it does anything useful for you.
   framing of the SessionStart / PreCompact hook output. See
   `docs/operational/security-audit-2026-05-11.md`.
 - **P1 hardening sweep.** approval-gate fails closed on missing
-  `yq`, standing-approvals path is hardcoded (no env-var override),
-  external submodule hooks now under sha256 integrity scan,
+  `yq`, standing-approvals path is hardcoded (the previous
+  `WALTER_STANDING_APPROVALS` env var is now ignored with a WARN log;
+  `WALTER_STANDING_APPROVALS_OVERRIDE` is an explicit testing-only
+  hatch that ALSO requires `WALTER_AGENT_ALLOW_OVERRIDE=1` in the
+  same shell), external submodule hooks now resolve via the same
+  `hook-checksums.json` integrity gate as in-repo hooks,
   `~/.config/walter-os/env` loaded through an allowlist parser
   instead of `source`, n8n basic auth on as defense-in-depth behind
   Cloudflare Access, `@latest` npm pins replaced in sub-router
@@ -310,8 +314,11 @@ installed.
 
 #### Founder-skills bundle (v0.4.0)
 
-A six-skill family for the operator who's the entire founding team. See
-`skills/founder-skills/INDEX.md` for the workflow catalog.
+A five-skill family for the operator who's the entire founding team. The
+bundle ships with a workflow-composition index at
+[`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
+(five composition workflows — landing-launch, contract-triage, hiring-loop,
+financial-modeling, terms-bootstrap).
 
 | Skill | Purpose |
 |---|---|
@@ -320,7 +327,6 @@ A six-skill family for the operator who's the entire founding team. See
 | `legal-doc-review` | 12-clause contract triage with red-flag detection |
 | `financial-plan-builder` | 12-month cash projection from a YAML revenue / expense model |
 | `hiring-toolkit` | Job description + interview rubric + offer template |
-| `founder-skills/INDEX.md` | Bundle index with five composition workflows |
 
 Skills auto-trigger based on description match. You can also invoke them
 explicitly by name: "apply the `hackathon-spinup` skill to this project."
@@ -845,7 +851,8 @@ requirements on an existing VM.
 > [Hetzner Cloud pricing](https://www.hetzner.com/cloud).
 >
 > **Heavy tier caveat**: requires improvements for cross-zone load balancing
-> (planned for v0.3.x). For now, single-node CX53 is the recommended ceiling.
+> (tracked as a future roadmap item; no specific release target). For now,
+> single-node CX53 is the recommended ceiling.
 > For hosting alternatives (DigitalOcean, Vultr, bare metal), see
 > `docs/operational/hosting-providers-comparison.md`.
 
@@ -1600,7 +1607,7 @@ reproducibility.
 
 ## Known limitations and alpha status
 
-Walter-OS is **alpha software** (v0.4.0-alpha, in flight). Expect breaking changes between
+Walter-OS is **alpha software** (v0.4.0-alpha, in-flight). Expect breaking changes between
 minor versions. The following limitations are known and tracked:
 
 - **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
