@@ -71,10 +71,21 @@ PRs #55–#59 and land as the bundle epic completes.)
   Audit ledger `docs/operational/security-audit-2026-05-11.md` updated:
   6/6 P0 findings closed; P1-08 closed by the same fix.
 
-### Out of scope for v0.3.0 (will retro-tag to v0.3.1 if needed)
+### Changed (build / release pipeline)
 
-- PR #36 (overlay opener) — operator must merge via the GitHub UI.
-- PR #52 (P0-06 sanitization proposal) — operator decision pending.
+- Consolidated `.github/workflows/release-security.yml` into
+  `.github/workflows/release.yml` as a second job (`security`) that
+  depends on the `release` job. The split-file design relied on the
+  `release: published` event to chain workflows, which GitHub blocks
+  when the release was created by `GITHUB_TOKEN` (recursive-workflow
+  protection) — so v0.3.0's first tag push produced a release without
+  SBOM / checksums / cosign signatures. Running both jobs in one
+  workflow side-steps that limit, and a new `workflow_dispatch` input
+  lets operators re-sign an existing tag without rolling a new one.
+  Updated `docs/security/verification.md` to point at the consolidated
+  workflow (`release.yml`) for v0.3.1+ bundles. Older bundles signed
+  by `release-security.yml` remain verifiable with the previous
+  identity regexp documented in that file.
 
 ---
 
