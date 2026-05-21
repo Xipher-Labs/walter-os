@@ -31,7 +31,28 @@
 set -uo pipefail
 
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
-STANDING_APPROVALS="${WALTER_STANDING_APPROVALS:-$WALTER_CONFIG/agent-approvals.yml}"
+
+# Standing-approvals config path is HARDCODED (audit P1-06). The env var
+# `WALTER_STANDING_APPROVALS` is no longer honored as a config-pointer
+# override — letting attackers point this at an attacker-controlled YAML
+# (via compromised MCP env injection or a malicious operator dotfile)
+# would auto-approve every blocked operation.
+#
+# The opt-in override path `WALTER_STANDING_APPROVALS_OVERRIDE` is
+# consulted ONLY when `WALTER_AGENT_ALLOW_OVERRIDE=1` is set in the
+# same shell. It exists for testing the gate against synthetic
+# approvals files; using it logs a WARN to stderr every invocation.
+STANDING_APPROVALS="$WALTER_CONFIG/agent-approvals.yml"
+if [[ "${WALTER_AGENT_ALLOW_OVERRIDE:-0}" == "1" \
+      && -n "${WALTER_STANDING_APPROVALS_OVERRIDE:-}" ]]; then
+  echo "approval-gate: WARN — using override standing-approvals path: $WALTER_STANDING_APPROVALS_OVERRIDE" >&2
+  STANDING_APPROVALS="$WALTER_STANDING_APPROVALS_OVERRIDE"
+elif [[ -n "${WALTER_STANDING_APPROVALS:-}" ]]; then
+  # Operator set the old override env var without the allow flag.
+  # Ignore it but tell them so they know it's not silently taking effect.
+  echo "approval-gate: WARN — WALTER_STANDING_APPROVALS env var is ignored (audit P1-06). Use WALTER_STANDING_APPROVALS_OVERRIDE with WALTER_AGENT_ALLOW_OVERRIDE=1 if you really need to override." >&2
+fi
+
 TRUST_TIERS="${WALTER_TRUST_TIERS:-$WALTER_CONFIG/trust-tiers.yml}"
 
 # ---------- block patterns (keep in lockstep with §7.1 of the spec) ----------
@@ -104,6 +125,13 @@ declare -a BLOCK_PATH_PATTERNS=(
 # medium-required: low tier is blocked unless the agent has an explicit override.
 # high-required: low and medium tier are blocked unless override.
 
+# Bash 3.2 (macOS default) misparses `[token-with-dashes]=value` inside
+# `declare -A` under `set -u` — it treats the dashed token as
+# `${token-with-dashes}` (default-substitution parameter expansion),
+# then errors on the inner unset variable. Bash 4+ (Linux, brew bash)
+# handles it correctly. Wrap the array literal in `set +u` so this
+# script loads cleanly on every bash we support.
+set +u
 declare -A CATEGORY_MIN_TIER=(
   [git-push-feature-branch]="medium"
   [gh-pr-create]="medium"
@@ -115,6 +143,7 @@ declare -A CATEGORY_MIN_TIER=(
   [gh-pr-comment]="low"
   [gh-pr-review-approve]="high"
 )
+set -u
 
 # Tier ordering: low=1, medium=2, high=3
 _tier_rank() {
@@ -561,6 +590,18 @@ if ! command -v jq >/dev/null 2>&1; then
   # by shadowing jq on PATH. See: docs/operational/security-audit-2026-05-11.md P0-03
   echo "approval-gate: jq missing — failing closed for safety. Install jq to proceed." >&2
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: jq missing — failing closed for safety"}}\n'
+  exit 0
+fi
+
+if ! command -v yq >/dev/null 2>&1; then
+  # Fail CLOSED — yq is required to read standing-approvals + trust-tier
+  # config. Without it, those paths used to silently fall through to the
+  # block path (safe in isolation), but a missing yq combined with future
+  # config-format changes makes the security-path fragile. Make this a
+  # hard dependency, same as jq.
+  # See: docs/operational/security-audit-2026-05-11.md P1-05
+  echo "approval-gate: yq missing — failing closed for safety. Install yq to proceed." >&2
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: yq missing — failing closed for safety"}}\n'
   exit 0
 fi
 

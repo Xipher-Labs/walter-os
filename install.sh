@@ -144,6 +144,10 @@ check_requirements() {
   check_required_tool git "brew install git  # or: sudo apt-get install -y git"
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
+  # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
+  # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
+  # install is worse than no install — blocking here is correct.
+  check_required_tool yq "brew install yq  # or: sudo snap install yq"
 
   say
   say "${c_b}Required for full walter-host stack:${c_reset}"
@@ -286,6 +290,13 @@ check_preflight() {
 
   if ! command -v jq >/dev/null 2>&1; then
     err "jq required. Install: brew install jq"
+    exit 4
+  fi
+
+  if ! command -v yq >/dev/null 2>&1; then
+    # Hard dependency — approval-gate.sh fails CLOSED if yq is missing.
+    # See: docs/operational/security-audit-2026-05-11.md P1-05
+    err "yq required (approval-gate hard dep). Install: brew install yq"
     exit 4
   fi
 
