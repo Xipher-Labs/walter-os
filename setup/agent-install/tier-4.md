@@ -114,8 +114,9 @@ Ask the operator to confirm the workspace + projects + labels are
 created.
 
 Walter-OS does NOT ship a CLI subcommand for bootstrapping Plane
-labels today. The real `walter-os agents` dispatcher only supports
-`{list|run-once|pause|resume|status}` (see `scripts/agents/main.sh`).
+labels today. The real `walter-os agents` dispatcher supports
+`{list|run-once|pause|resume|unlock|trust|status}` (see
+`scripts/agents/main.sh`) — none of which create labels.
 The operator creates the labels by hand from the Plane settings UI,
 or via direct API calls using `curl` + the token in Infisical at
 `walter-vm-internal/prod/plane/PLANE_API_TOKEN`.
@@ -144,25 +145,51 @@ future enhancement; not in scope for this tier.
 ================================================================================
 STEP 3 — TRUST TIERS
 
-Write the trust tier config:
+The trust-tiers.yml file should already be at
+`~/.config/walter-os/trust-tiers.yml` (install.sh copies it from
+`setup/templates/trust-tiers.yml` during Tier I --upgrade). The
+canonical format is a nested `agents:` map with per-agent `tier` and
+`overrides` fields — NOT a flat agent→tier map:
 
-  ~/.config/walter-os/trust-tiers.yml:
-    reviewer:   high
-    triage:     medium
-    researcher: medium
-    coder:      medium
-    liaison:    low
-    janitor:    low
+  agents:
+    triage:
+      tier: medium
+      overrides: {}
+    researcher:
+      tier: medium
+      overrides: {}
+    coder:
+      tier: medium
+      overrides: {}
+    reviewer:
+      tier: high
+      overrides: {}
+    janitor:
+      tier: low
+      overrides: {}
+    liaison:
+      tier: low
+      overrides: {}
 
-Ask if the operator wants to override any. Recommended: accept
-defaults on first install, adjust later after seeing behavior.
+(The `overrides` block per agent allows per-category exceptions to
+the tier defaults. See `docs/decisions/0009-agent-trust-tiers.md`
+for the tier-category matrix and what overrides can / cannot do —
+the "blocked for ALL tiers" list in hooks/approval-gate.sh is
+hardcoded and cannot be overridden.)
 
-Verify the trust tiers loaded — no dedicated subcommand exists for
-this today, so just read the file:
-  cat ~/.config/walter-os/trust-tiers.yml
-  # expect: a 6-row YAML with one line per agent (reviewer, triage,
-  # researcher, coder, liaison, janitor) each mapped to a tier
-  # (high|medium|low).
+Ask if the operator wants to override any default. Recommended:
+accept defaults on first install, adjust after seeing behavior.
+
+Verify the trust tiers loaded via the actual `walter-os agents
+trust` dispatcher (scripts/agents/main.sh line 117):
+
+  walter-os agents trust list           # tabular view, all 6 agents
+  walter-os agents trust list --json    # JSON output, for scripts
+  walter-os agents trust <agent-name>   # show tier + effective perms
+  walter-os agents trust set <agent> <tier>  # mutate one entry
+
+Expect: 6-row output with one entry per agent (reviewer, triage,
+researcher, coder, liaison, janitor) each at the configured tier.
 
 ================================================================================
 STEP 4 — APPROVAL GATE
