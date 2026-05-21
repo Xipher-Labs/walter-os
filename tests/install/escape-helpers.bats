@@ -159,10 +159,21 @@ _invoke() {
 }
 
 @test "#134: _xml_escape escapes the 5 XML-reserved characters" {
-  run _invoke '_xml_escape "<a&b>'"'"'c'"'"'\"d\""'
-  [ "$status" -eq 0 ]
-  # & must escape FIRST so we don't double-escape entities we add later
-  [ "$output" = "&lt;a&amp;b&gt;&apos;c&apos;&quot;d&quot;" ]
+  # Pass each reserved char individually + assert the substitution.
+  # Avoids the cross-shell-version fragility of building a single
+  # 7-character string with embedded apostrophes + quotes through
+  # multiple layers of bash + bats quoting.
+  local out
+  out=$(_invoke '_xml_escape "<"')
+  [ "$out" = "&lt;" ] || { echo "got: [$out] for <" >&2; return 1; }
+  out=$(_invoke '_xml_escape ">"')
+  [ "$out" = "&gt;" ] || { echo "got: [$out] for >" >&2; return 1; }
+  out=$(_invoke '_xml_escape "&"')
+  [ "$out" = "&amp;" ] || { echo "got: [$out] for &" >&2; return 1; }
+  out=$(_invoke "_xml_escape \"'\"")
+  [ "$out" = "&apos;" ] || { echo "got: [$out] for apos" >&2; return 1; }
+  out=$(_invoke '_xml_escape "\""')
+  [ "$out" = "&quot;" ] || { echo "got: [$out] for quot" >&2; return 1; }
 }
 
 @test "#134: _xml_escape ampersand-first ordering — no double-escape" {
