@@ -42,13 +42,14 @@ JSON
 
   AUDIT_FINDINGS="$TMP_HOME/findings.jsonl"
   AUDIT_RUNNER="$TMP_HOME/run_check_tool_definitions.sh"
+  # Override finding() to capture findings as JSONL. The override comes
+  # AFTER `source "$AUDIT"` so it shadows the real finding() inside
+  # check_tool_definitions. Copilot R2 #129 R2.7: previous version
+  # defined finding() twice (before + after source) for no reason —
+  # the pre-source definition was dead code because audit.sh redefines
+  # finding() during sourcing.
   cat > "$AUDIT_RUNNER" <<RUNNER
 #!/usr/bin/env bash
-finding() {
-  local sev="\$1" id="\$2" desc="\$3" action="\${4:-investigate manually}"
-  jq -nc --arg sev "\$sev" --arg id "\$id" --arg desc "\$desc" --arg action "\$action" \\
-    '{severity: \$sev, id: \$id, desc: \$desc, action: \$action}' >> "$AUDIT_FINDINGS"
-}
 source "$AUDIT"
 finding() {
   local sev="\$1" id="\$2" desc="\$3" action="\${4:-investigate manually}"

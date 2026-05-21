@@ -6,7 +6,7 @@
 set -uo pipefail
 # Note: not using -e because we want to collect ALL findings, not bail on first.
 
-readonly WALTER_CONFIG="${HOME}/.config/walter-os"
+readonly WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
 readonly BASELINES_DIR="${WALTER_CONFIG}/baselines"
 readonly TODAY="$(date +%Y-%m-%d)"
 readonly REPORT="${WALTER_CONFIG}/audit-${TODAY}.md"
@@ -25,10 +25,15 @@ CRIT_COUNT=0
 
 bump() {
   local level="$1"
+  # Copilot R2 #129 R2.4: medium maps to the same bucket as high
+  # (severity=2, exit code 2). Callers can still emit "medium" for
+  # finer-grained reporting in the markdown report; severity counts
+  # treat medium and high identically so neither is silently dropped.
   case "$level" in
-    info) (( INFO_COUNT++ )); (( SEVERITY < 1 )) && SEVERITY=1 ;;
-    high) (( HIGH_COUNT++ )); (( SEVERITY < 2 )) && SEVERITY=2 ;;
-    crit) (( CRIT_COUNT++ )); (( SEVERITY < 3 )) && SEVERITY=3 ;;
+    info)   (( INFO_COUNT++ )); (( SEVERITY < 1 )) && SEVERITY=1 ;;
+    medium) (( HIGH_COUNT++ )); (( SEVERITY < 2 )) && SEVERITY=2 ;;
+    high)   (( HIGH_COUNT++ )); (( SEVERITY < 2 )) && SEVERITY=2 ;;
+    crit)   (( CRIT_COUNT++ )); (( SEVERITY < 3 )) && SEVERITY=3 ;;
   esac
 }
 
@@ -182,7 +187,15 @@ check_tool_definitions() {
 
   local baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
   local current
-  current="$(jq --sort-keys '.servers // {}' "$registry" 2>/dev/null)" || return 0
+  # Copilot R2 #129 R2.6: surface jq parse failures as HIGH instead of
+  # silently returning 0. A corrupted/malformed registry shouldn't be
+  # a stealth way to disable the drift check.
+  if ! current="$(jq --sort-keys '.servers // {}' "$registry" 2>/dev/null)"; then
+    finding high "mcp-registry-unparseable" \
+      "jq failed to parse $registry; MCP drift check skipped" \
+      "Inspect mcp/servers.json for JSON syntax errors. If safe: walter-os baseline-mcp-tools"
+    return 0
+  fi
 
   if [[ ! -f "$baseline" ]]; then
     # Atomic write (Copilot R1 #129 R1.3) — consistent with
