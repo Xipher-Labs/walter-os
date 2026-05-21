@@ -133,7 +133,7 @@ A skill named `pr-review-severity` documents the ruleset, the keyword lists, and
 
 | # | Condition | Why |
 |---|---|---|
-| C1 | `auto-merge-enabled` marker file exists at repo root | Per-repo opt-in. Operator's signed declaration that this repo accepts the bounded auto-merge contract. |
+| C1 | `auto-merge-enabled` marker file exists at repo root AND its `enabled:` key is true (or missing — defaults to true). | Per-repo opt-in + kill-switch. The marker must be present (covers the `no-opt-in` slug) AND `enabled: false` in the marker triggers the `opt-out-kill-switch` slug (lets the operator temporarily disable auto-merge without deleting the marker — useful during incident response). |
 | C2 | ≥ N completed review rounds (default N=3, configurable in `auto-merge-enabled` file) | The 3-round Walter-OS review loop has proven its value; we bound the loop, not skip it. |
 | C3 | Zero BLOCKER findings on the latest HEAD | Hard rule. |
 | C4 | Zero MAJOR findings on the latest HEAD | Hard rule. |
@@ -155,25 +155,25 @@ C8 (renumbered).
 
 ### 4.4 Auto-merge action sequence
 
-When C1-C9 hold (gate passes):
+When C1-C8 hold (gate passes):
 
 1. The `pr-auto-merge-gate.sh` hook (triggered by GitHub webhook on `pull_request_review` event) executes.
 2. The hook calls `walter-os pr-classify-review <pr-num>` which produces a severity-tagged finding list.
-3. If gate passes:
-   a. Create follow-up issue with the deferred MINOR/COSMETIC findings (one issue per PR, not per finding).
+3. Gate-pass action sequence:
+   a. Create follow-up issue with the deferred MINOR/COSMETIC findings (one issue per PR, not per finding). If `gh issue create` returns non-zero → abort, emit `MERGE_BLOCKED:follow-up-issue-create-failed`, post a PR comment with the slug + retry guidance, exit the action sequence here.
    b. Comment on the PR with the merge decision + the follow-up issue link.
    c. Auto-resolve the MINOR/COSMETIC review threads on the PR.
    d. Invoke `gh pr merge --squash --delete-branch --admin` (assumes operator's bypass permission is configured per branch-protection).
 
-When the gate fails on any condition (C1-C9):
+When the gate fails on any condition (C1-C8):
 
-5. Post a PR comment naming the failing condition + slug + remediation guidance. PR remains open.
+4. Post a PR comment naming the failing condition + `MERGE_BLOCKED:<reason-slug>` + remediation guidance. PR remains open.
 
-When a BLOCKER finding is detected (independent of gate pass/fail):
+When a BLOCKER finding is detected (independent of gate pass/fail — this path supersedes step 3's gate-pass action when ANY BLOCKER is present, since C3 would already be failing):
 
-6. Create a high-priority follow-up issue capturing the BLOCKER finding(s) verbatim + the source file:line + a suggested fix-shape (per G3). The issue title prefix is `[FIX] -SECURITY-` for security paths, `[FIX] -OPERATIONS-` otherwise.
-7. Post a PR comment naming the BLOCKER(s), linking the issue from step 6, and explicitly stating the gate did NOT auto-close the PR — operator decides (G3, Decision 4).
-8. The PR stays open. No further action.
+5. Create a high-priority follow-up issue capturing the BLOCKER finding(s) verbatim + the source file:line + a suggested fix-shape (per G3). The issue title prefix is `[FIX] -SECURITY-` for security paths, `[FIX] -OPERATIONS-` otherwise.
+6. Post a PR comment naming the BLOCKER(s), linking the issue from step 5, and explicitly stating the gate did NOT auto-close the PR — operator decides (G3, Decision 4).
+7. The PR stays open. No further action.
 
 ### 4.5 `auto-merge-enabled` file format
 
