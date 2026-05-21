@@ -17,7 +17,7 @@ fixed on the latest minor and ships in the next release.
 |---|---|---|
 | Latest minor (currently 0.4.x — see `VERSION`) | yes | full security + functional support |
 | Previous minor (currently 0.3.x) | partial | CVSS ≥ 7.0 security fixes only |
-| Older minors | no | EOL — upgrade to a supported line |
+| Older minors (0.2.x, 0.1.x, and any prior) | no | EOL — upgrade to a supported line |
 
 The "currently" labels are refreshed as part of the release checklist;
 if they ever disagree with `VERSION`, `VERSION` wins.
