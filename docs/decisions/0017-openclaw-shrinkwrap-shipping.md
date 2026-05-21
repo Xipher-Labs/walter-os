@@ -1,9 +1,9 @@
-# ADR 0017 — Ship a shrinkwrap alongside the OpenClaw runtime install
+# 0017. Ship a shrinkwrap alongside the OpenClaw runtime install
 
-**Status**: Proposed (2026-05-21).
-**Date**: 2026-05-21.
-**Deciders**: operator (f0x1777) — pending approval.
-**Related**: spec `docs/specs/openclaw-supply-chain-lockfile.md`, issue #132, ADR 0012, ADR 0016.
+**Date**: 2026-05-21
+**Status**: Proposed
+**Spec**: `docs/specs/openclaw-supply-chain-lockfile.md`
+**Related**: issue #132, ADR 0012 (OSS security hardening primitives), ADR 0016 (hook-checksums v2)
 
 ## Context
 
@@ -43,6 +43,17 @@ The two formats are content-identical. `package-lock.json` is the npm-default fo
 The current PR #127 flow (`npm install -g --ignore-scripts ./tarball`) does NOT consume an external shrinkwrap — npm's global-install path resolves deps fresh from the registry every time. To honor the shrinkwrap, we have to introduce one of three flows (spec §4.2 Candidates A/B/C). The exact choice is deferred to prototype evidence on `node:24-slim`; the recommendation is Candidate A (wrapper-package + `npm ci` + `npm link`) for its standard-npm-semantics + audit clarity.
 
 Codex R1 on the initial draft of this ADR caught that the obvious `npm ci --prefix /workspace/.npm-global ./tarball` doesn't actually install globally — `npm ci` is project-install-oriented + only materializes `./node_modules/`, leaving `/workspace/.npm-global/bin/openclaw` (which the rest of compose relies on) missing. The corrected design routes through `npm link` after the deterministic dep install.
+
+The exact `npm link` direction (Copilot R1 #140 catch — needs spelling out):
+
+- Inside the wrapper-package dir (Candidate A) after `npm ci`:
+  `cd node_modules/openclaw && npm link --prefix /workspace/.npm-global`
+  — this exposes openclaw's `bin` entries as symlinks under
+  `/workspace/.npm-global/bin/` per its `package.json` `bin` field.
+  The wrapper itself is NOT linked globally (it's just the scaffold
+  for deterministic dep resolution).
+- For Candidate B (extract-in-place), same idea but the cwd at link
+  time is the extracted `package/` dir, not `node_modules/openclaw/`.
 
 ## Consequences
 

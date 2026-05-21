@@ -43,7 +43,7 @@ The current state is "no execution risk on install, but the deployed code may no
 
 ### 4.1 Artifact shape
 
-Ship a **`npm-shrinkwrap.json`** file alongside the compose pinning. The operator generates it once per version bump using the standard `npm shrinkwrap` flow against a clean install of the pinned `OC_VER`. The file lists every transitive package + version + integrity hash, locking the tree to exactly what the operator audited.
+Ship a **`npm-shrinkwrap.json`** file alongside the compose pinning. The operator generates it once per version bump via `npm install --ignore-scripts --package-lock-only --registry=https://registry.npmjs.org/` against either a wrapper package.json (Candidate A) or the extracted openclaw tarball (Candidate B), then renames the resulting `package-lock.json` to `npm-shrinkwrap.json`. (`--package-lock-only` skips actually-installing — we only need the lock metadata. The two filenames are content-identical; `npm-shrinkwrap.json` is the canonical "deterministic install artifact" marker.) The file lists every transitive package + version + integrity hash, locking the tree to exactly what the operator audited.
 
 File location: `setup/walter-host/services/openclaw/npm-shrinkwrap.json`. Same dir as the standalone openclaw compose; ships through `git` with the rest of the repo.
 
@@ -89,11 +89,21 @@ Both resolve to the same in-container path; bats AC4 (extended) verifies both co
 2. Regenerate `OC_INTEGRITY` from the new tarball (same flow as today).
 3. **NEW**: regenerate the shrinkwrap in a sandbox that mirrors the production install context — explicitly with `--ignore-scripts` so the generation step doesn't execute upstream lifecycle code on the operator's machine (closes Codex R1 #132 MAJOR — `no flags` would have implicitly run lifecycle scripts during generation, defeating part of the security model).
 
+   **CRITICAL**: pass `--registry=https://registry.npmjs.org/` on the
+   generation command too (Copilot R1 #140 catch). A lockfile records
+   `resolved` URLs from whatever registry the operator's local npmrc
+   currently points at — if that's a mirror, a private proxy, or a
+   user-level npmrc override, the shipped shrinkwrap would lock the
+   container to URLs the production environment can't (or shouldn't)
+   reach. Pinning the registry at generation matches what the
+   container's `npm ci` will use.
+
    For Candidate A (wrapper-package):
    ```sh
    mkdir /tmp/openclaw-shrinkwrap && cd /tmp/openclaw-shrinkwrap
    printf '{"name":"openclaw-wrapper","version":"1.0.0","dependencies":{"openclaw":"%s"}}\n' "$NEW_OC_VER" > package.json
-   npm install --ignore-scripts --package-lock-only
+   npm install --ignore-scripts --package-lock-only \
+     --registry=https://registry.npmjs.org/
    mv package-lock.json $REPO/setup/walter-host/services/openclaw/npm-shrinkwrap.json
    # (rename: package-lock.json + npm-shrinkwrap.json are content-identical;
    #  we use the shrinkwrap name as the deterministic-install marker)
@@ -101,8 +111,10 @@ Both resolve to the same in-container path; bats AC4 (extended) verifies both co
 
    For Candidate B (extract-in-place):
    ```sh
-   npm pack openclaw@$NEW_OC_VER && tar -xzf openclaw-$NEW_OC_VER.tgz
-   cd package && npm install --ignore-scripts --package-lock-only
+   npm pack openclaw@$NEW_OC_VER --registry=https://registry.npmjs.org/
+   tar -xzf openclaw-$NEW_OC_VER.tgz
+   cd package && npm install --ignore-scripts --package-lock-only \
+     --registry=https://registry.npmjs.org/
    mv package-lock.json $REPO/setup/walter-host/services/openclaw/npm-shrinkwrap.json
    ```
 
@@ -130,7 +142,7 @@ The quarterly-upgrade-cadence skill gets an OpenClaw-specific section documentin
     - Candidate A (wrapper-package): `.packages."node_modules/openclaw".version` (the wrapper root is `openclaw-wrapper@1.0.0`, irrelevant to OC_VER).
     - Candidate B (extract-in-place): `.name == "openclaw"` AND `.version == OC_VER` (the lockfile root IS openclaw).
     Implementation PR picks the assertion based on chosen candidate.
-- [ ] **AC6.** `docs/operational/quarterly-upgrade-cadence.md` (or the corresponding skill) documents the regenerate-shrinkwrap step **with `--ignore-scripts` mandatory** in the operator's sandbox-generation command (Codex R1 #132 catch — naive `npm install` runs upstream lifecycle code on the operator's machine).
+- [ ] **AC6.** `skills/quarterly-upgrade-cadence/SKILL.md` (the actual location — Copilot R1 #140 catch; the file is under skills/, not docs/operational/) documents the regenerate-shrinkwrap step with `--ignore-scripts` AND `--registry=https://registry.npmjs.org/` mandatory in the operator's sandbox-generation command (#132 Codex R1 catch — naive `npm install` runs upstream lifecycle code on the operator's machine; #140 Copilot R1 catch — without an explicit registry, the generated lockfile records URLs from whatever registry the operator's local npmrc points at).
 - [ ] **AC7.** v0.4.4's R3 comment block in both compose files is updated to drop the "residual gap" note + replace with the new closed-state.
 - [ ] **AC8.** Smoke test on a fresh `node:24-slim` container: `OC_VER=2026.5.7 OC_INTEGRITY=... docker compose up openclaw` produces an identical `/workspace/.npm-global` tree as a second run (same lockfile = same artifacts).
 - [ ] **AC9.** ADR 0017 documents the design choice + rejected alternatives (ship-deps-in-tarball / npm-cache-store offline mode / IPFS pinning / `package-lock.json` instead of shrinkwrap).
