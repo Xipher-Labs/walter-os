@@ -54,27 +54,32 @@ EOF
 
   # Helper: run audit's check_hooks in isolation, capture findings JSONL.
   AUDIT_FINDINGS="$TMP_HOME/findings.jsonl"
+  AUDIT_RUNNER="$TMP_HOME/run_check_hooks.sh"
+  cat > "$AUDIT_RUNNER" <<RUNNER_EOF
+#!/usr/bin/env bash
+# Stub finding() BEFORE sourcing audit.sh so the sourced script picks
+# up our override instead of its own. Sourcing without a pipe avoids
+# SIGPIPE truncating the function definitions partway through.
+finding() {
+  local sev="\$1" id="\$2" desc="\$3" action="\${4:-investigate manually}"
+  jq -nc --arg sev "\$sev" --arg id "\$id" --arg desc "\$desc" --arg action "\$action" \\
+    '{severity: \$sev, id: \$id, desc: \$desc, action: \$action}' >> "$AUDIT_FINDINGS"
+}
+source "$AUDIT"
+# Re-stub finding() AFTER source — the source defines its own
+# finding(), overriding ours. Re-defining here makes our log capture
+# work on every subsequent call from check_hooks.
+finding() {
+  local sev="\$1" id="\$2" desc="\$3" action="\${4:-investigate manually}"
+  jq -nc --arg sev "\$sev" --arg id "\$id" --arg desc "\$desc" --arg action "\$action" \\
+    '{severity: \$sev, id: \$id, desc: \$desc, action: \$action}' >> "$AUDIT_FINDINGS"
+}
+check_hooks
+RUNNER_EOF
+  chmod +x "$AUDIT_RUNNER"
+
   run_check_hooks() {
-    # Source audit.sh in a subshell, override `finding` to log to JSONL,
-    # then invoke check_hooks. Returns the JSONL path for inspection.
-    bash -c "
-      set -uo pipefail
-      export HOME='$HOME'
-      export WALTER_CONFIG='$WALTER_CONFIG'
-      export WALTER_OS_HOME='$WALTER_OS_HOME'
-      export CLAUDE_HOME='$CLAUDE_HOME'
-      finding() {
-        local sev='\$1' id='\$2' desc='\$3' action='\${4:-investigate manually}'
-        jq -nc --arg sev \"\$sev\" --arg id \"\$id\" --arg desc \"\$desc\" --arg action \"\$action\" \
-          '{severity: \$sev, id: \$id, desc: \$desc, action: \$action}' >> '$AUDIT_FINDINGS'
-      }
-      export -f finding
-      # Source the script so check_hooks is available. The script's main
-      # body is gated by [[ \${BASH_SOURCE[0]} == \${0} ]] in modern
-      # scripts; if not, we source then call.
-      source '$AUDIT' 2>/dev/null || true
-      check_hooks
-    "
+    bash "$AUDIT_RUNNER"
   }
 }
 

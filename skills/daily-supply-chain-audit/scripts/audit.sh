@@ -104,6 +104,33 @@ check_secrets_in_configs() {
 
 # ---------- 3. Hooks integrity ----------
 
+# _audit_hash_file — portable SHA256 (GNU/BSD).
+_audit_hash_file() {
+  local file="$1"
+  [[ -r "$file" && -f "$file" ]] || { echo ""; return; }
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" 2>/dev/null | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+  else
+    echo ""
+  fi
+}
+
+# _check_hooks_v1 — legacy v1 detection fallback (command-strings only).
+_check_hooks_v1() {
+  local settings="$1" checksums="$2"
+  local current; current="$(jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings")"
+  local stored; stored="$(cat "$checksums")"
+  if [[ "$current" != "$stored" ]]; then
+    finding high "hooks-modified" \
+      "Hooks in $settings differ from v1 baseline" \
+      "Inspect new hooks. If safe: walter-os baseline-hooks (also migrates to v2)"
+  fi
+}
+
+# check_hooks — v2 detection: per-entry content SHA256 + command drift.
+# Closes F1 BLOCKER (external review 2026-05-21, issue #115). See ADR 0016.
 check_hooks() {
   local settings="${CLAUDE_HOME}/settings.json"
   [[ -f "$settings" ]] || return 0
@@ -113,20 +140,81 @@ check_hooks() {
   fi
   local hook_count
   hook_count="$(jq '[.hooks // {} | .. | objects | select(has("command"))] | length' "$settings" 2>/dev/null || echo 0)"
-  if [[ "$hook_count" -gt 0 ]]; then
-    local checksums="${WALTER_CONFIG}/hook-checksums.json"
-    if [[ ! -f "$checksums" ]]; then
-      # First run: silently snapshot. Future runs compare against this.
-      jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings" > "$checksums"
-    else
-      local current; current="$(jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings")"
-      local stored; stored="$(cat "$checksums")"
-      if [[ "$current" != "$stored" ]]; then
-        finding high "hooks-modified" \
-          "Hooks in $settings differ from baseline" \
-          "Inspect new hooks for malicious commands. If safe: walter-os baseline-hooks"
-      fi
+  [[ "$hook_count" -gt 0 ]] || return 0
+
+  local checksums="${WALTER_CONFIG}/hook-checksums.json"
+
+  # First run — snapshot v2 directly.
+  if [[ ! -f "$checksums" ]]; then
+    mkdir -p "$(dirname "$checksums")"
+    local result; result=$(jq -n '{version: 2, hooks: []}')
+    local hooks_array; hooks_array=$(jq '[.hooks // {} | .. | objects | select(has("command"))]' "$settings")
+    local n; n=$(jq 'length' <<<"$hooks_array")
+    local i=0
+    while [[ $i -lt $n ]]; do
+      local cmd; cmd=$(jq -r ".[$i].command" <<<"$hooks_array")
+      local path; path=$(awk '{print $1}' <<<"$cmd")
+      local sha=""
+      [[ -n "$path" && -f "$path" ]] && sha=$(_audit_hash_file "$path")
+      result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
+        '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
+      i=$((i + 1))
+    done
+    echo "$result" | jq --sort-keys '.' > "$checksums"
+    return 0
+  fi
+
+  # Schema detection
+  local schema
+  if jq -e 'type == "object" and .version == 2' "$checksums" >/dev/null 2>&1; then
+    schema="v2"
+  elif jq -e 'type == "array"' "$checksums" >/dev/null 2>&1; then
+    finding info "hook-checksums-v1-schema" \
+      "hook-checksums.json on legacy v1 schema (does NOT detect in-place script modification)" \
+      "Run: walter-os baseline-hooks to migrate to v2 (content-hashing)"
+    _check_hooks_v1 "$settings" "$checksums"
+    return 0
+  else
+    finding high "hook-checksums-corrupted" \
+      "hook-checksums.json schema not recognized" \
+      "Inspect manually then: walter-os baseline-hooks"
+    return 0
+  fi
+
+  # v2: per-entry content check
+  local entries; entries=$(jq -c '.hooks[]' "$checksums")
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    local cmd path stored_sha
+    cmd=$(jq -r '.command' <<<"$entry")
+    path=$(jq -r '.path' <<<"$entry")
+    stored_sha=$(jq -r '.sha256' <<<"$entry")
+
+    [[ -z "$path" ]] && continue  # inline command, no content check
+
+    if [[ ! -f "$path" || ! -r "$path" ]]; then
+      finding high "hook-file-missing" \
+        "Hook script vanished or unreadable: $path (cmd: $cmd)" \
+        "Restore from git OR walter-os baseline-hooks if intentional"
+      continue
     fi
+
+    local current_sha; current_sha=$(_audit_hash_file "$path")
+    if [[ -n "$stored_sha" && "$current_sha" != "$stored_sha" ]]; then
+      finding crit "hook-content-modified" \
+        "Hook script CONTENT changed in place (path unchanged): $path. Stored sha: ${stored_sha:0:12}..., current sha: ${current_sha:0:12}..." \
+        "REVIEW DIFF: git diff $path. If intentional: walter-os baseline-hooks"
+    fi
+  done <<< "$entries"
+
+  # Command-string-level drift (added/removed entries)
+  local stored_cmds current_cmds
+  stored_cmds=$(jq -S '[.hooks[].command]' "$checksums")
+  current_cmds=$(jq -S '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings")
+  if [[ "$stored_cmds" != "$current_cmds" ]]; then
+    finding high "hooks-modified" \
+      "Hook command set in $settings differs from baseline (added/removed/renamed entry)" \
+      "Inspect new hooks. If safe: walter-os baseline-hooks"
   fi
 }
 

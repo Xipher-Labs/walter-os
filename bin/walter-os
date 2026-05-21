@@ -251,6 +251,37 @@ cmd_baseline() {
   echo "  sha256: $current"
 }
 
+# _hash_file — portable SHA256 of a file's content (GNU/BSD).
+# Returns the 64-char hex hash, or empty string if the file is unreadable
+# or no hasher is installed.
+_hash_file() {
+  local file="$1"
+  [[ -r "$file" && -f "$file" ]] || { echo ""; return; }
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" 2>/dev/null | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+  else
+    echo ""
+  fi
+}
+
+# _hook_checksums_schema_version — detect existing baseline schema.
+# Returns: "v1" (legacy array of command-strings), "v2" (typed object
+# with .version=2), "missing" (no file), or "unknown" (corrupted).
+# See ADR 0016 for the schema migration design.
+_hook_checksums_schema_version() {
+  local file="${WALTER_CONFIG}/hook-checksums.json"
+  [[ -f "$file" ]] || { echo "missing"; return; }
+  if jq -e 'type == "object" and .version == 2' "$file" >/dev/null 2>&1; then
+    echo "v2"
+  elif jq -e 'type == "array"' "$file" >/dev/null 2>&1; then
+    echo "v1"
+  else
+    echo "unknown"
+  fi
+}
+
 cmd_baseline_hooks() {
   require_jq
   local settings="$CLAUDE_SETTINGS"
@@ -259,8 +290,40 @@ cmd_baseline_hooks() {
     exit 2
   fi
   local checksums="${WALTER_CONFIG}/hook-checksums.json"
-  jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings" > "$checksums"
-  echo "✓ Hook checksums refreshed: $checksums"
+
+  local prev_schema; prev_schema=$(_hook_checksums_schema_version)
+  case "$prev_schema" in
+    v1) echo "info: migrating hook-checksums.json from v1 (string array) to v2 (typed object with content sha256)" ;;
+    unknown) echo "warning: existing hook-checksums.json schema not recognized; overwriting with v2" ;;
+  esac
+
+  # Extract every {command:...} hook entry from settings.json
+  local hooks_array
+  hooks_array=$(jq '[.hooks // {} | .. | objects | select(has("command"))]' "$settings")
+
+  # Build v2 entries: {command, path, sha256} per hook.
+  # path = first whitespace-separated token of command (the executable).
+  local result
+  result=$(jq -n '{version: 2, hooks: []}')
+
+  local n; n=$(jq 'length' <<<"$hooks_array")
+  local i=0
+  while [[ $i -lt $n ]]; do
+    local cmd; cmd=$(jq -r ".[$i].command" <<<"$hooks_array")
+    local path; path=$(awk '{print $1}' <<<"$cmd")
+    local sha=""
+    if [[ -n "$path" && -f "$path" ]]; then
+      sha=$(_hash_file "$path")
+    fi
+    result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
+      '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
+    i=$((i + 1))
+  done
+
+  # Atomic write + deterministic sort
+  mkdir -p "$(dirname "$checksums")"
+  echo "$result" | jq --sort-keys '.' > "${checksums}.tmp" && mv "${checksums}.tmp" "$checksums"
+  echo "✓ Hook checksums refreshed (v2 schema, $n entries): $checksums"
 }
 
 # Re-snapshot external/**/hooks/scripts/*.{sh,py,js} after an intentional
