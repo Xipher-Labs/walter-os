@@ -13,6 +13,13 @@ setup() {
   TMP="$(mktemp -d)"
   # Use the live mcp/servers.json — it carries the JSON-blob env value that
   # triggered the bug.
+
+  # Several tests in this file invoke python3 directly (to parse the
+  # generated TOML / JSON). Skip the whole file if python3 isn't on
+  # PATH — running individual tests against a missing python3 produces
+  # confusing "command not found" failures later. Matches the repo's
+  # skip convention (see tests/agents/devrel-analyst.bats:44).
+  command -v python3 >/dev/null 2>&1 || skip "python3 required (not on PATH)"
 }
 
 teardown() {
@@ -20,16 +27,11 @@ teardown() {
 }
 
 @test "generate-mcp-configs.sh codex output parses as valid TOML" {
-  # Two-step prerequisite check (matches the repo's convention for
-  # environmental skips — see tests/agents/devrel-analyst.bats:44):
-  #   1. python3 must be on PATH at all
-  #   2. tomllib must be importable (stdlib from Python 3.11+)
-  # Distinguishing these gives clearer skip messages — a missing python3
-  # is an install gap; a present-but-old python3 is a version gap.
-  # Without step 1, the previous `python3 -c "import tomllib"` check
-  # would skip with the wrong reason when python3 itself was missing
-  # (exit 127 from "command not found" — Copilot R1 of #101).
-  command -v python3 >/dev/null 2>&1 || skip "python3 required (not on PATH)"
+  # python3 presence is checked in setup() (whole-file prerequisite).
+  # This per-test check covers the narrower version requirement: tomllib
+  # is stdlib only from Python 3.11+. On older python3 the import fails
+  # with ModuleNotFoundError — that's a version gap, not the script's
+  # bug. Skip gracefully so the failure mode is clear.
   if ! python3 -c "import tomllib" 2>/dev/null; then
     skip "tomllib required (Python 3.11+); test scope is TOML validity on Python 3.11+"
   fi
