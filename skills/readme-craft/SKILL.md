@@ -163,6 +163,13 @@ This skill builds on the curated list at
 2026-05). The upstream owns enumeration; this skill owns the
 opinionated layer.
 
+**For concrete tool recommendations, see
+[`recommended-tools.md`](recommended-tools.md)** — Walter-OS curates 8
+tools (out of ~55 upstream) with per-tool "use when / avoid when /
+supply-chain notes". Re-audited quarterly. When the agent needs to pick
+a specific tool, it consults `recommended-tools.md` first and falls
+back to the upstream catalog only if nothing in the curated list fits.
+
 The upstream organises tools into 5 categories. Use the gloss below
 to pick a category, then walk the upstream list to choose a specific
 tool.
