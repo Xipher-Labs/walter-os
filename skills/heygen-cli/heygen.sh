@@ -52,6 +52,7 @@ _heygen_request() {
       "$url")"
   fi
 
+  local http_code body_only
   http_code="$(printf '%s' "$response" | tail -n1)"
   body_only="$(printf '%s' "$response" | sed '$d')"
 
@@ -59,13 +60,15 @@ _heygen_request() {
     2*) printf '%s\n' "$body_only" ;;
     401) echo "heygen-cli: 401 unauthorized — check HEYGEN_API_KEY" >&2; return 4 ;;
     429)
-      # Rate-limited. We do NOT auto-retry. We surface the HTTP Retry-After
-      # header (or `retry_after` field in the response body if present) so
-      # the operator can decide whether to back off. The caller gets a
-      # non-zero exit; re-invocation is an explicit operator action.
-      # Per the skill's design note: paid-API back-pressure is the
-      # operator's call, not the script's — automatic retry on a paid
-      # endpoint is a recipe for runaway spend.
+      # Rate-limited. We do NOT auto-retry. We surface the `retry_after`
+      # field from the JSON response body (HeyGen's documented field for
+      # rate-limit responses; the HTTP `Retry-After` header is NOT parsed
+      # — that would require curl `-D -` header-dump plumbing this skill
+      # doesn't do today) so the operator can decide whether to back off.
+      # The caller gets a non-zero exit; re-invocation is an explicit
+      # operator action. Paid-API back-pressure is the operator's call,
+      # not the script's — automatic retry on a paid endpoint is a
+      # recipe for runaway spend.
       local retry_after
       retry_after="$(printf '%s' "$body_only" | jq -r '.retry_after // empty' 2>/dev/null)"
       echo "heygen-cli: 429 rate-limited (retry_after=${retry_after:-unknown}). Re-run after backoff." >&2
@@ -107,7 +110,11 @@ heygen_get_video_status() {
   _heygen_request GET "/v1/video_status.get?video_id=${video_id}"
 }
 
-# ----- State-changing (paid — approval-gate enforces high tier) -----
+# ----- State-changing (paid — operator-confirmation in chat required) -----
+# These functions spend money. The walter-os approval-gate hook does NOT
+# carry a dedicated `heygen-*` CATEGORY_MIN_TIER entry today (see SKILL.md
+# §Money-spending for the follow-up). Guardrail is the explicit-confirm
+# convention from the multi-agent autonomy spec §7.1.
 
 # heygen_generate_video --avatar X --voice Y --script Z [--background HEX] [--ratio 16:9]
 heygen_generate_video() {
@@ -117,7 +124,7 @@ heygen_generate_video() {
   # Helper: require a value follows the flag, then shift past both. Copilot
   # R1 flagged that bare `shift 2` would silently mis-parse if a flag was
   # passed without its argument (e.g., `--avatar --voice ID`).
-  _require_value() {
+  _heygen_require_value() {
     local flag="$1" value="$2"
     if [[ -z "$value" || "$value" == --* ]]; then
       echo "heygen-cli: $flag requires a value" >&2
@@ -128,11 +135,11 @@ heygen_generate_video() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --avatar)     _require_value "$1" "${2:-}" || return $?; avatar="$2"; shift 2 ;;
-      --voice)      _require_value "$1" "${2:-}" || return $?; voice="$2"; shift 2 ;;
-      --script)     _require_value "$1" "${2:-}" || return $?; script="$2"; shift 2 ;;
-      --background) _require_value "$1" "${2:-}" || return $?; background="$2"; shift 2 ;;
-      --ratio)      _require_value "$1" "${2:-}" || return $?; ratio="$2"; shift 2 ;;
+      --avatar)     _heygen_require_value "$1" "${2:-}" || return $?; avatar="$2"; shift 2 ;;
+      --voice)      _heygen_require_value "$1" "${2:-}" || return $?; voice="$2"; shift 2 ;;
+      --script)     _heygen_require_value "$1" "${2:-}" || return $?; script="$2"; shift 2 ;;
+      --background) _heygen_require_value "$1" "${2:-}" || return $?; background="$2"; shift 2 ;;
+      --ratio)      _heygen_require_value "$1" "${2:-}" || return $?; ratio="$2"; shift 2 ;;
       *) echo "heygen-cli: unknown flag $1" >&2; return 2 ;;
     esac
   done
