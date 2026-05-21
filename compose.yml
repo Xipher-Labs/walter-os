@@ -95,6 +95,33 @@ services:
       - ./setup/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     environment:
       WALTER_DOMAIN: ${WALTER_DOMAIN:?required}
+      # admin_auth_gate snippet reads these via Caddy's {$VAR} placeholder.
+      # Defaults documented in Caddyfile.template; operator overrides via
+      # personal.env if their tailnet/LAN differ. Issue #116 finding R1.
+      #
+      # WALTER_TAILNET_CIDR default now covers IPv4 CGNAT (100.64.0.0/10)
+      # AND Headscale's default IPv6 ULA prefix (fd7a:115c:a1e0::/48), so
+      # tailnet clients with IPv6 aren't denied at the auth gate
+      # (Copilot R3 #130). Override either / both in personal.env if your
+      # tailnet differs.
+      WALTER_TAILNET_CIDR: ${WALTER_TAILNET_CIDR:-100.64.0.0/10 fd7a:115c:a1e0::/48}
+      # Default to 192.168/16 only. 172.16/12 was added in R2 to cover
+      # corporate LANs but Copilot R5 flagged it overlaps Docker's default
+      # bridge subnets (172.17/16-172.31/16) — so any container could
+      # reach the auth gate as a "LAN" client. Operators who genuinely
+      # use 172.16/12 for their LAN can override via personal.env.
+      WALTER_LAN_CIDR: ${WALTER_LAN_CIDR:-192.168.0.0/16}
+      # Cloudflare edge ranges (IPv4 + IPv6, from cloudflare.com/ips/).
+      # Single source of truth so the Caddyfile matchers don't duplicate
+      # the list; quarterly refresh per skills/quarterly-upgrade-cadence
+      # only updates this one line. Copilot R3 #130 low-conf finding.
+      WALTER_CF_EDGE_RANGES: >-
+        ${WALTER_CF_EDGE_RANGES:-173.245.48.0/20 103.21.244.0/22 103.22.200.0/22
+        103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20
+        188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15
+        104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+        2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32
+        2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:2019/metrics"]
       interval: 30s

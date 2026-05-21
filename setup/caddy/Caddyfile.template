@@ -30,51 +30,134 @@
 }
 
 # ---------------------------------------------------------------------------
+# admin_auth_gate snippet — defense-in-depth for admin dashboards.
+#
+# Closes external review F2 (issue #116). Every admin-surface site
+# imports this snippet; it returns 403 unless the request EITHER:
+#   - originates from a Tailscale tailnet / LAN / loopback IP, OR
+#   - carries a Cloudflare Access email header.
+#
+# A bug in any individual dashboard's per-app auth (Grafana, n8n,
+# Plane, etc.) cannot expose admin access to the public internet —
+# requests without one of the two auth signals are dropped at the
+# proxy layer.
+#
+# Configurable via the operator's personal.env:
+#   WALTER_TAILNET_CIDR  — defaults to Tailscale CGNAT (100.64.0.0/10)
+#   WALTER_LAN_CIDR      — defaults to private 192.168.0.0/16
+#
+# Sites that are GENUINELY public (Matrix federation, PostHog event
+# ingestion, etc.) deliberately DO NOT import this — they have their
+# own auth model + are documented as public-facing.
+# ---------------------------------------------------------------------------
+
+(admin_auth_gate) {
+  # Caddy reads env vars at config-load time via {$VAR} (envsubst is
+  # NOT used for this snippet — it doesn't expand ${VAR:-default}).
+  # Defaults for all three env vars live in compose.yml's caddy service
+  # block (scripts/bootstrap.sh boots compose, which then renders the
+  # env into the container). Operator overrides via personal.env.
+  #
+  # Two ALLOW signals — request passes if EITHER holds:
+  #   (A) remote_ip in tailnet / LAN / loopback ("internal"), OR
+  #   (B) remote_ip in Cloudflare edge ranges AND request carries
+  #       the CF Access email header.
+  #
+  # Closes Copilot R2 #130 R2.1: previously the header was the only
+  # check for the CF path, which is spoofable by any public attacker.
+  # Tying header acceptance to CF edge IPs prevents the spoof —
+  # CF strips/overrides incoming CF-Access-* headers when it
+  # terminates the request.
+  #
+  # IPv6 coverage (Copilot R3 #130): the default WALTER_TAILNET_CIDR
+  # now includes Headscale's default IPv6 ULA (fd7a:115c:a1e0::/48) so
+  # tailnet clients with IPv6 are not denied. The Cloudflare list
+  # includes IPv6 ranges. ::1 covers loopback IPv6.
+  #
+  # CF edge ranges live in WALTER_CF_EDGE_RANGES — a single source of
+  # truth so the two matchers below can't drift on quarterly refreshes.
+  #
+  # Deny-path implementation: rather than express the negation of
+  # (A OR B) as a single matcher (Caddy makes that awkward), use two
+  # `handle` blocks ordered so DENY cases respond 403 and ALLOW cases
+  # fall through to the site's reverse_proxy.
+
+  @deny_not_in_any_allowlist {
+    not remote_ip {$WALTER_TAILNET_CIDR} {$WALTER_LAN_CIDR} 10.0.0.0/8 127.0.0.0/8 ::1 {$WALTER_CF_EDGE_RANGES}
+  }
+  handle @deny_not_in_any_allowlist {
+    respond "403 — admin endpoint: requires Tailscale tailnet or Cloudflare Access" 403 {
+      close
+    }
+  }
+
+  @deny_cf_edge_without_header {
+    remote_ip {$WALTER_CF_EDGE_RANGES}
+    not header CF-Access-Authenticated-User-Email *
+  }
+  handle @deny_cf_edge_without_header {
+    respond "403 — CF edge IP without CF Access email header (configure CF Access app on this hostname)" 403 {
+      close
+    }
+  }
+  # Anything else falls through to the site's reverse_proxy — allowed.
+}
+
+# ---------------------------------------------------------------------------
 # CORE SERVICES
 # ---------------------------------------------------------------------------
 
 # Plane — project management
 plane.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy plane-proxy:80
 }
 
 # Forgejo — git hosting
 git.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy forgejo:3000
 }
 
 # Infisical — secrets manager
 secrets.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy infisical:8080
 }
 
 # LiteLLM — LLM gateway
 llm.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy litellm:4000
 }
 
 # Grafana — dashboards
 grafana.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy grafana:3000
 }
 
 # n8n — workflow automation
 n8n.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy n8n:5678
 }
 
 # Uptime Kuma — uptime monitoring
 status.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy uptime-kuma:3001
 }
 
 # Homepage — service dashboard
 home.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy homepage:3000
 }
 
 # Syncthing — file sync web UI
 sync.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy syncthing:8384
 }
 
@@ -85,18 +168,23 @@ headscale.${WALTER_DOMAIN} {
 
 # Headscale Admin UI
 headscale-admin.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy headscale-admin:80
 }
 
 # WireGuard web UI
 vpn.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy wg-easy:51821
 }
 
 # Control Tower — Walter Council UI (Tailscale-only)
-# NOTE: Access is enforced at the app layer (TAILSCALE_ENFORCE=true).
-# For defence-in-depth, add a `remote_ip` matcher here or use Cloudflare Access.
+# App-layer access control is TAILSCALE_ENFORCE=true; the proxy-layer
+# admin_auth_gate adds defense-in-depth so any future app-layer regression
+# (env var dropped, middleware bypassed, etc.) doesn't expose the dashboard
+# publicly. Closes Codex R2 #130 MAJOR.
 tower.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy control-tower:3000 {
     # Strip attacker-controlled IP headers; set from actual remote address only.
     # Prevents X-Forwarded-For spoofing that would break Tailscale IP enforcement.
@@ -114,11 +202,13 @@ posthog.${WALTER_DOMAIN} {
 
 # Postiz — social media scheduling (promoted from devrel profile in v0.2.0)
 postiz.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy postiz:3000
 }
 
 # Metabase — analytics / BI dashboards (promoted from devrel profile in v0.2.0)
 metabase.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy metabase:3000
 }
 
@@ -128,11 +218,13 @@ metabase.${WALTER_DOMAIN} {
 
 # Penpot — design tool
 penpot.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy penpot-frontend:8080
 }
 
 # Draw.io — diagrams
 draw.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy drawio:8080
 }
 
@@ -142,6 +234,7 @@ draw.${WALTER_DOMAIN} {
 
 # OpenClaw — personal AI assistant admin UI (Phase 2)
 claw.${WALTER_DOMAIN} {
+  import admin_auth_gate
   reverse_proxy openclaw:18789
 }
 
