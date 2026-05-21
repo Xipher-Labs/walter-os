@@ -43,7 +43,7 @@ The Passing rubric has ~70 criteria. The high-confidence MET subset (already sat
 - **Documentation**: README has architecture overview, install steps, contributor guide → `CONTRIBUTING.md`
 - **Other**: project tracks security-known vulnerabilities → audit ledger
 - **Change-control**: public version-controlled repo, history, releases via tags
-- **Reporting**: BUG_TRACKER URL = github issues, vulnerabilities → `SECURITY.md`
+- **Reporting**: BUG_TRACKER URL = GitHub Issues, vulnerabilities → `SECURITY.md`
 - **Quality**: working build (CI green), tests (bats + vitest), test policy in CONTRIBUTING
 - **Security**: developer training (operator docs), application of secure design (`docs/operational/security-audit-*.md`), at least 1 hardening tool (gitleaks via `.githooks/pre-commit`, activated by `core.hooksPath=.githooks` — installer at `scripts/setup-githooks.sh` / `scripts/install-pre-commit.sh`; CI scan at `.github/workflows/gitleaks.yml`)
 
@@ -63,7 +63,7 @@ Same shape as AC-1 for `docs/operational/openssf-badge-silver.md`. Silver adds ~
 - **Build documentation**: README install + release.yml
 - **Continuous integration**: ci.yml + release.yml + release-security workflow (folded into release.yml in PR #62)
 - **Static analysis fix policy**: documented in AGENTS.md "Review loop"
-- **Two-person review for releases**: walter-os branch-flow + 3-round-review policy already requires Copilot+Codex on every PR before merge (effectively two-reviewer minimum)
+- **Two-person review for releases**: OpenSSF Silver's `two_person_review` criterion explicitly requires INDEPENDENT HUMAN review on changes that touch security-sensitive surfaces. Copilot + Codex automated review (which Walter-OS's branch-flow + 3-round-review policy already requires on every PR) does NOT satisfy this on its own — automated reviewers are tooling, not independent humans. **Action for Silver filing**: document the policy that any merge to `main` that touches `hooks/`, `auth/`, `crypto/`, money-flows, or PHI requires at least one human reviewer in addition to the automated tools. Operator + a co-maintainer is the minimum; Walter-OS today is solo-operator, so Silver `two_person_review` is honestly answered as **NOT-MET** until a co-maintainer is onboarded. Don't claim the criterion based on bot review — that's a badge-misrepresentation risk.
 - **Memory-safety**: shell + python + JS — no C/C++ surface; answer N/A
 - **Threat-model documentation**: `docs/operational/security-audit-2026-05-11.md`
 
@@ -128,8 +128,8 @@ Silver gaps:
 
 ## Refs
 
-- Parent: `docs/specs/oss-trust-roadmap.md` E-1 + E-2
-- Sibling: `docs/specs/oss-trust-v0.5.0-small-batch.md` (D-1 GHSA — pre-req for Passing `vulnerability_response`)
+- Parent: OSS Trust roadmap E-1 + E-2 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); post-merge in-tree: `docs/specs/oss-trust-roadmap.md`.
+- Sibling: D-1 GHSA — pre-req for Passing `vulnerability_response`. Spec'd in the small-batch [PR #89](https://github.com/Xipher-Labs/walter-os/pull/89); post-merge in-tree: `docs/specs/oss-trust-v0.5.0-small-batch.md`.
 - OpenSSF Best Practices Badge: <https://www.bestpractices.dev/>
 - Passing criteria: <https://www.bestpractices.dev/en/criteria/0>
 - Silver criteria: <https://www.bestpractices.dev/en/criteria/1>
