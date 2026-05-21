@@ -3,7 +3,7 @@
 **Status**: ready for `/write-plan` after operator approval
 **Audit refs**: `docs/operational/security-audit-2026-05-11.md` P2-01 through P2-08
 **Target release**: **v0.5.0** (after v0.4.0 P1 epic closes)
-**Depends on**: v0.4.0 P1 closures merged (`docs/specs/p1-hardening-epic.md`)
+**Depends on**: v0.4.0 P1 closures merged. The companion P1 epic spec is in PR #65 (`docs/specs/p1-hardening-epic.md`) and may not yet be on `main` when this spec is read.
 
 ## Problem
 
@@ -30,9 +30,9 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 | D-1 | **P2-01 `bootstrap.sh` eval**: replace `eval "$@"` with `run_args` (same pattern as `install.sh`). | Eliminates the eval path entirely. Same fix as P0-04. |
 | D-2 | **P2-02 Syncthing :22000**: keep `0.0.0.0` (required for device-to-device sync) but DOCUMENT it explicitly in the security posture doc + add Cloudflare-Access-equivalent gating note. | Functional requirement; we document the trust boundary, not change it. |
 | D-3 | **P2-03 Wireguard :51820/udp**: same as P2-02 — keep binding; harden documentation around `.env` file mode 600 + key rotation runbook. | Functional requirement. |
-| D-4 | **P2-04 `detect-error.sh` stderr injection**: wrap stderr/stdout in `<TOOL_OUTPUT>…</TOOL_OUTPUT>` bounded markers (same pattern as P0-06 bounded-section framing). | Same mitigation class as the lessons.md fix. The submodule already houses the fix; just extend to the third hook script. |
+| D-4 | **P2-04 `detect-error.sh` stderr injection**: wrap stderr in `<TOOL_STDERR>…</TOOL_STDERR>` and stdout in `<TOOL_STDOUT>…</TOOL_STDOUT>` bounded markers (two-marker scheme so the operator can tell them apart in logs and the submodule's regex can target each independently). Same UNTRUSTED-DATA framing prefix as P0-06. | Same mitigation class as the lessons.md fix. The submodule already houses the fix; just extend to the third hook script. AC-3 below pins the two-marker scheme. |
 | D-5 | **P2-05 Grafana Assistant plugin**: REMOVE from default install. Operator opts in via `WALTER_GRAFANA_ASSISTANT=1` env var. | Outbound LLM leakage from the observability layer (which has metric / log / alert content) is too easy to enable accidentally. Operator must opt in. |
-| D-6 | **P2-06 redactor gaps**: extend `scripts/agent-secret-redactor.sh` to cover Hetzner (`/^[a-f0-9]{64}$/`), Infisical (`st\.v3\.[A-Za-z0-9_-]+`), Vercel (`vc_[A-Za-z0-9_-]+`), Cloudflare (`/^[A-Za-z0-9_-]{40,60}$/` — generic high-entropy pattern), and `LITELLM_MASTER_KEY` (operator-defined pattern read from `personal.env`). | Each missing token class is one bats test + one regex. |
+| D-6 | **P2-06 redactor gaps**: extend `scripts/agent-secret-redactor.sh` to cover Hetzner (operator-config required: see AC-5), Infisical (`st\.v3\.[A-Za-z0-9_-]+` — prefix-anchored, low FP risk), Vercel (`vc_[A-Za-z0-9_-]+` — prefix-anchored, low FP risk), Cloudflare (operator-config: see AC-5), and `LITELLM_MASTER_KEY` (operator-defined pattern via `WALTER_LITELLM_MASTER_KEY_PATTERN` env var — see AC-5 for the canonical config-key name; do NOT read raw from `personal.env`). | Each missing token class is one bats test + one regex. **Avoid generic high-entropy regexes** like `^[a-f0-9]{64}$` (matches every sha256 digest the operator prints) or `^[A-Za-z0-9_-]{40,60}$` (matches half the legitimate base64 output) — they cause false-positive redactions that hide real diagnostic content. Use prefix-anchored or operator-config patterns instead. |
 | D-7 | **P2-07 tool-definition drift**: implement `check_tool_definitions()` properly. Snapshot per-MCP tool defs to `~/.config/walter-os/mcp-snapshots/<server>-<date>.json`; diff against yesterday's snapshot; CRITICAL finding on change. | Closes the explicit Phase-2 TODO. Same pattern as the new `check_external_hooks()` from P1-07. |
 | D-8 | **P2-08 SQL pattern variants**: extend the `approval-gate.sh` SQL regex to cover `DELETE\nFROM`, `delete from` (lowercase), and `DELETE/*…*/FROM` (comment-separator). | Three lines of regex + three bats tests. |
 
@@ -63,12 +63,27 @@ Closing all 8 lifts Walter-OS from "audit-clean for v0.4.0" to "audit-clean acro
 
 ### AC-5 — P2-06 redactor coverage
 - [ ] `scripts/agent-secret-redactor.sh` adds patterns for:
-  - Hetzner: 64-char hex token
-  - Infisical: `st\.v3\.[A-Za-z0-9_-]{20,}`
-  - Vercel: `vc_[A-Za-z0-9_-]{20,}`
-  - Cloudflare: documented generic high-entropy pattern; operator can extend via overlay
-  - `LITELLM_MASTER_KEY` (length ≥ 32): pattern read from `WALTER_LITELLM_MASTER_KEY_PATTERN` env var (operator-defined regex), fallback to a sensible default
-- [ ] `tests/scripts/agent-secret-redactor.bats` extended with 5 cases (one per new pattern).
+  - Hetzner: operator-config pattern via `WALTER_HETZNER_TOKEN_PATTERN`
+    env var (the raw "64-char hex" pattern would catch every sha256
+    digest the operator prints — too noisy as a default). If unset,
+    redactor leaves the token class unscanned.
+  - Infisical: `st\.v3\.[A-Za-z0-9_-]{20,}` (prefix-anchored, low
+    false-positive risk).
+  - Vercel: `vc_[A-Za-z0-9_-]{20,}` (prefix-anchored).
+  - Cloudflare: operator-config pattern via `WALTER_CLOUDFLARE_TOKEN_PATTERN`.
+    Same rationale as Hetzner — `^[A-Za-z0-9_-]{40,60}$` would redact
+    most legitimate base64 output (Postgres password hashes, JWT
+    fragments, kubectl certs).
+  - `LITELLM_MASTER_KEY` (length ≥ 32): pattern read from
+    `WALTER_LITELLM_MASTER_KEY_PATTERN` env var (operator-defined regex,
+    canonical config-key name — D-6 says the same; do NOT use a raw
+    `LITELLM_MASTER_KEY` regex unless this env var is set).
+- [ ] `tests/scripts/agent-secret-redactor.bats` extended with 5 cases
+  (one per new pattern, plus 2 false-positive guards: a printed sha256
+  digest should NOT be redacted when no `WALTER_HETZNER_TOKEN_PATTERN`
+  is configured, and a JWT-shaped base64 segment should NOT be redacted
+  by the Cloudflare scan when no `WALTER_CLOUDFLARE_TOKEN_PATTERN` is
+  configured).
 
 ### AC-6 — P2-07 tool-definition drift detection
 - [ ] `skills/daily-supply-chain-audit/scripts/audit.sh` `check_tool_definitions()` implemented:
