@@ -24,30 +24,36 @@ This is NOT a sandbox (that's A-3 — process isolation via nsjail/sandbox-exec)
 
 | # | Decision | Why |
 |---|---|---|
-| D-1 | **Token format: PASETO v4 (public)**. Per-session Ed25519 keypair signs claims. | Per the parent roadmap D-2 decision. PASETO v4 closes the JWT footguns by design. |
+| D-1 | **Token format: PASETO v4 (public)**. Per-session Ed25519 keypair signs claims. | Capability-token format is PASETO v4 (per the OSS Trust roadmap `DEC-2` cross-cutting decision in `docs/specs/oss-trust-roadmap.md`). PASETO v4 closes the JWT alg-confusion / kid-confusion footguns by design. |
 | D-2 | **Per-session keypair lifetime = session TTL** (from A-4 spec). Key generated at session start, deleted at session end. Capability tokens minted from this key. | Tying cap TTL to session TTL means session-end revokes everything. No long-lived secrets on disk. |
-| D-3 | **Token claims schema (PASETO v4 footer + payload)**: | Minimum viable claim set. Operator can extend. |
-|   | ```                                                  |   |
-|   | {                                                    |   |
-|   |   "iss": "walter-os",                                |   |
-|   |   "sub": "<operator>",                               |   |
-|   |   "session_id": "<uuid>",                            |   |
-|   |   "tool": "Bash" | "Edit" | "Write" | ...,           |   |
-|   |   "scope": {                                         |   |
-|   |     "paths": ["<glob>", ...],                        |   |
-|   |     "network": ["<host>", ...],                      |   |
-|   |     "patterns": ["<bash-regex>", ...]                |   |
-|   |   },                                                 |   |
-|   |   "iat": "<ISO-8601>",                               |   |
-|   |   "exp": "<ISO-8601 ≤ session end>",                 |   |
-|   |   "nonce": "<uuid>"                                  |   |
-|   | }                                                    |   |
-|   | ```                                                  |   |
+| D-3 | **Token claims schema (PASETO v4 footer + payload)** — see `Token claims schema` block immediately below this table. | Minimum viable claim set. Operator can extend. |
 | D-4 | **Minting via `walter-os cap mint <tool> --paths <glob>... --duration <Nm>`**. Operator mints; tokens land in `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`. | Operator-controlled. Default agents don't mint; they consume tokens minted by the operator. |
 | D-5 | **Enforcement via `hooks/capability-check.sh`** PreToolUse hook. Reads the relevant tool call (path + command), looks up the latest valid token for that tool in the session, verifies the cap covers the requested operation. | Same chain as the other gates. |
 | D-6 | **Fail-secure for high-tier categories.** If no valid token exists for an `Edit`/`Write`/`Bash` op AND the operation falls in a tier-`high` category from `approval-gate.sh CATEGORY_MIN_TIER`, the hook BLOCKS. Lower tiers fall through (cap is mandatory only for high-tier ops; low-tier ops are governed by the existing approval-gate alone). | Layered defense. v0.5.0 doesn't try to gate everything; only the dangerous tier. |
 | D-7 | **Operator-overridable per-skill defaults**. `~/.config/walter-os/overlay/skill-capabilities.yml` declares which skills auto-mint a default capability at session start (e.g. `nuclei-cli` auto-mints `tool=Bash, scope.patterns=[nuclei.*]`). | Skills the operator trusts get auto-caps; novel commands require explicit minting. |
 | D-8 | **No transitive delegation in v0.5.0.** A subagent cannot mint a token from its parent's token. Operator is always in the loop. | Capability-system 101: simple before clever. |
+
+### Token claims schema (D-3 reference)
+
+Embedded outside the decisions table because GitHub's Markdown
+renderer mangles multi-line fenced code blocks inside table cells.
+
+```json
+{
+  "iss": "walter-os",
+  "sub": "<operator>",
+  "session_id": "<uuid>",
+  "tool": "Bash | Edit | Write | ...",
+  "scope": {
+    "paths": ["<glob>", "..."],
+    "network": ["<host>", "..."],
+    "patterns": ["<bash-regex>", "..."]
+  },
+  "iat": "<ISO-8601>",
+  "exp": "<ISO-8601 ≤ session end>",
+  "nonce": "<uuid>"
+}
+```
 
 ## Acceptance criteria
 
@@ -123,7 +129,7 @@ This is NOT a sandbox (that's A-3 — process isolation via nsjail/sandbox-exec)
 | Long-lived JWT-style token stolen from disk | PASETO v4 (no `alg=none` confusion). Plus session-lifetime expiry. |
 | Operator mints a wildcard cap and forgets it | Daily-audit `check_cap_state()` doesn't flag wide scope, but cap dies at session end (max 8h per A-4). |
 | Subagent escalates by re-signing its parent's token | D-8: no transitive delegation in v0.5.0. The subagent uses the same session key; minting requires `walter-os cap mint`, which is operator-gated. |
-| Filesystem race: operator revokes cap WHILE hook is reading it | Hook reads atomically via `flock`; deletion is a file unlink, observable on next check. Window is microseconds. |
+| Filesystem race: operator revokes cap WHILE hook is reading it | Hook reads with `flock` **when available** (Linux always; macOS only if the operator installed `util-linux` via Homebrew). On platforms without `flock`, the hook falls back to an open-and-read with a same-inode check at end-of-read — same pattern other walter-os scripts already use (`hooks/daily-audit-gate.sh`, agent metrics). The race window is microseconds either way; deletion is a file unlink, observable on the next PreToolUse invocation. |
 | Capability bypass via deleting `caps-<session>/` dir | Hook fails-CLOSED on missing dir for high-tier ops. |
 
 ## Out of scope
