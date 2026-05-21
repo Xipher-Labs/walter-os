@@ -175,8 +175,29 @@ check_tool_definitions() {
   # Phase 2 (follow-up, not in this MVP): connect to each running MCP via
   # stdio JSON-RPC, listTools, snapshot {name, schema, description} per
   # tool, diff against baseline. Requires walter-os to ship an MCP client.
-  local registry="${WALTER_OS_HOME:-${HOME}/walter-os}/mcp/servers.json"
-  [[ -f "$registry" ]] || return 0
+  # Registry path resolution (Copilot R3 #129): prefer the explicit
+  # WALTER_OS_HOME env var, then walk up from the script's own location
+  # (handles `audit.sh` run from a non-default checkout), then fall back
+  # to the legacy ~/walter-os default. If none resolve to an existing
+  # file, emit an INFO finding rather than silently returning — a
+  # missing registry should be visible in the audit report.
+  local registry=""
+  local script_root="${BASH_SOURCE[0]%/skills/*}"
+  for candidate in \
+      "${WALTER_OS_HOME:-}/mcp/servers.json" \
+      "${script_root}/mcp/servers.json" \
+      "${HOME}/walter-os/mcp/servers.json"; do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      registry="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$registry" ]]; then
+    finding info "mcp-registry-not-found" \
+      "mcp/servers.json not found in WALTER_OS_HOME, script root, or ~/walter-os; MCP drift check skipped" \
+      "Set WALTER_OS_HOME or run audit.sh from inside a walter-os checkout"
+    return 0
+  fi
   # MAJOR fix (Copilot R1 #129 R1.1): if jq is missing, the audit's
   # security-relevant MCP drift check would silently pass. Emit a HIGH
   # finding instead of returning quietly — same pattern as check_hooks.
@@ -200,8 +221,11 @@ check_tool_definitions() {
   if [[ ! -f "$baseline" ]]; then
     # Atomic write (Copilot R1 #129 R1.3) — consistent with
     # cmd_baseline_mcp_tools' .tmp + mv pattern.
+    # `printf '%s\n'` instead of `echo` (Copilot R3 #129 L2) — echo's
+    # handling of `-n`, `-e`, and backslash escapes is implementation-
+    # defined, which is unsafe for a security-sensitive baseline.
     mkdir -p "$(dirname "$baseline")"
-    echo "$current" > "${baseline}.tmp" && mv "${baseline}.tmp" "$baseline"
+    printf '%s\n' "$current" > "${baseline}.tmp" && mv "${baseline}.tmp" "$baseline"
     return 0
   fi
 
