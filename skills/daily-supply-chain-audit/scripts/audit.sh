@@ -219,12 +219,14 @@ check_tool_definitions() {
   fi
 
   if [[ ! -f "$baseline" ]]; then
-    # Atomic write. `mktemp -p` puts the temp file in the same
-    # directory as the destination so the final `mv` is atomic (same
-    # filesystem). Per-process unique name prevents the race Codex R2
-    # #129 flagged: concurrent `walter-os baseline-mcp-tools` + this
+    # Atomic write. `mktemp "${baseline}.tmp.XXXXXX"` (template form)
+    # creates the temp file in the same directory as $baseline so the
+    # final `mv` is atomic on the filesystem. The `XXXXXX` template
+    # gives a unique per-process name to prevent the race Codex R2 #129
+    # flagged: concurrent `walter-os baseline-mcp-tools` + this
     # check_tool_definitions first-run shared `${baseline}.tmp` and
-    # could clobber each other.
+    # could clobber. (Copilot R6 #129: comment used to say `mktemp -p`
+    # but the code uses the template form — corrected.)
     # printf '%s\n' (Copilot R3 #129) — echo's escape handling is
     # implementation-defined, unsafe for security-critical baseline.
     mkdir -p "$(dirname "$baseline")"
@@ -246,14 +248,14 @@ check_tool_definitions() {
     finding high "mcp-server-added" \
       "MCP server added: $name (in mcp/servers.json since baseline)" \
       "Review new server's command, args, trust. If safe: walter-os baseline-mcp-tools"
-  done < <(comm -23 <(echo "$current_names") <(echo "$stored_names"))
+  done < <(comm -23 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
 
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
     finding info "mcp-server-removed" \
       "MCP server removed: $name (was in baseline, not in current registry)" \
       "If intentional: walter-os baseline-mcp-tools"
-  done < <(comm -13 <(echo "$current_names") <(echo "$stored_names"))
+  done < <(comm -13 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
 
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
@@ -293,9 +295,9 @@ check_tool_definitions() {
       # semantics (config-takeover vectors live in this bucket).
       finding high "mcp-server-config-changed" \
         "MCP server '$name' config changed since baseline (fields other than command/args/trust)" \
-        "REVIEW: diff <(jq '.servers.\"$name\"' $baseline) <(jq '.servers.\"$name\"' $registry). If safe: walter-os baseline-mcp-tools"
+        "REVIEW: diff <(jq '.\"$name\"' $baseline) <(jq '.servers.\"$name\"' $registry). If safe: walter-os baseline-mcp-tools"
     fi
-  done < <(comm -12 <(echo "$current_names") <(echo "$stored_names"))
+  done < <(comm -12 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
 }
 
 # ---------- 6. Minimum release age check ----------
