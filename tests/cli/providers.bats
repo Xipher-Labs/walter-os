@@ -12,17 +12,18 @@ WALTER_BIN="${REPO_ROOT}/bin/walter"
 # -----------------------------------------------------------------------
 # Test environment setup helpers
 # -----------------------------------------------------------------------
-setup() {
-  # patch_env.sh + providers.sh require bash >= 4 (associative arrays).
-  # macOS ships bash 3.2 as /bin/bash AND that's what `bats` uses to
-  # source files inside @test blocks; we cannot re-exec a sourced
-  # file. Skip if bats itself is bash 3.2 — the script-under-test
-  # re-execs to bash 4+ on real invocation, so this is a test-harness-
-  # only limitation, not a production gap.
+# Helper called by tests that source patch_env.sh / patch_mcp.sh OR
+# execute providers.sh in-process via bats. Those paths require bash >= 4
+# (associative arrays). Tests that don't touch bash-4-only code (template
+# existence, detect.sh sourcing, executable bit check) run unconditionally
+# even on macOS bash 3.2.
+_require_bash_4_or_skip() {
   if [[ "${BASH_VERSION%%.*}" -lt 4 ]]; then
-    skip "providers test suite requires bash >= 4 (BASH_VERSION=$BASH_VERSION); the script re-execs under bash 4+ on real invocation, but bats sources files in its own shell"
+    skip "requires bash >= 4 (BASH_VERSION=$BASH_VERSION); the script under test re-execs to bash 4+ on real invocation, but bats sources/runs files in its own shell"
   fi
+}
 
+setup() {
   # Fresh temp dir for each test — simulates HOME config
   TEST_HOME="$(mktemp -d)"
   export HOME="$TEST_HOME"
@@ -189,6 +190,7 @@ teardown() {
 # BLOCKER 1: unbound variable / OOB index in non-interactive mode [AC-1]
 # -----------------------------------------------------------------------
 @test "BLOCKER1: piping unknown slug defaults to first option (no crash) [AC-1]" {
+  _require_bash_4_or_skip
   export PROVIDERS_YAML="${TEST_HOME}/.config/walter-os/providers.yaml"
   export ENV_LOCAL="${TEST_HOME}/.env.local"
   # 7 categories; send 'bogus-provider' for llm, then '1' for the rest
@@ -199,6 +201,7 @@ teardown() {
 }
 
 @test "BLOCKER1: piping OOB index 99 defaults to first option (no crash) [AC-1]" {
+  _require_bash_4_or_skip
   export PROVIDERS_YAML="${TEST_HOME}/.config/walter-os/providers.yaml"
   export ENV_LOCAL="${TEST_HOME}/.env.local"
   # '99' is out of bounds for any category menu
@@ -211,6 +214,7 @@ teardown() {
 # Task 4: providers.yaml writer — idempotency [AC-2]
 # -----------------------------------------------------------------------
 @test "apply.sh writes providers.yaml with correct structure [AC-2]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/apply.sh"
   local out="${TEST_HOME}/.config/walter-os/providers.yaml"
   write_providers_yaml \
@@ -222,6 +226,7 @@ teardown() {
 }
 
 @test "apply.sh is idempotent: re-run with same selections produces identical file [AC-2]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/apply.sh"
   local out="${TEST_HOME}/.config/walter-os/providers.yaml"
   write_providers_yaml \
@@ -243,6 +248,7 @@ teardown() {
 # Task 5: patch-env.sh — .env.local patching [AC-3]
 # -----------------------------------------------------------------------
 @test "patch_env: selecting github for git comments out FORGEJO_URL [AC-3]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_env.sh"
   local env_file="${TEST_HOME}/.env.local"
   patch_env_for_category "git" "github" "$env_file"
@@ -250,6 +256,7 @@ teardown() {
 }
 
 @test "patch_env: selecting forgejo for git keeps FORGEJO_URL uncommented [AC-3]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_env.sh"
   local env_file="${TEST_HOME}/.env.local"
   # Ensure FORGEJO_URL is present and uncommented
@@ -259,6 +266,7 @@ teardown() {
 }
 
 @test "patch_env: selecting linear for project_management comments out PLANE_API_TOKEN [AC-3]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_env.sh"
   local env_file="${TEST_HOME}/.env.local"
   patch_env_for_category "project_management" "linear" "$env_file"
@@ -266,6 +274,7 @@ teardown() {
 }
 
 @test "patch_env: selecting anthropic for llm comments out LITELLM_BASE_URL [AC-3]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_env.sh"
   local env_file="${TEST_HOME}/.env.local"
   patch_env_for_category "llm" "anthropic" "$env_file"
@@ -276,6 +285,7 @@ teardown() {
 # BLOCKER 2: cross-category env var clobbering [AC-3]
 # -----------------------------------------------------------------------
 @test "BLOCKER2: llm=openai + embeddings=nomic keeps OPENAI_API_KEY uncommented [AC-3]" {
+  _require_bash_4_or_skip
   # Add OPENAI_API_KEY to env file (uncommented)
   echo "OPENAI_API_KEY=sk-test-openai" >> "${TEST_HOME}/.env.local"
   source "${PROVIDERS_LIB}/patch_env.sh"
@@ -289,6 +299,7 @@ teardown() {
 }
 
 @test "BLOCKER2: llm=ollama + embeddings=voyage keeps OLLAMA_BASE_URL uncommented [AC-3]" {
+  _require_bash_4_or_skip
   # Add OLLAMA_BASE_URL to env file (uncommented)
   echo "OLLAMA_BASE_URL=http://localhost:11434" >> "${TEST_HOME}/.env.local"
   source "${PROVIDERS_LIB}/patch_env.sh"
@@ -305,6 +316,7 @@ teardown() {
 # Task 6: patch-mcp.sh — mcp/servers.json patching [AC-4]
 # -----------------------------------------------------------------------
 @test "patch_mcp: selecting linear disables plane MCP [AC-4]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_mcp.sh"
   local mcp_file="${TEST_HOME}/mcp-servers.json"
   cp "${REPO_ROOT}/mcp/servers.json" "$mcp_file"
@@ -315,6 +327,7 @@ teardown() {
 }
 
 @test "patch_mcp: selecting plane disables linear MCP [AC-4]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_mcp.sh"
   local mcp_file="${TEST_HOME}/mcp-servers.json"
   cp "${REPO_ROOT}/mcp/servers.json" "$mcp_file"
@@ -325,6 +338,7 @@ teardown() {
 }
 
 @test "patch_mcp: selected provider MCP has disabled=false [AC-4]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_mcp.sh"
   local mcp_file="${TEST_HOME}/mcp-servers.json"
   cp "${REPO_ROOT}/mcp/servers.json" "$mcp_file"
@@ -338,6 +352,7 @@ teardown() {
 # WARN 4: GIT_PROVIDER env var written to .env.local [AC-3]
 # -----------------------------------------------------------------------
 @test "WARN4: patch_env writes GIT_PROVIDER=github when git=github [AC-3]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_env.sh"
   local env_file="${TEST_HOME}/.env.local"
   patch_env_for_category "git" "github" "$env_file"
@@ -345,6 +360,7 @@ teardown() {
 }
 
 @test "WARN4: patch_env writes GIT_PROVIDER=forgejo when git=forgejo [AC-3]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_env.sh"
   local env_file="${TEST_HOME}/.env.local"
   patch_env_for_category "git" "forgejo" "$env_file"
@@ -359,6 +375,7 @@ teardown() {
 # WARN 5: jq --arg for safe key interpolation [AC-4]
 # -----------------------------------------------------------------------
 @test "WARN5: patch_mcp uses --arg for key interpolation (no jq injection) [AC-4]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_mcp.sh"
   # Inject a MCP key name that would break naive string interpolation
   # (contains a double-quote). We test by passing a key that simply doesn't
@@ -378,6 +395,7 @@ teardown() {
 # WARN 3: trap cleanup for jq temp file [AC-4]
 # -----------------------------------------------------------------------
 @test "WARN3: patch_mcp_for_category cleans up temp file on success [AC-4]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/patch_mcp.sh"
   local mcp_file="${TEST_HOME}/mcp-servers.json"
   cp "${REPO_ROOT}/mcp/servers.json" "$mcp_file"
@@ -394,11 +412,13 @@ teardown() {
 # Task 7: walter providers configure --category [AC-5, AC-6]
 # -----------------------------------------------------------------------
 @test "walter providers --help exits 0 [AC-1]" {
+  _require_bash_4_or_skip
   run bash "${SUBCOMMANDS}/providers.sh" --help
   [ "$status" -eq 0 ]
 }
 
 @test "Ollama post-config note is printed when nomic is selected [AC-6]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/apply.sh"
   run print_ollama_note
   [ "$status" -eq 0 ]
@@ -410,6 +430,7 @@ teardown() {
 # WARN 1: AC-5 --category scoping — only the specified category changes
 # -----------------------------------------------------------------------
 @test "WARN1: --category llm changes only llm, preserves other 6 categories [AC-5]" {
+  _require_bash_4_or_skip
   _setup_e2e_env "${TEST_HOME}/e2e"
   local yaml="${TEST_HOME}/.config/walter-os/providers.yaml"
   # First: write a full providers.yaml with a known baseline (all self-hosted)
@@ -444,6 +465,7 @@ teardown() {
 
 # Config 1: All-self-hosted (via apply.sh — existing coverage)
 @test "AC-7 all-self-hosted: providers.yaml has correct self-hosted selections [AC-7]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/apply.sh"
   local out="${TEST_HOME}/.config/walter-os/providers.yaml"
   write_providers_yaml \
@@ -460,6 +482,7 @@ teardown() {
 
 # Config 2: Cloud-first (via apply.sh — existing coverage)
 @test "AC-7 cloud-first: providers.yaml has correct cloud selections [AC-7]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/apply.sh"
   local out="${TEST_HOME}/.config/walter-os/providers.yaml"
   write_providers_yaml \
@@ -474,6 +497,7 @@ teardown() {
 
 # Config 3: Minimal (via apply.sh — existing coverage)
 @test "AC-7 minimal: providers.yaml has correct minimal selections [AC-7]" {
+  _require_bash_4_or_skip
   source "${PROVIDERS_LIB}/apply.sh"
   local out="${TEST_HOME}/.config/walter-os/providers.yaml"
   write_providers_yaml \
@@ -527,6 +551,7 @@ ENVEOF
 }
 
 @test "BLOCKER3: e2e wizard all-self-hosted produces correct yaml + env [AC-7]" {
+  _require_bash_4_or_skip
   _setup_e2e_env "${TEST_HOME}/e2e"
   # llm=1(litellm), pm=1(plane), git=1(forgejo), secrets=1(infisical),
   # analytics=1(plausible), search=1(brave), embeddings=1(nomic)
@@ -554,6 +579,7 @@ ENVEOF
 }
 
 @test "BLOCKER3: e2e wizard cloud-first produces correct yaml + env [AC-7]" {
+  _require_bash_4_or_skip
   _setup_e2e_env "${TEST_HOME}/e2e"
   # llm=2(anthropic), pm=2(linear), git=2(github), secrets=2(doppler),
   # analytics=2(plausible_cloud), search=2(algolia), embeddings=2(openai_ada)
@@ -582,6 +608,7 @@ ENVEOF
 }
 
 @test "BLOCKER3: e2e wizard minimal produces correct yaml + env [AC-7]" {
+  _require_bash_4_or_skip
   _setup_e2e_env "${TEST_HOME}/e2e"
   # llm=2(anthropic), pm=4(none), git=2(github), secrets=5(none),
   # analytics=5(none), search=3(none), embeddings=4(none)
