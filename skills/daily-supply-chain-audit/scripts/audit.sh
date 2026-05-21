@@ -26,9 +26,16 @@ CRIT_COUNT=0
 bump() {
   local level="$1"
   case "$level" in
-    info) (( INFO_COUNT++ )); (( SEVERITY < 1 )) && SEVERITY=1 ;;
-    high) (( HIGH_COUNT++ )); (( SEVERITY < 2 )) && SEVERITY=2 ;;
-    crit) (( CRIT_COUNT++ )); (( SEVERITY < 3 )) && SEVERITY=3 ;;
+    info)   (( INFO_COUNT++ ));   (( SEVERITY < 1 )) && SEVERITY=1 ;;
+    # medium findings count toward HIGH for exit-code purposes (so
+    # they still block the daily-audit-gate hook) but the level
+    # string "medium" is preserved in the finding output for human
+    # review. Added for Copilot R2 #124 R2.6 / #129 R2.1 — previously
+    # `finding medium ...` calls were silently dropped because bump()
+    # didn't recognize the level.
+    medium) (( HIGH_COUNT++ ));   (( SEVERITY < 2 )) && SEVERITY=2 ;;
+    high)   (( HIGH_COUNT++ ));   (( SEVERITY < 2 )) && SEVERITY=2 ;;
+    crit)   (( CRIT_COUNT++ ));   (( SEVERITY < 3 )) && SEVERITY=3 ;;
   esac
 }
 
@@ -105,16 +112,23 @@ check_secrets_in_configs() {
 # ---------- 3. Hooks integrity ----------
 
 # _audit_hash_file — portable SHA256 (GNU/BSD).
+# Closes Copilot R2 #124 R2.1: prints to a global _HASH_FILE_RESULT
+# variable AND returns 0/1 for success/failure. Callers must check
+# the return code — a missing hasher returns 1 (NOT an empty string
+# treated as a valid hash, which previously caused false-CRIT triggers
+# when current_sha was empty but stored_sha was non-empty).
 _audit_hash_file() {
   local file="$1"
-  [[ -r "$file" && -f "$file" ]] || { echo ""; return; }
+  _HASH_FILE_RESULT=""
+  [[ -r "$file" && -f "$file" ]] || return 1
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" 2>/dev/null | awk '{print $1}'
+    _HASH_FILE_RESULT=$(sha256sum "$file" 2>/dev/null | awk '{print $1}')
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+    _HASH_FILE_RESULT=$(shasum -a 256 "$file" 2>/dev/null | awk '{print $1}')
   else
-    echo ""
+    return 1
   fi
+  [[ -n "$_HASH_FILE_RESULT" ]]
 }
 
 # _check_hooks_v1 — legacy v1 detection fallback (command-strings only).
@@ -158,13 +172,23 @@ check_hooks() {
       local first_tok; first_tok=$(awk '{print $1}' <<<"$cmd")
       local path=""
       case "$first_tok" in
-        /*|./*|../*|~/*|\$*)
+        /*|./*|../*)
+          [[ -f "$first_tok" ]] && path="$first_tok"
+          ;;
+        ~/*)
           local resolved="${first_tok/#\~/$HOME}"
           [[ -f "$resolved" ]] && path="$resolved"
           ;;
+        \$*)
+          local resolved=""
+          eval "resolved=\"$first_tok\"" 2>/dev/null
+          [[ -n "$resolved" && -f "$resolved" ]] && path="$resolved"
+          ;;
       esac
       local sha=""
-      [[ -n "$path" ]] && sha=$(_audit_hash_file "$path")
+      if [[ -n "$path" ]] && _audit_hash_file "$path"; then
+        sha="$_HASH_FILE_RESULT"
+      fi
       result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
         '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
       i=$((i + 1))
@@ -213,7 +237,18 @@ check_hooks() {
       continue
     fi
 
-    local current_sha; current_sha=$(_audit_hash_file "$path")
+    # Closes Copilot R2 #124 R2.1: if no hasher is installed,
+    # _audit_hash_file returns 1 + empty result. Treat that as
+    # "cannot verify" (HIGH), NOT as "content mismatch" (CRIT).
+    local current_sha=""
+    if _audit_hash_file "$path"; then
+      current_sha="$_HASH_FILE_RESULT"
+    else
+      finding high "hook-hasher-missing" \
+        "No SHA256 tool installed; cannot verify hook content for $path" \
+        "brew install coreutils  (or use macOS default shasum)"
+      continue
+    fi
     if [[ "$current_sha" != "$stored_sha" ]]; then
       finding crit "hook-content-modified" \
         "Hook script CONTENT changed in place (path unchanged): $path. Stored sha: ${stored_sha:0:12}..., current sha: ${current_sha:0:12}..." \

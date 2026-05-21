@@ -318,10 +318,21 @@ cmd_baseline_hooks() {
     local first_tok; first_tok=$(awk '{print $1}' <<<"$cmd")
     local path=""
     case "$first_tok" in
-      /*|./*|../*|~/*|\$*)
-        # Expand ~ to $HOME (sh-style)
+      /*|./*|../*)
+        [[ -f "$first_tok" ]] && path="$first_tok"
+        ;;
+      ~/*)
         local resolved="${first_tok/#\~/$HOME}"
         [[ -f "$resolved" ]] && path="$resolved"
+        ;;
+      \$*)
+        # Env-var-prefixed path (e.g. $HOME/foo, ${WALTER_OS_HOME}/hooks/x).
+        # eval is appropriate here: settings.json is operator-trusted +
+        # this only runs on a token we already matched as $-prefixed,
+        # so the expansion surface is bounded. Closes Copilot R2 #124 R2.2.
+        local resolved=""
+        eval "resolved=\"$first_tok\"" 2>/dev/null
+        [[ -n "$resolved" && -f "$resolved" ]] && path="$resolved"
         ;;
     esac
     local sha=""
