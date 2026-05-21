@@ -15,12 +15,12 @@ fixed on the latest minor and ships in the next release.
 
 | Version | Supported | Notes |
 |---|---|---|
-| Latest minor | yes | full security + functional support |
-| Previous minor | partial | CVSS ≥ 7.0 security fixes only |
+| Latest minor (currently 0.4.x — see `VERSION`) | yes | full security + functional support |
+| Previous minor (currently 0.3.x) | partial | CVSS ≥ 7.0 security fixes only |
 | Older minors | no | EOL — upgrade to a supported line |
 
-The current `VERSION` file in this repo is the source of truth for the
-latest release. This table is updated as part of the release checklist.
+The "currently" labels are refreshed as part of the release checklist;
+if they ever disagree with `VERSION`, `VERSION` wins.
 
 ### Pre-1.0 stability note
 
