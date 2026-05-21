@@ -75,15 +75,16 @@ PUBLIC_SITES="headscale posthog matrix chat-matrix chat"
   grep -qE 'WALTER_TAILNET_CIDR.*fd7a:115c:a1e0::/48' "$compose"
 }
 
-# Codex R2 #130 MINOR: 172.16.0.0/12 (RFC1918) was missing from the
-# default LAN CIDR, leaving common corporate LAN ranges denied even on
-# the operator's own network.
-@test "AC2: WALTER_LAN_CIDR default covers all 3 RFC1918 ranges" {
+# Copilot R5 #130 reversal: 172.16/12 in the default WALTER_LAN_CIDR
+# overlapped Docker's default bridge ranges (172.17/16 - 172.31/16),
+# letting any container reach the gate as a "LAN" client. Default is
+# now 192.168/16 only; the static allowlist already covers 10/8 +
+# loopback. Operators who genuinely use 172.16/12 override in personal.env.
+@test "AC2: WALTER_LAN_CIDR default does NOT include Docker-bridge 172.16/12" {
   local compose="$REPO_ROOT/compose.yml"
   [[ -f "$compose" ]] || skip "compose.yml missing"
-  # 10/8 is in the snippet's static allowlist; 192.168/16 + 172.16/12
-  # are the configurable WALTER_LAN_CIDR default.
-  grep -qE 'WALTER_LAN_CIDR.*192\.168\.0\.0/16.*172\.16\.0\.0/12' "$compose"
+  grep -qE 'WALTER_LAN_CIDR.*192\.168\.0\.0/16' "$compose"
+  ! grep -qE 'WALTER_LAN_CIDR:[^#]*172\.16\.0\.0/12' "$compose"
 }
 
 # Codex R2 #130 BLOCKER: scripts/bootstrap.sh used envsubst without an
