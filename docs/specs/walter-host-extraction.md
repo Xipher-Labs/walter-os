@@ -1,10 +1,11 @@
 # walter-host extraction — depersonalization spec
 
-**Status**: ready for `/write-plan` after operator approval of the migration approach (A vs B)
+**Status**: ready for `/write-plan` — D-1 below proposes Option B (overlay + envsubst rendering) as the migration approach; what's pending is operator sign-off on that proposal plus selection of the first pilot service.
 **Issue**: #44 (`[CHORE] -OPERATIONS- setup/walter-host contains operator-specific configs`)
 **Target release**: v0.5.0 → v0.7.0 (multi-release migration; each service is its own small PR)
 **Depends on**: nothing new in main — extends the existing overlay pattern.
-**Parent**: `docs/specs/phase-w-5-depersonalization.md` (scope was scripts only; this is the same gap scaled up to ~31 services).
+**Parent**: `docs/specs/phase-w-5-depersonalization.md` (a broad depersonalization pass that already covered scripts, compose files, contexts, and other operator-personal references — this spec is the same depersonalization discipline applied at scale to the ~31 service stacks under `setup/walter-host/` that W-5 didn't enumerate one-by-one).
+**Precedent**: `skills/syncthing-cli/SKILL.md` + the `bin/walter-os syncthing-bootstrap` subcommand — the existing service-extraction pattern that this spec scales to 31 services.
 **ADR follow-up**: a new `docs/decisions/0014-walter-host-templating-strategy.md` will land alongside the first pilot migration PR.
 
 ## Problem
@@ -63,9 +64,10 @@ Mirror the existing scripts pattern, scoped to services:
 ~/.config/walter-os/overlay/walter-host/<service>/deploy.sh
 ~/config-personal/walter-host/<service>/                            ← legacy path, deprecated but supported
 <walter-os>/setup/walter-host/services/<service>/compose.yml.example ← OSS default with placeholders
+<walter-os>/setup/walter-host/services/<service>/deploy.sh.example   ← OSS default with placeholders
 ```
 
-`walter-os walter-host bootstrap <service>` resolves precedence and writes the active `compose.yml` to a runtime location (probably `${WALTER_RUNTIME_DIR}/walter-host/<service>/compose.yml`, defaulting to `/var/lib/walter-host/`).
+`walter-os walter-host bootstrap <service>` resolves precedence and writes the active `compose.yml` to a runtime location at `${WALTER_RUNTIME_DIR}/walter-host/<service>/compose.yml`. The default for `WALTER_RUNTIME_DIR` is **TBD pending operator decision** — see Open Questions below for the `/var/lib/walter-host/runtime` (system-owned) vs `$XDG_RUNTIME_DIR/walter-host` (user-owned) choice. Implementation MUST refuse to run with `WALTER_RUNTIME_DIR` unset until that question is answered.
 
 ### D-3 — Placeholder syntax
 
@@ -74,7 +76,7 @@ Use shell `${VAR}` substitution in `.example` files, expanded via `envsubst` at 
 | Placeholder | Source | Example |
 |---|---|---|
 | `${WALTER_DOMAIN}` | `personal.env` | `walter.example` |
-| `${WALTER_HOST_DATA_DIR}` | `personal.env` (new) | `/mnt/walter-vm-data` |
+| `${WALTER_HOST_DATA_DIR}` | `personal.env` (new) | Operator-specific. OSS default proposed: `/var/lib/walter-host` (matches the runtime-dir convention). The example `/mnt/walter-vm-data` is a CURRENT-OPERATOR value, not the OSS default — operators set this to whatever disk topology their host uses. |
 | `${WALTER_INITIAL_USER}` | `personal.env` | `walter-admin` |
 | `${WALTER_TIMEZONE}` | `personal.env` | `UTC` |
 
@@ -107,7 +109,7 @@ The `diff` subcommand is critical: it tells the operator "your overlay is X comm
 
 ### D-7 — Audit + test integration
 
-- `tests/oss/walter-host-no-operator-tokens.bats` (new): grep against the migrated services for the W-5 forbidden-token list (`/mnt/walter*` literal paths, hardcoded SSO domains, operator email addresses, etc.). Fails CI if any unmigrated service ships a forbidden literal.
+- `tests/oss/walter-host-no-operator-tokens.bats` (new): grep against the migrated services for a NEW per-service forbidden-token list (this spec extends the W-5 forbidden-token concept; W-5's tests cover the scripts pass, this spec adds the per-service service-tree coverage). The forbidden list includes literal `/mnt/walter*` paths, hardcoded SSO domains, hardcoded `xipher-labs` references in service config, operator email addresses, and any string the operator overlay already substitutes via `${...}` placeholders. Fails CI if any unmigrated service ships a forbidden literal. The list lives in `tests/oss/walter-host-forbidden-tokens.txt` (operator-extendable) and is sourced by both this test and a new `walter-os walter-host scan-forbidden` CLI subcommand for operator-side previews.
 - `daily-supply-chain-audit` extended `check_walter_host_drift()`: if the operator overlay is `> 30d` older than the upstream example for any service, emit `info` finding.
 
 ## Acceptance criteria
@@ -147,7 +149,7 @@ The `diff` subcommand is critical: it tells the operator "your overlay is X comm
 
 ## Threat model
 
-- **Overlay file owned by the operator** (lives under `~/.config/walter-os/overlay/`). Standard operator-file integrity (P1-09 env-allowlist parser doesn't apply to YAML files directly, but the overlay path is already protected by the standing-approvals path lockdown).
+- **Overlay file owned by the operator** (lives under `~/.config/walter-os/overlay/`). The operator's `~/.config/walter-os/` tree carries standard chmod 0700 + sha256-baseline-via-daily-audit hygiene. Note: P1-09's env-allowlist parser only applies to `KEY=VALUE` env files (NOT YAML/compose files), and the standing-approvals path lockdown (P1-06) hardcodes the `agent-approvals.yml` path — it does NOT enforce any policy on arbitrary overlay subtrees like `overlay/walter-host/`. Integrity for the overlay tree is operator-file-permissions + daily-audit drift detection, not a hook-level gate.
 - **`envsubst` injection risk**: a malicious `personal.env` could set `WALTER_DOMAIN='$(rm -rf /)'` and inject shell at substitution time. Mitigation: `envsubst` does NOT execute substitutions — it does string replacement only. We document this explicitly and add a bats test asserting that `WALTER_DOMAIN='$(echo pwned)'` lands as a literal string in the rendered compose.
 - **Operator drift**: an overlay that's 6 months behind the upstream example can silently miss security patches in the example. Mitigation: AC-5 drift reminder. Operator chooses when to reconcile.
 
@@ -177,7 +179,7 @@ The `diff` subcommand is critical: it tells the operator "your overlay is X comm
 
 - Issue #44
 - `docs/specs/phase-w-5-depersonalization.md` (parent spec)
-- `docs/specs/syncthing-script-extraction.md` (precedent — single-script extraction)
+- `skills/syncthing-cli/SKILL.md` + `bin/walter-os syncthing-bootstrap` subcommand (precedent — single-service extraction following the same pattern this spec scales to 31 services)
 - `docs/decisions/0011-depersonalization-strategy.md` (overlay-first ADR)
 - `tests/oss/depersonalization.bats` (existing regression suite — this spec extends it)
 - `bin/walter-os syncthing-bootstrap` (existing three-tier overlay-lookup pattern)
