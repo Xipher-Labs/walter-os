@@ -393,13 +393,18 @@ Auto-escalate to **major** (regardless of LOC) for: any change in `auth/`,
 
 ### Branch flow
 
-```
-feature/<slug> → dev → staging → main
-```
+Configurable via `WALTER_BRANCH_FLOW` in your overlay. Default
+(`single-tier`) is `feature/<slug>` → `main`. Set
+`WALTER_BRANCH_FLOW=three-stage` in
+`~/.config/walter-os/overlay/personal.env` to opt in to the
+`feature → dev → staging → main` flow for teams with a real
+staging environment.
 
-PRs must target the next level. `hooks/branch-flow-guard.sh` blocks skipping
-levels. Hotfix to main requires `--allow-branch-skip` flag + justification in
-the PR body.
+Direct push to `main` (or `master`, `staging`, `production` if those
+branches exist) is blocked unconditionally by
+`hooks/branch-flow-guard.sh` regardless of mode. See
+`docs/decisions/0013-solo-operator-merge-policy.md` for the
+trade-offs.
 
 ### Definition of Done
 
@@ -1582,8 +1587,8 @@ Contributions that address them are welcome — see `CONTRIBUTING.md`.
 Walter-OS welcomes contributions. Before opening a pull request, read
 `CONTRIBUTING.md` for the branch flow, commit format requirements, and
 the Definition of Done checklist. The short version: `feature/<slug>` →
-`dev` → `staging` → `main`. All PRs require conventional commits and a
-passing bats test suite.
+`main`. All PRs require conventional commits and a passing bats test
+suite.
 
 Bug reports and feature requests go to GitHub Issues. Please use the issue
 templates — they map to the spec format used internally.
