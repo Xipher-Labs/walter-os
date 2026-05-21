@@ -1,0 +1,159 @@
+# Filesystem capability tokens (OSS Trust A-2) — spec
+
+**Status**: ready for `/write-plan` after operator approval
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-2
+**Target release**: v0.5.0
+**Depends on**: env-allowlist parser (P1-09), time-bounded-sessions spec (`docs/specs/time-bounded-sessions.md`) — A-2 binds capability TTLs to the session TTL from A-4.
+
+## Problem
+
+Today, when an agent invokes a tool, the tool inherits the full POSIX permissions of the operator's user. A `Bash` call to `cat ~/.ssh/id_ed25519` succeeds because the operator can read it; nothing in Walter-OS asks "should THIS tool, in THIS session, be allowed to read THIS path right now?"
+
+The fix is per-tool capability tokens: short-lived, scoped, signed assertions about (operator, session, tool, allowed paths) that the hook chain checks before letting a sensitive operation proceed.
+
+This is NOT a sandbox (that's A-3 — process isolation via nsjail/sandbox-exec). This is a CAP-LIKE policy layer ABOVE the existing approval-gate, so even when the gate would approve, the cap token must also vouch for it.
+
+## Non-goals
+
+- Replacing POSIX permissions. We compose; we don't replace.
+- Per-syscall granularity. Tools are coarse-grained (Bash, Edit, Write, etc.); capabilities target tool-level allowed-paths + allowed-network.
+- Hardware-token integration (YubiKey). Future work; v0.5.0 uses on-disk per-session Ed25519 key.
+- Multi-operator capability delegation. Single operator per install.
+
+## Decisions (proposed)
+
+| # | Decision | Why |
+|---|---|---|
+| D-1 | **Token format: PASETO v4 (public)**. Per-session Ed25519 keypair signs claims. | Per the parent roadmap D-2 decision. PASETO v4 closes the JWT footguns by design. |
+| D-2 | **Per-session keypair lifetime = session TTL** (from A-4 spec). Key generated at session start, deleted at session end. Capability tokens minted from this key. | Tying cap TTL to session TTL means session-end revokes everything. No long-lived secrets on disk. |
+| D-3 | **Token claims schema (PASETO v4 footer + payload)**: | Minimum viable claim set. Operator can extend. |
+|   | ```                                                  |   |
+|   | {                                                    |   |
+|   |   "iss": "walter-os",                                |   |
+|   |   "sub": "<operator>",                               |   |
+|   |   "session_id": "<uuid>",                            |   |
+|   |   "tool": "Bash" | "Edit" | "Write" | ...,           |   |
+|   |   "scope": {                                         |   |
+|   |     "paths": ["<glob>", ...],                        |   |
+|   |     "network": ["<host>", ...],                      |   |
+|   |     "patterns": ["<bash-regex>", ...]                |   |
+|   |   },                                                 |   |
+|   |   "iat": "<ISO-8601>",                               |   |
+|   |   "exp": "<ISO-8601 ≤ session end>",                 |   |
+|   |   "nonce": "<uuid>"                                  |   |
+|   | }                                                    |   |
+|   | ```                                                  |   |
+| D-4 | **Minting via `walter-os cap mint <tool> --paths <glob>... --duration <Nm>`**. Operator mints; tokens land in `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`. | Operator-controlled. Default agents don't mint; they consume tokens minted by the operator. |
+| D-5 | **Enforcement via `hooks/capability-check.sh`** PreToolUse hook. Reads the relevant tool call (path + command), looks up the latest valid token for that tool in the session, verifies the cap covers the requested operation. | Same chain as the other gates. |
+| D-6 | **Fail-secure for high-tier categories.** If no valid token exists for an `Edit`/`Write`/`Bash` op AND the operation falls in a tier-`high` category from `approval-gate.sh CATEGORY_MIN_TIER`, the hook BLOCKS. Lower tiers fall through (cap is mandatory only for high-tier ops; low-tier ops are governed by the existing approval-gate alone). | Layered defense. v0.5.0 doesn't try to gate everything; only the dangerous tier. |
+| D-7 | **Operator-overridable per-skill defaults**. `~/.config/walter-os/overlay/skill-capabilities.yml` declares which skills auto-mint a default capability at session start (e.g. `nuclei-cli` auto-mints `tool=Bash, scope.patterns=[nuclei.*]`). | Skills the operator trusts get auto-caps; novel commands require explicit minting. |
+| D-8 | **No transitive delegation in v0.5.0.** A subagent cannot mint a token from its parent's token. Operator is always in the loop. | Capability-system 101: simple before clever. |
+
+## Acceptance criteria
+
+### AC-1 — PASETO v4 dependency + key generation
+- [ ] `scripts/walter/lib/paseto.sh` (new) — wraps `paseto-cli` (uvx-installable Python package) for sign + verify. Pinned to exact version.
+- [ ] `install.sh` adds `paseto-cli` to required tools (`uv tool install paseto-cli==<pinned>`).
+- [ ] `hooks/session-start.sh` (extended from A-4 spec) generates Ed25519 keypair at session start; stores at `~/.config/walter-os/state/session-<uuid>.key` (mode 0600).
+- [ ] `bats` coverage in `tests/walter/paseto-roundtrip.bats` — sign + verify produces same claims.
+
+### AC-2 — `walter-os cap` CLI
+- [ ] `walter-os cap mint <tool> --paths <glob>... --network <host>... --duration <Nm> [--patterns <regex>...]` — emits a PASETO v4 token to stdout AND writes to `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`.
+- [ ] `walter-os cap list` — prints active tokens for the current session.
+- [ ] `walter-os cap revoke <nonce>` — deletes the token file; subsequent tool calls won't find it.
+- [ ] `walter-os cap verify <token-file>` — sanity-check a token (operator debugging).
+- [ ] bats coverage in `tests/cli/walter-os-cap.bats`.
+
+### AC-3 — `hooks/capability-check.sh` PreToolUse hook
+- [ ] Hook runs in the PreToolUse chain after `approval-gate.sh` (so a category is already classified).
+- [ ] For `Edit`/`Write`: extracts `file_path`; checks every cap in the session's `caps-<session>/` dir for `tool` matching AND `scope.paths` glob matching.
+- [ ] For `Bash`: extracts `command`; checks every cap for `tool=Bash` AND (a) `scope.patterns` regex matching OR (b) network destination in `scope.network` (parsed from curl/git/etc. like A-1 egress hook does).
+- [ ] If a high-tier op has NO matching cap → block with `"capability-check: no valid token for <tool> on <target>; mint with: walter-os cap mint <tool> ..."`.
+- [ ] If a low-tier op has no cap → passthrough allow (existing approval-gate is the only check).
+- [ ] bats coverage in `tests/hooks/capability-check.bats`:
+  - High-tier op with no cap → block
+  - High-tier op with matching cap → allow
+  - High-tier op with EXPIRED cap → block
+  - Low-tier op with no cap → allow (cap is opt-in for low-tier)
+  - Two-factor bypass (`WALTER_CAP_BYPASS=1` + `--allow-no-cap`) → allow with WARN
+
+### AC-4 — Default skill capabilities
+- [ ] `contexts/_examples/skill-capabilities.example.yml`:
+  ```yaml
+  # When these skills are autoloaded at session start, walter-os
+  # auto-mints a default capability so the skill works without operator
+  # intervention. Operator removes / tightens / extends as needed.
+  
+  skills:
+    nuclei-cli:
+      tool: Bash
+      scope:
+        patterns: ["nuclei[[:space:]].*"]
+        network: ["*"]  # nuclei talks to operator-specified targets
+      duration: 4h
+    
+    hcloud-cli:
+      tool: Bash
+      scope:
+        patterns: ["hcloud[[:space:]].*"]
+        network: ["api.hetzner.cloud"]
+      duration: 8h
+  ```
+- [ ] `scripts/walter/lib/skill-cap-loader.sh` reads the YAML at session start and mints matching tokens.
+
+### AC-5 — Daily-audit integration
+- [ ] `daily-supply-chain-audit` adds `check_cap_state()`:
+  - Orphaned `caps-<session>/` dirs (session ended but caps remain) → `info` finding `cap-cleanup-stale`
+  - Token mode != 0600 → `high` finding (operator-side perms issue)
+  - PASETO key file mode != 0600 → `crit` finding (signing-key exposure)
+
+### AC-6 — Operator-facing docs + CHANGELOG
+- [ ] `docs/operational/capability-tokens.md` (new):
+  - Philosophy (layered above approval-gate, mandatory for high-tier ops)
+  - Common workflow: skill auto-caps; operator-mints when needed
+  - Troubleshooting (token expired, signature invalid, hook can't find cap)
+  - PASETO v4 primer (what an operator needs to know)
+- [ ] CHANGELOG entry under `[Unreleased] → Added (default-deny security floor)`.
+
+## Threat model
+
+| Attack | Mitigation |
+|---|---|
+| Prompt-injection generates `Bash: cat ~/.ssh/id_rsa` | Sensitive path → tier `high` → no matching cap → blocked. Operator never minted "Bash on ~/.ssh/*". |
+| Long-lived JWT-style token stolen from disk | PASETO v4 (no `alg=none` confusion). Plus session-lifetime expiry. |
+| Operator mints a wildcard cap and forgets it | Daily-audit `check_cap_state()` doesn't flag wide scope, but cap dies at session end (max 8h per A-4). |
+| Subagent escalates by re-signing its parent's token | D-8: no transitive delegation in v0.5.0. The subagent uses the same session key; minting requires `walter-os cap mint`, which is operator-gated. |
+| Filesystem race: operator revokes cap WHILE hook is reading it | Hook reads atomically via `flock`; deletion is a file unlink, observable on next check. Window is microseconds. |
+| Capability bypass via deleting `caps-<session>/` dir | Hook fails-CLOSED on missing dir for high-tier ops. |
+
+## Out of scope
+
+- Capability delegation (sub-tokens). Future work.
+- Hardware-bound signing (YubiKey). Future work.
+- Per-syscall caps (eBPF / seccomp). That's A-3 (sandbox), separate spec.
+- UI for cap inspection (Control Tower would be the home). v0.5.0 is CLI.
+
+## Recommended PR ordering
+
+1. AC-1 — PASETO lib + key generation (foundation)
+2. AC-2 — `walter-os cap` CLI (uses AC-1)
+3. AC-3 — `hooks/capability-check.sh` (uses AC-1)
+4. AC-4 — default skill caps + YAML schema
+5. AC-5 — daily-audit `check_cap_state()`
+6. AC-6 — docs + CHANGELOG
+
+Each ≤300 LOC. 3-round review.
+
+## Open questions for the operator
+
+1. **PASETO v4 vs Biscuit**: Biscuit (eclipse-biscuit) is a newer capability-token format with native delegation + Datalog-like attenuation. PASETO is simpler + more mature. Proposal: PASETO v4 for v0.5.0; revisit Biscuit if delegation becomes a real need.
+2. **Default skill cap network scope = `["*"]`**: too loose? Should `nuclei-cli` cap require an explicit target list at session start? Proposal: `["*"]` for v0.5.0 (otherwise operator has to update the YAML every time); tighten in v0.6.0.
+3. **High-tier-only enforcement (proposal) vs all-tier enforcement**: should low-tier ops also require a cap once any cap exists for the session? Proposal: high-tier-only; low-tier remains governed by approval-gate alone. Lower friction for the operator who doesn't want to mint caps for every `Read` call.
+
+## Refs
+
+- Parent: `docs/specs/oss-trust-roadmap.md` A-2
+- Sibling: `docs/specs/time-bounded-sessions.md` A-4 (cap TTL bound to session TTL)
+- Pattern: `hooks/approval-gate.sh` `CATEGORY_MIN_TIER` (high-tier classifier this layer respects)
+- PASETO v4 spec: <https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version4.md>
+- `paseto-cli` PyPI: <https://pypi.org/project/paseto/>
