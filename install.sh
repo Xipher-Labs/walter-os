@@ -242,15 +242,22 @@ run_args() {
 # include an inline comment justifying the shell-snippet need + confirming
 # all interpolated values are operator-controlled / sanitized. Issue #119.
 run_sh() {
+  # Arg-count guard: prevents `set -u` surprises and unexpected behavior
+  # if the caller forgets the snippet or passes the snippet as multiple
+  # arguments instead of a single quoted string. Copilot R2 #128.
+  [[ $# -eq 1 ]] || { echo "run_sh: requires exactly 1 argument (the snippet)" >&2; return 2; }
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "$1"
   else
-    # Inherit strict-mode settings from install.sh so errors / undefined
-    # vars / pipe failures bubble up the same way they would inline.
-    # Without these flags, a typo or missed variable in a run_sh snippet
-    # would silently succeed where the equivalent inline code would
-    # abort. Copilot R1 #128 R1.2.
-    bash -c "set -euo pipefail; $1"
+    # Pass the snippet as a positional argument to bash -c rather than
+    # interpolating it into the script string. This keeps the outer
+    # shell from re-interpreting any quotes, backslashes, or newlines
+    # inside the snippet before the inner bash sees it. The inner bash
+    # script applies strict mode (same semantics as install.sh) and
+    # eval's $1 — run_sh explicitly accepts shell-snippet semantics
+    # (redirects, pipes, glob), so eval-inside is by design.
+    # Copilot R1 #128 R1.2 (strict mode) + R2 #128 R2.3 (quoting).
+    bash -c 'set -euo pipefail; eval "$1"' bash "$1"
   fi
 }
 

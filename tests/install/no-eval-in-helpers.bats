@@ -68,8 +68,15 @@ _invoke() {
 }
 
 @test "AC4: run_args treats backticks as literal" {
-  # Use a non-interpolating single-quoted bash payload via env passing.
-  _invoke "PAYLOAD='\`touch $PROBE\`'; run_args echo \"arg1 \$PAYLOAD\""
+  # Copilot R2 #128 R2.4: pass raw backticks via an exported env var
+  # (single-quoted at assignment so they aren't executed at outer
+  # parse time). Inside _invoke, $PAYLOAD expands to the literal
+  # backtick string; bash does not re-evaluate substitutions inside
+  # already-substituted values, so under run_args's argv path the
+  # backticks are passed verbatim to echo. If a regression re-introduced
+  # eval semantics, the substitution would fire and touch the probe.
+  PROBE="$PROBE" PAYLOAD='`touch '"$PROBE"'`' \
+    _invoke 'run_args echo "arg1 $PAYLOAD"'
   [ ! -e "$PROBE" ]
 }
 
@@ -99,6 +106,11 @@ _invoke() {
 }
 
 @test "AC2: run_args call sites count is at least 10" {
-  count=$(grep -cE 'run_args ' "$INSTALL_SH")
+  # Copilot R2 #128 R2.5: anchor to leading whitespace so we only
+  # count actual call sites, not the function definition (line 231,
+  # no leading whitespace) nor the docs comments (start with '#').
+  # A regression that drops the real call site count to single
+  # digits will now fail the assertion.
+  count=$(grep -cE '^[[:space:]]+run_args ' "$INSTALL_SH")
   [ "$count" -ge 10 ]
 }
