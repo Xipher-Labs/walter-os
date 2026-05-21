@@ -30,9 +30,9 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 
 - **G1.** Every Copilot/Codex finding is assigned a severity (BLOCKER, MAJOR, MINOR, COSMETIC) at review-receive time.
 - **G2.** After a configurable number of review rounds (default 3), if all remaining findings are MINOR or below AND a set of safety preconditions hold, the PR may be auto-merged. The deferred findings spin off into a single follow-up issue with full context.
-- **G3.** BLOCKER findings never permit auto-merge regardless of rounds — they spin off into a new high-priority issue and the PR is closed pending the blocker's resolution.
+- **G3.** BLOCKER findings never permit auto-merge regardless of rounds. The action sequence (§4.4) creates a new high-priority issue + posts a PR comment explaining the block. PR CLOSE on BLOCKER is an operator decision, not an automatic gate action — the gate posts the diagnostic and waits.
 - **G4.** Auto-merge is **per-repo opt-in** via a marker file (`auto-merge-enabled` in repo root). Repos without the marker behave per current `AGENTS.md` (manual operator merge).
-- **G5.** The current safety paths (auto-escalation triggers — auth/, crypto/, money, PHI, audit logs, prod migrations, hooks/, AGENTS.md, install.sh, mcp/servers.json) are NEVER eligible for auto-merge, regardless of opt-in or severity.
+- **G5.** The current safety paths (intersection of AGENTS.md "Things agents must NEVER do" + "Blocked for ALL tiers" — auth/, crypto/, money, PHI, audit logs, prod migrations, hooks/, AGENTS.md, install.sh, mcp/servers.json) are NEVER eligible for auto-merge, regardless of opt-in or severity. AGENTS.md distinguishes the two lists (task-rigor auto-escalation vs hardcoded approval-gate blocks); this spec uses the union as a conservative super-set.
 - **G6.** Severity classification is auditable: a deterministic ruleset produces the verdict, and any LLM-fallback classification is logged with the reasoning that led to it.
 - **G7.** Follow-up issues for deferred MINORs are auto-created with the verbatim finding + the source-of-truth file:line reference + a suggested fix shape.
 
@@ -40,9 +40,9 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 
 - **NG1.** Not removing the operator's ability to merge manually. The auto-merge path is additive; manual merge is always available.
 - **NG2.** Not reclassifying findings retroactively. Findings landing AFTER this spec ships are classified; older findings stay as-is.
-- **NG3.** Not building a UI. CLI + GitHub Actions integration only.
+- **NG3.** Not building a UI. CLI + GitHub Actions integration + the existing hook/n8n event surface only — no operator dashboard, no web app, no new UX.
 - **NG4.** Not extending to repos beyond walter-os in the first version. Per-org rollout is a follow-up if the walter-os experience is positive.
-- **NG5.** Not implementing a "severity override" by the operator on individual findings. The classifier is the source of truth; the operator can adjust the ruleset itself in `~/.config/walter-os/severity-rules.yml` if they disagree.
+- **NG5.** Not implementing a "severity override" by the operator on individual findings. The classifier is the source of truth; the operator can adjust the ruleset itself via the `classifier_overrides` block in the repo-root `auto-merge-enabled` file (see §4.5 schema) if they disagree.
 
 ## 4. Design (decisions locked, see ADR 0015)
 
@@ -53,7 +53,7 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 | **BLOCKER** | Touches an auto-escalation path OR introduces a security/safety regression. Never permits auto-merge. | Finding in `auth/`, `crypto/`, money flows, PHI; leaked secret; broken safety hook. |
 | **MAJOR** | Real logic bug, broken test, regression in existing functionality, or violation of an `AGENTS.md` hard rule. Blocks auto-merge until resolved. | Failing unit test; logic mismatch between prompt and code (R4 #1-#2 on #111); regression on a previously passing test. |
 | **MINOR** | Doc accuracy, prose nit, comment drift, portability quirk, test thoroughness improvement with no current false-negative, dead code. Eligible for auto-merge after gate. | `\s` → `[[:space:]]`; stale comment block; ADR claim doesn't match impl; AC doesn't validate deep nesting. |
-| **COSMETIC** | Formatting, indentation, spelling, variable-name preference, ordering of unrelated items. Eligible for auto-merge immediately (skips the round threshold). | Trailing whitespace; renamed `cmd` → `command`; alphabetize unrelated import. |
+| **COSMETIC** | Formatting, indentation, spelling, variable-name preference, ordering of unrelated items. Eligible for auto-merge once ALL other gate conditions (C1, C2≥N rounds, C3-C9) are met — COSMETIC doesn't bypass the round threshold; it bypasses MINOR's deferral-to-follow-up (cosmetic items merge cleanly without a follow-up issue). | Trailing whitespace; renamed `cmd` → `command`; alphabetize unrelated import. |
 
 ### 4.2 Classifier — deterministic rules + LLM fallback
 
@@ -144,13 +144,16 @@ follow_up_issue:
   title_prefix: "[CHORE] -OPERATIONS- deferred MINORs from PR #"
 audit_log:                                 # where the classifier writes its decisions
   path: ~/.config/walter-os/state/auto-merge-log.jsonl
+llm_fallback:                              # cost caps for the UNCLASSIFIED → LLM path
+  per_call_cap_usd: 0.01                   # hard cap per individual finding classification
+  per_pr_cap_usd: 1.0                      # hard cap across all UNCLASSIFIED findings in one PR
 ```
 
 Repos without this file → no auto-merge, manual operator merge as today.
 
 ### 4.6 Failure modes & guard rails
 
-- **Misclassified MINOR that's actually MAJOR**: caught by the LLM fallback's audit log + the operator's weekly digest (see G2+ in spec §6). If discovered post-merge, the operator reverts via standard git revert and adjusts the classifier rules.
+- **Misclassified MINOR that's actually MAJOR**: caught by the LLM fallback's audit log + the operator's weekly digest (out-of-scope follow-up F1 in §6). If discovered post-merge, the operator reverts via standard git revert and adjusts the classifier rules.
 - **Classifier loops on UNCLASSIFIED → LLM cost runaway**: LLM fallback hard-caps at $0.01 per finding + $1 per PR. Above cap, defaults to MAJOR (fail-safe to "needs human").
 - **Operator wants to defer a finding the classifier called MAJOR**: not allowed in the gate. Operator can adjust the keyword list in `auto-merge-enabled` for future PRs, OR manually merge this one.
 - **Branch protection enforces non-bypassable rules**: gate respects them. If branch protection requires a human approval that the operator hasn't pre-authorized, gate falls back to posting a "ready for your merge" comment and stops.
@@ -163,10 +166,10 @@ Repos without this file → no auto-merge, manual operator merge as today.
 - [ ] **AC4.** Keyword-based MAJOR trigger fires on each keyword in the §4.2 list; tested with a fixture file per keyword.
 - [ ] **AC5.** Doc-file MINOR vs COSMETIC bias distinguishes correctly for a 10-sample fixture (5 each).
 - [ ] **AC6.** UNCLASSIFIED findings trigger the LLM fallback (validated by checking the audit log entry); cost-cap enforces fail-safe to MAJOR above $0.01.
-- [ ] **AC7.** `walter-os pr-auto-merge <pr-num>` checks C1-C9 (§4.3) and returns one of `MERGE_APPROVED | MERGE_BLOCKED <reason>`. Tested with one positive fixture and one fixture per blocking condition.
+- [ ] **AC7.** `walter-os pr-auto-merge <pr-num>` checks C1-C9 (§4.3) and returns one of `MERGE_APPROVED` (exit 0) or `MERGE_BLOCKED:<reason-slug>` (exit 1, reason-slug is one of: `no-opt-in`, `insufficient-rounds`, `blocker-present`, `major-present`, `ci-not-clean`, `loc-cap-exceeded`, `safe-path-touched`, `unresolved-threads`, `opt-out-kill-switch`). Tested with one positive fixture and one fixture per blocking condition.
 - [ ] **AC8.** When MERGE_APPROVED: hook creates the follow-up issue, auto-resolves the relevant conversation threads, and invokes `gh pr merge --squash --delete-branch --admin`. Tested via mocked GitHub API.
 - [ ] **AC9.** When MERGE_BLOCKED: hook posts a comment to the PR with the blocking condition + remediation guidance. Tested via mocked GitHub API.
-- [ ] **AC10.** `auto-merge-enabled` file at repo root is the only opt-in mechanism. Repos without it return MERGE_BLOCKED with reason "auto-merge not enabled for this repo".
+- [ ] **AC10.** `auto-merge-enabled` file at repo root is the only opt-in mechanism. Repos without it return `MERGE_BLOCKED:no-opt-in` (slug consistent with AC7's slug enumeration).
 - [ ] **AC11.** AGENTS.md "Never auto-merge a PR" hard rule is amended to "Never auto-merge a PR UNLESS the bounded conditions in §X.Y are met"; new subsection links to ADR 0015.
 - [ ] **AC12.** ADR 0015 documents the design choice + rejected alternatives (always auto-merge / fully manual / per-PR label / time-based auto-merge).
 - [ ] **AC13.** End-to-end smoke: a sample PR with one MINOR finding + 3 completed review rounds + `auto-merge-enabled` present produces a follow-up issue, resolves the thread, and squash-merges. Tested via a dedicated `tests/e2e/auto-merge-mock-pr.bats` using a forked test repo.

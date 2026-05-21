@@ -3,7 +3,7 @@
 **Spec:** `docs/specs/pr-review-severity-gate.md`
 **ADR:** `docs/decisions/0015-pr-review-severity-gate.md`
 **Branch:** `feature/pr-review-severity-gate`
-**Total tasks:** 18 (15 implementation + 3 verification).
+**Total tasks:** 20 (17 implementation + 3 verification).
 **Estimated effort:** 8–12 hours assuming Bats + bash + GitHub API familiarity.
 
 Each task follows RED-GREEN-REFACTOR. Skip RED is a violation of

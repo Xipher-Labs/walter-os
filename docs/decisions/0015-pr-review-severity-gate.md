@@ -72,7 +72,7 @@ Repos without the marker file → auto-merge gate refuses (returns `MERGE_BLOCKE
 | C8 | Single follow-up issue auto-created with the deferred MINOR/COSMETIC list before merge |
 | C9 | All review conversation threads resolved (auto-resolved by the gate when finding is MINOR/COSMETIC) |
 
-Any condition failing → `MERGE_BLOCKED:<reason>`, PR remains open, operator gets a comment with remediation guidance.
+Any condition failing → `MERGE_BLOCKED:<reason>` (one of the AC7 slugs), PR remains open, operator gets a comment with remediation guidance. Note: even for BLOCKER findings, the gate posts the diagnostic + a recommendation to close — but does NOT auto-close the PR. The Consequences section's "explicitly close the PR" wording describes the operator's typical response to a BLOCKER, not an automatic gate action.
 
 ### Decision 5 — Mandatory follow-up issue for every deferred finding
 
