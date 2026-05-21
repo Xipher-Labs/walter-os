@@ -56,7 +56,12 @@ _invoke() {
     # other config files are missing (CI runners, fresh checkouts).
     # Those landed in the bats run capture + polluted $output. The
     # function output stays on stdout uncluttered.
-    if ! source "$WALTER_INSTALL_SH" 2>/dev/null; then
+    # Redirect BOTH stdout + stderr at source time. install.sh runs
+    # banner code at source on a fresh checkout (CI Ubuntu) that emits
+    # to stdout AND stderr; bats run captures both, polluting the
+    # exact-match assertions on _xml_escape output. The function call
+    # below stays uncluttered because eval is unredirected.
+    if ! source "$WALTER_INSTALL_SH" >/dev/null 2>&1; then
       echo "_invoke: source of $WALTER_INSTALL_SH failed" >&2
       exit 1
     fi
