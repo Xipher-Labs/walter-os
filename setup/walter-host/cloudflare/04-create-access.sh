@@ -71,11 +71,23 @@ echo "==> Create/update Access app per service..."
 # Single source of truth for which subdomains get a CF Access app.
 # Add new services here when their cloudflared ingress lands — without an
 # Access policy they'd be publicly reachable.
-# NOTE: 'headscale' (control plane) is intentionally EXCLUDED — Tailscale
-# clients can't do interactive Google OAuth. The HS admin UI lives on
-# 'hs' (separate subdomain) which IS protected.
+# NOTE: 'headscale' (control plane / federation) is intentionally EXCLUDED
+# — Tailscale clients can't do interactive Google OAuth on the control
+# plane. The HS admin UI is a separate Caddy site ('headscale-admin')
+# and IS protected here.
 for sub in vault llm plane git status home secrets uptime \
-           n8n grafana penpot draw chat sync element claw hs vpn; do
+           n8n grafana penpot draw chat sync element claw headscale-admin vpn \
+           tower metabase postiz; do
+  # Per #136 + Codex R1 catch: any subdomain that imports admin_auth_gate
+  # in the Caddy template needs a matching CF Access app. The
+  # admin_auth_gate accepts either Tailscale tailnet IP OR a valid
+  # CF-Access-Authenticated-User-Email header. Without a CF Access app
+  # the public-internet path fails 403 even with valid auth elsewhere.
+  # Codex R1 R1.1 caught that 'hs' (the old short name in this script)
+  # didn't match 'headscale-admin' (the actual Caddy site label) —
+  # renamed to keep the symmetry; operators with a legacy 'hs' Access
+  # app can delete it manually. tests/compose/cf-access-coverage.bats
+  # locks the symmetry in to prevent future drift.
   hostname="${sub}.${SERVICE_DOMAIN}"
 
   existing_apps=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps")
