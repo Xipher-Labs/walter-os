@@ -471,6 +471,41 @@ link_skills()   { link_dir_contents "$REPO_ROOT/skills"   "$CLAUDE_HOME/skills" 
 link_agents()   { link_dir_contents "$REPO_ROOT/agents"   "$CLAUDE_HOME/agents"   "subagents → ~/.claude/agents"; }
 link_commands() { link_dir_contents "$REPO_ROOT/commands" "$CLAUDE_HOME/commands" "slash commands → ~/.claude/commands"; }
 
+# link_walter_cli — ensure `walter-os` resolves on the XDG-standard
+# user binary path (`~/.local/bin/`). The canonical CLI stays in the
+# clone; we add a symlink so operators don't need to learn a
+# Walter-OS-specific PATH convention. See ADR 0014 for the design
+# rationale and rejected alternatives.
+link_walter_cli() {
+  step "Link walter-os CLI → ~/.local/bin/walter-os"
+  local local_bin="$HOME/.local/bin"
+  local cli_src="$REPO_ROOT/bin/walter-os"
+
+  if [[ ! -x "$cli_src" ]]; then
+    warn "CLI source missing or not executable: $cli_src — skipping symlink"
+    return 0
+  fi
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "mkdir -p $local_bin"
+    dry "ln -sf $cli_src $local_bin/walter-os"
+    return 0
+  fi
+
+  mkdir -p "$local_bin"
+  link_safe "$cli_src" "$local_bin/walter-os"
+
+  # Heuristic: warn if ~/.local/bin/ isn't on $PATH. The existing
+  # ${WALTER_OS_HOME}/bin/ export remains as a fallback regardless.
+  case ":$PATH:" in
+    *":$local_bin:"*) ;;  # already on PATH, nothing to say
+    *)
+      warn "  ~/.local/bin/ is not on your \$PATH. Add to your shell rc:"
+      warn "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+      ;;
+  esac
+}
+
 merge_claude_settings() {
   merge_claude_hooks
   merge_claude_mcp_servers
@@ -1607,6 +1642,7 @@ run_step_0() {
   link_skills
   link_agents
   link_commands
+  link_walter_cli
   merge_claude_settings
   write_codex_config
   write_env_file
@@ -1661,4 +1697,8 @@ main() {
   step_9
 }
 
-main "$@"
+# Only execute main when run as a script (not when sourced — e.g. by
+# bats tests that need to invoke individual functions in isolation).
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi

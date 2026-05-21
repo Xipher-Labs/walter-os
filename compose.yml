@@ -783,13 +783,18 @@ services:
       start_period: 120s
 
   # --------------------------------------------------------------------------
-  # Control Tower — Walter Council UI (always-on as of v0.2.0)
+  # Control Tower — Walter Council UI
+  # Gated behind `--profile tier4` (since v0.4.1). Tier III deployments
+  # (`docker compose --profile core up -d`) do NOT bring this up; Tier
+  # IV adds it via `--profile tier4`. See docs/specs/agent-install-tier-
+  # completion.md AC7/AC8 and ADR 0014's companion compose change.
   # Inlined from setup/walter-host/services/control-tower/compose.yml (standalone kept).
   # No host ports: Caddy proxies tower.${WALTER_DOMAIN} → control-tower:3000.
   # Access is Tailscale-only (TAILSCALE_ENFORCE=true at app layer).
   # --------------------------------------------------------------------------
   control-tower:
     <<: *walter-common
+    profiles: [tier4]
     build:
       context: .
       dockerfile: apps/control-tower/Dockerfile

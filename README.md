@@ -529,8 +529,46 @@ with DNS, Cloudflare Tunnel, secrets bootstrap, and Control Tower build.
 
 ---
 
+## Install via agent (Tier I → IV)
+
+Don't want to memorize steps? Walter-OS ships four copy-paste prompts
+you hand to your agent (Claude Code, Codex CLI, or Cursor). The agent
+reads the prompt, asks the minimum questions, writes the config files,
+and verifies each step before moving on.
+
+Tiers stack — start small and upgrade later without redoing earlier
+work.
+
+| Tier | What you get | Time | Cost/mo | Prompt |
+|---|---|---|---|---|
+| **I — Agent contract** | `AGENTS.md` cascade + personal overlay + hooks + `walter-os` CLI symlinked to `~/.local/bin/` | ~5 min | $0 | [`setup/agent-install/tier-1.md`](setup/agent-install/tier-1.md) |
+| **II — + Local tooling** | Tier I + skills catalog (~50) + MCP profiles + slash commands + `obra/superpowers` plugin | ~15 min | $0 | [`setup/agent-install/tier-2.md`](setup/agent-install/tier-2.md) |
+| **III — + Self-hosted stack** | Tier II + Hetzner VM + 25 services (Plane, Forgejo, Grafana, n8n, Infisical, LiteLLM, …) behind Cloudflare Access | ~1–2 hrs | ~€25–50 | [`setup/agent-install/tier-3.md`](setup/agent-install/tier-3.md) |
+| **IV — + Council + automation** | Tier III + 6-agent Walter Council with per-agent trust tiers + n8n workflows + Plane workspace structure + Control Tower (`--profile tier4`) | ~2–3 hrs | +~$10–50 LLM | [`setup/agent-install/tier-4.md`](setup/agent-install/tier-4.md) |
+
+**How to use**: open your agent in any directory, paste the entire
+fenced block from the chosen tier file, answer questions one at a
+time. Prompts are idempotent — re-paste to upgrade tiers, rotate
+keys, or add things you skipped. Verification at every step uses
+`walter-os doctor --tier N`.
+
+**Ground rules baked into every tier prompt**:
+- One question at a time; defaults explained.
+- Diffs shown before writes.
+- Verify after every step; stop on errors.
+- Conversation in your language; code/paths in English.
+- Tier III's money-spending actions print the bill and require
+  explicit per-action confirmation.
+
+If you'd rather follow steps manually, the [Quick start](#quick-start-mode-2--client-install)
+above and the [Step-by-step installation](#step-by-step-installation)
+below cover the same ground without an agent.
+
+---
+
 ## Table of contents
 
+- [Install via agent (Tier I → IV)](#install-via-agent-tier-i--iv)
 - [Personas](#personas)
 - [Stack at a glance](#stack-at-a-glance)
 - [Networking and access](#networking-and-access)
