@@ -993,10 +993,18 @@ services:
           OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
           # --registry=... pins the source so a persisted /workspace/.npmrc
           # can't redirect dependency downloads (Copilot R3 #127).
-          # 2>&1 keeps stderr visible if the pack itself fails — easier to
-          # debug a first-boot regression than silenced /dev/null was.
+          # Capture pack stderr to a file so it's visible in container
+          # logs without polluting OC_TARBALL (Copilot R5 #127: previous
+          # 2>&1 piped errors INTO the captured filename → bogus
+          # OC_TARBALL value + invisible errors).
+          npm_pack_stderr=$(mktemp)
           OC_TARBALL=$(cd /tmp && npm pack openclaw@${OC_VER} \
-            --registry=https://registry.npmjs.org/ --silent 2>&1 | tail -1)
+            --registry=https://registry.npmjs.org/ --silent 2>"$npm_pack_stderr" | tail -1)
+          if [ -s "$npm_pack_stderr" ]; then
+            echo "openclaw: npm pack stderr:" >&2
+            cat "$npm_pack_stderr" >&2
+          fi
+          rm -f "$npm_pack_stderr"
           if [ -z "$OC_TARBALL" ] || [ ! -f "/tmp/$OC_TARBALL" ]; then
             echo "openclaw: npm pack failed for openclaw@${OC_VER}" >&2
             exit 1
