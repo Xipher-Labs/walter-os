@@ -1,9 +1,9 @@
 # Invisible secret-bearing mounts during runs (OSS Trust A-5) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-5 (parent spec is in PR #83 — not yet on `main`)
+**Parent**: OSS Trust roadmap Layer A item A-5 — umbrella spec is in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83) (post-merge in-tree path: `docs/specs/oss-trust-roadmap.md`).
 **Target release**: v0.5.x (after A-3 sandbox lands; this is a refinement layer above A-3)
-**Depends on**: `docs/specs/process-isolation-sandbox.md` (A-3 — PR #92 — provides the bind-mount mechanism). A-3 must merge before A-5 implements.
+**Depends on**: A-3 process-isolation sandbox — [PR #92](https://github.com/Xipher-Labs/walter-os/pull/92) (post-merge in-tree path: `docs/specs/process-isolation-sandbox.md`) — provides the bind-mount mechanism. A-3 must merge before A-5 implements.
 
 ## Problem
 
@@ -11,7 +11,14 @@ A-3 sandbox profiles already restrict filesystem access. But the existing profil
 
 A-5 adds a finer scope: ALL secret-bearing paths are bind-mounted as EMPTY placeholders during high-tier sandbox runs, so even a successful exfil attempt returns empty / missing-file.
 
-**Terminology**: this layer is INVISIBILITY (the path looks not-secret-bearing), NOT read-only-and-invisibility. The mechanism is "bind-mount an empty placeholder over the real path", which the sandbox can then leave read-write OR read-only on top — that's an orthogonal choice (default: read-only mounts so a write doesn't accidentally pollute the placeholder). Renaming the spec file is impractical mid-flight; future readers should treat "read-only-mounts" as a shorthand for the invisibility pattern.
+**Terminology** (operator note — there are two distinct properties to nail down before reading the rest):
+
+- **Invisibility**: the path looks not-secret-bearing. A read returns an empty dir (or empty placeholder file). The directory entry / path itself still exists, so tools that probe for parent-directory existence (e.g. `mkdir -p ~/.ssh/x`) succeed at the directory level.
+- **Read-only-ness**: a separate axis. A write attempt against a path either succeeds (mount is rw) or fails (mount is ro).
+
+A-5 mandates INVISIBILITY for the configured secret paths. The placeholder mount is read-only by DEFAULT (so a stray write doesn't accidentally pollute the operator's view of the placeholder dir between sandbox runs), but the **read-only flag is an implementation hardening choice, not the security boundary**. The threat A-5 mitigates is "an allowed Bash call also reads `~/.ssh/id_rsa`" — read-only-ness alone wouldn't help that, only invisibility does.
+
+The historical file name `read-only-mounts.md` precedes this clarification. Renaming the spec file is impractical mid-flight; future readers should read it as shorthand for the invisibility pattern, with read-only being a default but not the load-bearing property.
 
 This is the difference between "you can read config" and "config is not at this path right now."
 
@@ -36,9 +43,10 @@ This is the difference between "you can read config" and "config is not at this 
 
 ### AC-1 — Invisible-mount mechanism
 - [ ] `scripts/walter/lib/sandbox.sh` `walter_sandbox_run` gains a `--high-tier` flag that adds invisible mounts.
-- [ ] Linux (nsjail): each protected path adds a `mount { dst: ... is_bind: true src: <empty-dir> }` clause to the runtime-rewritten profile.
-- [ ] macOS (sandbox-exec): each protected path adds a `(deny file-read* (subpath "..."))` clause.
-- [ ] Empty dirs created on first use under `${WALTER_RUNTIME_DIR}/sandbox/invisible/`. Each is mode 0700.
+- [ ] **Per-target type**: D-3's protected-paths list contains BOTH directories (`~/.ssh/`, `~/.aws/`) AND single files (`~/.docker/config.json`, `~/.config/walter-os/overlay/personal.env`). The mechanism creates an EMPTY DIR placeholder for dir targets and an EMPTY FILE placeholder for file targets — bind-mounting a dir over a file (or vice-versa) errors out at sandbox start. The detection rule: if the source path resolves to a regular file, use an empty file placeholder; if it resolves to a directory (or doesn't exist yet), use an empty dir placeholder. Both placeholder kinds are mode `0700` (file) / `0700` (dir) so even the placeholder itself can't be probed for contents from outside the sandbox.
+- [ ] Linux (nsjail): each protected DIR adds `mount { dst: ... is_bind: true src: <empty-dir> }`; each protected FILE adds `mount { dst: ... is_bind: true src: <empty-file> }` (nsjail bind-mounts work on regular files too).
+- [ ] macOS (sandbox-exec): each protected path adds a `(deny file-read-data (subpath "..."))` clause (NOT `file-read*`, which also blocks metadata — a `file-read*` deny would make the path itself return "operation not permitted" on `stat`, breaking parent-directory existence probes; `file-read-data` lets `stat` succeed while blocking content reads, matching the Linux empty-placeholder semantics. On macOS we cannot bind-mount in user space, so the deny-rule is the equivalent of the Linux empty-mount — different mechanism, same observable result.)
+- [ ] Empty placeholders (dirs and files) created on first use under `${WALTER_RUNTIME_DIR}/sandbox/invisible/`. Each is mode `0700` (dir) / `0600` (file). Re-used across sandbox starts; recreated if the operator deletes them.
 - [ ] bats coverage in `tests/walter/sandbox-invisible-mounts.bats`:
   - With `--high-tier`: `ls ~/.ssh` → empty (no `id_rsa` visible)
   - Without `--high-tier`: `ls ~/.ssh` → operator's actual ssh dir
@@ -94,7 +102,7 @@ This is the difference between "you can read config" and "config is not at this 
 
 - Encrypted overlay mounts. We bind-mount empty dirs; we don't encrypt.
 - Per-tool selective invisibility (e.g. "make ~/.ssh visible to `git clone` but not to `cat`"). Future fine-grained scope.
-- Auto-extending the protected list based on operator's installed CLIs (1password, bitwarden, etc.). Operator declares.
+- Auto-extending the protected list based on operator's installed CLIs (1Password, Bitwarden, etc.). Operator declares.
 
 ## Recommended PR ordering
 
