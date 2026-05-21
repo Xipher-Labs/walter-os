@@ -65,3 +65,12 @@ teardown() {
     and (index("${HOME}/work") | not)
   '
 }
+
+@test "generate-mcp-configs.sh keeps elevenlabs uvx exact pin in claude output" {
+  run bash "$SCRIPT" claude
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '
+    .elevenlabs.command == "uvx"
+    and .elevenlabs.args[0] == "elevenlabs-mcp==0.9.1"
+  '
+}
