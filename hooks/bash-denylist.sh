@@ -7,6 +7,25 @@
 # Registered in ~/.claude/settings.json PreToolUse hook chain.
 # See docs/specs/walter-os-oss-security-hardening.md AC-7.
 #
+# Re-exec under bash 4+ if launched by the macOS default /bin/bash 3.2,
+# which does NOT support `declare -A` (associative arrays). Without
+# this re-exec the hook silently fails at load time on operator Macs
+# (the `declare -A DENYLIST_PATTERNS` line below errors), and the
+# PreToolUse chain treats that as fail-open. Codex caught this in
+# the bash-3.2-related fixes already shipped for approval-gate.sh
+# (P1-05 side fix); same class of bug here.
+if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+  for _candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if [[ -x "$_candidate" ]]; then
+      exec "$_candidate" "$0" "$@"
+    fi
+  done
+  # No newer bash available — emit fail-CLOSED block so the hook does
+  # not silently fail-open.
+  echo '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
+  exit 0
+fi
+#
 # Bypass escape (two-factor): the hook allows a matched pattern only if BOTH
 #   1. the env var WALTER_DENYLIST_BYPASS=1 is set in the hook's environment, AND
 #   2. the command contains the literal string `--allow-denylist-pattern`.
@@ -90,6 +109,10 @@ DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|
 # bash -c / sh -c with command substitution: `bash -c "$(curl ...)"`, etc.
 # This also catches `bash -c "$(cat /tmp/payload)"`. Mirror of python-c-variable.
 DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(ba|z|d|k)?sh[[:space:]]+-c[[:space:]]+["'\'']?\$[{(]'
+# Sibling pattern: backtick command substitution `bash -c "`curl …`"`. Codex
+# R2 of PR #63 flagged this gap (issue #3 P2-1). Backticks are still common
+# in older shell snippets / man pages / one-liners.
+DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]])(ba|z|d|k)?sh[[:space:]]+-c[[:space:]]+["'\'']?`'
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
 # without braces) OR a command-substitution `$(...)`. Deliberately does NOT
