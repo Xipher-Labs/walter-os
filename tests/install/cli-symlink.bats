@@ -89,5 +89,5 @@ invoke_link_walter_cli() {
 # exist as dead code.
 # -----------------------------------------------------------------------
 @test "link_walter_cli is called from run_step_0" {
-  grep -qE "^\s*link_walter_cli\s*$" "${REPO_ROOT}/install.sh"
+  grep -qE "^[[:space:]]*link_walter_cli[[:space:]]*$" "${REPO_ROOT}/install.sh"
 }

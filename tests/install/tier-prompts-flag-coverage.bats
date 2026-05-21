@@ -27,7 +27,7 @@ setup() {
 # -----------------------------------------------------------------------
 @test "AC9: every install.sh --<flag> in prompts exists in install.sh argparse" {
   # Extract flags. Pattern: install.sh --foo-bar
-  prompt_flags=$(grep -hoE 'install\.sh\s+--[a-z][a-z0-9-]*' "$PROMPT_DIR"/tier-*.md 2>/dev/null \
+  prompt_flags=$(grep -hoE 'install\.sh[[:space:]]+--[a-z][a-z0-9-]*' "$PROMPT_DIR"/tier-*.md 2>/dev/null \
     | sed -E 's/install\.sh[[:space:]]+--/--/' \
     | sort -u)
 
@@ -38,7 +38,7 @@ setup() {
   missing=""
   while IFS= read -r flag; do
     # Look for the flag in install.sh case statement
-    if ! grep -qE "^\s*${flag}\s*\)" "$INSTALL_SH"; then
+    if ! grep -qE "^[[:space:]]*${flag}[[:space:]]*\)" "$INSTALL_SH"; then
       missing="${missing}\n  ✗ ${flag}"
     fi
   done <<< "$prompt_flags"
@@ -89,7 +89,7 @@ setup() {
     esac
     # Find the dispatch case in bin/walter-os. Lines look like:
     #   doctor)             cmd_doctor "$@" ;;
-    if ! grep -qE "^\s*${sub}\s*\)" "$WALTER_OS_BIN"; then
+    if ! grep -qE "^[[:space:]]*${sub}[[:space:]]*\)" "$WALTER_OS_BIN"; then
       missing="${missing}\n  ✗ ${sub}"
     fi
   done <<< "$prompt_subs"
