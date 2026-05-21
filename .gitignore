@@ -12,6 +12,10 @@ secrets.env
 
 # Audit and runtime artifacts
 audit-*.md
+# Specs and operational docs about auditing are tracked (they document the
+# system, they are not runtime artifacts).
+!docs/specs/audit-*.md
+!docs/operational/audit-*.md
 audit.log
 audit.err
 spend-status.json
