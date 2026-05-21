@@ -17,7 +17,7 @@ setup() {
 ADMIN_SITES="plane git secrets llm grafana n8n status home sync headscale-admin vpn postiz metabase penpot draw claw"
 
 # Sites that MUST NOT import admin_auth_gate (genuinely public).
-# Reasoning per site captured in PR #NEW body.
+# Reasoning per site captured in issue #116.
 PUBLIC_SITES="headscale posthog matrix chat-matrix chat"
 
 # -----------------------------------------------------------------------

@@ -95,6 +95,11 @@ services:
       - ./setup/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     environment:
       WALTER_DOMAIN: ${WALTER_DOMAIN:?required}
+      # admin_auth_gate snippet reads these via Caddy's {$VAR} placeholder.
+      # Defaults documented in Caddyfile.template; operator overrides via
+      # personal.env if their tailnet/LAN differ. Issue #116 finding R1.
+      WALTER_TAILNET_CIDR: ${WALTER_TAILNET_CIDR:-100.64.0.0/10}
+      WALTER_LAN_CIDR: ${WALTER_LAN_CIDR:-192.168.0.0/16}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:2019/metrics"]
       interval: 30s

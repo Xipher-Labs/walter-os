@@ -35,7 +35,7 @@
 # Closes external review F2 (issue #116). Every admin-surface site
 # imports this snippet; it returns 403 unless the request EITHER:
 #   - originates from a Tailscale tailnet / LAN / loopback IP, OR
-#   - carries a Cloudflare Access JWT header.
+#   - carries a Cloudflare Access email header.
 #
 # A bug in any individual dashboard's per-app auth (Grafana, n8n,
 # Plane, etc.) cannot expose admin access to the public internet —
@@ -52,8 +52,16 @@
 # ---------------------------------------------------------------------------
 
 (admin_auth_gate) {
+  # Note: envsubst (used to render this template) does NOT expand
+  # ${VAR:-default} bash-style defaults. We use Caddy's native {$VAR}
+  # placeholder syntax instead — Caddy reads these env vars at config
+  # load time. The bootstrap script (setup/walter-host/bootstrap.sh)
+  # exports sensible defaults for WALTER_TAILNET_CIDR + WALTER_LAN_CIDR
+  # before invoking envsubst, so a missing operator override falls
+  # back to those defaults rather than rendering an empty CIDR list
+  # (which would make the matcher useless).
   @not_authed {
-    not remote_ip ${WALTER_TAILNET_CIDR:-100.64.0.0/10} ${WALTER_LAN_CIDR:-192.168.0.0/16} 10.0.0.0/8 127.0.0.0/8 ::1
+    not remote_ip {$WALTER_TAILNET_CIDR} {$WALTER_LAN_CIDR} 10.0.0.0/8 127.0.0.0/8 ::1
     not header CF-Access-Authenticated-User-Email *
   }
   handle @not_authed {
