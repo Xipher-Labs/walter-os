@@ -95,6 +95,19 @@ _write_settings_with_command() {
 # -----------------------------------------------------------------------
 # Positive case: legitimate $HOME / $WALTER_OS_HOME prefixes still work
 # -----------------------------------------------------------------------
+@test "doctor: WALTER_OS_HOME with shell metacharacters does NOT execute (Codex R3)" {
+  # Codex R3 #124: the doctor's tier-1/tier-4 bash -c calls used to
+  # interpolate WALTER_OS_HOME into a quoted string. A WALTER_OS_HOME
+  # containing `"; touch CANARY; #` would break out and execute. Fixed
+  # by passing as positional arg.
+  local canary="$TMP_HOME/DOCTOR_RCE_CANARY"
+  local evil_home="$TMP_HOME/safe-prefix\"; touch $canary; echo \"oops"
+  mkdir -p "$evil_home/agents"
+  touch "$evil_home/agents/dummy.md"
+  WALTER_OS_HOME="$evil_home" "$WALTER_OS_BIN" doctor --tier 4 >/dev/null 2>&1 || true
+  [ ! -e "$canary" ]
+}
+
 @test "baseline-hooks: legitimate \$HOME-prefixed path resolves correctly" {
   mkdir -p "$TMP_HOME/hooks"
   cat > "$TMP_HOME/hooks/legit.sh" <<'SH'
