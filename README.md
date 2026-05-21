@@ -68,16 +68,23 @@ overlay before it does anything useful for you.
   `WALTER_STANDING_APPROVALS` env var is now ignored with a WARN log;
   `WALTER_STANDING_APPROVALS_OVERRIDE` is an explicit testing-only
   hatch that ALSO requires `WALTER_AGENT_ALLOW_OVERRIDE=1` in the
-  same shell), external submodule hooks now resolve via the same
-  `hook-checksums.json` integrity gate as in-repo hooks,
-  `~/.config/walter-os/env` loaded through an allowlist parser
-  instead of `source`, n8n basic auth on as defense-in-depth behind
-  Cloudflare Access, `@latest` npm pins replaced in sub-router
-  Dockerfiles.
+  same shell), external submodule hooks now under a sha256-baseline
+  integrity gate (stored separately at
+  `~/.config/walter-os/external-hook-checksums.json` — distinct from
+  the in-repo `hook-checksums.json` baseline, since the submodule
+  tree and the repo hook table are managed independently),
+  `~/.config/walter-os/env` will load through an allowlist parser
+  instead of `source` (in flight via PR #69; not yet on `main` at
+  the time of this README refresh), n8n basic auth on as
+  defense-in-depth behind Cloudflare Access, `@latest` npm pins
+  replaced in sub-router Dockerfiles.
 - **Founder-skills bundle complete.** `track-pending`,
   `terms-policy-generator`, `legal-doc-review`,
   `financial-plan-builder`, `hiring-toolkit`, plus the
-  `founder-skills/INDEX.md` workflow catalogue.
+  [`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
+  workflow catalogue (the INDEX itself is a sixth `founder-skills`
+  skill — it's both an index document and a skill the agent
+  activates to navigate the bundle).
 - **OpenRouter as a LiteLLM provider.** Six routes
   (`openrouter/claude`, `openrouter/claude-opus`, `openrouter/deepseek`,
   `openrouter/qwen`, `openrouter/mistral`, `openrouter/grok`) wired
@@ -314,11 +321,14 @@ installed.
 
 #### Founder-skills bundle (v0.4.0)
 
-A five-skill family for the operator who's the entire founding team. The
-bundle ships with a workflow-composition index at
-[`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
-(five composition workflows — landing-launch, contract-triage, hiring-loop,
-financial-modeling, terms-bootstrap).
+A six-skill bundle for the operator who's the entire founding team:
+five domain skills (`track-pending`, `legal-doc-review`,
+`terms-policy-generator`, `financial-plan-builder`, `hiring-toolkit`)
+plus the `founder-skills` index — both an index document
+and an invokable skill the agent activates to navigate the bundle.
+See [`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
+for the composition workflows (e.g. "open a new role", "launch a
+public-facing service", "monthly financial review").
 
 | Skill | Purpose |
 |---|---|
