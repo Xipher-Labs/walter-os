@@ -1,9 +1,13 @@
 # Tamper-evident audit chain + signed receipts (OSS Trust B-1 + B-2) — combined spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer B items B-1 + B-2
+**Parent**: OSS Trust roadmap Layer B items B-1 + B-2 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83) (post-merge in-tree path: `docs/specs/oss-trust-roadmap.md`).
 **Target release**: v0.5.x (after A-2 capability tokens lands — re-uses the per-session Ed25519 key)
-**Depends on**: `docs/specs/capability-tokens.md` (A-2 — provides the signing key) and `docs/specs/time-bounded-sessions.md` (A-4 — defines the session lifecycle)
+**Depends on**:
+- A-2 capability tokens — [PR #88](https://github.com/Xipher-Labs/walter-os/pull/88) (post-merge: `docs/specs/capability-tokens.md`) — provides the signing key.
+- A-4 time-bounded sessions — [PR #87](https://github.com/Xipher-Labs/walter-os/pull/87) (post-merge: `docs/specs/time-bounded-sessions.md`) — defines the session lifecycle.
+
+**Naming note (Copilot R1)**: this spec's filename uses "Merkle" but the design is a **linear hash chain**, NOT a Merkle tree. Each row's `prev_hash = sha256(previous_row)` is sequential — there are no sibling hashes and no inclusion proofs. We kept "Merkle" in the filename because the parent OSS Trust roadmap (B-1) named it that way originally, and renaming the file mid-flight would invalidate inbound links. Future readers should treat the file name as historical shorthand for "tamper-evident hash chain"; the body uses the precise "hash chain" terminology throughout.
 
 ## Problem
 
@@ -12,7 +16,7 @@ Walter-OS's audit trail today is a regular markdown / jsonl file at `~/.config/w
 - Truncate the file
 - Replace the file with a fabricated one
 
-A security-conscious adopter cannot trust the audit trail to faithfully record what an agent did. The Merkle hash chain + signed receipts close this gap: every tool invocation is a row whose `prev_hash` chains to the previous, and a per-session signature over the row makes silent edits provable.
+A security-conscious adopter cannot trust the audit trail to faithfully record what an agent did. The **hash chain** (linear, sequential — not a Merkle tree; see the naming note above) + signed receipts close this gap: every tool invocation is a row whose `prev_hash` chains to the previous, and a per-session signature over the row makes silent edits provable.
 
 ## Non-goals
 
@@ -23,12 +27,13 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 ## Decisions (proposed)
 
-### B-1 (Merkle hash chain)
+### B-1 (hash chain — linear; called "Merkle" in the roadmap for historical reasons, see naming note above)
 
 | # | Decision | Why |
 |---|---|---|
 | D-1 | **Per-day JSONL chain file**: `~/.config/walter-os/audit/chain-YYYY-MM-DD.jsonl`. Each row's last field is `prev_hash = sha256(row_normalized)` of the previous row in the SAME file. First row's `prev_hash = "null"`. | Per-day partitioning keeps file sizes manageable; chain integrity remains intact within a day. |
-| D-2 | **Daily root hash file**: `~/.config/walter-os/audit/root-YYYY-MM-DD.txt` containing `sha256(last_row)` of the day's chain. Operator can pin this somewhere external if they want long-term tamper detection. | Single fixed file for cross-day chaining: day N's `prev_chain_root = sha256(root-YYYY-MM-(DD-1).txt)`. |
+| D-2 | **Daily root hash file**: `~/.config/walter-os/audit/root-YYYY-MM-DD.txt` containing the 64-character lowercase hex digest of `sha256(last_row)` (the last row's full bytes), no trailing newline, no surrounding whitespace, UTF-8 encoded. Operator can pin this somewhere external if they want long-term tamper detection. | Deterministic file content makes cross-day chaining unambiguous (see D-2 cross-day note below). Operator-portable. |
+|   | **Cross-day chaining**: day N's first chain row carries `prev_chain_root = <day N-1's root-YYYY-MM-DD.txt content, verbatim hex string>` — NOT a re-hash of the file. The text inside `root-YYYY-MM-DD.txt` IS the prev-day's root hash; copying it into day N's first row is what links the days. Verifier confirms `day-N-first-row.prev_chain_root == read_file("root-YYYY-MM-(DD-1).txt")`. This avoids the double-hash / file-encoding-sensitivity confusion the earlier draft created. | Single string equality check; no implicit re-hashing of the file. |
 | D-3 | **Row normalization**: JSON serialized with sorted keys + LF line ending + no trailing whitespace. Hashed UTF-8 bytes. Documented in `docs/operational/audit-chain-format.md`. | Deterministic hashing across operators; verifier doesn't have to reinvent. |
 | D-4 | **Atomic append**: writer takes `flock(LOCK_EX)` on a sidecar `.lock` file (NOT the JSONL itself — addresses the rotation-race that Codex flagged for issue #3 P2-2). Inside the lock, opens the JSONL by path (not by held fd), reads the last line, computes new row's prev_hash, appends. | Robust under concurrent appenders + log rotation. |
 | D-5 | **`walter-os audit verify-chain [<date>]`** walks the chain end-to-end and reports the first row whose `prev_hash` doesn't match the previous row. Default verifies today; with `<date>` verifies that day. | Operator-runnable proof of integrity. |
@@ -37,7 +42,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 | # | Decision | Why |
 |---|---|---|
-| D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. The `sig` field carries the raw 64-byte Ed25519 signature, base64-encoded, computed over the canonical JSON serialization of the row with the `sig` field removed (RFC 8785 JCS — JSON Canonicalization Scheme: keys sorted, no whitespace, UTF-8). NOTE: "detached signature" is NOT a term defined by the PASETO v4 spec; we use raw Ed25519 directly so the wire format is unambiguous across language implementations. PASETO v4 is referenced only as the design inspiration for the per-session-key model. | Reuses the cap-token signing key. No new key infrastructure. RFC 8785 JCS makes the signed bytes deterministic across implementations. |
+| D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. The `sig` field carries the raw 64-byte Ed25519 signature, **base64-encoded per RFC 4648 §4 (standard base64, NOT base64url): the alphabet is `A-Z a-z 0-9 + /`, padding `=` is REQUIRED so a 64-byte signature always serializes to exactly 88 characters, and the output MUST NOT contain line breaks**. Computed over the canonical JSON serialization of the row with the `sig` field removed (RFC 8785 JCS — JSON Canonicalization Scheme: keys sorted, no whitespace, UTF-8). NOTE: "detached signature" is NOT a term defined by the PASETO v4 spec; we use raw Ed25519 directly so the wire format is unambiguous across language implementations. PASETO v4 is referenced only as the design inspiration for the per-session-key model. | Reuses the cap-token signing key. No new key infrastructure. RFC 8785 JCS makes the signed bytes deterministic across implementations; RFC 4648 §4 + required padding makes the wire encoding round-trip-stable across Python (`base64.b64encode`), Node (`Buffer.from(..., 'base64')`), Bash (`base64`), and Go (`base64.StdEncoding`). |
 | D-7 | **Verifier resolves the per-row signer**: `(session_id, sig)` → look up `~/.config/walter-os/state/session-<session_id>.pub` (the public half of the session key, persisted at session start). | Public key persists; private key dies at session end. After session end, you can still VERIFY past rows; you cannot mint new ones. |
 | D-8 | **Public key rotation**: when a new session starts, the previous session's public key is moved to `~/.config/walter-os/state/keys-archive/session-<uuid>.pub`. Verifier checks both `state/` and `state/keys-archive/`. | Never delete public keys (you'd lose ability to verify old rows). Keys archive is bounded by `WALTER_AUDIT_KEYS_ARCHIVE_DAYS` (default 365). |
 | D-9 | **Sigstore Rekor (opt-in)**: when `WALTER_AUDIT_REKOR_UPLOAD=1`, the daily root hash (NOT row content) + timestamp + operator-id are uploaded to Sigstore Rekor at session end. Public attestation that THIS operator was running THIS chain at THIS time. | Operator-opt-in public timestamping. Per OSS Trust roadmap D-3 decision. |
