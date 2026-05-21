@@ -566,6 +566,22 @@ merge_claude_hooks() {
   fi
 
   local walter_hooks
+  # PreToolUse Bash chain (order matters — first hook fires first):
+  #   1. bash-denylist.sh  → CHEAP regex match. Blocks RCE patterns
+  #      (curl|bash, eval$VAR, bash -c "$(...)", etc.) before any
+  #      heavier check. Fails fast; fails closed when jq is missing.
+  #   2. approval-gate.sh  → TIER-based approval matrix (P1-05/P1-06).
+  #      Decides whether destructive ops / pushes / PRs need operator
+  #      confirmation. Consults ~/.config/walter-os/agent-approvals.yml.
+  #   3. branch-flow-guard.sh → blocks pushes that violate the
+  #      configured branch flow (single-tier vs three-stage).
+  #   4. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
+  #
+  # bash-denylist + approval-gate were ABSENT from this template at
+  # one point (Codex R2 MEDIUM M2 caught the regression). The bats
+  # test `tests/install/hook-chain-content.bats` pins both presence
+  # and ordering — a future template edit that drops either hook
+  # will fail CI before reaching main.
   walter_hooks="$(jq -n --arg repo "$REPO_ROOT" '{
     SessionStart: [{
       matcher: "*",
@@ -579,6 +595,8 @@ merge_claude_hooks() {
       {
         matcher: "Bash",
         hooks: [
+          { type: "command", command: ($repo + "/hooks/bash-denylist.sh"),    _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
         ]
