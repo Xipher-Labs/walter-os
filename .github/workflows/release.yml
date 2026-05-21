@@ -183,17 +183,22 @@ jobs:
 
       # Step D: Compute SHA-256 checksums over every file in ASSET_DIR,
       # excluding the checksums file itself + previously-uploaded
-      # security artifacts (cosign bundle, sig). Sorted for reproducibility.
+      # security artifacts (cosign bundle, sig, keyless cert). Sorted
+      # for reproducibility.
       - name: Generate SHA-256 checksums for full release payload
         run: |
           set -euo pipefail
           cd "${ASSET_DIR}"
           # Remove any previously-downloaded security artifacts so the
           # re-signed checksums file covers ONLY the canonical payload.
-          rm -f "${CHECKSUMS_FILE}" "${CHECKSUMS_FILE}.sig" "${CHECKSUMS_FILE}.cosign.bundle"
+          rm -f "${CHECKSUMS_FILE}" \
+                "${CHECKSUMS_FILE}.sig" \
+                "${CHECKSUMS_FILE}.pem" \
+                "${CHECKSUMS_FILE}.cosign.bundle"
           find . -maxdepth 1 -type f \
             ! -name "${CHECKSUMS_FILE}" \
             ! -name "${CHECKSUMS_FILE}.sig" \
+            ! -name "${CHECKSUMS_FILE}.pem" \
             ! -name "*.cosign.bundle" \
             -exec sha256sum {} + | sort > "${CHECKSUMS_FILE}"
           test -s "${CHECKSUMS_FILE}"
@@ -213,15 +218,54 @@ jobs:
         run: |
           set -euo pipefail
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}"
+          # Cosign v3+ forces the new-bundle format and treats
+          # --output-signature / --output-certificate as deprecated.
+          # In practice a second sign-blob invocation that tries to
+          # emit those side-by-side errors out with:
+          #   "signing checksums.sha256: create bundle file: open :
+          #    no such file or directory"
+          # because cosign silently demands --bundle even when those
+          # flags are set. The canonical artifact going forward is the
+          # bundle: a single file carrying signature + Fulcio cert +
+          # Rekor entry. We sign once, emit the bundle, and document
+          # the bundle as the only first-class verification target.
+          # See docs/security/verification.md.
           cosign sign-blob --yes \
             "${ASSET_DIR}/${CHECKSUMS_FILE}" \
-            --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle" \
-            --output-signature "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
+            --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
-          test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.sig"
 
-      # Step F: Upload SBOM + checksums + signature/bundle. --clobber
-      # so workflow_dispatch re-runs overwrite previous artifacts cleanly.
+      # Step F: Upload SBOM + checksums + bundle. --clobber so
+      # workflow_dispatch re-runs overwrite previous artifacts
+      # cleanly. The legacy .sig + .pem pair is no longer produced —
+      # cosign v3+ forces bundle-only output (see Step E). For tags
+      # that previously had legacy `.sig` / `.pem` attached (v0.3.0,
+      # the abandoned v0.4.0 attempt), explicitly delete those
+      # assets first so the published artifact list matches the
+      # workflow's claim (Codex R2 on PR #108: --clobber only
+      # replaces files we LIST, not files we omit; stale legacy
+      # sidecars would otherwise remain on the release).
+      - name: Remove stale legacy assets from existing release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for stale in "${CHECKSUMS_FILE}.sig" "${CHECKSUMS_FILE}.pem"; do
+            # gh release delete-asset exits non-zero if the asset
+            # doesn't exist — that's fine for releases that never
+            # had it. `|| true` keeps the workflow moving; we log
+            # what happened for the audit trail.
+            if gh release view "$TAG" --repo "${RELEASE_REPO}" --json assets \
+                 --jq ".assets[].name" | grep -qx "$stale"; then
+              echo "Deleting stale legacy asset: $stale"
+              gh release delete-asset "$TAG" "$stale" \
+                --repo "${RELEASE_REPO}" --yes
+            else
+              echo "No stale $stale on $TAG — nothing to remove."
+            fi
+          done
+
       - name: Upload security artifacts to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -231,7 +275,6 @@ jobs:
           gh release upload "$TAG" \
             "${ASSET_DIR}/${SBOM_FILE}" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}" \
-            "${ASSET_DIR}/${CHECKSUMS_FILE}.sig" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle" \
             --repo "${RELEASE_REPO}" \
             --clobber

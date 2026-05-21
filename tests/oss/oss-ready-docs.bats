@@ -76,7 +76,10 @@ setup() {
   grep -q "\[0\.2\.0\]" "$REPO_ROOT/CHANGELOG.md"
 }
 @test "CHANGELOG.md has footer link references" {
-  grep -q "compare/v0.2.0...HEAD" "$REPO_ROOT/CHANGELOG.md"
+  # The [Unreleased] compare link tracks the most-recent tagged version.
+  # Each release bumps this; we assert the link shape rather than a specific
+  # version so the test doesn't have to be updated on every release.
+  grep -qE "compare/v[0-9]+\.[0-9]+\.[0-9]+\.\.\.HEAD" "$REPO_ROOT/CHANGELOG.md"
 }
 
 # --- Issue templates ---

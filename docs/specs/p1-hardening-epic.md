@@ -19,8 +19,8 @@ The 2026-05-11 audit identified 9 P1-severity findings (CVSS 5.0–8.1). Two wer
 ## Non-goals
 
 - Re-litigating P0-01..P0-06 (closed).
-- P2 findings (P2-01..P2-08) — separate epic; cleanup in v0.4.0 or v0.5.0 depending on operator scheduling.
-- Adopting runtime sandboxing (#1 OSS trust roadmap) — too big for v0.4.0; lives in v0.5.0+.
+- P2 findings (P2-01..P2-08) — separate epic; cleanup in v0.4.0 or v0.4.1 depending on operator scheduling.
+- Adopting runtime sandboxing (#1 OSS trust roadmap) — too big for v0.4.0. The capability-token + egress-allowlist + time-bounded-session pieces (A-1 / A-2 / A-4) land in v0.4.1; the process-isolation sandboxing (A-3) lands in v0.5.x.
 - Rewriting `approval-gate.sh` from scratch. Each P1 fix is a surgical patch.
 - Forking every upstream service to pin from scratch. We pin to the digest currently in use.
 

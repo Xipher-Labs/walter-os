@@ -8,8 +8,9 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.3.0--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.4.0--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
+[![Audit: 6/6 P0 closed](https://img.shields.io/badge/audit-6%2F6_P0_closed-brightgreen.svg)](docs/operational/security-audit-2026-05-11.md)
 
 </div>
 
@@ -45,14 +46,56 @@ overlay before it does anything useful for you.
 
 ## Status: alpha — read this before relying on it
 
-> **This is v0.3.0-alpha. Things iterate fast, things break, things get
-> corrected on the fly while other work is in flight.**
+> **This is v0.4.0-alpha (in-flight). Things iterate fast, things break,
+> things get corrected on the fly while other work is in-flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
 > and is in the process of being generalized for OSS adoption.
-> v0.2.0 was the first release intended for third parties; v0.3.0 lands
-> process-hygiene + depersonalization cleanup plus the start of the
-> founder-toolkit; v0.4.0+ continues founder-skills coverage and tightens APIs.
+> v0.2.0 was the first release intended for third parties. v0.3.0
+> shipped process-hygiene + depersonalization cleanup plus the first
+> founder-skills (track-pending). v0.4.0 (this release, in-flight) adds
+> the rest of the founder-skills bundle, OpenRouter as a LiteLLM fallback
+> provider, and closes the remaining audit P0 + P1 findings.
+
+### What's new since v0.3.0
+
+- **6/6 P0 audit findings closed.** Indirect prompt injection through
+  `.claude/lessons.md` (P0-06 / P1-08) is fixed via bounded-section
+  framing of the SessionStart / PreCompact hook output. See
+  `docs/operational/security-audit-2026-05-11.md`.
+- **P1 hardening sweep.** approval-gate fails closed on missing
+  `yq`, standing-approvals path is hardcoded (the previous
+  `WALTER_STANDING_APPROVALS` env var is now ignored with a WARN log;
+  `WALTER_STANDING_APPROVALS_OVERRIDE` is an explicit testing-only
+  hatch that ALSO requires `WALTER_AGENT_ALLOW_OVERRIDE=1` in the
+  same shell), external submodule hooks now under a sha256-baseline
+  integrity gate (stored separately at
+  `~/.config/walter-os/external-hook-checksums.json` — distinct from
+  the in-repo `hook-checksums.json` baseline, since the submodule
+  tree and the repo hook table are managed independently),
+  `~/.config/walter-os/env` will load through an allowlist parser
+  instead of `source` (in flight via PR #69; not yet on `main` at
+  the time of this README refresh), n8n basic auth on as
+  defense-in-depth behind Cloudflare Access, `@latest` npm pins
+  replaced in sub-router Dockerfiles.
+- **Founder-skills bundle complete.** `track-pending`,
+  `terms-policy-generator`, `legal-doc-review`,
+  `financial-plan-builder`, `hiring-toolkit`, plus the
+  [`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
+  workflow catalogue (the INDEX itself is a sixth `founder-skills`
+  skill — it's both an index document and a skill the agent
+  activates to navigate the bundle).
+- **OpenRouter as a LiteLLM provider.** Six routes
+  (`openrouter/claude`, `openrouter/claude-opus`, `openrouter/deepseek`,
+  `openrouter/qwen`, `openrouter/mistral`, `openrouter/grok`) wired
+  into the fallback chain as last-resort failover after the primary
+  Anthropic / OpenAI / Google API keys + claude-code-router
+  subscription proxy.
+- **Release workflow consolidation.** `release.yml` and the previous
+  `release-security.yml` collapsed into one workflow with two jobs
+  (`release` → `security`). `workflow_dispatch` input lets operators
+  re-sign an existing tag without rolling a new one. Closes the
+  GitHub-token-can't-dispatch-release-event gap.
 >
 > **What this means for adopters:**
 >
@@ -274,6 +317,26 @@ installed.
 | `regulatory-research-international` | Multi-jurisdiction regulatory lookup |
 | `medical-data-compliance` | PHI/HIPAA/GDPR guardrails for health data |
 | `landing-page-fast` | Rapid landing page scaffold with Astro + Tailwind |
+| `readme-craft` | Opinionated README authoring — picks section template per project type, curates upstream tools from `awesome-readme-tools` |
+
+#### Founder-skills bundle (v0.4.0)
+
+A six-skill bundle for the operator who's the entire founding team:
+five domain skills (`track-pending`, `legal-doc-review`,
+`terms-policy-generator`, `financial-plan-builder`, `hiring-toolkit`)
+plus the `founder-skills` index — both an index document
+and an invokable skill the agent activates to navigate the bundle.
+See [`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
+for the composition workflows (e.g. "open a new role", "launch a
+public-facing service", "monthly financial review").
+
+| Skill | Purpose |
+|---|---|
+| `track-pending` | `walter-pending.md` ledger convention — track operator-blocking decisions across sessions |
+| `terms-policy-generator` | Terms / Privacy / Cookies drafts from a single YAML config |
+| `legal-doc-review` | 12-clause contract triage with red-flag detection |
+| `financial-plan-builder` | 12-month cash projection from a YAML revenue / expense model |
+| `hiring-toolkit` | Job description + interview rubric + offer template |
 
 Skills auto-trigger based on description match. You can also invoke them
 explicitly by name: "apply the `hackathon-spinup` skill to this project."
@@ -798,7 +861,8 @@ requirements on an existing VM.
 > [Hetzner Cloud pricing](https://www.hetzner.com/cloud).
 >
 > **Heavy tier caveat**: requires improvements for cross-zone load balancing
-> (planned for v0.3.x). For now, single-node CX53 is the recommended ceiling.
+> (tracked as a future roadmap item; no specific release target). For now,
+> single-node CX53 is the recommended ceiling.
 > For hosting alternatives (DigitalOcean, Vultr, bare metal), see
 > `docs/operational/hosting-providers-comparison.md`.
 
@@ -1553,14 +1617,14 @@ reproducibility.
 
 ## Known limitations and alpha status
 
-Walter-OS is **alpha software** (v0.3.0-alpha). Expect breaking changes between
+Walter-OS is **alpha software** (v0.4.0-alpha, in-flight). Expect breaking changes between
 minor versions. The following limitations are known and tracked:
 
 - **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
   stack is designed for a single node. Multi-VM deployments require manual
   configuration work not covered by this repo.
 - **No mobile management UI**: Control Tower is a desktop browser application.
-  Mobile access to the Walter Council is not supported in v0.3.
+  Mobile access to the Walter Council is not supported in v0.4.
 - **Manual service updates**: `docker compose pull` only updates services with
   `latest` or non-pinned tags. Pinned services (the majority) require manual
   tag bumps in the compose files.

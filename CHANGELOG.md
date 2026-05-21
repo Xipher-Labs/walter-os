@@ -18,10 +18,125 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.4.0** — founder-skills epic + audit P1/P2
-cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
+Target release: **v0.4.3+** — OSS Trust roadmap implementation
+continues. Spec PRs #85–#95 (target column points at v0.4.1 in the
+specs themselves; impl PRs target v0.4.3+) close out their reviews
+and the implementation work lands here.
 
-### Added (v0.4.0 candidates already on main)
+### Pending
+
+- OSS Trust A–E implementation tasks (see
+  `docs/specs/oss-trust-roadmap.md` for individual spec breakdown).
+- `install via agent — tier I-IV prompts` (PR #103) — needs further
+  R2/R3 cycle on the precheck command / project naming / path
+  inconsistencies.
+
+---
+
+## [0.4.2] — 2026-05-21
+
+**Placeholder tag, no content delta from v0.4.1.** Pushed at
+operator request to claim the v0.4.2 milestone marker. Code,
+SBOM contents, and checksums are identical to v0.4.1 — only the
+`VERSION` file changed (0.4.1 → 0.4.2) and this changelog stub.
+
+Why this exists: it lets follow-up impl PRs (OSS Trust roadmap)
+land against a fresh `[Unreleased]` block targeting v0.4.3+
+without conflating "v0.4.1 release tooling" with "the next batch
+of work." No re-verification is needed for consumers tracking
+v0.4.1 — re-signing the same payload under the v0.4.2 tag does
+not change what's inside `checksums.sha256.cosign.bundle`.
+
+---
+
+## [0.4.1] — 2026-05-21
+
+Release-tooling fix + small documentation cleanup. v0.4.0 was tagged
+without attached assets because the cosign signing step assumed a
+2-invocation pattern (bundle + raw .sig/.pem) that cosign v3+ no
+longer supports. v0.4.1 collapses to bundle-only signing, deletes
+the legacy assets from existing releases, and re-targets the OSS
+Trust roadmap from v0.5.0 to v0.4.1 per the operator pivot.
+
+### Fixed
+
+- **release.yml cosign v3+ compatibility (#108).** Cosign v3+ forces
+  the new-bundle-format and refuses to honor `--output-signature` /
+  `--output-certificate` — the second `sign-blob` invocation errored
+  with `create bundle file: open : no such file or directory`. This
+  blocked v0.4.0 from receiving any signed-release assets. Workflow
+  now signs once with `--bundle`, uploads only the bundle, and
+  explicitly deletes any stale `.sig` / `.pem` files left on
+  pre-v0.4.1 releases before re-uploading. Replaces #105's two-sig
+  attempt. After v0.4.1 lands, all releases attach a 3-artifact set
+  (SBOM + checksums + cosign bundle). `docs/security/verification.md`
+  rewritten to document bundle-only verification.
+
+### Added
+
+- **`skills/readme-craft/recommended-tools.md` (#106).** Curated
+  short-list of 8 tools selected from the upstream
+  `dhyeythumar/awesome-readme-tools` (CC0-1.0, ~55 tools). Replaces
+  per-invocation upstream browsing with an opinionated subset that
+  agents can consult first. Bats coverage in
+  `tests/skills/readme-craft-recommended-tools.bats`:
+  - AC-1..7: structural invariants (8 entries, three required
+    subsections per entry, upstream catalog linked twice, etc.)
+  - AC-8: "Last reviewed" date freshness (0–120 days, future dates
+    rejected so a future-dated review can't bypass the gate)
+  - AC-9 (gated by `RECOMMENDED_TOOLS_LIVENESS=1`): every upstream
+    URL responds with 200 (HEAD with GET fallback)
+  - `tests/skills/` newly wired into the CI bats job so static
+    structural regressions are caught on every PR.
+
+### Changed
+
+- **OSS Trust roadmap retarget v0.5.0 → v0.4.1 (#107).** Operator
+  pivot 2026-05-21. Updates `Target` columns + narrative across 7
+  spec docs:
+  - `docs/specs/oss-trust-roadmap.md` (umbrella)
+  - `docs/specs/walter-host-extraction.md`
+  - `docs/specs/graphify-knowledge-maps.md`
+  - `docs/specs/recon-vuln-scanning-profile.md`
+  - `docs/specs/p1-hardening-epic.md`
+  - `docs/specs/multi-model-preference-wizard.md`
+  - `docs/specs/walter-debt-tracker.md`
+
+  `v0.5.x` items (process isolation A-3, read-only mounts A-5,
+  etc.) intentionally stay `v0.5.x`. `v0.6.0` references stay
+  `v0.6.0`. Implementation of the v0.4.1-targeted items lands in
+  v0.4.2 → v1.0 across the subsequent release cuts.
+
+### Closed PRs (no merge)
+
+- **#84 v0.4.0 release plan** — superseded by the actual v0.4.0
+  release (tag landed 2026-05-21, commit 08ac3cc). Canonical record
+  lives in this CHANGELOG and the GitHub release notes; the plan
+  doc was a pre-flight checklist whose value expired at tag time.
+
+---
+
+## [0.4.0] — 2026-05-21
+
+Founder-skills epic + audit P1/P2 cleanup + OSS Trust roadmap specs.
+22 PRs landed across the v0.4.0 sprint; the security audit ledger gained
+closure on all 6 P0 findings (P0-01..P0-06), P1-01/03/05/06/07/08/09, and
+P2-01..P2-08 are spec'd for v0.4.1.
+
+### Added (v0.4.0 highlights)
+
+- `skills/heygen-cli/` — HeyGen avatar-video REST API skill. Bash
+  function library (`heygen.sh`) wrapping `curl` for `list_avatars`,
+  `list_voices`, `list_templates`, `get_video_status`,
+  `generate_video`, and `generate_from_template`. Pinned API
+  versions, fail-loud on missing `HEYGEN_API_KEY`, 401 / 429
+  surface-only handling (no automatic retry on paid endpoints),
+  fail-fast on invalid `--ratio`. State-changing endpoints rely on
+  the operator-confirmation convention in chat — a dedicated
+  `heygen-generate` category for `hooks/approval-gate.sh`'s
+  `CATEGORY_MIN_TIER` is a follow-up after this PR lands. Replaces
+  the unmaintained `heygen-mcp@0.0.3` PyPI package (anonymous
+  author, fails minReleaseAge gate). Closes #41.
 
 - `skills/track-pending/SKILL.md` — the `walter-pending.md` ledger
   convention. Closes #10. (PR #54)
@@ -81,6 +196,25 @@ PRs #55–#59 and land as the bundle epic completes.)
   Audit ledger `docs/operational/security-audit-2026-05-11.md` updated:
   6/6 P0 findings closed; P1-08 closed by the same fix.
 
+- **Audit P1-03 closed.** Both n8n compose files —
+  `setup/walter-host/services/n8n/compose.yml` AND the repo root
+  `compose.yml` used by `install.sh`'s default-deploy path — now run
+  n8n's built-in basic auth as a defense-in-depth layer behind
+  Cloudflare Access (was off, single-layer perimeter only).
+  `N8N_BASIC_AUTH_ACTIVE: "true"` + `${N8N_BASIC_AUTH_USER:?…}` +
+  `${N8N_BASIC_AUTH_PASSWORD:?…}` substitutions mean missing operator
+  secrets cause the container to fail loudly at boot rather than
+  silently fall back to disabled auth. Updated
+  `setup/walter-host/services/n8n/README.md` with the two-layer threat
+  model and operator setup commands (corrected to reflect the actual
+  `.env` flow, not the deprecated `walter-os secrets-pull`).
+  `.env.template` documents the two new required vars. New regression
+  test `tests/oss/services-n8n-auth.bats` (5 tests) pins the
+  invariant. The phrase "second factor" was misleading (this is not
+  MFA, it's a second independent credential check); compose comments
+  + README + audit doc all switched to "second auth layer" / "defense-
+  in-depth layer" to avoid implying multi-factor.
+
 - **Audit P1-05 closed.** `hooks/approval-gate.sh` now hard-fails with
   `permissionDecision: "block"` when `yq` is missing (same pattern as
   the P0-03 jq-missing path). `install.sh` adds `yq` to its required-
@@ -120,6 +254,18 @@ PRs #55–#59 and land as the bundle epic completes.)
   `tests/audit/external-hook-integrity.bats` (6 cases) pins the
   behavior.
 
+- **Audit P1-09 closed.** `hooks/daily-audit-gate.sh` no longer `source`s
+  `$WALTER_CONFIG/env` directly. New
+  `scripts/walter/lib/env-loader.sh` exports a
+  `walter_env_load_allowlist()` parser that reads `KEY=VALUE` lines,
+  rejects keys not in `WALTER_ENV_ALLOWLIST` (with a WARN), and never
+  evaluates values as code — command substitution (`$(...)`),
+  backticks, and any other shell payload in the value land as literal
+  strings. Operators can extend the allowlist via
+  `$WALTER_CONFIG/env-allowlist.txt` (one KEY per line). 9 new bats
+  tests at `tests/hooks/env-allowlist.bats` lock the parser against
+  direct injection attempts.
+
 - **`tests/oss` failures fixed (#50 closed).** Two pre-existing failures
   blocked the full `tests/oss/` glob from running in CI:
   - `depersonalization.bats AC-3` was matching `Law N.NNN` and `Ley N`
@@ -154,6 +300,52 @@ PRs #55–#59 and land as the bundle epic completes.)
   workflow (`release.yml`) for v0.3.1+ bundles. Older bundles signed
   by `release-security.yml` remain verifiable with the previous
   identity regexp documented in that file.
+
+### Security (continued)
+
+- **Audit P1-01 closed.** The three sub-router Dockerfiles
+  (`gemini-sub-router`, `claude-sub-router`, `chatgpt-codex-router`)
+  no longer install npm packages with `@latest`. They now pin
+  `@google/gemini-cli@0.42.0`, `@anthropic-ai/claude-code@2.1.146`,
+  and `@openai/codex@0.132.0` respectively. New bats regression
+  `tests/oss/no-latest-tags-walter-host.bats` fails CI if any
+  `image: …:latest`, `image: …:stable`, or `npm install … @latest`
+  reappears under `setup/walter-host/services/`. The `openclaw`
+  install was already pinned to `openclaw@2026.5.7`; the test
+  enforces that too.
+
+### Release cycle fixes (late v0.4.0 sprint)
+
+- **#96 [SECURITY]** `bin/walter-os baseline-external-hooks`: harden
+  the CLI subcommand to use `jq` for JSON key extraction (replacing
+  `grep -bo` offset arithmetic) and pin the sorted-keys invariant
+  test to use `jq`-parsed key ordering. Closes operator-noted gap in
+  external-hook baseline generation parity with the audit script.
+- **#97 [SECURITY]** Bump submodule
+  `external/marchetto-agent-skills` to pick up the P0-06 jq/json
+  encoding fix in the fork.
+- **#98 [SECURITY]** Providers wizard: wrap `declare -A` block in
+  `set +u` … `set -u` so the script no longer crashes under bash 3.2
+  (macOS default). Adds bats coverage for both bash 3.2 and bash 4+
+  paths.
+- **#99 [OPERATIONS]** `install.sh --dry-run`: warn instead of exit
+  on missing `jq` / `yq`, with OS-aware install hints (`brew install`
+  on macOS, `apt-get install` on Linux). The `--check` path remains
+  hard-fail.
+- **#100 [SECURITY] (CRITICAL)** `install.sh` was missing both
+  `bash-denylist.sh` and `approval-gate.sh` from the generated
+  `PreToolUse` Bash hook chain — destructive-op protection was
+  effectively disabled for new installs. Both hooks restored in
+  bash-denylist → approval-gate order. Regression tests added at
+  `tests/install/hook-chain-content.bats` (3 cases) pin the chain
+  shape.
+- **#101 [TECHNICAL]** Skip `tests/install/generate-mcp-configs.bats`
+  codex-TOML parsing test on Python < 3.11 (when `tomllib` is
+  unavailable) instead of failing. Other tests in the file still run.
+- **#102 [OPERATIONS]** Add `setup/secrets-identity-init.sh` to the
+  Makefile `audit-shell` target so the script is covered by the
+  shellcheck CI gate (it was generated late and missed the original
+  glob).
 
 ---
 
@@ -452,6 +644,10 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/xipher-labs/walter-os/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/xipher-labs/walter-os/releases/tag/v0.2.0
-[0.1.0]: https://github.com/xipher-labs/walter-os/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.2
+[0.4.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.1
+[0.4.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.0
+[0.3.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.3.0
+[0.2.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.1.0

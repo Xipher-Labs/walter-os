@@ -6,7 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Gemini CLI from Google (https://github.com/google-gemini/gemini-cli)
-RUN npm install -g @google/gemini-cli@latest
+# Pinned to a specific version to close audit P1-01 (no `@latest` in
+# runtime-installed deps with execution context). Bump deliberately
+# after diffing the release notes; do not switch back to `@latest`.
+RUN npm install -g @google/gemini-cli@0.42.0
 
 WORKDIR /app
 

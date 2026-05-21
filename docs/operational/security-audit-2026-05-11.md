@@ -169,6 +169,8 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 
 ### P1-01 — `openclaw@latest` npm package installed at runtime — unpinned dependency with execution context
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `openclaw` itself was already pinned to `openclaw@2026.5.7` ahead of this audit's re-review. The three additional `@latest` npm installs the audit didn't catch — in `gemini-sub-router/Dockerfile`, `claude-sub-router/Dockerfile`, and `chatgpt-codex-router/Dockerfile` — are now pinned to `@google/gemini-cli@0.42.0`, `@anthropic-ai/claude-code@2.1.146`, and `@openai/codex@0.132.0` respectively. Regression test at `tests/oss/no-latest-tags-walter-host.bats` (4 tests) pins the no-`@latest` invariant in CI.
+
 **Category**: 8 (Supply chain)  
 **File**: `setup/walter-host/services/openclaw/compose.yml:71`
 
@@ -195,14 +197,25 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 
 ### P1-03 — n8n runs with `N8N_BASIC_AUTH_ACTIVE: "false"` — single-layer auth dependency on Cloudflare Access
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. Both n8n compose files —
+`setup/walter-host/services/n8n/compose.yml` AND the repo root
+`compose.yml` (used by `install.sh`'s default-deploy flow) — now set
+`N8N_BASIC_AUTH_ACTIVE: "true"` and wire `N8N_BASIC_AUTH_USER` +
+`N8N_BASIC_AUTH_PASSWORD` via `${VAR:?msg}` substitutions, so a missing
+operator-side secret makes the container fail at boot rather than
+silently falling back to disabled auth. `setup/walter-host/services/n8n/README.md`
+documents the two-layer auth model (CF Access perimeter + n8n basic
+defense-in-depth) with operator setup steps. Regression test at
+`tests/oss/services-n8n-auth.bats` (5 tests).
+
 **Category**: 3 (Authentication bypass)  
-**File**: `setup/walter-host/services/n8n/compose.yml:46-47`
+**File**: `setup/walter-host/services/n8n/compose.yml` (basic-auth env-block) + `compose.yml` (repo root, n8n service block)
 
 **Description**: n8n disables its own authentication layer entirely, relying solely on Cloudflare Access (CF Tunnel) for protection. If the CF Access policy is misconfigured, the CF tunnel is bypassed (e.g., via a direct connection to the Walter-VM IP on port 5678 if a firewall rule is ever relaxed), or if cloudflared has a vulnerability, n8n is fully open with no secondary auth. n8n has direct access to Postgres credentials, Execute Command nodes, and all configured credentials.
 
 **CVSS estimate**: 8.1 (AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:H)
 
-**Fix**: Re-enable n8n's built-in user management as a second factor. Set `N8N_BASIC_AUTH_ACTIVE: "true"` or configure n8n's native user management with strong credentials as defense-in-depth behind CF Access.
+**Fix**: Re-enable n8n's built-in basic auth as a SECOND AUTH LAYER (not MFA — a second independent shared-secret credential, not a different factor type). Set `N8N_BASIC_AUTH_ACTIVE: "true"` with strong `N8N_BASIC_AUTH_USER` + `N8N_BASIC_AUTH_PASSWORD` credentials as defense-in-depth behind CF Access.
 
 ---
 
@@ -284,6 +297,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 ---
 
 ### P1-09 — `daily-audit-gate.sh` sources `$WALTER_CONFIG/env` at startup, which can be attacker-controlled
+
+**Status**: ✅ **Fixed in v0.4.0-inflight**. The `source "${WALTER_CONFIG}/env"` call is gone. The hook now loads operator env through the new `walter_env_load_allowlist()` parser in `scripts/walter/lib/env-loader.sh` — which reads `KEY=VALUE` lines, rejects any key not in `WALTER_ENV_ALLOWLIST` (with a WARN), never evaluates values as code, and treats command-substitution / backtick / shell-metacharacter payloads as literal strings. An operator who needs an additional key can add it to `$WALTER_CONFIG/env-allowlist.txt` (one KEY per line). 9 bats regression tests at `tests/hooks/env-allowlist.bats` lock the behavior, including direct command-substitution / backtick attack payloads.
 
 **Category**: 9 (Secrets leakage) / 4 (Privilege escalation)  
 **File**: `hooks/daily-audit-gate.sh:23`

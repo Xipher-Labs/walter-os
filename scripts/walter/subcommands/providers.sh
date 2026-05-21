@@ -9,6 +9,27 @@
 #
 # Categories: llm | project_management | git | secrets | web_analytics | search | embeddings
 
+# Requires bash >= 4 (associative arrays). macOS ships bash 3.2 as
+# /bin/bash; if invoked under that, re-exec under a newer bash (Homebrew
+# or /usr/local) so the operator doesn't get a `declare: -A: invalid
+# option` error on first invocation. Same pattern as bash-denylist.sh
+# bash-3.2 re-exec. One-shot guard prevents infinite loop if the
+# candidate path ALSO resolves to bash < 4.
+if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+  if [[ "${WALTER_PROVIDERS_REEXEC:-0}" == "1" ]]; then
+    echo "walter providers: re-exec landed on bash < 4 again. Install GNU bash >= 4 (brew install bash)." >&2
+    exit 3
+  fi
+  _self="${BASH_SOURCE[0]}"
+  for _candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if [[ -x "$_candidate" && -f "$_self" ]]; then
+      WALTER_PROVIDERS_REEXEC=1 exec "$_candidate" "$_self" "$@"
+    fi
+  done
+  echo "walter providers: requires bash >= 4 (macOS /bin/bash 3.2 doesn't support associative arrays). Install GNU bash: brew install bash" >&2
+  exit 3
+fi
+
 set -euo pipefail
 
 WALTER_OS_HOME="${WALTER_OS_HOME:?WALTER_OS_HOME required — set in personal.env or export. Default: /opt/walter-os}"
@@ -38,6 +59,14 @@ source "${PROVIDERS_LIB}/patch_mcp.sh"
 # ---------------------------------------------------------------------------
 # Metadata: display names and ordered options per category
 # ---------------------------------------------------------------------------
+# bash 3.2 (macOS default) misparses `[key-with-letters]=value` under
+# `set -u` as a `${key}` parameter expansion before recognizing the
+# array-assignment syntax, which then fires "unbound variable" on the
+# bare token. Same bug pattern as approval-gate.sh CATEGORY_MIN_TIER
+# (PR #68 P1-05 side-fix). Wrap the assignment in `set +u`/`set -u`
+# so the script loads cleanly on every bash we support. bash 4+
+# accepts both forms identically.
+set +u
 declare -A CATEGORY_LABELS=(
   [llm]="LLM Gateway"
   [project_management]="Project Management"
@@ -47,10 +76,13 @@ declare -A CATEGORY_LABELS=(
   [search]="Search"
   [embeddings]="Embeddings"
 )
+set -u
 
 CATEGORY_ORDER=(llm project_management git secrets web_analytics search embeddings)
 
-# Options per category: "slug:Label" pairs
+# Options per category: "slug:Label" pairs.
+# Same bash-3.2-under-`set -u` workaround as CATEGORY_LABELS above.
+set +u
 declare -A CATEGORY_OPTIONS=(
   [llm]="litellm:LiteLLM-proxy-all (self-host)|anthropic:Direct Anthropic|openai:Direct OpenAI|ollama:Ollama local"
   [project_management]="plane:Plane self-host|linear:Linear|plane_cloud:Plane cloud|none:None"
@@ -60,6 +92,7 @@ declare -A CATEGORY_OPTIONS=(
   [search]="brave:Brave Search API|algolia:Algolia|none:None"
   [embeddings]="nomic:nomic-embed-text local (Ollama)|openai_ada:OpenAI ada-002|voyage:Voyage AI|none:None"
 )
+set -u
 
 # ---------------------------------------------------------------------------
 # Usage
