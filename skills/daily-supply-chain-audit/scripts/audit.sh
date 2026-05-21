@@ -6,7 +6,7 @@
 set -uo pipefail
 # Note: not using -e because we want to collect ALL findings, not bail on first.
 
-readonly WALTER_CONFIG="${HOME}/.config/walter-os"
+readonly WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
 readonly BASELINES_DIR="${WALTER_CONFIG}/baselines"
 readonly TODAY="$(date +%Y-%m-%d)"
 readonly REPORT="${WALTER_CONFIG}/audit-${TODAY}.md"
@@ -54,6 +54,10 @@ _safe_expand_env_path() {
 
 bump() {
   local level="$1"
+  # Copilot R2 #129 R2.4: medium maps to the same bucket as high
+  # (severity=2, exit code 2). Callers can still emit "medium" for
+  # finer-grained reporting in the markdown report; severity counts
+  # treat medium and high identically so neither is silently dropped.
   case "$level" in
     info)   (( INFO_COUNT++ ));   (( SEVERITY < 1 )) && SEVERITY=1 ;;
     # medium findings count toward HIGH for exit-code purposes (so
@@ -356,15 +360,147 @@ check_mcp_scanners() {
   # day creates alert fatigue. It's documented in the SKILL.md as optional.
 }
 
-# ---------- 5. Tool definition drift ----------
+# ---------- 5. MCP server-registry drift ----------
+# (Function still named check_tool_definitions for backward compat with
+# audit_main() invocation order; Phase 1 closes the no-op gap at the
+# registry level. Phase 2 — tool-schema drift via stdio JSON-RPC — is
+# follow-up under #117.)
 
 check_tool_definitions() {
-  # Snapshot today's tool defs from each connected MCP, diff against yesterday.
-  # Implementation depends on how MCPs are listed locally.
-  local snapdir="${WALTER_CONFIG}/mcp-snapshots"
-  mkdir -p "$snapdir"
-  # Phase 2: query each MCP for its tool list, diff against snapdir/yesterday.
-  # Until then this is a no-op rather than a noisy finding.
+  # Closes issue #117 (external review F4) Phase 1: snapshot the STATIC
+  # MCP server registry (mcp/servers.json) and diff against a baseline.
+  # Detects:
+  #   - server added → HIGH (new capability surface)
+  #   - server removed → INFO (cleanup, less suspicious)
+  #   - command / args changed → HIGH (different binary or version)
+  #   - trust level changed → MEDIUM
+  #
+  # Phase 2 (follow-up, not in this MVP): connect to each running MCP via
+  # stdio JSON-RPC, listTools, snapshot {name, schema, description} per
+  # tool, diff against baseline. Requires walter-os to ship an MCP client.
+  # Registry path resolution (Copilot R3 #129): prefer the explicit
+  # WALTER_OS_HOME env var, then walk up from the script's own location
+  # (handles `audit.sh` run from a non-default checkout), then fall back
+  # to the legacy ~/walter-os default. If none resolve to an existing
+  # file, emit an INFO finding rather than silently returning — a
+  # missing registry should be visible in the audit report.
+  local registry=""
+  local script_root="${BASH_SOURCE[0]%/skills/*}"
+  for candidate in \
+      "${WALTER_OS_HOME:-}/mcp/servers.json" \
+      "${script_root}/mcp/servers.json" \
+      "${HOME}/walter-os/mcp/servers.json"; do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      registry="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$registry" ]]; then
+    finding info "mcp-registry-not-found" \
+      "mcp/servers.json not found in WALTER_OS_HOME, script root, or ~/walter-os; MCP drift check skipped" \
+      "Set WALTER_OS_HOME or run audit.sh from inside a walter-os checkout"
+    return 0
+  fi
+  # MAJOR fix (Copilot R1 #129 R1.1): if jq is missing, the audit's
+  # security-relevant MCP drift check would silently pass. Emit a HIGH
+  # finding instead of returning quietly — same pattern as check_hooks.
+  if ! command -v jq >/dev/null 2>&1; then
+    finding high "no-jq-mcp-drift" "jq not installed; cannot verify MCP server registry for drift" "brew install jq"
+    return 0
+  fi
+
+  local baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
+  local current
+  # Copilot R2 #129 R2.6: surface jq parse failures as HIGH instead of
+  # silently returning 0. A corrupted/malformed registry shouldn't be
+  # a stealth way to disable the drift check.
+  if ! current="$(jq --sort-keys '.servers // {}' "$registry" 2>/dev/null)"; then
+    finding high "mcp-registry-unparseable" \
+      "jq failed to parse $registry; MCP drift check skipped" \
+      "Inspect mcp/servers.json for JSON syntax errors. If safe: walter-os baseline-mcp-tools"
+    return 0
+  fi
+
+  if [[ ! -f "$baseline" ]]; then
+    # Atomic write. `mktemp "${baseline}.tmp.XXXXXX"` (template form)
+    # creates the temp file in the same directory as $baseline so the
+    # final `mv` is atomic on the filesystem. The `XXXXXX` template
+    # gives a unique per-process name to prevent the race Codex R2 #129
+    # flagged: concurrent `walter-os baseline-mcp-tools` + this
+    # check_tool_definitions first-run shared `${baseline}.tmp` and
+    # could clobber. (Copilot R6 #129: comment used to say `mktemp -p`
+    # but the code uses the template form — corrected.)
+    # printf '%s\n' (Copilot R3 #129) — echo's escape handling is
+    # implementation-defined, unsafe for security-critical baseline.
+    mkdir -p "$(dirname "$baseline")"
+    local tmp; tmp="$(mktemp "${baseline}.tmp.XXXXXX")"
+    printf '%s\n' "$current" > "$tmp" && mv "$tmp" "$baseline"
+    return 0
+  fi
+
+  local stored
+  stored="$(cat "$baseline")"
+  [[ "$current" == "$stored" ]] && return 0
+
+  local current_names stored_names
+  current_names="$(jq -r 'keys[]' <<<"$current" | sort -u)"
+  stored_names="$(jq -r 'keys[]' <<<"$stored" | sort -u)"
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    finding high "mcp-server-added" \
+      "MCP server added: $name (in mcp/servers.json since baseline)" \
+      "Review new server's command, args, trust. If safe: walter-os baseline-mcp-tools"
+  done < <(comm -23 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    finding info "mcp-server-removed" \
+      "MCP server removed: $name (was in baseline, not in current registry)" \
+      "If intentional: walter-os baseline-mcp-tools"
+  done < <(comm -13 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    # Codex R2 #129 BLOCKER fix: compare the FULL per-server JSON object
+    # (sorted keys) — not just command/args/trust. Other fields like
+    # `url`, `headers`, `env`, `disabled`, `load`, `contexts` describe
+    # the server's behavior + can be malicious-takeover vectors (e.g.
+    # silently flipping `disabled: true` → `false` on a high-trust server,
+    # or changing `url` to an attacker-controlled proxy). Any whole-object
+    # difference now emits a finding.
+    local cur_full sto_full
+    cur_full="$(jq --sort-keys --arg n "$name" '.[$n]' <<<"$current")"
+    sto_full="$(jq --sort-keys --arg n "$name" '.[$n]' <<<"$stored")"
+    [[ "$cur_full" == "$sto_full" ]] && continue
+
+    # Identify which fields changed for a more actionable finding message.
+    local cur_cmd cur_args cur_trust sto_cmd sto_args sto_trust
+    cur_cmd="$(jq -r --arg n "$name" '.[$n].command // ""' <<<"$current")"
+    cur_args="$(jq -c --arg n "$name" '.[$n].args // []' <<<"$current")"
+    cur_trust="$(jq -r --arg n "$name" '.[$n].trust // ""' <<<"$current")"
+    sto_cmd="$(jq -r --arg n "$name" '.[$n].command // ""' <<<"$stored")"
+    sto_args="$(jq -c --arg n "$name" '.[$n].args // []' <<<"$stored")"
+    sto_trust="$(jq -r --arg n "$name" '.[$n].trust // ""' <<<"$stored")"
+
+    if [[ "$cur_cmd" != "$sto_cmd" || "$cur_args" != "$sto_args" ]]; then
+      finding high "mcp-server-cmd-changed" \
+        "MCP server '$name' command/args changed since baseline" \
+        "REVIEW: jq '.servers.\"$name\"' $registry. If safe: walter-os baseline-mcp-tools"
+    elif [[ "$cur_trust" != "$sto_trust" ]]; then
+      finding medium "mcp-server-trust-changed" \
+        "MCP server '$name' trust level changed: '$sto_trust' → '$cur_trust'" \
+        "Verify intentional. If safe: walter-os baseline-mcp-tools"
+    else
+      # Whole-object diff but command/args/trust unchanged — must be one
+      # of: url, headers, env, disabled, load, contexts, verified_at, or
+      # any future-added field. Emit HIGH because we don't know the
+      # semantics (config-takeover vectors live in this bucket).
+      finding high "mcp-server-config-changed" \
+        "MCP server '$name' config changed since baseline (fields other than command/args/trust)" \
+        "REVIEW: diff <(jq '.\"$name\"' $baseline) <(jq '.servers.\"$name\"' $registry). If safe: walter-os baseline-mcp-tools"
+    fi
+  done < <(comm -12 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
 }
 
 # ---------- 6. Minimum release age check ----------
