@@ -296,6 +296,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 
 ### P1-09 — `daily-audit-gate.sh` sources `$WALTER_CONFIG/env` at startup, which can be attacker-controlled
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. The `source "${WALTER_CONFIG}/env"` call is gone. The hook now loads operator env through the new `walter_env_load_allowlist()` parser in `scripts/walter/lib/env-loader.sh` — which reads `KEY=VALUE` lines, rejects any key not in `WALTER_ENV_ALLOWLIST` (with a WARN), never evaluates values as code, and treats command-substitution / backtick / shell-metacharacter payloads as literal strings. An operator who needs an additional key can add it to `$WALTER_CONFIG/env-allowlist.txt` (one KEY per line). 9 bats regression tests at `tests/hooks/env-allowlist.bats` lock the behavior, including direct command-substitution / backtick attack payloads.
+
 **Category**: 9 (Secrets leakage) / 4 (Privilege escalation)  
 **File**: `hooks/daily-audit-gate.sh:23`
 

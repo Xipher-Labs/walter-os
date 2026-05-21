@@ -137,6 +137,18 @@ PRs #55–#59 and land as the bundle epic completes.)
   `tests/audit/external-hook-integrity.bats` (6 cases) pins the
   behavior.
 
+- **Audit P1-09 closed.** `hooks/daily-audit-gate.sh` no longer `source`s
+  `$WALTER_CONFIG/env` directly. New
+  `scripts/walter/lib/env-loader.sh` exports a
+  `walter_env_load_allowlist()` parser that reads `KEY=VALUE` lines,
+  rejects keys not in `WALTER_ENV_ALLOWLIST` (with a WARN), and never
+  evaluates values as code — command substitution (`$(...)`),
+  backticks, and any other shell payload in the value land as literal
+  strings. Operators can extend the allowlist via
+  `$WALTER_CONFIG/env-allowlist.txt` (one KEY per line). 9 new bats
+  tests at `tests/hooks/env-allowlist.bats` lock the parser against
+  direct injection attempts.
+
 - **`tests/oss` failures fixed (#50 closed).** Two pre-existing failures
   blocked the full `tests/oss/` glob from running in CI:
   - `depersonalization.bats AC-3` was matching `Law N.NNN` and `Ley N`
