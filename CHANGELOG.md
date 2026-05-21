@@ -18,18 +18,86 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.4.3+** — OSS Trust roadmap implementation
-continues. Spec PRs #85–#95 (target column points at v0.4.1 in the
-specs themselves; impl PRs target v0.4.3+) close out their reviews
-and the implementation work lands here.
+Target release: **v0.4.4+** — OSS Trust roadmap **implementation**
+(the v0.4.3 spec batch unblocks the implementation work). First impl
+candidates: A-1 network egress allowlist + E-1 OpenSSF Passing badge
+filing.
 
 ### Pending
 
-- OSS Trust A–E implementation tasks (see
-  `docs/specs/oss-trust-roadmap.md` for individual spec breakdown).
-- `install via agent — tier I-IV prompts` (PR #103) — needs further
-  R2/R3 cycle on the precheck command / project naming / path
+- OSS Trust A–E implementation tasks (per the now-merged specs in
+  `docs/specs/`).
+- `install via agent — tier I-IV prompts` (PR #103) — needs R3+
+  review cycle on the precheck command / project naming / path
   inconsistencies.
+
+---
+
+## [0.4.3] — 2026-05-21
+
+**OSS Trust spec batch.** All 11 OSS Trust roadmap per-item specs
+landed. Documentation-only release — no behavior change, no install
+flow change, no compose-file change. This batch unblocks the v0.4.4+
+implementation work by pinning the architecture decisions across the
+A–E layers + the P2 hardening epic.
+
+### Added (per-item specs)
+
+- **`docs/specs/p2-hardening-epic.md`** (#85) — P2-01..P2-08 closure
+  plan. Eight findings from the 2026-05-11 audit, each with a
+  concrete decision + AC + bats coverage.
+- **`docs/specs/network-egress-allowlist.md`** (#86) — OSS Trust
+  A-1. Hook-level default-deny outbound network gate via
+  `hooks/network-gate.sh`; allowlist file at
+  `~/.config/walter-os/egress-allowlist.txt`. Two-factor bypass.
+- **`docs/specs/time-bounded-sessions.md`** (#87) — OSS Trust A-4.
+  Wall-clock + idle session timeouts via
+  `hooks/session-timeout.sh`. PHI mode hard-caps. State integrity
+  via monotonic timestamps + mode-0700 + daily-audit checksum
+  baseline.
+- **`docs/specs/capability-tokens.md`** (#88) — OSS Trust A-2.
+  PASETO v4 tokens signed by per-session Ed25519 key. Subagent-
+  mint blocked via `WALTER_AGENT_CONTEXT`. Approval-gate
+  classifies `walter-os cap mint` as high-tier.
+- **`docs/specs/oss-trust-v0.5.0-small-batch.md`** (#89) — OSS
+  Trust C-3 (pre-commit) + D-1 (GHSA) + E-3 (`@types/*` allowlist)
+  + E-4 (`justify revoke`).
+- **`docs/specs/audit-chain-merkle-and-receipts.md`** (#90) — OSS
+  Trust B-1 + B-2. Linear hash chain (NOT a Merkle tree despite
+  the filename — historical shorthand) + per-row Ed25519
+  signatures. RFC 4648 §4 base64. Cross-day chaining via verbatim
+  prev-day root string.
+- **`docs/specs/openssf-badges.md`** (#91) — OSS Trust E-1 + E-2.
+  Passing → Silver filing runbook + per-criterion answers + the
+  `walter-os audit badge-prereqs` CLI for programmatic checks.
+  Silver `two_person_review` honestly marked NOT-MET for
+  solo-operator setups.
+- **`docs/specs/process-isolation-sandbox.md`** (#92) — OSS Trust
+  A-3. Per-OS sandbox wrappers (nsjail / sandbox-exec / firejail)
+  + uniform shim `scripts/walter/lib/sandbox.sh` + provider-
+  binary integrity baseline in daily-audit.
+- **`docs/specs/read-only-mounts.md`** (#93) — OSS Trust A-5.
+  Invisible bind-mount of secret-bearing paths during high-tier
+  ops. Per-target `:dir` / `:file` tagging. macOS uses
+  `file-read-data` deny (NOT `file-read*` — keeps metadata reads
+  working so the path appears empty rather than nonexistent).
+- **`docs/specs/audit-telemetry-grafana-loki.md`** (#94) — OSS
+  Trust B-3. Promtail tails the audit chain; Grafana dashboard
+  with 7 pre-built panels; operator opt-out via
+  `WALTER_AUDIT_LOKI_DISABLE=1`. Audit chain integrity preserved
+  in Loki — `walter-os audit verify-chain --from-loki` re-derives
+  it.
+- **`docs/specs/oss-trust-supply-chain.md`** (#95) — OSS Trust
+  C-1 + C-2 (combined spec because both touch `release.yml`).
+  SLSA L3 provenance via `actions/attest-build-provenance` +
+  reproducible builds (`git archive | gzip -n` + sorted SBOM +
+  pinned toolchain + `ubuntu-24.04` runner pin).
+
+### Changed (spec index)
+
+- `docs/specs/README.md` gains an `oss-trust-v0.5.0-small-batch.md`
+  entry under Active Specs (the entry was missed in the original
+  #89 PR; added during R1 fix cycle).
 
 ---
 
@@ -644,7 +712,8 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.3
 [0.4.2]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.2
 [0.4.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.0
