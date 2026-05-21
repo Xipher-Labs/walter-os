@@ -288,16 +288,37 @@ check_preflight() {
     ok "Codex CLI: $(codex --version 2>/dev/null || echo unknown)"
   fi
 
+  # Hard-dependency preflight. In dry-run mode we WARN instead of EXIT
+  # so the operator can preview the install plan on a machine that
+  # doesn't yet have all dependencies. --check still hard-fails
+  # (that's its job — report whether the machine is ready). A real
+  # install (no --dry-run / no --check) hard-fails like before.
+  local _hard_dep_missing=0
   if ! command -v jq >/dev/null 2>&1; then
-    err "jq required. Install: brew install jq"
-    exit 4
+    if [[ $DRY_RUN -eq 1 ]]; then
+      warn "jq missing (would be required on real install). Install: brew install jq"
+      _hard_dep_missing=1
+    else
+      err "jq required. Install: brew install jq"
+      exit 4
+    fi
   fi
 
   if ! command -v yq >/dev/null 2>&1; then
     # Hard dependency — approval-gate.sh fails CLOSED if yq is missing.
     # See: docs/operational/security-audit-2026-05-11.md P1-05
-    err "yq required (approval-gate hard dep). Install: brew install yq"
-    exit 4
+    if [[ $DRY_RUN -eq 1 ]]; then
+      warn "yq missing (would be required on real install). Install: brew install yq"
+      _hard_dep_missing=1
+    else
+      err "yq required (approval-gate hard dep). Install: brew install yq"
+      exit 4
+    fi
+  fi
+
+  if [[ $DRY_RUN -eq 1 && $_hard_dep_missing -eq 1 ]]; then
+    warn "DRY-RUN: continuing past hard-dep gaps so the install plan can"
+    warn "         be previewed. A real install would have exited here."
   fi
 
   local missing=()
