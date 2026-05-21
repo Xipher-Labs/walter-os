@@ -13,13 +13,11 @@ setup() {
   TMP="$(mktemp -d)"
   # Use the live mcp/servers.json — it carries the JSON-blob env value that
   # triggered the bug.
-
-  # Several tests in this file invoke python3 directly (to parse the
-  # generated TOML / JSON). Skip the whole file if python3 isn't on
-  # PATH — running individual tests against a missing python3 produces
-  # confusing "command not found" failures later. Matches the repo's
-  # skip convention (see tests/agents/devrel-analyst.bats:44).
-  command -v python3 >/dev/null 2>&1 || skip "python3 required (not on PATH)"
+  # NOTE: python3 prerequisite is checked per-test (only the TOML and
+  # JSON parse-validity tests need it). Skipping the whole file would
+  # over-skip the grep-based regression tests (escape behavior,
+  # mcpServer enumeration, HOME expansion, uvx pin) that don't depend
+  # on Python at all.
 }
 
 teardown() {
@@ -27,11 +25,15 @@ teardown() {
 }
 
 @test "generate-mcp-configs.sh codex output parses as valid TOML" {
-  # python3 presence is checked in setup() (whole-file prerequisite).
-  # This per-test check covers the narrower version requirement: tomllib
-  # is stdlib only from Python 3.11+. On older python3 the import fails
-  # with ModuleNotFoundError — that's a version gap, not the script's
-  # bug. Skip gracefully so the failure mode is clear.
+  # Two-step prereq (matches the repo's environmental-skip convention,
+  # see tests/agents/devrel-analyst.bats:44):
+  #   1. python3 must be on PATH at all
+  #   2. tomllib must be importable (stdlib from Python 3.11+)
+  # Distinguishing these gives clear skip messages — a missing python3
+  # is an install gap; a present-but-old python3 is a version gap. The
+  # other tests in this file run unconditionally except for test 4
+  # (claude JSON validity), which has its own python3 check.
+  command -v python3 >/dev/null 2>&1 || skip "python3 required (not on PATH)"
   if ! python3 -c "import tomllib" 2>/dev/null; then
     skip "tomllib required (Python 3.11+); test scope is TOML validity on Python 3.11+"
   fi
@@ -65,6 +67,10 @@ teardown() {
 }
 
 @test "generate-mcp-configs.sh claude output is valid JSON" {
+  # python3 prereq is only required for the JSON parse step below; if
+  # python3 isn't on PATH, skip with a clear message rather than fail
+  # with "command not found" inside the pipe.
+  command -v python3 >/dev/null 2>&1 || skip "python3 required (not on PATH)"
   run bash "$SCRIPT" claude
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "import sys, json; json.load(sys.stdin)"
