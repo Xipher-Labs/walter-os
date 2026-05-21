@@ -101,7 +101,27 @@ services:
                 process.exit(1);
               }
             ' || exit 1
-          npm install -g "/tmp/$OC_TARBALL"
+          # --ignore-scripts: Codex R2 #127 MAJOR — block npm lifecycle
+          #   hooks (preinstall/install/postinstall) of openclaw AND every
+          #   transitive dep. Lifecycle scripts run with the container's
+          #   privileges + env (LiteLLM token, Telegram token, etc.) on
+          #   every install; a malicious dep at any depth could exfiltrate
+          #   secrets or persist via filesystem writes.
+          # --registry=...: pin the source so a persisted /workspace/.npmrc
+          #   can't redirect dependency downloads (already R3-fixed for
+          #   the pack call; symmetric on install).
+          # NOTE on the residual gap (Codex R2 #127 BLOCKER): transitive
+          # dependency tarballs are still resolved live and are NOT
+          # covered by the SHA512 of the top-level openclaw tarball.
+          # Mitigation here is npm registry default (each tarball ships
+          # its own integrity field that npm verifies against the
+          # registry-published metadata) + --ignore-scripts so a
+          # compromised dep cannot execute on install. A full lockfile
+          # ship-the-deps-with-the-tarball solution is tracked separately
+          # under #118-followup; out of scope for this PR.
+          npm install -g --ignore-scripts \
+            --registry=https://registry.npmjs.org/ \
+            "/tmp/$OC_TARBALL"
           rm -f "/tmp/$OC_TARBALL"
         fi
         # First boot: idle until onboard via `docker exec ... openclaw onboard`.
