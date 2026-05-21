@@ -790,6 +790,7 @@ services:
   # --------------------------------------------------------------------------
   control-tower:
     <<: *walter-common
+    profiles: [tier4]
     build:
       context: .
       dockerfile: apps/control-tower/Dockerfile
