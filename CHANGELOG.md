@@ -30,11 +30,79 @@ the implementation lives in dedicated follow-up PRs per the plan in
   Phase A-F task tree from the plan).
 - OSS Trust A–E implementation tasks (per the v0.4.3 specs in
   `docs/specs/`).
-- Issue #132 — OpenClaw transitive-dep lockfile (residual gap from
-  PR #127's SHA512 verification).
-- Issues #133, #134, #136 — three pre-existing security/docs gaps
-  surfaced by Codex during the v0.4.4 cross-review cycle but
-  out-of-scope for the merged PRs.
+- **OpenClaw shrinkwrap implementation** (#132 spec landed in v0.4.5
+  PR #140; impl PR will pick Candidate A vs B + ship first shrinkwrap).
+
+---
+
+## [0.4.5] — 2026-05-21
+
+**v0.4.4 follow-up batch + bash-5.2 compat fix.** Closes the four
+follow-up issues filed during the v0.4.4 cross-review cycle (#132 spec,
+#133, #134, #136), hardens the test scaffolding behind v0.4.4's escape
+helpers, and lands a real production-bug fix that the new tests caught.
+
+### Added
+
+- **PR #138** — `_shell_quote` (printf `%q`) + `_xml_escape` helpers in
+  `install.sh`. Closes #133 (REPO_ROOT shell-injection in env-file
+  render) + #134 (audit_script XML-injection in launchd plist render).
+  Adds `tests/install/escape-helpers.bats` covering both.
+- **PR #139** — Cloudflare Access apps for **every** site that imports
+  `admin_auth_gate` in the Caddyfile. Adds `tower` + `metabase` + `postiz`
+  (the original gap that triggered #136) + renames the script's `hs`
+  short-name to the actual Caddy site label `headscale-admin` (Codex R1
+  catch — a CF app for `hs.${SERVICE_DOMAIN}` does NOT protect the
+  `headscale-admin.${SERVICE_DOMAIN}` site, so the Headscale admin UI's
+  CF Access path was effectively missing). New
+  `tests/compose/cf-access-coverage.bats` locks the symmetry in.
+- **PR #140** — Spec + ADR 0017 for OpenClaw transitive-dep shrinkwrap
+  shipping (closes #132 spec scope; runtime impl deferred to a separate
+  PR after operator sign-off). Documents three candidate install flows
+  (wrapper-package + npm ci + npm link / extract-in-place / rejected
+  install-then-compare with G2-violation rationale), the operator
+  regenerate workflow with `--ignore-scripts` + `--registry=...` pin
+  mandatory, and a 10-item AC matrix.
+- **PR #141** — Hardened `escape-helpers.bats` after Copilot R2 found
+  three test-quality issues post-#138-merge: `_invoke` broke under
+  adversarial clone paths (the exact scenario #133 was supposed to
+  validate), the round-trip eval could execute injection on regression,
+  and the env-file integration test ran with REPO_ROOT == no-metachars
+  so any regression would silently pass. Wired all the install-bats
+  files into the CI workflow's bats invocation list (they existed but
+  weren't actually being run).
+
+### Security
+
+- **MAJOR — `_xml_escape` broke under bash 5.2+** (Ubuntu 24.04+, current
+  GHA runners, recent Homebrew on macOS). Bash 5.2 enabled the
+  `patsub_replacement` shopt by default; under it, `&` in the
+  replacement of `${var//pattern/replacement}` is interpreted as "the
+  matched text". So `${v//</&lt;}` produced `<lt;` instead of `&lt;`
+  — the `&` we wanted to emit got eaten + replaced with the matched
+  `<`. Every `_xml_escape` call would have produced broken XML on any
+  bash 5.2+ system. Fixed by `shopt -u patsub_replacement` at the top
+  of the function. The bug shipped in v0.4.4 PR #138 but stayed
+  invisible because the existing bats tests ran on macOS bash where
+  patsub_replacement defaults off. The hardened tests in #141 caught
+  it the first CI run — exactly the regression coverage the hardening
+  was supposed to add.
+
+### Process notes
+
+- **Cross-review discipline upheld**: Codex was the FIRST reviewer on
+  every #138-#141 PR — not catch-up. Real Codex R1 findings landed in
+  each: spec/plan/ADR consistency, `npm link` direction, registry
+  pinning on shrinkwrap-gen, CI missing the new test files, plist-
+  render coverage gap, canary-not-in-injected-payload, and the bash 5.2
+  `patsub_replacement` find via CI itself.
+- Branch protection was relaxed twice during this cycle for the merges
+  + restored both times.
+
+### Related follow-up issues (still open)
+
+- **Issue #132** — OpenClaw shrinkwrap **implementation** PR (spec lives
+  in this release; impl is the actual byte-shipping change). Deferred.
 
 ---
 

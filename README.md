@@ -8,7 +8,7 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.4.4--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.4.5--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
 [![Audit: 6/6 P0 closed](https://img.shields.io/badge/audit-6%2F6_P0_closed-brightgreen.svg)](docs/operational/security-audit-2026-05-11.md)
 
@@ -46,7 +46,7 @@ overlay before it does anything useful for you.
 
 ## Status: alpha — read this before relying on it
 
-> **This is v0.4.4-alpha (latest tested). Things iterate fast, things break,
+> **This is v0.4.5-alpha (latest tested). Things iterate fast, things break,
 > things get corrected on the fly while other work is in-flight.**
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
@@ -1662,7 +1662,7 @@ reproducibility.
 
 ## Known limitations and alpha status
 
-Walter-OS is **alpha software** (v0.4.4-alpha, latest tested). Expect breaking changes between
+Walter-OS is **alpha software** (v0.4.5-alpha, latest tested). Expect breaking changes between
 minor versions. The following limitations are known and tracked:
 
 - **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
