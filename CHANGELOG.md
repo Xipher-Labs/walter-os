@@ -18,14 +18,84 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.4.1** — OSS Trust roadmap implementation (per
-docs/specs/oss-trust-roadmap.md). Spec PRs #85–#95 already landed in
-v0.4.0; v0.4.1 lands the implementations.
+Target release: **v0.4.2** — OSS Trust roadmap implementation. Spec
+PRs #85–#95 (re-targeted to v0.4.1 via #107) close out their reviews
+and the implementation work lands here.
 
 ### Pending
 
-- OSS Trust A–E implementation tasks (see docs/specs for individual
-  spec breakdown).
+- OSS Trust A–E implementation tasks (see
+  `docs/specs/oss-trust-roadmap.md` for individual spec breakdown).
+- `install via agent — tier I-IV prompts` (PR #103) — needs further
+  R2/R3 cycle on the precheck command / project naming / path
+  inconsistencies.
+
+---
+
+## [0.4.1] — 2026-05-21
+
+Release-tooling fix + small documentation cleanup. v0.4.0 was tagged
+without attached assets because the cosign signing step assumed a
+2-invocation pattern (bundle + raw .sig/.pem) that cosign v3+ no
+longer supports. v0.4.1 collapses to bundle-only signing, deletes
+the legacy assets from existing releases, and re-targets the OSS
+Trust roadmap from v0.5.0 to v0.4.1 per the operator pivot.
+
+### Fixed
+
+- **release.yml cosign v3+ compatibility (#108).** Cosign v3+ forces
+  the new-bundle-format and refuses to honor `--output-signature` /
+  `--output-certificate` — the second `sign-blob` invocation errored
+  with `create bundle file: open : no such file or directory`. This
+  blocked v0.4.0 from receiving any signed-release assets. Workflow
+  now signs once with `--bundle`, uploads only the bundle, and
+  explicitly deletes any stale `.sig` / `.pem` files left on
+  pre-v0.4.1 releases before re-uploading. Replaces #105's two-sig
+  attempt. After v0.4.1 lands, all releases attach a 3-artifact set
+  (SBOM + checksums + cosign bundle). `docs/security/verification.md`
+  rewritten to document bundle-only verification.
+
+### Added
+
+- **`skills/readme-craft/recommended-tools.md` (#106).** Curated
+  short-list of 8 tools selected from the upstream
+  `dhyeythumar/awesome-readme-tools` (CC0-1.0, ~55 tools). Replaces
+  per-invocation upstream browsing with an opinionated subset that
+  agents can consult first. Bats coverage in
+  `tests/skills/readme-craft-recommended-tools.bats`:
+  - AC-1..7: structural invariants (8 entries, three required
+    subsections per entry, upstream catalog linked twice, etc.)
+  - AC-8: "Last reviewed" date freshness (0–120 days, future dates
+    rejected so a future-dated review can't bypass the gate)
+  - AC-9 (gated by `RECOMMENDED_TOOLS_LIVENESS=1`): every upstream
+    URL responds with 200 (HEAD with GET fallback)
+  - `tests/skills/` newly wired into the CI bats job so static
+    structural regressions are caught on every PR.
+
+### Changed
+
+- **OSS Trust roadmap retarget v0.5.0 → v0.4.1 (#107).** Operator
+  pivot 2026-05-21. Updates `Target` columns + narrative across 7
+  spec docs:
+  - `docs/specs/oss-trust-roadmap.md` (umbrella)
+  - `docs/specs/walter-host-extraction.md`
+  - `docs/specs/graphify-knowledge-maps.md`
+  - `docs/specs/recon-vuln-scanning-profile.md`
+  - `docs/specs/p1-hardening-epic.md`
+  - `docs/specs/multi-model-preference-wizard.md`
+  - `docs/specs/walter-debt-tracker.md`
+
+  `v0.5.x` items (process isolation A-3, read-only mounts A-5,
+  etc.) intentionally stay `v0.5.x`. `v0.6.0` references stay
+  `v0.6.0`. Implementation of the v0.4.1-targeted items lands in
+  v0.4.2 → v1.0 across the subsequent release cuts.
+
+### Closed PRs (no merge)
+
+- **#84 v0.4.0 release plan** — superseded by the actual v0.4.0
+  release (tag landed 2026-05-21, commit 08ac3cc). Canonical record
+  lives in this CHANGELOG and the GitHub release notes; the plan
+  doc was a pre-flight checklist whose value expired at tag time.
 
 ---
 
@@ -556,7 +626,8 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.2.0
