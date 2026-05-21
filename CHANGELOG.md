@@ -18,8 +18,9 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.4.2** — OSS Trust roadmap implementation. Spec
-PRs #85–#95 (re-targeted to v0.4.1 via #107) close out their reviews
+Target release: **v0.4.3+** — OSS Trust roadmap implementation
+continues. Spec PRs #85–#95 (target column points at v0.4.1 in the
+specs themselves; impl PRs target v0.4.3+) close out their reviews
 and the implementation work lands here.
 
 ### Pending
@@ -29,6 +30,22 @@ and the implementation work lands here.
 - `install via agent — tier I-IV prompts` (PR #103) — needs further
   R2/R3 cycle on the precheck command / project naming / path
   inconsistencies.
+
+---
+
+## [0.4.2] — 2026-05-21
+
+**Placeholder tag, no content delta from v0.4.1.** Pushed at
+operator request to claim the v0.4.2 milestone marker. Code,
+SBOM contents, and checksums are identical to v0.4.1 — only the
+`VERSION` file changed (0.4.1 → 0.4.2) and this changelog stub.
+
+Why this exists: it lets follow-up impl PRs (OSS Trust roadmap)
+land against a fresh `[Unreleased]` block targeting v0.4.3+
+without conflating "v0.4.1 release tooling" with "the next batch
+of work." No re-verification is needed for consumers tracking
+v0.4.1 — re-signing the same payload under the v0.4.2 tag does
+not change what's inside `checksums.sha256.cosign.bundle`.
 
 ---
 
@@ -626,7 +643,8 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.2
 [0.4.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.3.0
