@@ -1,9 +1,9 @@
 # Time-bounded sessions (OSS Trust A-4) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-4
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-4 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
 **Target release**: v0.5.0
-**Depends on**: env-allowlist parser (P1-09 — in flight) for the new env vars.
+**Depends on**: env-allowlist parser (P1-09 — in PR #69, also not yet on `main`) for the new env vars.
 
 ## Problem
 
@@ -14,7 +14,7 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
 ## Non-goals
 
 - Replacing the operator's terminal multiplexer (tmux, zellij) idle handling. Operator's tooling stays authoritative for foreground-shell idle detection.
-- Coordinating across multiple parallel sessions on the same machine. v0.5.0 = per-session; multi-session orchestration is a Phase V follow-up.
+- Coordinating sessions across parallel terminals (e.g., one tmux pane idle-pausing another). v0.5.0 = per-session; cross-terminal orchestration is a Phase V follow-up. AC-6 provides a read-only `walter-os session list` across repos for visibility — that is enumeration, not coordination.
 - Hard-killing a running tool mid-call. Session-end signal asks the agent to wrap up; tool finishes its current op, then session exits cleanly.
 
 ## Decisions (proposed)
@@ -22,16 +22,26 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
 | # | Decision | Why |
 |---|---|---|
 | D-1 | **Two limits**: `WALTER_SESSION_MAX_HOURS` (wall-clock, default 8) and `WALTER_SESSION_MAX_IDLE_MIN` (idle since last tool call, default 60). Either tripping → session end. | 8 hours = a workday; 60 minutes = forgot-to-close. Operator-overridable per personal.env. |
-| D-2 | **Implementation via `hooks/session-timeout.sh`** running on `UserPromptSubmit` (Claude Code) / `before_prompt` (Codex CLI). Every turn, check the clock; if either limit hit → emit a `block` with reason "session expired". | No new daemon. Uses existing PreToolUse-style hook chain. |
-| D-3 | **Session start = first invocation in a working directory after a gap of `> SESSION_MAX_IDLE_MIN`.** Tracked via `~/.config/walter-os/state/session-<repo-hash>.json` (start-time + last-activity timestamps). | "Session" is operator-implicit; we don't try to be smarter. A different repo or a gap longer than the idle threshold starts a new session. |
+| D-2 | **Implementation via `hooks/session-timeout.sh`** running on `UserPromptSubmit` (Claude Code). For Codex CLI, the timeout is enforced via a wrapper script invoked from the `walter-os` Codex entry point — Codex CLI has no native pre-prompt hook today, so we cannot wire this in `~/.codex/config.toml` directly. The plan revisits Codex integration once Codex ships a hook mechanism; until then, Codex sessions are bounded by the wrapper-script-injected check. Every turn, check the clock; if either limit hit → emit a `block` with reason "session expired". | No new daemon. Uses existing PreToolUse-style hook chain. AC-2 + AC-4 below cover the `UserPromptSubmit` registration in `install.sh`. |
+| D-3 | **Session start = first invocation in a working directory after a gap of `> WALTER_SESSION_MAX_IDLE_MIN`.** Tracked via `~/.config/walter-os/state/session-<repo-hash>.json` (start-time + last-activity timestamps). Limits (`max_hours`, `max_idle_min`) come from the env vars NOT the state file — the state file only carries the activity timestamps and per-session UUID. | "Session" is operator-implicit; we don't try to be smarter. A different repo or a gap longer than the idle threshold starts a new session. |
 | D-4 | **End behavior**: hook emits a `block` with `permissionDecisionReason: "Walter-OS session expired at HH:MM (max-hours=8). Type /session restart to begin a new session, or close this terminal."`. | Clear, actionable, doesn't kill the terminal. Operator decides what to do next. |
 | D-5 | **`/session` slash command** in `commands/session.md` exposes `status`, `restart`, `extend <hours>`. `extend` REQUIRES an explicit reason (logged), capped at +2 hours per extension. | Operator can override for a legitimate long-running task; the extension is auditable. |
-| D-6 | **PHI override**: when `WALTER_MODEL_PHI` is set (medical-data-compliance skill active), max-hours hard-cap at 4 and max-idle at 30 min, unmodifiable. | PHI sessions need tighter blast-radius. Independent of operator-set defaults. |
+| D-6 | **PHI override**: when the `medical-data-compliance` skill is active (signaled by `WALTER_PHI_MODE=1` exported by that skill's activation hook — the canonical signal also used by `scripts/agents/lib/llm.sh` for PHI routing), max-hours hard-cap at 4 and max-idle at 30 min, unmodifiable by `/session extend`. | PHI sessions need tighter blast-radius. Independent of operator-set defaults. Picks a single existing PHI-mode signal so implementers don't build against a non-existent `WALTER_MODEL_PHI` flag. |
 | D-7 | **Daily-audit reminder**: if `~/.config/walter-os/state/session-*.json` files exist with start-time > 24h ago (i.e. session-state didn't get cleaned up), emit `info` finding. | Catches operator-forgot-to-restart-after-extend scenarios. |
 
 ## Acceptance criteria
 
 ### AC-1 — Session state tracking
+
+The state file is a **trust-bounded** record. The hook reads
+`session_id`, `started_at`, `last_activity_at`, `repo_path`, and the
+`extensions` array as ground truth, because they record what the
+operator's activity has done in this session. The hook reads
+`max_hours` and `max_idle_min` from the env vars at hook-fire time,
+NOT from the state file — so an attacker who can write to
+`session-<hash>.json` cannot escape the limit by editing it. The
+state file echoes the active limits for inspection / debugging only.
+
 - [ ] `~/.config/walter-os/state/session-<repo-hash>.json` schema:
   ```json
   {
@@ -39,13 +49,23 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
     "started_at": "2026-05-21T03:14:22Z",
     "last_activity_at": "2026-05-21T04:30:11Z",
     "repo_path": "/Users/.../walter-os",
-    "max_hours": 8,
-    "max_idle_min": 60,
+    "max_hours_at_start": 8,
+    "max_idle_min_at_start": 60,
     "extensions": [
       {"ts": "...", "added_hours": 2, "reason": "long debug session"}
     ]
   }
   ```
+  Field meanings:
+  - **Trusted by the hook** (used for time-comparison): `session_id`,
+    `started_at`, `last_activity_at`, `repo_path`, `extensions[].ts`,
+    `extensions[].added_hours`.
+  - **Inspection-only / NOT trusted** (the hook uses env vars
+    instead): `max_hours_at_start`, `max_idle_min_at_start`. Renamed
+    from `max_hours` / `max_idle_min` to make the trust boundary
+    explicit. These exist so `walter-os session list` (AC-6) can
+    display the limits that WERE in effect when the session started,
+    even if the env vars have been changed since.
 - [ ] `scripts/walter/lib/session-state.sh` exposes `walter_session_get`, `walter_session_touch`, `walter_session_end`.
 - [ ] `bats` coverage in `tests/walter/session-state.bats`:
   - First invocation creates the state file with current ts
@@ -55,6 +75,12 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
 
 ### AC-2 — `hooks/session-timeout.sh` hook
 - [ ] Hook runs on every `UserPromptSubmit` (Claude Code).
+- [ ] `install.sh` (and `install.sh --upgrade`) registers the new
+  `UserPromptSubmit` hook in `~/.claude/settings.json` alongside the
+  existing `SessionStart` + `PreToolUse` registrations. Today the
+  installer wires only those two events; the new hook needs an
+  explicit registration step plus the same hook-checksums baseline
+  treatment as the other hooks.
 - [ ] Reads / writes session state via `session-state.sh`.
 - [ ] On expiry: emits `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","permissionDecision":"block","permissionDecisionReason":"Walter-OS session expired at HH:MM (reason). Type /session restart to begin a new session."}}` and exits 0.
 - [ ] On non-expiry: passthrough allow.
@@ -62,7 +88,9 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
   - Within limits → allow
   - Beyond `max_hours` → block with `session expired (max-hours)` reason
   - Beyond `max_idle_min` → block with `session expired (max-idle)` reason
-  - PHI mode → max-hours capped at 4
+  - PHI mode (`WALTER_PHI_MODE=1`) → max-hours capped at 4
+  - Hook is actually registered by `install.sh --upgrade` (smoke
+    test reads `~/.claude/settings.json` after install).
 
 ### AC-3 — `/session` slash command
 - [ ] `commands/session.md` documents:
