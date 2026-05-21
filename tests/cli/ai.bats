@@ -259,7 +259,15 @@ teardown() {
   post_files=$(ls -1 "${tmpbase}"walter-llm-debug.* 2>/dev/null | sort || true)
   new_file=$(comm -13 <(printf '%s\n' "$pre_files") <(printf '%s\n' "$post_files") | head -1)
   [[ -n "$new_file" ]] || { echo "No new walter-llm-debug file found in ${tmpbase}"; return 1; }
-  mode=$(stat -f '%A' "$new_file" 2>/dev/null || stat -c '%a' "$new_file" 2>/dev/null)
+  # `stat` flag meanings diverge between BSD (macOS) and GNU (Linux). On Linux
+  # `stat -f` means "filesystem info" (succeeds with wrong output), so the
+  # old `stat -f '%A' || stat -c '%a'` cascade never fell through. Detect by
+  # platform.
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    mode=$(stat -f '%A' "$new_file" 2>/dev/null)
+  else
+    mode=$(stat -c '%a' "$new_file" 2>/dev/null)
+  fi
   rm -f "$new_file"
   [[ "$mode" == "600" || "$mode" == "0600" ]] \
     || { echo "Debug file mode is '$mode', expected 600"; return 1; }
