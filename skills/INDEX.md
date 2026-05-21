@@ -46,6 +46,7 @@ in your message.
 - [brand-creation](brand-creation/SKILL.md)
 - [landing-page-fast](landing-page-fast/SKILL.md)
 - [nanobanana](nanobanana/SKILL.md)
+- [readme-craft](readme-craft/SKILL.md)
 
 ## Project and Knowledge Management
 
