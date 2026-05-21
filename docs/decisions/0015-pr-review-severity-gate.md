@@ -69,10 +69,23 @@ Repos without the marker file → auto-merge gate refuses (returns `MERGE_BLOCKE
 | C5 | All CI checks success on latest HEAD |
 | C6 | PR LOC change ≤ operator-configured cap (default 1500 additions, 500 deletions) |
 | C7 | PR does not touch any auto-escalation path |
-| C8 | Single follow-up issue auto-created with the deferred MINOR/COSMETIC list before merge |
-| C9 | All review conversation threads resolved (auto-resolved by the gate when finding is MINOR/COSMETIC) |
+| C8 | All review conversation threads resolved (auto-resolved by the gate when finding is MINOR/COSMETIC) |
 
-Any condition failing → `MERGE_BLOCKED:<reason>` (one of the AC7 slugs), PR remains open, operator gets a comment with remediation guidance. Note: even for BLOCKER findings, the gate posts the diagnostic + a recommendation to close — but does NOT auto-close the PR. The Consequences section's "explicitly close the PR" wording describes the operator's typical response to a BLOCKER, not an automatic gate action.
+Codex R5 #114: previously this table listed 9 conditions with C8
+as "follow-up issue auto-created". That conflated gate-precondition
+with gate-action (the issue can only be created AFTER the gate
+decides to pass). Issue creation moved to the action sequence in
+spec §4.4 step 3a (with explicit failure slug
+`follow-up-issue-create-failed` in AC7); former C9 (thread
+resolution) is renumbered C8. The gate is now C1-C8 (eight
+conditions) in spec, plan, and ADR.
+
+Any C1-C8 condition failing → `MERGE_BLOCKED:<reason-slug>` (one of the
+AC7 slugs), PR remains open, operator gets a comment with remediation
+guidance. Note: even for BLOCKER findings, the gate posts the
+diagnostic + creates a high-priority follow-up issue + posts a PR
+comment — but does NOT auto-close the PR. Closure is the operator's
+decision per spec §4.4 step 8.
 
 ### Decision 5 — Mandatory follow-up issue for every deferred finding
 

@@ -46,7 +46,7 @@ Tests (17 total — one fixture per AC1 case + three additional gate tests):
 
 **Verify**: 17 FAIL (classifier doesn't exist yet; 14 fixture cases + 3 gate cases = 17).
 
-### A3. Write failing tests for AC7 (gate conditions C1–C9)
+### A3. Write failing tests for AC7 (gate conditions C1–C8 + issue-create failure slug)
 
 **File:** `tests/severity-gate/pr-auto-merge-gate.bats`
 
@@ -59,11 +59,20 @@ Tests:
 - `@test "AC7: LOC over cap → MERGE_BLOCKED reason=loc-cap-exceeded"`
 - `@test "AC7: auto-escalation path touched → MERGE_BLOCKED reason=safe-path-touched"`
 - `@test "AC7: unresolved conversations → MERGE_BLOCKED reason=unresolved-threads"`
+- `@test "AC7: opt-out via 'enabled: false' in marker → MERGE_BLOCKED reason=opt-out-kill-switch"`
+- `@test "AC7: gh issue create fails → MERGE_BLOCKED reason=follow-up-issue-create-failed"`
+  Mock `gh issue create` to return non-zero. Assert the merge is
+  aborted (no `gh pr merge` call) + the comment posts the slug.
+  Closes Codex R5 #114: the new slug introduced when C8 moved out
+  of preconditions in spec R4 had no RED test covering its trigger.
 - `@test "AC7: all conditions met → MERGE_APPROVED"`
 
 Mock the GitHub API responses via test fixtures + `curl` stubs.
 
-**Verify**: 9 FAIL.
+**Verify**: 11 FAIL (8 gate conditions C1-C8 + 1 opt-out kill-switch
++ 1 issue-create-failure + 1 positive). Note: C8 in spec R4+ is
+"all threads resolved" (the former C9); spec/ADR/plan all consistent
+on the 8-condition gate.
 
 ### A4. Write failing tests for AC8 + AC9 + BLOCKER-handling (action sequence)
 
@@ -164,7 +173,7 @@ Walks every inline comment on the PR, calls pr-classify-finding for each, return
 
 **File:** `scripts/walter/subcommands/pr-auto-merge.sh`
 
-Checks C1-C9 in order. Returns `MERGE_APPROVED` or `MERGE_BLOCKED:<reason-slug>`.
+Checks C1-C8 in order. Returns `MERGE_APPROVED` or `MERGE_BLOCKED:<reason-slug>` (one of the 10 slugs in AC7, including `follow-up-issue-create-failed` emitted from the §4.4 step 3a action if gh issue create returns non-zero).
 
 Helpers needed:
 - `_auto_merge_marker_path()` — find `auto-merge-enabled` at repo root
