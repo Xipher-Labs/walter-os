@@ -5,6 +5,9 @@
 	# DO NOT add 'branch =' — that enables --remote drift. See: docs/operational/security-audit-2026-05-11.md P0-05
 [submodule "external/marchetto-agent-skills"]
 	path = external/marchetto-agent-skills
-	url = https://github.com/JuanMarchetto/agent-skills.git
-	# PINNED to 871b3bd334f94c53120ea3548a7d3866b5fb8054 for supply chain security
+	url = https://github.com/Xipher-Labs/marchetto-agent-skills-fork.git
+	# PINNED to d1ad0e7fbd738af3bd095cae1d2f87ce51d03b77 for supply chain security
 	# DO NOT add 'branch =' — that enables --remote drift. See: docs/operational/security-audit-2026-05-11.md P0-05
+	# URL points to the Xipher-Labs fork of JuanMarchetto/agent-skills, which carries
+	# the P0-06 lessons.md bounded-section framing fix (commit d1ad0e7). Upstream PR may
+	# be filed later — until then, the fork is the security boundary.

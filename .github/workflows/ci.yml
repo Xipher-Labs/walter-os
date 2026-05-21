@@ -98,12 +98,8 @@ jobs:
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "ci"
-      - name: Run hook + agent + wiki + litellm + walter-bridge + cli + walter + oss tests
+      - name: Run hook + agent + wiki + litellm + walter-bridge + cli + walter + oss + audit tests
         run: |
-          # Pre-existing failures in tests/oss/depersonalization.bats (AC-3)
-          # and tests/oss/security-no-weak-defaults.bats (A-1) are tracked in
-          # issue #50. tests/oss/ is wired in selectively by individual file
-          # path until #50 closes; then this can collapse back to `tests/oss/`.
           bats \
             tests/hooks/ \
             tests/agents/ \
@@ -112,17 +108,8 @@ jobs:
             tests/walter-bridge/ \
             tests/cli/ \
             tests/walter/ \
-            tests/oss/founder-skills.bats \
-            tests/oss/founder-skills-extension.bats \
-            tests/oss/hermes-agent.bats \
-            tests/oss/license-files.bats \
-            tests/oss/operator-contexts.bats \
-            tests/oss/oss-ready-docs.bats \
-            tests/oss/pr-title-format.bats \
-            tests/oss/readme-detailed.bats \
-            tests/oss/review-loop-policy.bats \
-            tests/oss/secrets-runtime-docs.bats \
-            tests/oss/walter-personal-skeleton.bats \
+            tests/oss/ \
+            tests/audit/ \
             tests/scripts/secrets-identity-init.bats
 
   install-dry-run:
