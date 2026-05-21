@@ -1015,12 +1015,6 @@ _install_deps_linux() {
     ok "docker found: $(docker --version 2>/dev/null | head -1)"
   fi
 
-  if ! command -v apt-get >/dev/null 2>&1; then
-    warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
-    warn "Install manually: ${required_deps[*]}"
-    return 0
-  fi
-
   # _yq_is_mikefarah — validate the locally-installed yq is mikefarah/yq
   # (Go-based; the YAML processor Walter-OS hooks expect), not the
   # Python-based kislyuk/yq that Debian/Ubuntu's `apt install yq` ships.
@@ -1030,6 +1024,38 @@ _install_deps_linux() {
   _yq_is_mikefarah() {
     yq --version 2>&1 | grep -qi 'mikefarah'
   }
+
+  # Codex R4 #125: enforce yq flavor BEFORE the apt-get-missing early
+  # return. The previous order let `--step 1` on a non-Debian Linux
+  # (Arch, Fedora, Alpine, NixOS, etc.) hit the apt-get-missing branch,
+  # print "install manually", exit 0 — leaving wrong-flavor yq on
+  # PATH and hooks broken. Hard-fail here so the operator can't proceed
+  # with the bad state.
+  if command -v yq >/dev/null 2>&1 && ! _yq_is_mikefarah; then
+    err "yq is installed but is NOT mikefarah/yq (Walter-OS hooks require it)."
+    err "  Detected: $(yq --version 2>&1 | head -1)"
+    err "  Remove the wrong yq first, then install mikefarah/yq:"
+    err "    sudo apt-get remove -y yq    # Debian/Ubuntu"
+    err "    sudo dnf remove -y yq        # Fedora/RHEL"
+    err "    sudo pacman -R yq            # Arch"
+    err "  Then download mikefarah/yq directly:"
+    err "    https://github.com/mikefarah/yq/releases (look for yq_linux_*)"
+    exit 1
+  fi
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
+    warn "Install manually: ${required_deps[*]}"
+    # If yq is missing entirely on a non-Debian Linux, surface that
+    # explicitly so the operator doesn't think the warn-and-return
+    # means everything's OK. Codex R4 #125.
+    if ! command -v yq >/dev/null 2>&1; then
+      err "yq is REQUIRED at runtime and not installed."
+      err "  Install mikefarah/yq for your distro before re-running."
+      exit 1
+    fi
+    return 0
+  fi
 
   for dep in "${required_deps[@]}"; do
     if command -v "$dep" >/dev/null 2>&1; then
