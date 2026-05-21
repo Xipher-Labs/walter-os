@@ -9,10 +9,11 @@ overlay_usage() {
 Usage: walter-os overlay [--print]
        walter overlay [--print]
 
-Open ~/.config/walter-os/overlay in an editor, preferring:
+Open ~/.config/walter-os/overlay with the configured overlay opener,
+in this preference order:
   1. WALTER_OVERLAY_OPEN_CMD
   2. WALTER_OVERLAY_EDITOR
-  3. System opener
+  3. System opener (platform-native)
   4. VISUAL
   5. EDITOR
 

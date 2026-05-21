@@ -21,9 +21,14 @@ export WALTER_OS_HOME="${REPO_ROOT}"
   run bash "${OVERLAY_SCRIPT}" --help
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"configured overlay opener"* ]]
-  [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]]
-  [[ "$output" == *"--print"* ]]
+  # NOTE: chain with && so each substring is required for the test to pass.
+  # A bare `[[ ... ]]` line in the middle of a bats test does NOT fail the
+  # test on Bats 1.13 (macOS) when it isn't the last statement — only the
+  # trailing command's exit code is consulted. CI's bats build catches the
+  # gap; macOS bats does not. The && chain forces ALL conditions to hold.
+  [[ "$output" == *"configured overlay opener"* ]] \
+    && [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]] \
+    && [[ "$output" == *"--print"* ]]
 }
 
 @test "overlay invokes injected opener with overlay path" {
@@ -286,16 +291,18 @@ SH
   run env HOME="/tmp/walter-test-home" WALTER_OS_HOME="${REPO_ROOT}" "${WALTER_BIN}" overlay --help
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"configured overlay opener"* ]]
-  [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]]
-  [[ "$output" == *"--print"* ]]
+  # Chain with && — see test #2 comment for why a bare middle `[[ ]]` is
+  # silently swallowed by Bats 1.13 on macOS.
+  [[ "$output" == *"configured overlay opener"* ]] \
+    && [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]] \
+    && [[ "$output" == *"--print"* ]]
 }
 
 @test "walter-os overlay --help reaches the subcommand help (not the universal guard)" {
   run env HOME="/tmp/walter-test-home" WALTER_OS_HOME="${REPO_ROOT}" "${WALTER_OS_BIN}" overlay --help
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"configured overlay opener"* ]]
-  [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]]
-  [[ "$output" == *"--print"* ]]
+  [[ "$output" == *"configured overlay opener"* ]] \
+    && [[ "$output" == *"WALTER_OVERLAY_EDITOR"* ]] \
+    && [[ "$output" == *"--print"* ]]
 }
