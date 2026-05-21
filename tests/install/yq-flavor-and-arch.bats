@@ -97,3 +97,23 @@ setup() {
   # And hard-exits with remediation for the wrong-flavor case.
   grep -qE 'yq is installed but NOT mikefarah/yq' "$INSTALL_SH"
 }
+
+# Codex R3 #125: --check (check_requirements) was passing on any yq.
+@test "check_requirements (--check) also flavor-checks yq" {
+  # The check_requirements function must call the same mikefarah test
+  # after check_required_tool yq. Look for the increment of
+  # _requirement_failures inside a flavor-check branch.
+  grep -qE '_requirement_failures=\$\(\(_requirement_failures \+ 1\)\)' "$INSTALL_SH"
+  # And the flavor-check error string appears more than once now
+  # (check_requirements + check_preflight + _install_deps_macos/linux).
+  [[ $(grep -cE 'yq is installed but (is )?NOT mikefarah/yq' "$INSTALL_SH") -ge 3 ]]
+}
+
+# Codex R3 #125: --step 1 bypasses check_preflight, so the macOS
+# already-installed branch must also flavor-check.
+@test "_install_deps_macos already-installed branch flavor-checks yq" {
+  # The macOS install loop must have the flavor check for `dep == yq`
+  # in the `already installed` branch — symmetric to the Linux helper.
+  # Count of `\$dep" == "yq".*NOT mikefarah` patterns >= 2 (mac + linux).
+  [[ $(grep -cE '"\$dep" == "yq".*\\$|"\$dep" == "yq"' "$INSTALL_SH") -ge 2 ]]
+}

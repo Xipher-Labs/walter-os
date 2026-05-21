@@ -148,6 +148,18 @@ check_requirements() {
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
   check_required_tool yq "brew install yq  # or: sudo snap install yq"
+  # Codex R3 #125: --check (which calls check_requirements) was passing on
+  # any `yq` on PATH, including apt's kislyuk/yq which is the wrong tool.
+  # Add the flavor check inline so --check reports the same wrong-flavor
+  # exit as the install path.
+  if command -v yq >/dev/null 2>&1; then
+    if ! (yq --version 2>&1 | grep -qi 'mikefarah'); then
+      err "yq is installed but is NOT mikefarah/yq (required by hooks)"
+      say "  Detected: $(yq --version 2>&1 | head -1)" >&2
+      say "  Fix: sudo apt-get remove -y yq && sudo snap install yq" >&2
+      _requirement_failures=$((_requirement_failures + 1))
+    fi
+  fi
 
   say
   say "${c_b}Required for full walter-host stack:${c_reset}"
@@ -947,6 +959,18 @@ _install_deps_macos() {
   for dep in "${required_deps[@]}"; do
     [[ "$dep" == "docker" ]] && continue
     if command -v "$dep" >/dev/null 2>&1; then
+      # Codex R3 #125: --step 1 bypasses check_preflight, so the macOS
+      # branch must also flavor-check yq when already-installed. Without
+      # this, `./install.sh --step 1` on a kislyuk/yq machine would
+      # report ok + leave hooks broken at runtime.
+      if [[ "$dep" == "yq" ]] && ! (yq --version 2>&1 | grep -qi 'mikefarah'); then
+        err "yq is installed but NOT mikefarah/yq (Walter-OS hooks require it)."
+        err "  Detected: $(yq --version 2>&1 | head -1)"
+        err "  Fix on macOS: brew uninstall yq && brew install yq"
+        err "  (Homebrew's 'yq' is mikefarah/yq — the conflict is when both"
+        err "   were installed via different sources)."
+        exit 1
+      fi
       ok "$dep already installed"
     else
       if [[ $DRY_RUN -eq 1 ]]; then
