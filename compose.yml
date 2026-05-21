@@ -976,8 +976,23 @@ services:
           exit 1
         fi
         if [ ! -x /workspace/.npm-global/bin/openclaw ]; then
+          # Integrity-verified install (issue #118 / external review F11).
+          # The sha512 is the SRI hash published by npm for openclaw@2026.5.7.
+          # Download tarball, verify, then install — fail closed on mismatch
+          # to prevent a malicious npm publish from being trusted at runtime.
+          # Bump version AND integrity TOGETHER on intentional upgrades.
           mkdir -p /workspace/.npm-global
-          npm install -g openclaw@2026.5.7
+          OC_VER=2026.5.7
+          OC_INTEGRITY=sha512-hjvpgconK20YltQPrzDY6cehjM8ijQyZnLKhqLBTngiFEPum9gmXwCDsrisPEXVRFtzuMhap+w6zSEmSQ1047Q==
+          curl -fsSL "https://registry.npmjs.org/openclaw/-/openclaw-${OC_VER}.tgz" -o /tmp/openclaw.tgz
+          EXPECTED_HEX=$(printf '%s' "${OC_INTEGRITY#sha512-}" | base64 -d 2>/dev/null | od -An -vtx1 | tr -d ' \n')
+          ACTUAL_HEX=$(sha512sum /tmp/openclaw.tgz | awk '{print $1}')
+          if [ "$EXPECTED_HEX" != "$ACTUAL_HEX" ]; then
+            echo "openclaw: SHA512 integrity check FAILED (expected ${EXPECTED_HEX:0:24}..., got ${ACTUAL_HEX:0:24}...)" >&2
+            exit 1
+          fi
+          npm install -g /tmp/openclaw.tgz
+          rm -f /tmp/openclaw.tgz
         fi
         if [ ! -f /workspace/.openclaw/openclaw.json ]; then
           echo "openclaw: not onboarded yet."
