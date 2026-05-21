@@ -195,16 +195,25 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 
 ### P1-03 — n8n runs with `N8N_BASIC_AUTH_ACTIVE: "false"` — single-layer auth dependency on Cloudflare Access
 
-**Status**: ✅ **Fixed in v0.4.0-inflight**. `setup/walter-host/services/n8n/compose.yml` now sets `N8N_BASIC_AUTH_ACTIVE: "true"` and wires `N8N_BASIC_AUTH_USER` + `N8N_BASIC_AUTH_PASSWORD` via `${VAR:?msg}` substitutions, so a missing operator-side secret makes the container fail at boot rather than silently falling back to disabled auth. `setup/walter-host/services/n8n/README.md` documents the two-layer auth model (CF Access perimeter + n8n basic defense-in-depth) with operator setup steps. Regression test at `tests/oss/services-n8n-auth.bats` (5 tests).
+**Status**: ✅ **Fixed in v0.4.0-inflight**. Both n8n compose files —
+`setup/walter-host/services/n8n/compose.yml` AND the repo root
+`compose.yml` (used by `install.sh`'s default-deploy flow) — now set
+`N8N_BASIC_AUTH_ACTIVE: "true"` and wire `N8N_BASIC_AUTH_USER` +
+`N8N_BASIC_AUTH_PASSWORD` via `${VAR:?msg}` substitutions, so a missing
+operator-side secret makes the container fail at boot rather than
+silently falling back to disabled auth. `setup/walter-host/services/n8n/README.md`
+documents the two-layer auth model (CF Access perimeter + n8n basic
+defense-in-depth) with operator setup steps. Regression test at
+`tests/oss/services-n8n-auth.bats` (5 tests).
 
 **Category**: 3 (Authentication bypass)  
-**File**: `setup/walter-host/services/n8n/compose.yml:46-47`
+**File**: `setup/walter-host/services/n8n/compose.yml` (basic-auth env-block) + `compose.yml` (repo root, n8n service block)
 
 **Description**: n8n disables its own authentication layer entirely, relying solely on Cloudflare Access (CF Tunnel) for protection. If the CF Access policy is misconfigured, the CF tunnel is bypassed (e.g., via a direct connection to the Walter-VM IP on port 5678 if a firewall rule is ever relaxed), or if cloudflared has a vulnerability, n8n is fully open with no secondary auth. n8n has direct access to Postgres credentials, Execute Command nodes, and all configured credentials.
 
 **CVSS estimate**: 8.1 (AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:H)
 
-**Fix**: Re-enable n8n's built-in user management as a second factor. Set `N8N_BASIC_AUTH_ACTIVE: "true"` or configure n8n's native user management with strong credentials as defense-in-depth behind CF Access.
+**Fix**: Re-enable n8n's built-in basic auth as a SECOND AUTH LAYER (not MFA — a second independent shared-secret credential, not a different factor type). Set `N8N_BASIC_AUTH_ACTIVE: "true"` with strong `N8N_BASIC_AUTH_USER` + `N8N_BASIC_AUTH_PASSWORD` credentials as defense-in-depth behind CF Access.
 
 ---
 

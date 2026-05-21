@@ -122,17 +122,31 @@ n8n basic auth catches every one of those.
    be **24+ random characters** (the example above gives 32). Save both
    in your password manager.
 
-2. Pull them into the compose env:
+2. Write them into the service's local `.env` file. The deploy flow
+   (`deploy.sh`) generates `/opt/walter-vm/services/n8n/.env` on first
+   run from `.env.template`; either edit the generated file directly
+   or pull-and-render via your secrets manager.
 
    ```bash
-   walter-os secrets-pull
+   # Option A — Infisical CLI writes the .env directly:
+   cd /opt/walter-vm/services/n8n
+   infisical export --env=prod --format=dotenv >> .env
+
+   # Option B — append manually (use ONLY for testing):
+   echo "N8N_BASIC_AUTH_USER=walter-admin" >> .env
+   echo "N8N_BASIC_AUTH_PASSWORD=<paste-from-password-manager>" >> .env
    ```
 
-3. Restart n8n to pick up the new env:
+   Note: `walter-os secrets-pull` is the DEPRECATED Bitwarden/
+   Vaultwarden bridge (see `bin/walter-os`) and does NOT sync from
+   Infisical, so it is NOT the right command for this flow.
+
+3. Restart n8n to pick up the new env (compose reads `.env` via
+   `--env-file .env` per `deploy.sh`):
 
    ```bash
    cd setup/walter-host/services/n8n
-   docker compose up -d
+   docker compose --env-file .env up -d
    ```
 
 4. The first browser hit will prompt for basic-auth credentials AFTER

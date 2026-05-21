@@ -8,6 +8,7 @@
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 COMPOSE="$REPO_ROOT/setup/walter-host/services/n8n/compose.yml"
+ROOT_COMPOSE="$REPO_ROOT/compose.yml"
 README="$REPO_ROOT/setup/walter-host/services/n8n/README.md"
 
 @test "n8n compose has N8N_BASIC_AUTH_ACTIVE set to \"true\" (P1-03)" {
@@ -42,4 +43,25 @@ README="$REPO_ROOT/setup/walter-host/services/n8n/README.md"
   grep -qi 'defense in depth\|defense-in-depth\|two-layer' "$README"
   grep -q 'Cloudflare Access' "$README"
   grep -q 'N8N_BASIC_AUTH_PASSWORD' "$README"
+}
+
+# --- Copilot R1 of #67: ALSO cover the repo-root compose.yml ---
+# `install.sh` deploys the root compose.yml as the default-deploy path,
+# not the walter-host services/n8n/compose.yml. Both files must hold the
+# same basic-auth posture or the audit closure is only partial.
+
+@test "root compose.yml: n8n service has N8N_BASIC_AUTH_ACTIVE \"true\" (P1-03)" {
+  [ -f "$ROOT_COMPOSE" ]
+  grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"true"\s*$' "$ROOT_COMPOSE"
+}
+
+@test "root compose.yml: n8n service does NOT set N8N_BASIC_AUTH_ACTIVE \"false\" (P1-03)" {
+  [ -f "$ROOT_COMPOSE" ]
+  ! grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$ROOT_COMPOSE"
+}
+
+@test "root compose.yml: n8n service wires both basic-auth env vars with :? guard (P1-03)" {
+  [ -f "$ROOT_COMPOSE" ]
+  grep -qE 'N8N_BASIC_AUTH_USER:\s+\$\{N8N_BASIC_AUTH_USER:\?' "$ROOT_COMPOSE"
+  grep -qE 'N8N_BASIC_AUTH_PASSWORD:\s+\$\{N8N_BASIC_AUTH_PASSWORD:\?' "$ROOT_COMPOSE"
 }

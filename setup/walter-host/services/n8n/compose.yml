@@ -40,22 +40,29 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
 
       # ---- Auth (defense in depth — closes audit P1-03) ----
-      # n8n's basic auth is now ON as a second factor behind Cloudflare
-      # Access. CF Access (Google IdP, allow @${WALTER_DOMAIN}) is the
-      # primary perimeter; n8n basic-auth is the fallback for any CF
-      # Access misconfig, CF Tunnel bypass, or cloudflared CVE. Both
-      # layers must pass before reaching the workflow editor and the
-      # credential vault.
+      # n8n's basic auth is now ON as a SECOND AUTH LAYER behind
+      # Cloudflare Access. This is NOT multi-factor auth (it's a
+      # second independent shared-secret credential, not a different
+      # factor type). CF Access (Google IdP, allow @${WALTER_DOMAIN}) is
+      # the primary perimeter; n8n basic-auth is the fallback for any
+      # CF Access misconfig, CF Tunnel bypass, or cloudflared CVE.
+      # Both layers must pass before reaching the workflow editor and
+      # the credential vault.
       #
-      # Required env vars in secrets.env:
+      # Required env vars in this service's `.env` file (the file the
+      # deploy.sh flow writes to /opt/walter-vm/services/n8n/.env and
+      # that `docker compose --env-file .env up` reads):
       #   N8N_BASIC_AUTH_USER     — operator-chosen, e.g. walter-admin
-      #   N8N_BASIC_AUTH_PASSWORD — 24+ char random; provisioned in Infisical
+      #   N8N_BASIC_AUTH_PASSWORD — 24+ char random; provisioned in
+      #                             Infisical (or operator's secrets
+      #                             manager) and pulled into `.env`.
       #
       # See setup/walter-host/services/n8n/README.md for the two-layer
-      # threat model and operator setup steps.
+      # threat model and operator setup steps; see .env.template for
+      # the canonical field list.
       N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:?N8N_BASIC_AUTH_USER required — see services/n8n/README.md}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?N8N_BASIC_AUTH_PASSWORD required — see services/n8n/README.md}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:?N8N_BASIC_AUTH_USER required — see setup/walter-host/services/n8n/README.md}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?N8N_BASIC_AUTH_PASSWORD required — see setup/walter-host/services/n8n/README.md}
       N8N_USER_MANAGEMENT_DISABLED: "false"
 
       # ---- Trust proxy (we are behind cloudflared) ----
