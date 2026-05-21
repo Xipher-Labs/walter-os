@@ -44,7 +44,7 @@ The current PR #127 flow (`npm install -g --ignore-scripts ./tarball`) does NOT 
 
 Codex R1 on the initial draft of this ADR caught that the obvious `npm ci --prefix /workspace/.npm-global ./tarball` doesn't actually install globally — `npm ci` is project-install-oriented + only materializes `./node_modules/`, leaving `/workspace/.npm-global/bin/openclaw` (which the rest of compose relies on) missing. The corrected design routes through `npm link` after the deterministic dep install.
 
-The exact `npm link` direction (Copilot R1 #140 catch — needs spelling out):
+The exact `npm link` direction (Copilot R1 finding on this PR — needs spelling out):
 
 - Inside the wrapper-package dir (Candidate A) after `npm ci`:
   `cd node_modules/openclaw && npm link --prefix /workspace/.npm-global`
