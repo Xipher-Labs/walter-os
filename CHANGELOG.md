@@ -120,6 +120,25 @@ PRs #55–#59 and land as the bundle epic completes.)
   `tests/audit/external-hook-integrity.bats` (6 cases) pins the
   behavior.
 
+- **`tests/oss` failures fixed (#50 closed).** Two pre-existing failures
+  blocked the full `tests/oss/` glob from running in CI:
+  - `depersonalization.bats AC-3` was matching `Law N.NNN` and `Ley N`
+    strings inside `node_modules/` dependency CHANGELOG / README files
+    (`recharts`, `eslint-plugin-*`, `flat-cache`, etc.) — all unrelated
+    to Walter-OS's depersonalization invariant. Test now excludes
+    `node_modules`, `.next`, `dist`, `build`, `test-results`, and `.git`
+    via `grep --exclude-dir`.
+  - `security-no-weak-defaults.bats A-1` failed because the string
+    `ccr-internal` (the old weak default for `CCR_APIKEY`) still
+    appeared in a comment in `setup/walter-host/services/llm-proxies/
+    compose.yml`. Comment rephrased to reference "the old weak internal
+    default value that v0.4.0 removed" without re-introducing the
+    literal string.
+
+  CI workflow `.github/workflows/ci.yml` collapsed the per-file
+  `tests/oss/*.bats` allowlist back to the full `tests/oss/` glob,
+  and added `tests/audit/` to the matrix (picks up the new P1-07
+  external-hook-integrity bats test).
 ### Changed (build / release pipeline)
 
 - Consolidated `.github/workflows/release-security.yml` into

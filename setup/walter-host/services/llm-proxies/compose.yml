@@ -40,10 +40,11 @@ services:
         # APIKEY is mandatory — set CCR_APIKEY in personal.env or Infisical.
         # litellm/config.yaml references it via os.environ/CCR_APIKEY.
         # ALWAYS reconcile the existing config with current CCR_APIKEY: an
-        # earlier deployment may have a stale APIKEY (e.g. the old
-        # 'ccr-internal' default). If config.json's APIKEY != CCR_APIKEY,
-        # CCR daemon would accept the OLD key while LiteLLM sends the NEW
-        # key, silently breaking the claude-sub aliases on upgrade.
+        # earlier deployment may have a stale APIKEY (e.g. the old weak
+        # internal default value that v0.4.0 removed). If config.json's
+        # APIKEY != CCR_APIKEY, CCR daemon would accept the OLD key while
+        # LiteLLM sends the NEW key, silently breaking the claude-sub
+        # aliases on upgrade.
         CCR_CFG=/app/.claude-code-router/config.json
         regenerate=1
         if [ -s "$CCR_CFG" ]; then
