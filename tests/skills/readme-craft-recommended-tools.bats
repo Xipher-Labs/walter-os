@@ -48,10 +48,15 @@ RECOMMENDED_MD="${SKILL_DIR}/recommended-tools.md"
 }
 
 # -----------------------------------------------------------------------
-# AC-4: the upstream catalog is linked at least twice
+# AC-4: the upstream catalog is linked at least twice (once as the
+# anchor / preamble link, again in the re-audit checklist or footer).
+# `grep -qc` was a bug — `-q` suppresses output but `-c` only counts,
+# and short-circuits at first match, so the assertion was effectively
+# "linked at least once". Use a proper count + threshold instead.
 # -----------------------------------------------------------------------
-@test "AC-4: upstream catalog is referenced" {
-  grep -qc "dhyeythumar/awesome-readme-tools" "${RECOMMENDED_MD}"
+@test "AC-4: upstream catalog is referenced at least twice" {
+  count=$(grep -cE "dhyeythumar/awesome-readme-tools" "${RECOMMENDED_MD}")
+  [ "${count}" -ge 2 ]
 }
 
 # -----------------------------------------------------------------------
@@ -79,6 +84,14 @@ RECOMMENDED_MD="${SKILL_DIR}/recommended-tools.md"
 # AC-8: 'Last reviewed' date in recommended-tools.md is not older than
 # 120 days (90-day quarterly cadence + 30-day grace period).
 # This catches stale curation before downstream consumers do.
+# The "0 < age_days <= 120" range (inclusive upper bound, strictly
+# non-future lower bound) closes two regressions Copilot flagged:
+#   1. A future "Last reviewed" date made age_days negative, which
+#      satisfied `-lt 120` and bypassed the freshness gate. Reject
+#      future-dated reviews.
+#   2. `-lt 120` strictly excluded exactly-120-day-old reviews, even
+#      though the comment promised "not older than 120 days". Switch
+#      to `-le 120` so the boundary case passes as documented.
 # -----------------------------------------------------------------------
 @test "AC-8: Last reviewed date is within 120 days" {
   reviewed=$(grep -oE 'Last reviewed\*\*: [0-9]{4}-[0-9]{2}-[0-9]{2}' "${RECOMMENDED_MD}" \
@@ -96,7 +109,10 @@ RECOMMENDED_MD="${SKILL_DIR}/recommended-tools.md"
   now_epoch=$(date +%s)
   age_days=$(( (now_epoch - reviewed_epoch) / 86400 ))
 
-  [ "${age_days}" -lt 120 ]
+  # Reject future-dated reviews (negative age_days bypasses the upper
+  # bound). 0 is acceptable — same-day review.
+  [ "${age_days}" -ge 0 ]
+  [ "${age_days}" -le 120 ]
 }
 
 # -----------------------------------------------------------------------
@@ -119,9 +135,16 @@ RECOMMENDED_MD="${SKILL_DIR}/recommended-tools.md"
 
   failed=""
   while IFS= read -r url; do
+    # Try HEAD first (cheap), GET as fallback. `-sSL` follows redirects,
+    # so 301/302 should resolve to 200 here — but some servers respond
+    # to HEAD with 405/403 even when GET succeeds (Vercel, some CDNs),
+    # so any non-200 from HEAD also triggers the GET retry. Previously
+    # 301/302 were treated as terminal-success along with 200; that
+    # masked hosts that redirect on HEAD but succeed on GET.
     code=$(curl -sSL -o /dev/null -w '%{http_code}' -A "walter-os-readme-craft-tools-audit/1.0" -m 10 -I "${url}" || echo "000")
-    if [ "${code}" != "200" ] && [ "${code}" != "301" ] && [ "${code}" != "302" ]; then
-      # Retry with GET — some hosts (GitHub raw, Vercel) reject HEAD.
+    if [ "${code}" != "200" ]; then
+      # Retry with GET — covers HEAD-hostile hosts AND any final-state
+      # check that HEAD's -sSL might have missed.
       code=$(curl -sSL -o /dev/null -w '%{http_code}' -A "walter-os-readme-craft-tools-audit/1.0" -m 10 "${url}" || echo "000")
     fi
     if [ "${code}" != "200" ]; then
