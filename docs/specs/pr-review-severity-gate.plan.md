@@ -219,6 +219,34 @@ If the gh call returns non-2xx, log + fail (do not retry).
 
 When any condition fails, post a PR comment with the failing condition + the remediation: "To unblock, address the BLOCKER findings in [list], then re-trigger via `walter-os pr-auto-merge <pr-num>`." (The PR number is substituted at hook-call time; never hard-code a specific PR in the template.)
 
+### D5. BLOCKER-finding action sequence (Codex R4 #114)
+
+Implements §4.4 steps 6/7/8 — the BLOCKER-specific path. Distinct
+from D1-D3 (which only run when the gate PASSES) and D4 (which posts
+a generic blocked-condition comment). Called whenever the classifier
+emits at least one BLOCKER finding, independently of the other gate
+conditions' status.
+
+**Files:**
+- `scripts/walter/subcommands/pr-auto-merge.sh` (extend)
+- `scripts/walter/lib/blocker-issue.sh` (new — title/body builder)
+
+Behavior:
+1. For each BLOCKER finding, append to the issue body: verbatim
+   finding text, file:line anchor, classifier `rule` + `rule_detail`,
+   suggested fix-shape (deterministic mapping from rule → shape;
+   `auth-path-trigger` → "audit the auth/ change for secret/PII
+   leak", etc.).
+2. Title: `[FIX] -SECURITY- <PR-title-body> — BLOCKER from PR #<N>`
+   when ANY BLOCKER's path matches a SECURITY glob (auth/, crypto/,
+   secrets/, .env*, PHI). Otherwise `[FIX] -OPERATIONS- ... — BLOCKER`.
+3. `gh issue create --label severity-blocker,from-auto-merge --title "..." --body "..."`
+4. Post PR comment naming each BLOCKER + linking the new issue.
+5. EXPLICITLY do NOT call `gh pr close`. The PR stays open; closure
+   is operator-only.
+
+**Verify**: the two A4 BLOCKER tests PASS (issue-create + no-close).
+
 **Verify**: AC9 PASS.
 
 ---
