@@ -98,7 +98,7 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 - [ ] `setup/sandbox-profiles/walter-skill-default.nsjail.conf`:
   - Repo cwd + 1-level parent: `rw: true`
   - Operator overlay: `rw: false`
-  - DENY: `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/`, `~/.gnupg/`, `*.pem`, `*.key`
+  - DENY: `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 only — NOT the whole `state/` dir; matches D-4's narrower scope so skills can still read decision journals + knowledge cards from `state/`), `~/.gnupg/`, `*.pem`, `*.key`
   - Network: per A-1 egress allowlist (sandbox doesn't override; A-1 hook is still authoritative)
   - Signal scope: cgroup-limited (no kill outside sandboxed PID tree)
 - [ ] macOS equivalent in `walter-skill-default.sb`.
