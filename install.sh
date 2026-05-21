@@ -337,12 +337,15 @@ check_preflight() {
     exit 4
   fi
 
-  # yq presence handling (Codex R2 #125 MAJOR — flavor check + ordering):
-  # Three cases the preflight needs to disambiguate:
-  #   (a) yq missing entirely: Step 1's _install_deps_{macos,linux} will
-  #       install mikefarah/yq via brew/snap, so we WARN here and let the
-  #       wizard continue. Hard-exiting here would prevent the very install
-  #       step that's supposed to put yq on PATH.
+  # yq presence handling (Codex R2-R6 #125 — flavor check + ordering):
+  # Three cases the preflight needs to disambiguate. Codex R6 collapsed
+  # the previous (a) warn-then-step1-installs path: run_step_0 writes
+  # the approval-gate hook BEFORE step_1 ever runs, so a step_1 failure
+  # mid-install would leave the operator with a broken hook (closed-by-
+  # default on yq-missing). Now: missing yq is always a hard-fail in
+  # preflight regardless of mode — operator installs once, re-runs.
+  #   (a) yq missing entirely: hard-exit with install hint (DRY_RUN
+  #       still warn-only, so the install plan can be previewed).
   #   (b) yq present + mikefarah flavor: ok, proceed.
   #   (c) yq present + WRONG flavor (kislyuk/Python yq from apt): hard-exit
   #       with remediation. Without this check, an apt-yq machine would
@@ -352,17 +355,21 @@ check_preflight() {
     if [[ $DRY_RUN -eq 1 ]]; then
       warn "yq missing (would be required on real install). ${_pkg_hint_yq}"
       warn "DRY-RUN: continuing past the missing yq so the install plan can be previewed."
-    elif [[ $UPGRADE -eq 1 ]]; then
-      # Codex R5 #125 BLOCKER fix: `--upgrade` runs run_step_0 only (no
-      # step_1, no install-deps helper). If yq is missing here, no later
-      # step will install it — the upgrade would complete with a broken
-      # approval-gate hook dep. Hard-exit on missing yq in upgrade mode.
-      err "yq required (approval-gate hard dep) and --upgrade does not run Step 1."
-      err "  Install yq first, then re-run: ${_pkg_hint_yq}"
-      exit 4
     else
-      # Full-install path: step_1 will run after this and provision yq.
-      warn "yq missing. Step 1 will install mikefarah/yq via ${_pkg_hint_yq%%  #*}."
+      # Codex R6 #125 BLOCKER fix: previous version warned-and-continued
+      # in full-install mode hoping step_1 would install yq. But
+      # run_step_0 writes the approval-gate hook BEFORE step_1 ever
+      # runs — and if step_1 fails for any reason (no Docker, no brew,
+      # no snap, network/package error), the operator is left with the
+      # hook in place + no yq, which fails closed on every claude/codex
+      # invocation. Better: hard-fail in preflight on missing yq.
+      # Operator installs it once, then re-runs. Aligns with --check's
+      # behavior + AGENTS.md "fail fast" pattern.
+      err "yq required (approval-gate hard dep) and not installed."
+      err "  Install yq first, then re-run install.sh: ${_pkg_hint_yq}"
+      err "  (mikefarah/yq, not apt's kislyuk/yq — they share a name but"
+      err "   only mikefarah/yq has the syntax our hooks use)"
+      exit 4
     fi
   else
     # Flavor check using the same helper Step 1's install path uses.

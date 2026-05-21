@@ -84,11 +84,16 @@ setup() {
 # Also: check_preflight didn't validate flavor, so an apt-yq machine
 # would pass preflight + fail at hook-runtime.
 
-@test "check_preflight does NOT hard-exit on missing yq (Step 1 installs)" {
-  # On the missing-yq path, check_preflight emits `warn`, not `err+exit`.
-  grep -qE 'warn "yq missing\. Step 1 will install' "$INSTALL_SH"
-  # And the surrounding code does NOT exit on the missing-yq branch.
-  ! grep -qE 'yq required \(approval-gate hard dep\)' "$INSTALL_SH"
+@test "check_preflight hard-fails on missing yq (Codex R6 #125)" {
+  # R6 reversal of R2-R5's "warn-and-let-step_1-install" path: that path
+  # had a real race where run_step_0 writes the approval-gate hook
+  # BEFORE step_1 installs yq. A step_1 failure mid-install left the
+  # operator with a broken hook. Now: missing yq is always hard-fail
+  # in preflight regardless of mode (DRY_RUN excepted).
+  grep -qE 'yq required \(approval-gate hard dep\) and not installed' "$INSTALL_SH"
+  grep -qE 'exit 4' "$INSTALL_SH"
+  # The old "Step 1 will install" warn-text is gone.
+  ! grep -qE 'warn "yq missing\. Step 1 will install' "$INSTALL_SH"
 }
 
 @test "check_preflight runs flavor check when yq IS on PATH" {
