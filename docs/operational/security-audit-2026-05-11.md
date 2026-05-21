@@ -163,6 +163,8 @@ The only sanitization is escaping double quotes and stripping newlines. A lesson
 
 ### P1-01 — `openclaw@latest` npm package installed at runtime — unpinned dependency with execution context
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `openclaw` itself was already pinned to `openclaw@2026.5.7` ahead of this audit's re-review. The three additional `@latest` npm installs the audit didn't catch — in `gemini-sub-router/Dockerfile`, `claude-sub-router/Dockerfile`, and `chatgpt-codex-router/Dockerfile` — are now pinned to `@google/gemini-cli@0.42.0`, `@anthropic-ai/claude-code@2.1.146`, and `@openai/codex@0.132.0` respectively. Regression test at `tests/oss/no-latest-tags-walter-host.bats` (4 tests) pins the no-`@latest` invariant in CI.
+
 **Category**: 8 (Supply chain)  
 **File**: `setup/walter-host/services/openclaw/compose.yml:71`
 
