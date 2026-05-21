@@ -173,9 +173,20 @@ SH
 
   # jq --sort-keys must put 'external/aardvark-skill/...' before
   # 'external/zebra-skill/...' regardless of FS enumeration order.
-  baseline_content="$(cat "$WALTER_CONFIG/external-hook-checksums.json")"
-  aardvark_pos="$(printf '%s' "$baseline_content" | grep -bo 'aardvark' | head -1 | cut -d: -f1)"
-  zebra_pos="$(printf '%s' "$baseline_content" | grep -bo 'zebra' | head -1 | cut -d: -f1)"
-  [ -n "$aardvark_pos" ] && [ -n "$zebra_pos" ]
-  [ "$aardvark_pos" -lt "$zebra_pos" ]
+  # Parse the JSON with jq directly (already a setup() prereq) instead
+  # of byte-offset comparison via grep -bo — Copilot R1 of #96.
+  #
+  # Note: setup() pre-stages a third file under fake-skill/, so the
+  # baseline ends up with 3 keys total. The deterministic invariant
+  # we care about is the ORDERING — sorted lexicographically,
+  # 'external/aardvark-skill/...' must come BEFORE
+  # 'external/zebra-skill/...' regardless of FS enumeration order.
+  local first_key last_key
+  first_key="$(jq -r 'keys | first' "$WALTER_CONFIG/external-hook-checksums.json")"
+  last_key="$(jq -r 'keys | last' "$WALTER_CONFIG/external-hook-checksums.json")"
+
+  # First key starts with 'a' (aardvark < fake-skill < zebra).
+  # Last key starts with 'z'.
+  [[ "$first_key" == external/aardvark-skill/* ]]
+  [[ "$last_key" == external/zebra-skill/* ]]
 }
