@@ -1,11 +1,13 @@
+# GitHub Issue Template config.
+#
+# `contact_links` deliberately omitted: GitHub requires absolute URLs there,
+# which would force a hardcoded github.com/<org>/walter-os reference. That
+# would leak the upstream org into every fork's issue UI. Operators who
+# fork can add their own contact_links in their fork; the upstream Walter-OS
+# distribution surfaces the same affordances through README links and the
+# SECURITY.md / COMMERCIAL.md files at the repo root.
+#
+# See docs/specs/phase-w-5-depersonalization.md for the OSS-cleanliness
+# rationale and the depersonalization re-audit (Refs: PR #73).
+
 blank_issues_enabled: false
-contact_links:
-  - name: Security vulnerability disclosure
-    url: https://github.com/xipher-labs/walter-os/blob/main/SECURITY.md
-    about: Private security disclosure process (do NOT file public issues for security)
-  - name: Commercial licensing inquiry
-    url: https://github.com/xipher-labs/walter-os/blob/main/COMMERCIAL.md
-    about: Closed-source / enterprise license terms -- contact Xipher Labs
-  - name: Discussions
-    url: https://github.com/xipher-labs/walter-os/discussions
-    about: Open-ended discussion (use Discussions, not Issues, for design conversations)

@@ -12,10 +12,14 @@
 
 import { getVersionInfo } from "@/lib/version";
 
-const REPO_URL =
-  process.env.NEXT_PUBLIC_WALTER_REPO_URL ??
-  "https://github.com/xipher-labs/walter-os";
-const CHANGELOG_URL = `${REPO_URL}/blob/main/CHANGELOG.md`;
+// Repo URL is provided by the operator's deployment via
+// NEXT_PUBLIC_WALTER_REPO_URL. We intentionally avoid a hardcoded fallback
+// to any specific GitHub org so the Control Tower doesn't ship a personal
+// identifier or a wrong-fork URL — see W-5 / R2-3 in the OSS launch spec
+// and the depersonalization re-audit. If the env var is unset, the update
+// badge is rendered without a link target.
+const REPO_URL = process.env.NEXT_PUBLIC_WALTER_REPO_URL ?? null;
+const CHANGELOG_URL = REPO_URL ? `${REPO_URL}/blob/main/CHANGELOG.md` : null;
 
 export default function VersionBadge() {
   const { version, updateAvailable, showBadge } = getVersionInfo();
@@ -32,20 +36,36 @@ export default function VersionBadge() {
       </span>
 
       {showBadge && updateAvailable && (
-        <a
-          href={CHANGELOG_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
-                     bg-amber-100 dark:bg-amber-900/40
-                     text-amber-800 dark:text-amber-300
-                     border border-amber-300 dark:border-amber-700
-                     hover:bg-amber-200 dark:hover:bg-amber-800/50
-                     transition-colors"
-          data-testid="update-badge"
-        >
-          Update available: v{updateAvailable} → changelog
-        </a>
+        CHANGELOG_URL ? (
+          <a
+            href={CHANGELOG_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                       bg-amber-100 dark:bg-amber-900/40
+                       text-amber-800 dark:text-amber-300
+                       border border-amber-300 dark:border-amber-700
+                       hover:bg-amber-200 dark:hover:bg-amber-800/50
+                       transition-colors"
+            data-testid="update-badge"
+          >
+            Update available: v{updateAvailable} → changelog
+          </a>
+        ) : (
+          // Operator hasn't set NEXT_PUBLIC_WALTER_REPO_URL. Render the
+          // text badge without a link so the user still sees the update
+          // notice; no hardcoded URL leaks into the page.
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                       bg-amber-100 dark:bg-amber-900/40
+                       text-amber-800 dark:text-amber-300
+                       border border-amber-300 dark:border-amber-700"
+            data-testid="update-badge-no-link"
+            title="Set NEXT_PUBLIC_WALTER_REPO_URL to enable the changelog link"
+          >
+            Update available: v{updateAvailable}
+          </span>
+        )
       )}
     </div>
   );
