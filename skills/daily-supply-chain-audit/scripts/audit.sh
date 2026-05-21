@@ -395,6 +395,17 @@ check_skill_scripts() {
 check_external_hooks() {
   [[ -n "${WALTER_OS_HOME:-}" && -d "${WALTER_OS_HOME}/external" ]] || return 0
 
+  # jq is REQUIRED — the pipeline downstream parses hasher output via jq
+  # and serializes the baseline JSON. If jq is missing we cannot make a
+  # security decision; fail HIGH and refuse to silently disable the
+  # integrity gate. Copilot R1 finding on PR #90.
+  if ! command -v jq >/dev/null 2>&1; then
+    finding high "external-hook-integrity-skipped" \
+      "jq missing — external-hook integrity gate disabled. Install jq." \
+      "brew install jq (macOS) / apt install jq (Linux)"
+    return 0
+  fi
+
   # Resolve sha256sum invocation per platform. Use an array so the
   # multi-arg `shasum -a 256` form splits correctly under shellcheck-
   # clean quoting in the pipeline below.
@@ -414,17 +425,63 @@ check_external_hooks() {
   local current_tmp
   current_tmp="$(mktemp)"
 
-  # Hash every external hook script. Sort for reproducibility so the
-  # baseline JSON is line-stable across runs.
+  # Hash every external hook script.
+  #
+  # Use `find -print0` + `xargs -0 --no-run-if-empty` so the hasher is
+  # NOT invoked when zero files match — without --no-run-if-empty, GNU
+  # xargs runs the hasher once with no args, the hasher reads stdin
+  # (empty) and emits a synthetic "<hash>  -" line, polluting the
+  # baseline. Copilot R1 finding on PR #90.
+  #
+  # macOS xargs (BSD) doesn't support --no-run-if-empty; fall back to
+  # a manual file-count check before invoking the pipeline. Detect via
+  # `xargs --no-run-if-empty </dev/null 2>/dev/null` which returns 0
+  # iff the flag is supported.
+  local -a xargs_cmd=(xargs -0)
+  if printf '' | xargs --no-run-if-empty -0 true 2>/dev/null; then
+    xargs_cmd+=(--no-run-if-empty)
+  else
+    # BSD xargs path: pre-check whether there's at least one match.
+    local first_file
+    first_file="$(find "${WALTER_OS_HOME}/external" \
+      -type f \
+      -path '*/hooks/scripts/*' \
+      \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
+      -print 2>/dev/null \
+      | head -1)"
+    if [[ -z "$first_file" ]]; then
+      rm -f "$current_tmp"
+      return 0
+    fi
+  fi
+
+  # The jq script parses each hasher output line robustly. Both
+  # sha256sum (GNU) and `shasum -a 256` (macOS) emit
+  #   <64-hex-chars><whitespace><path>
+  # We capture the 64-hex hash via a regex anchored to start-of-line
+  # plus a single capture group for the path (everything after the
+  # whitespace). This avoids the previous `split("  ")` hack which
+  # was sensitive to delimiter width (one vs two spaces between BSD
+  # vs GNU tools) and which truncated paths containing double-space
+  # sequences. Copilot R1 finding on PR #90.
+  #
+  # Output JSON is normalized via `--sort-keys` so the baseline is
+  # stable across jq versions and object-insertion order. Copilot
+  # R1 finding on PR #90.
   find "${WALTER_OS_HOME}/external" \
     -type f \
     -path '*/hooks/scripts/*' \
     \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
     -print0 2>/dev/null \
     | LC_ALL=C sort -z \
-    | xargs -0 "${hasher_cmd[@]}" 2>/dev/null \
-    | jq -R 'split("  ") | {(.[1] | sub("^.*/external/"; "external/")): .[0]}' \
-    | jq -s 'add // {}' \
+    | "${xargs_cmd[@]}" "${hasher_cmd[@]}" 2>/dev/null \
+    | jq -R --slurp --sort-keys '
+        split("\n")
+        | map(select(length > 0))
+        | map(capture("^(?<hash>[0-9a-f]{64})[[:space:]]+\\*?(?<path>.+)$"))
+        | map({(.path | sub("^.*/external/"; "external/")): .hash})
+        | add // {}
+      ' \
     > "$current_tmp"
 
   if [[ ! -s "$current_tmp" ]]; then

@@ -102,7 +102,9 @@ PRs #55–#59 and land as the bundle epic completes.)
   + two P1-06 lockdown cases) pin the behavior.
 
 - **Audit P1-07 closed.** External submodule hook scripts (the
-  `external/**/hooks/scripts/*.sh` tree, e.g. `learn-by-mistake`) are
+  `external/**/hooks/scripts/*.{sh,py,js}` tree — bash, Python, and
+  JavaScript hooks, covering the full set of executable types the
+  Walter Council submodules ship; e.g. `learn-by-mistake`) are
   now under the daily-audit integrity perimeter. New
   `check_external_hooks()` in
   `skills/daily-supply-chain-audit/scripts/audit.sh` snapshots the

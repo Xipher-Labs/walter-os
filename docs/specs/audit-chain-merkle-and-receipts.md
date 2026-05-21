@@ -37,7 +37,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 | # | Decision | Why |
 |---|---|---|
-| D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. Signature in the row's `sig` field (base64 PASETO v4 detached signature over `row_minus_sig_field_normalized`). | Reuses the cap-token signing key. No new key infrastructure. |
+| D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. The `sig` field carries the raw 64-byte Ed25519 signature, base64-encoded, computed over the canonical JSON serialization of the row with the `sig` field removed (RFC 8785 JCS — JSON Canonicalization Scheme: keys sorted, no whitespace, UTF-8). NOTE: "detached signature" is NOT a term defined by the PASETO v4 spec; we use raw Ed25519 directly so the wire format is unambiguous across language implementations. PASETO v4 is referenced only as the design inspiration for the per-session-key model. | Reuses the cap-token signing key. No new key infrastructure. RFC 8785 JCS makes the signed bytes deterministic across implementations. |
 | D-7 | **Verifier resolves the per-row signer**: `(session_id, sig)` → look up `~/.config/walter-os/state/session-<session_id>.pub` (the public half of the session key, persisted at session start). | Public key persists; private key dies at session end. After session end, you can still VERIFY past rows; you cannot mint new ones. |
 | D-8 | **Public key rotation**: when a new session starts, the previous session's public key is moved to `~/.config/walter-os/state/keys-archive/session-<uuid>.pub`. Verifier checks both `state/` and `state/keys-archive/`. | Never delete public keys (you'd lose ability to verify old rows). Keys archive is bounded by `WALTER_AUDIT_KEYS_ARCHIVE_DAYS` (default 365). |
 | D-9 | **Sigstore Rekor (opt-in)**: when `WALTER_AUDIT_REKOR_UPLOAD=1`, the daily root hash (NOT row content) + timestamp + operator-id are uploaded to Sigstore Rekor at session end. Public attestation that THIS operator was running THIS chain at THIS time. | Operator-opt-in public timestamping. Per OSS Trust roadmap D-3 decision. |
@@ -58,7 +58,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
     "decision_source": "approval-gate" | "bash-denylist" | "capability-check" | "network-gate" | "operator-confirm",
     "decision_reason": "<gate-emitted reason or empty>",
     "prev_hash": "<hex sha256 of prev row, or 'null' for first>",
-    "sig": "<base64 PASETO v4 detached sig of row sans sig field>"
+    "sig": "<base64 raw Ed25519 signature over JCS(row minus sig field)>"
   }
   ```
 - [ ] `scripts/walter/lib/audit-chain.sh` (new) — exposes `walter_audit_append <tool> <input> <decision> <source> <reason>` and `walter_audit_normalize_row`.
@@ -75,7 +75,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 - [ ] bats coverage in `tests/hooks/audit-chain-hook-integration.bats`: a sample Bash invocation that hits approval-gate gets exactly ONE row appended, not zero, not multiple.
 
 ### AC-3 — Signing
-- [ ] Each row's `sig` field is a PASETO v4 detached signature (using the per-session Ed25519 key from A-2) over `row_normalized_minus_sig`.
+- [ ] Each row's `sig` field is a raw Ed25519 signature (base64-encoded; 64 bytes raw before encoding) over the RFC 8785 JCS canonicalization of the row with the `sig` field removed. The signing key is the per-session Ed25519 private key from A-2. "PASETO v4" is referenced as the design inspiration only — we do NOT emit PASETO tokens because "detached signature" isn't a defined term in the PASETO spec and would lead to incompatible implementations across languages.
 - [ ] Verifier in `walter-os audit verify-chain`:
   - Loads the session's public key (from `state/` or `state/keys-archive/`)
   - Recomputes `prev_hash` per row; mismatch → integrity error
@@ -160,6 +160,7 @@ Each ≤300 LOC. 3-round review.
 - Parent: `docs/specs/oss-trust-roadmap.md` Layer B B-1 + B-2
 - Sibling: `docs/specs/capability-tokens.md` (A-2 — signing key source)
 - Sibling: `docs/specs/time-bounded-sessions.md` (A-4 — session lifecycle defines key rotation)
-- PASETO v4 detached signature: <https://github.com/paseto-standard/paseto-spec>
+- PASETO v4 (design inspiration only; we emit raw Ed25519, not PASETO tokens): <https://github.com/paseto-standard/paseto-spec>
+- RFC 8785 JCS (canonicalization scheme for the signed bytes): <https://datatracker.ietf.org/doc/html/rfc8785>
 - Sigstore Rekor: <https://docs.sigstore.dev/rekor/overview/>
 - Issue #3 P2-2 (rotation-race finding — AC-1 addresses)
