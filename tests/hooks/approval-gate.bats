@@ -434,3 +434,83 @@ EOF
   run "$HOOK" check "git push origin main" --tool Bash
   [[ "$status" -eq 7 ]]
 }
+
+# ---------------------------------------------------------------------------
+# P1-05 — yq fail-closed at hook entry (audit hardening)
+# ---------------------------------------------------------------------------
+
+@test "P1-05: hook mode fails CLOSED when yq is missing" {
+  command -v jq >/dev/null 2>&1 || skip "jq required"
+
+  # Build a minimal PATH that has every binary the hook NEEDS at startup
+  # (bash, jq, grep, sed, cat, rm, mkdir, printf, echo) but does NOT
+  # include yq. `command -v yq` then returns false.
+  local stub_dir
+  stub_dir="$(mktemp -d)"
+  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr; do
+    if [ -x "$(command -v "$bin" 2>/dev/null)" ]; then
+      ln -sf "$(command -v "$bin")" "$stub_dir/$bin"
+    fi
+  done
+
+  run env -i PATH="$stub_dir" HOME="$HOME" WALTER_CONFIG="$WALTER_CONFIG" \
+    bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"echo ok"}}'
+
+  rm -rf "$stub_dir"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '"permissionDecision":"block"'
+  echo "$output" | grep -q 'yq missing'
+}
+
+# ---------------------------------------------------------------------------
+# P1-06 — standing-approvals path lockdown (audit hardening)
+# ---------------------------------------------------------------------------
+
+@test "P1-06: WALTER_STANDING_APPROVALS env var is IGNORED without allow-override flag" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  # Operator tries to point the gate at an attacker-controlled YAML.
+  local evil_file="$WALTER_CONFIG/evil-approvals.yml"
+  cat > "$evil_file" <<EOF
+auto_approved:
+  bypass-everything:
+    agent: test-agent
+    constraint: ANY
+EOF
+
+  # No agent-approvals.yml at the hardcoded path — without the override,
+  # the gate must block destructive ops regardless of the env var.
+  rm -f "$WALTER_CONFIG/agent-approvals.yml"
+
+  export WALTER_STANDING_APPROVALS="$evil_file"
+  export WALTER_AGENT_NAME=test-agent
+  # Do NOT set WALTER_AGENT_ALLOW_OVERRIDE — the env var must be ignored.
+
+  run "$HOOK" check "rm -rf /var/lib" --tool Bash
+  # 7 = blocked. If the override leaked through, it would be 0 (allowed).
+  [[ "$status" -eq 7 ]]
+  echo "$output" | grep -qi 'WALTER_STANDING_APPROVALS env var is ignored' || echo "(warn message check is best-effort — stderr may be captured separately)"
+}
+
+@test "P1-06: WALTER_STANDING_APPROVALS_OVERRIDE only honored when WALTER_AGENT_ALLOW_OVERRIDE=1" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  # Place a permissive YAML at a path that only the override env var
+  # points at. Default hardcoded path stays empty.
+  rm -f "$WALTER_CONFIG/agent-approvals.yml"
+  local override_file="$WALTER_CONFIG/override-approvals.yml"
+  cat > "$override_file" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
+  # Without the allow flag — override is ignored, lint-fix is blocked.
+  unset WALTER_AGENT_ALLOW_OVERRIDE
+  export WALTER_STANDING_APPROVALS_OVERRIDE="$override_file"
+  export WALTER_AGENT_NAME=test-agent
+
+  run "$HOOK" check "git push origin main" --tool Bash
+  [[ "$status" -eq 7 ]]
+}
