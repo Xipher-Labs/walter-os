@@ -144,6 +144,12 @@ DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:spa
 # typical real-world form. We anchor on the `(bash|sh|zsh|dash|ksh) -c <quote> ... \?\``
 # shape: shell + `-c` + optional quote + any chars (incl. backslash-escape)
 # then a backtick.
+# shellcheck disable=SC2016
+# (The backticks in this pattern are REGEX METACHARACTERS, not shell
+# command substitution. The whole string is intentionally single-quoted
+# so bash leaves it alone — that's the point. SC2016 is a false positive
+# here; shellcheck can't distinguish regex backticks from shell-expansion
+# backticks in a quoted literal.)
 DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]])(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\'']?[^`]*`'
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
