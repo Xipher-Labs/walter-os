@@ -1,9 +1,9 @@
 # Audit telemetry → Grafana / Loki (OSS Trust B-3) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer B item B-3
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer B item B-3 (in PR #83 — not yet on `main` at the time of this spec's writing)
 **Target release**: v0.6.0 (after B-1 + B-2 audit-chain lands in v0.5.x)
-**Depends on**: `docs/specs/audit-chain-merkle-and-receipts.md` (B-1 + B-2 — provides the JSONL source)
+**Depends on**: `docs/specs/audit-chain-merkle-and-receipts.md` (B-1 + B-2 — in PR #90, also not yet on `main`; provides the JSONL source). This spec assumes that PR merges first or in the same release cycle. If you read this on `main` and the dependency hasn't landed, B-3 is blocked.
 
 ## Problem
 
@@ -50,12 +50,19 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
 
 ### AC-2 — Grafana dashboard JSON
 - [ ] `setup/walter-host/services/observability/grafana/dashboards/walter-audit.json`:
-  - Tool-call rate (Loki query: `rate({app="walter-os", kind="audit-chain"}[5m])`)
-  - Block rate by `decision_source` (`rate({app="walter-os", kind="audit-chain"} | json | decision="block" [5m])`, grouped by `decision_source`)
-  - Top blocked tools (instant query: `topk(10, sum by (tool) (rate({app="walter-os"} | json | decision="block" [7d])))`)
-  - Top block reasons (same shape on `decision_reason`)
-  - Sessions per host
-  - Active sessions (last activity ≤ 30 min ago — uses `last_over_time` on `ts`)
+  - Tool-call rate: `rate({app="walter-os", kind="audit-chain"}[5m])`
+  - Block rate by `decision_source`:
+    `sum by (decision_source) (rate(({app="walter-os", kind="audit-chain"} | json | decision="block")[5m]))`
+    — note the **parens around the entire log-stream-pipeline** before the
+    range selector `[5m]`. LogQL requires the range selector to attach to
+    the parenthesized pipeline, not to a single label-filter expression
+    inside the pipeline.
+  - Top blocked tools (instant query):
+    `topk(10, sum by (tool) (rate(({app="walter-os", kind="audit-chain"} | json | decision="block")[7d])))`
+  - Top block reasons: same shape on `decision_reason` label.
+  - Sessions per host: `count by (host) (count_over_time({app="walter-os", kind="audit-chain"}[24h]))`
+  - Active sessions (last activity ≤ 30 min ago):
+    `count by (session_id) (last_over_time({app="walter-os", kind="audit-chain"} | json | unwrap ts [30m]))`
 - [ ] Dashboard auto-provisioned by Grafana's `provisioning/dashboards/` directory (already wired in the existing stack).
 
 ### AC-3 — `walter-os audit verify-chain --from-loki <range>`
@@ -81,15 +88,15 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
   - LogQL query examples for common questions
   - Opt-out via `WALTER_AUDIT_LOKI_DISABLE=1`
   - Cross-host workflow (configure each Walter-OS host's Promtail to ship to the SAME Loki)
-  - Operator-data-ownership statement: "Loki runs on YOUR walter-host. Walter Labs has no access."
+  - Operator-data-ownership statement: "Loki runs on YOUR walter-host. Xipher Labs has no access."
 - [ ] CHANGELOG entry under `[Unreleased] → Added (observability)`.
 
 ## Threat model
 
 | Attack | Mitigation |
 |---|---|
-| Compromised host ships fake audit rows to Loki | Loki stores verbatim including `sig`; verifier rejects on sig mismatch. Attacker can spam rows but can't forge valid sigs (sessions key local to that host). |
-| Loki tampered to drop rows post-shipping | Local JSONL is still source of truth. `verify-chain --from-loki` cross-checks against the local file (if available). |
+| Compromised host ships fake audit rows to Loki | Loki stores verbatim including `sig`; verifier rejects on sig mismatch. Attacker can spam rows but can't forge valid sigs (session key local to that host). |
+| Loki tampered to drop rows post-shipping | Local JSONL is still source of truth. AC-3 specifies `verify-chain --from-loki` reconstructs from Loki ONLY; the broader cross-check against the local JSONL is a follow-up enhancement (operator runs `verify-chain` twice — once `--from-loki <range>` and once against the local file — and compares the resulting chain heads). |
 | Operator opts out then opts back in; chain has a gap in Loki | Local JSONL is intact; operator can backfill via `promtail --once /path/to/chain-YYYY-MM-DD.jsonl` (documented). |
 | Loki disk fills up; new rows dropped | Operator-side disk monitoring (existing). 30d retention is the default ceiling. |
 
