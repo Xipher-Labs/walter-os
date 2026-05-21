@@ -122,7 +122,10 @@ setup() {
   # portability across bash 3.2 (macOS default) and bash 4+ (Linux).
   valid_subs_for() {
     case "$1" in
-      agents)            echo "list run-once pause resume status" ;;
+      # Sourced from scripts/agents/main.sh — top-level cases at
+      # lines 27 (list), 42 (run-once), 74 (pause), 81 (resume),
+      # 91 (unlock), 117 (trust), 259 (status).
+      agents)            echo "list run-once pause resume status trust unlock" ;;
       profile)           echo "default high-risk" ;;
       profile-bootstrap) echo "init status sync-shared" ;;
       *)                 echo "" ;;
