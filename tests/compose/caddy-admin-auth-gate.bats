@@ -44,27 +44,51 @@ PUBLIC_SITES="headscale posthog matrix chat-matrix chat"
   grep -qE 'not header CF-Access-Authenticated-User-Email' "$CADDYFILE"
 }
 
-@test "AC2: snippet includes CF IPv4 ranges (representative samples)" {
-  grep -qE '173\.245\.48\.0/20' "$CADDYFILE"
-  grep -qE '104\.16\.0\.0/13' "$CADDYFILE"
-  grep -qE '162\.158\.0\.0/15' "$CADDYFILE"
+@test "AC2: CF IPv4 ranges (representative samples) present in compose default" {
+  # CF ranges are now sourced from WALTER_CF_EDGE_RANGES (defined with
+  # defaults in compose.yml). The Caddyfile uses {$WALTER_CF_EDGE_RANGES}
+  # in both matchers, so verify the live default list lives in compose.
+  local compose="$REPO_ROOT/compose.yml"
+  [[ -f "$compose" ]] || skip "compose.yml missing"
+  grep -qE '173\.245\.48\.0/20' "$compose"
+  grep -qE '104\.16\.0\.0/13' "$compose"
+  grep -qE '162\.158\.0\.0/15' "$compose"
 }
 
-@test "AC2: snippet includes CF IPv6 ranges" {
-  grep -qE '2400:cb00::/32' "$CADDYFILE"
-  grep -qE '2606:4700::/32' "$CADDYFILE"
+@test "AC2: snippet includes CF IPv6 ranges (via WALTER_CF_EDGE_RANGES env var)" {
+  # The Caddyfile references the ranges by env var; the actual list
+  # lives in compose.yml as the default for WALTER_CF_EDGE_RANGES.
+  # Assert (a) Caddyfile uses the env var in both matchers, and
+  # (b) compose.yml's default list contains representative IPv6 ranges.
+  grep -qE '\{\$WALTER_CF_EDGE_RANGES\}' "$CADDYFILE"
+  local compose="$REPO_ROOT/compose.yml"
+  [[ -f "$compose" ]] || skip "compose.yml missing"
+  grep -qE '2400:cb00::/32' "$compose"
+  grep -qE '2606:4700::/32' "$compose"
+}
+
+# AC2: Tailscale IPv6 ULA (Headscale default) included so v6 tailnet
+# clients aren't denied at the auth gate. Copilot R3 #130 finding.
+@test "AC2: WALTER_TAILNET_CIDR default covers Tailscale IPv6 ULA" {
+  local compose="$REPO_ROOT/compose.yml"
+  [[ -f "$compose" ]] || skip "compose.yml missing"
+  grep -qE 'WALTER_TAILNET_CIDR.*fd7a:115c:a1e0::/48' "$compose"
 }
 
 # -----------------------------------------------------------------------
 # AC3: every admin site imports admin_auth_gate
 # -----------------------------------------------------------------------
 @test "AC3: every admin site imports admin_auth_gate" {
+  # Extract each site block from the opening `<site>.${WALTER_DOMAIN} {`
+  # line up to the matching closing `}` on its own line. Copilot R3 #130:
+  # the previous fixed-window awk (n<4) was brittle — adding a directive
+  # (e.g. header_up) inside an admin block could push `import` past the
+  # window and silently break the test even with the import intact.
   missing=""
   for site in $ADMIN_SITES; do
-    # Look for the site block + check the next 4 lines for the import
     block=$(awk -v site="$site" '
-      $0 ~ "^" site "\\.\\$\\{WALTER_DOMAIN\\} \\{" {flag=1; n=0}
-      flag && n<4 {print; n++}
+      $0 ~ "^" site "\\.\\$\\{WALTER_DOMAIN\\} \\{" {flag=1}
+      flag {print}
       flag && $0 ~ "^\\}$" {flag=0}
     ' "$CADDYFILE")
     if ! grep -qE "import admin_auth_gate" <<<"$block"; then
@@ -81,11 +105,13 @@ PUBLIC_SITES="headscale posthog matrix chat-matrix chat"
 # AC4: NO public site imports admin_auth_gate (they need to stay public)
 # -----------------------------------------------------------------------
 @test "AC4: public sites do NOT import admin_auth_gate" {
+  # Same full-block extraction as AC3 (Copilot R3 #130) — robust to site
+  # blocks growing additional directives over time.
   contaminated=""
   for site in $PUBLIC_SITES; do
     block=$(awk -v site="$site" '
-      $0 ~ "^" site "\\.\\$\\{WALTER_DOMAIN\\} \\{" {flag=1; n=0}
-      flag && n<6 {print; n++}
+      $0 ~ "^" site "\\.\\$\\{WALTER_DOMAIN\\} \\{" {flag=1}
+      flag {print}
       flag && $0 ~ "^\\}$" {flag=0}
     ' "$CADDYFILE")
     if grep -qE "import admin_auth_gate" <<<"$block"; then

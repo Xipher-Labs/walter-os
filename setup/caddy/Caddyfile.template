@@ -52,14 +52,12 @@
 # ---------------------------------------------------------------------------
 
 (admin_auth_gate) {
-  # Note: envsubst (used to render this template) does NOT expand
-  # ${VAR:-default} bash-style defaults. We use Caddy's native {$VAR}
-  # placeholder syntax instead — Caddy reads these env vars at config
-  # load time. The bootstrap script (setup/walter-host/bootstrap.sh)
-  # exports sensible defaults for WALTER_TAILNET_CIDR + WALTER_LAN_CIDR
-  # before invoking envsubst, so a missing operator override falls
-  # back to those defaults rather than rendering an empty CIDR list
-  # (which would make the matcher useless).
+  # Caddy reads env vars at config-load time via {$VAR} (envsubst is
+  # NOT used for this snippet — it doesn't expand ${VAR:-default}).
+  # Defaults for all three env vars live in compose.yml's caddy service
+  # block (scripts/bootstrap.sh boots compose, which then renders the
+  # env into the container). Operator overrides via personal.env.
+  #
   # Two ALLOW signals — request passes if EITHER holds:
   #   (A) remote_ip in tailnet / LAN / loopback ("internal"), OR
   #   (B) remote_ip in Cloudflare edge ranges AND request carries
@@ -71,9 +69,13 @@
   # CF strips/overrides incoming CF-Access-* headers when it
   # terminates the request.
   #
-  # The Cloudflare edge IPv4 + IPv6 ranges below are the published
-  # list from cloudflare.com/ips/. Refresh quarterly per
-  # skills/quarterly-upgrade-cadence.
+  # IPv6 coverage (Copilot R3 #130): the default WALTER_TAILNET_CIDR
+  # now includes Headscale's default IPv6 ULA (fd7a:115c:a1e0::/48) so
+  # tailnet clients with IPv6 are not denied. The Cloudflare list
+  # includes IPv6 ranges. ::1 covers loopback IPv6.
+  #
+  # CF edge ranges live in WALTER_CF_EDGE_RANGES — a single source of
+  # truth so the two matchers below can't drift on quarterly refreshes.
   #
   # Deny-path implementation: rather than express the negation of
   # (A OR B) as a single matcher (Caddy makes that awkward), use two
@@ -81,7 +83,7 @@
   # fall through to the site's reverse_proxy.
 
   @deny_not_in_any_allowlist {
-    not remote_ip {$WALTER_TAILNET_CIDR} {$WALTER_LAN_CIDR} 10.0.0.0/8 127.0.0.0/8 ::1 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+    not remote_ip {$WALTER_TAILNET_CIDR} {$WALTER_LAN_CIDR} 10.0.0.0/8 127.0.0.0/8 ::1 {$WALTER_CF_EDGE_RANGES}
   }
   handle @deny_not_in_any_allowlist {
     respond "403 — admin endpoint: requires Tailscale tailnet or Cloudflare Access" 403 {
@@ -90,7 +92,7 @@
   }
 
   @deny_cf_edge_without_header {
-    remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+    remote_ip {$WALTER_CF_EDGE_RANGES}
     not header CF-Access-Authenticated-User-Email *
   }
   handle @deny_cf_edge_without_header {
