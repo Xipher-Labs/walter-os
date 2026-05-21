@@ -225,6 +225,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 
 ### P1-05 — `approval-gate.sh` standing-approval path entirely skips the check when `yq` is missing
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `hooks/approval-gate.sh` now hard-fails the hook with a `permissionDecision: "block"` when yq is missing, alongside the existing jq-missing block path (same pattern as P0-03). `install.sh` preflight adds `yq` to the required-tools list and the runtime check, so a degraded install is caught at install time, not at first hook fire. Regression test `tests/hooks/approval-gate.bats` cases "P1-05: hook mode fails CLOSED when yq is missing". As a side fix the `declare -A CATEGORY_MIN_TIER` array literal is now wrapped in `set +u` … `set -u` because bash 3.2 (macOS default) misparses `[token-with-dashes]=value` under `set -u`.
+
 **Category**: 3 (Authentication bypass)  
 **File**: `hooks/approval-gate.sh:141`
 
@@ -237,6 +239,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 ---
 
 ### P1-06 — `WALTER_STANDING_APPROVALS` env var allows operator to point approval config at attacker-controlled YAML file
+
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `STANDING_APPROVALS` is now hardcoded to `$WALTER_CONFIG/agent-approvals.yml` (no longer overridable via env var). The new `WALTER_STANDING_APPROVALS_OVERRIDE` env var is consulted ONLY when `WALTER_AGENT_ALLOW_OVERRIDE=1` is set in the same shell, and emits a `WARN` log line every invocation. Setting the old `WALTER_STANDING_APPROVALS` without the allow flag is now silently ignored (with a WARN). Two regression tests in `tests/hooks/approval-gate.bats` lock the new behavior.
 
 **Category**: 3 (Authentication bypass)  
 **File**: `hooks/approval-gate.sh:29`
