@@ -395,12 +395,14 @@ check_skill_scripts() {
 check_external_hooks() {
   [[ -n "${WALTER_OS_HOME:-}" && -d "${WALTER_OS_HOME}/external" ]] || return 0
 
-  # Resolve sha256sum invocation per platform.
-  local hasher=""
+  # Resolve sha256sum invocation per platform. Use an array so the
+  # multi-arg `shasum -a 256` form splits correctly under shellcheck-
+  # clean quoting in the pipeline below.
+  local -a hasher_cmd=()
   if command -v sha256sum >/dev/null 2>&1; then
-    hasher="sha256sum"
+    hasher_cmd=(sha256sum)
   elif command -v shasum >/dev/null 2>&1; then
-    hasher="shasum -a 256"
+    hasher_cmd=(shasum -a 256)
   else
     finding high "external-hook-integrity-skipped" \
       "Neither sha256sum nor shasum installed — cannot verify external hook integrity" \
@@ -420,7 +422,7 @@ check_external_hooks() {
     \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
     -print0 2>/dev/null \
     | LC_ALL=C sort -z \
-    | xargs -0 $hasher 2>/dev/null \
+    | xargs -0 "${hasher_cmd[@]}" 2>/dev/null \
     | jq -R 'split("  ") | {(.[1] | sub("^.*/external/"; "external/")): .[0]}' \
     | jq -s 'add // {}' \
     > "$current_tmp"

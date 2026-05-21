@@ -271,11 +271,11 @@ cmd_baseline_external_hooks() {
     echo "walter-os baseline-external-hooks: WALTER_OS_HOME/external not found" >&2
     exit 2
   }
-  local hasher=""
+  local -a hasher_cmd=()
   if command -v sha256sum >/dev/null 2>&1; then
-    hasher="sha256sum"
+    hasher_cmd=(sha256sum)
   elif command -v shasum >/dev/null 2>&1; then
-    hasher="shasum -a 256"
+    hasher_cmd=(shasum -a 256)
   else
     echo "walter-os baseline-external-hooks: install sha256sum or shasum" >&2
     exit 3
@@ -288,7 +288,7 @@ cmd_baseline_external_hooks() {
     \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) \
     -print0 2>/dev/null \
     | LC_ALL=C sort -z \
-    | xargs -0 $hasher 2>/dev/null \
+    | xargs -0 "${hasher_cmd[@]}" 2>/dev/null \
     | jq -R 'split("  ") | {(.[1] | sub("^.*/external/"; "external/")): .[0]}' \
     | jq -s 'add // {}' \
     > "$baseline"
