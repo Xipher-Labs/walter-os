@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
-# walter-os — CLI for Walter-OS operations
+# walter-os — CLI for Walter-OS operations (audit, baseline, profile,
+#             secrets, agents, wiki, content, doctor — admin layer).
+#
+# This is the ADMIN binary. There is ALSO `bin/walter` (no `-os` suffix),
+# which is the operator's DAILY-DRIVER CLI (new project / ask / pivot /
+# deploy / etc.). The two are intentionally separate — don't merge them
+# without coordinating the CLI surface for both.
+#
+# Quick map (issue #121):
+#   walter-os  → audit / baseline / profile / lower-level ops
+#   walter     → new project / ask / pivot / deploy / higher-level
+#
+# Both have a `doctor` subcommand:
+#   walter-os doctor       checks the agent contract + symlinks
+#   walter doctor          operator's install-health check (with --client-only)
 #
 # Subcommands:
 #   audit                       Run supply-chain audit now (foreground)

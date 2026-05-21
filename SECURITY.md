@@ -2,13 +2,28 @@
 
 ## Supported versions
 
-Walter-OS is currently in early development (v0.2.x). Security fixes are
-applied to the current release series only.
+Walter-OS is in alpha (v0.4.x as of 2026-05). Security fixes are applied
+to the **latest minor** release line. The previous minor receives security
+fixes only when the underlying bug is severity HIGH or CRITICAL and
+backporting is straightforward; everything else is fixed on the latest
+minor and ships in the next release.
 
-| Version | Supported |
-|---|---|
-| 0.2.x | yes |
-| 0.1.x | no (EOL) |
+| Version | Supported | Notes |
+|---|---|---|
+| 0.4.x | yes | current release line |
+| 0.3.x | partial | HIGH/CRIT security fixes only |
+| 0.2.x | no | EOL |
+| 0.1.x | no | EOL |
+
+The current `VERSION` file in this repo is the source of truth for the
+latest release. This table is updated as part of the release checklist.
+
+### Pre-1.0 stability note
+
+Walter-OS is pre-1.0 alpha software. Breaking changes between minor
+versions are normal. Pin to a specific tag or commit if you depend on
+the framework in production. The security policy above tracks the
+release-line cadence, NOT API stability.
 
 ---
 
