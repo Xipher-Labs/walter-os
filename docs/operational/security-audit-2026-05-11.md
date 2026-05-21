@@ -255,6 +255,8 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 
 ### P1-07 — External submodule hooks execute WITHOUT audit-gate review; `learn-by-mistake` hooks are not covered by `hook-checksums.json`
 
+**Status**: ✅ **Fixed in v0.4.0-inflight**. The daily audit now includes a new `check_external_hooks()` step in `skills/daily-supply-chain-audit/scripts/audit.sh` that sha256-hashes every `external/**/hooks/scripts/*.{sh,py,js}` file, stores the baseline at `$WALTER_CONFIG/external-hook-checksums.json` on first run, and emits a CRITICAL `external-hook-tampered` finding on any subsequent drift (modified file, new file added, file removed). `check_skill_scripts()` is also extended to scan the `external/` tree for `curl|bash` and sensitive-fs-access patterns. New `walter-os baseline-external-hooks` CLI subcommand re-snapshots after an intentional submodule SHA bump. Side fixes: `finding()`'s `${level^^}` and the release-age check's `${sev,,}` use bash 3.2-incompatible syntax — both replaced with `tr` so the audit runs cleanly on macOS. Regression test `tests/audit/external-hook-integrity.bats` (6 cases) covers first-run snapshot, no-drift quiet, modified-file CRIT, new-file CRIT, intentional re-baseline, and no-external-tree no-op.
+
 **Category**: 8 (Supply chain) / 5 (Tool poisoning)  
 **File**: `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/`
 

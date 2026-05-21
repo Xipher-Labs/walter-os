@@ -113,6 +113,43 @@ PRs #55–#59 and land as the bundle epic completes.)
   bats tests in `tests/hooks/approval-gate.bats` (P1-05 fail-closed
   + two P1-06 lockdown cases) pin the behavior.
 
+- **Audit P1-07 closed.** External submodule hook scripts (the
+  `external/**/hooks/scripts/*.sh` tree, e.g. `learn-by-mistake`) are
+  now under the daily-audit integrity perimeter. New
+  `check_external_hooks()` in
+  `skills/daily-supply-chain-audit/scripts/audit.sh` snapshots the
+  sha256 of every external hook file on first run and emits a
+  CRITICAL `external-hook-tampered` finding on any subsequent drift
+  (modified, added, or removed). `check_skill_scripts()` is also
+  extended to scan `external/` for `curl|bash` and sensitive-fs-
+  access patterns. New `walter-os baseline-external-hooks` CLI
+  subcommand re-snapshots after an intentional submodule SHA bump.
+  Side fix: `${level^^}` and `${sev,,}` parameter-expansion forms in
+  `audit.sh` use bash 4+ syntax — replaced with `tr` so the audit
+  runs cleanly on macOS bash 3.2. Regression test
+  `tests/audit/external-hook-integrity.bats` (6 cases) pins the
+  behavior.
+
+- **`tests/oss` failures fixed (#50 closed).** Two pre-existing failures
+  blocked the full `tests/oss/` glob from running in CI:
+  - `depersonalization.bats AC-3` was matching `Law N.NNN` and `Ley N`
+    strings inside `node_modules/` dependency CHANGELOG / README files
+    (`recharts`, `eslint-plugin-*`, `flat-cache`, etc.) — all unrelated
+    to Walter-OS's depersonalization invariant. Test now excludes
+    `node_modules`, `.next`, `dist`, `build`, `test-results`, and `.git`
+    via `grep --exclude-dir`.
+  - `security-no-weak-defaults.bats A-1` failed because the string
+    `ccr-internal` (the old weak default for `CCR_APIKEY`) still
+    appeared in a comment in `setup/walter-host/services/llm-proxies/
+    compose.yml`. Comment rephrased to reference "the old weak internal
+    default value that v0.4.0 removed" without re-introducing the
+    literal string.
+
+  CI workflow `.github/workflows/ci.yml` collapsed the per-file
+  `tests/oss/*.bats` allowlist back to the full `tests/oss/` glob,
+  and added `tests/audit/` to the matrix (picks up the new P1-07
+  external-hook-integrity bats test).
+
 ### Changed (build / release pipeline)
 
 - Consolidated `.github/workflows/release-security.yml` into
