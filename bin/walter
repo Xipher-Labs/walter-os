@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
-# walter — operator's daily-driver CLI for Walter-OS.
+# walter — operator's DAILY-DRIVER CLI for Walter-OS.
+#
+# This is the high-level user-facing binary (new project / ask / pivot /
+# deploy / etc.). There is ALSO `bin/walter-os` — the ADMIN binary for
+# audit, baseline, profile, secrets, lower-level ops. The two are
+# intentionally separate — don't merge them without coordinating the
+# CLI surface for both (issue #121).
+#
+# Quick map:
+#   walter     → new project / ask / pivot / deploy / higher-level
+#   walter-os  → audit / baseline / profile / lower-level ops
+#
+# Both have a `doctor` subcommand:
+#   walter doctor          operator's install-health check (with --client-only)
+#   walter-os doctor       checks the agent contract + symlinks
 #
 # Usage:
 #   walter <command> <subcommand> [args...]
