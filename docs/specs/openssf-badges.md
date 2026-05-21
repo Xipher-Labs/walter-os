@@ -1,9 +1,10 @@
 # OpenSSF Best Practices Badges (OSS Trust E-1 + E-2) — combined spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer E E-1 + E-2 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
+**Scope of this PR**: spec only. The implementation (new operational docs `docs/operational/openssf-badge-passing.md` and `.../openssf-badge-silver.md`, a `walter-os audit badge-prereqs` CLI subcommand, and the README badge update) ships in follow-up PRs once this spec is approved.
+**Parent**: OSS Trust roadmap Layer E items E-1 + E-2 — umbrella spec is in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); once that merges the in-tree path is `docs/specs/oss-trust-roadmap.md`.
 **Target releases**: v0.5.0 (Passing) → v0.6.0 (Silver)
-**Depends on**: D-1 GitHub Security Advisories partner (in `docs/specs/oss-trust-v0.5.0-small-batch.md` — PR #89, also not yet on `main`; same release cycle as Passing).
+**Depends on**: D-1 GitHub Security Advisories partner — spec'd in the small-batch [PR #89](https://github.com/Xipher-Labs/walter-os/pull/89) (post-merge file: `docs/specs/oss-trust-v0.5.0-small-batch.md`). Same release cycle as Passing.
 
 ## Problem
 
@@ -37,8 +38,8 @@ Before filing, walk through the [Passing criteria checklist](https://www.bestpra
 
 The Passing rubric has ~70 criteria. The high-confidence MET subset (already satisfied):
 
-- **Basics**: project URL, project name, SPDX license (AGPLv3), README description — all present
-- **Floss-License-OSI**: AGPL-3.0 is OSI-approved
+- **Basics**: project URL, project name, SPDX license (`AGPL-3.0-or-later`), README description — all present
+- **Floss-License-OSI**: `AGPL-3.0-or-later` is OSI-approved
 - **Documentation**: README has architecture overview, install steps, contributor guide → `CONTRIBUTING.md`
 - **Other**: project tracks security-known vulnerabilities → audit ledger
 - **Change-control**: public version-controlled repo, history, releases via tags
