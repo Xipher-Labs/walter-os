@@ -83,7 +83,7 @@ Order of evaluation:
    # From AGENTS.md auto-escalation-to-major + "Blocked for ALL tiers":
    auth/** | crypto/** | hooks/**
    migrations/** | **/migrations/**     # any DB migration path (prod-DB risk)
-   audit/** | audit-logs/** | **/audit-logs/**   # audit-trail paths
+   audit/** | **/audit/** | audit-logs/** | **/audit-logs/**   # audit-trail paths (top-level + nested)
    AGENTS.md | install.sh | mcp/servers.json
    personal/health/** | **/medical/** | **/phi/** | **/.env*
    # Money-flow paths (AGENTS.md "money" trigger):

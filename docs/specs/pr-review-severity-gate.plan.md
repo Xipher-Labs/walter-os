@@ -18,7 +18,7 @@ Each task follows RED-GREEN-REFACTOR. Skip RED is a violation of
 **Files:**
 - `tests/severity-gate/fixtures/blocker-auth-path.json`     (Copilot comment referencing `auth/oauth.ts`)
 - `tests/severity-gate/fixtures/blocker-crypto-path.json`   (referencing `crypto/sign.rs`)
-- `tests/severity-gate/fixtures/blocker-money-keyword.json` (text mentions Stripe charge)
+- `tests/severity-gate/fixtures/blocker-money-path.json`    (referencing `programs/escrow.rs` or `payments/stripe/charge.ts` — spec §4.2 money-flow paths; renamed from -keyword because spec only defines money via PATH, not keyword)
 - `tests/severity-gate/fixtures/blocker-phi-path.json`      (referencing `personal/health/`)
 - `tests/severity-gate/fixtures/blocker-hooks-path.json`    (referencing `hooks/approval-gate.sh`)
 - `tests/severity-gate/fixtures/major-failing-test.json`    (body: "this test will fail when X")
@@ -65,7 +65,7 @@ Mock the GitHub API responses via test fixtures + `curl` stubs.
 
 **Verify**: 9 FAIL.
 
-### A4. Write failing tests for AC8 + AC9 (action sequence)
+### A4. Write failing tests for AC8 + AC9 + BLOCKER-handling (action sequence)
 
 **File:** `tests/severity-gate/pr-auto-merge-action.bats`
 
@@ -74,10 +74,19 @@ Tests:
 - `@test "AC8: MERGE_APPROVED auto-resolves MINOR/COSMETIC threads"`
 - `@test "AC8: MERGE_APPROVED invokes gh pr merge --squash --delete-branch --admin"`
 - `@test "AC9: MERGE_BLOCKED posts a comment with the reason"`
+- `@test "G3/§4.4: BLOCKER finding triggers high-priority issue create (not just comment)"`
+  Mock: classifier returns one BLOCKER + zero MAJOR. Assert: gate posts
+  the diagnostic comment AND invokes `gh issue create` with the
+  `[FIX] -SECURITY-` (or `-OPERATIONS-`) title prefix + BLOCKER finding
+  body + suggested fix-shape. Closes Codex R3 #114 BLOCKER (plan had
+  no task/test for the spec-mandated BLOCKER issue creation).
+- `@test "G3/§4.4: BLOCKER finding does NOT auto-close the PR"`
+  Mock: classifier returns one BLOCKER. Assert: the PR's state is
+  still 'open' after the gate runs + no `gh pr close` call was made.
 
 Mock all GitHub API calls. Validate the calls made, not the GitHub effect.
 
-**Verify**: 4 FAIL.
+**Verify**: 6 FAIL.
 
 ### A5. Write failing tests for AC10 (opt-in marker file)
 
@@ -224,15 +233,21 @@ Triggered by n8n webhook on GitHub `pull_request_review` event. Calls `walter-os
 
 This is the actual unattended-mode trigger. Without n8n wiring, the gate is invoked manually via the CLI.
 
-### E2. AGENTS.md amendment
+### E2. AGENTS.md amendment (TWO blocks — Codex R3 #114 BLOCKER)
 
-Replace the current absolute hard rule:
+AGENTS.md has TWO sites that hard-block auto-merge — both must be
+amended in this task. Closes Codex R3 #114: the previous version of
+this task only patched site #1, missing AGENTS.md:322-327 which
+hardcodes the approval-gate's refusal independent of the rule list.
+
+**Site 1** — `## Universal disciplines` → `Things agents must NEVER do`
+(AGENTS.md:329-336). Replace:
 
 ```
 - Never auto-merge a PR. The operator clicks merge.
 ```
 
-with the bounded version:
+with:
 
 ```
 - Never auto-merge a PR EXCEPT through the bounded conditions in
@@ -243,7 +258,32 @@ with the bounded version:
   every deferred MINOR/COSMETIC). See ADR 0015.
 ```
 
-**Verify**: AC11 PASS (doc only; reviewer confirms diff).
+**Site 2** — `## Trust tiers` → `Blocked for ALL tiers` hardcoded list
+(AGENTS.md:322-327). The current list reads:
+
+```
+push to main/staging/release, merge PRs, force-push any branch, ...
+[no override possible]
+```
+
+Amend the "merge PRs" entry with the same conditional:
+
+```
+push to main/staging/release, merge PRs (EXCEPT when the bounded
+conditions in `docs/specs/pr-review-severity-gate.md` §4.3 + §4.4
+hold and `auto-merge-enabled` is present at repo root — see ADR
+0015), force-push any branch, ...
+```
+
+This task ALSO patches `hooks/approval-gate.sh` to read the
+`auto-merge-enabled` marker + call `walter-os pr-auto-merge` before
+emitting the BLOCKED-by-hardcoded-rule response. Without that patch,
+the rule-list amendment alone wouldn't actually unlock auto-merge —
+the hook still hard-refuses based on its internal action-category
+allowlist.
+
+**Verify**: AC11 PASS (both AGENTS.md sites diffed + approval-gate.sh
+test covers the marker-file-present path).
 
 ### E3. ADR 0015 final
 
