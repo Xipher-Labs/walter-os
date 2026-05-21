@@ -23,13 +23,14 @@ jobs:
   semgrep:
     name: semgrep custom rules
     runs-on: ubuntu-latest
-    # Pinned semgrep image (tag-pinned, bumped via Renovate / quarterly
-    # cadence). Using the official `semgrep/semgrep` image because the
-    # GitHub Action `semgrep/semgrep-action` is archived upstream.
-    # TODO(supply-chain): pin to `@sha256:<digest>` once Renovate is
-    # configured to manage container digests (tracked separately).
+    # Pinned semgrep image (digest-pinned per supply-chain hardening,
+    # closes external-review F5 / #123). The tag is kept in the comment
+    # for human readability + as a Renovate anchor — Renovate matches
+    # on the `# tag: ...` annotation when bumping digests.
+    # Bump cadence: quarterly per skills/quarterly-upgrade-cadence.
     container:
-      image: semgrep/semgrep:1.157.0
+      # tag: semgrep/semgrep:1.157.0
+      image: semgrep/semgrep@sha256:500acf49f5e5785aa89af609b983f0427ac8cd08f7e34146277df6cffb002759
 
     steps:
       - name: Checkout

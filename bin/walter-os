@@ -1279,7 +1279,7 @@ cmd_doctor() {
   echo "Walter-OS doctor${tier_filter:+ (tier ${tier_filter})}"
   echo
 
-  local ok=0 issues=0
+  local ok=0 issues=0 warns=0
 
   check() {
     local label="$1"; shift
@@ -1289,6 +1289,67 @@ cmd_doctor() {
     else
       printf "  ✗ %s\n" "$label"
       issues=$((issues + 1))
+    fi
+  }
+
+  # check_three_state: an OK/WARN/FAIL probe — distinct from `check` which
+  # is binary ✓/✗. The probe is a function that prints `ok` / `warn` /
+  # `fail` on stdout. Closes external-review F8 / #123: the secrets.env
+  # presence check needs ✓ on a clean Infisical-runtime install (no
+  # plaintext file is the GOAL) and only ✗ when both runtime + plaintext
+  # paths are unconfigured. Hard-FAIL on legacy plaintext was the
+  # historical default and produced false alarms after the Vaultwarden
+  # retirement (operator decision 2026-05-05).
+  check_three_state() {
+    local label="$1" probe="$2" warn_hint="${3:-}"
+    local result
+    result="$($probe 2>/dev/null)"
+    case "$result" in
+      ok)
+        printf "  ✓ %s\n" "$label"
+        ok=$((ok + 1))
+        ;;
+      warn)
+        printf "  ⚠ %s%s\n" "$label" "${warn_hint:+ — ${warn_hint}}"
+        warns=$((warns + 1))
+        ;;
+      *)
+        printf "  ✗ %s\n" "$label"
+        issues=$((issues + 1))
+        ;;
+    esac
+  }
+
+  # _secrets_runtime_probe: classifies the operator's secrets posture.
+  # - ok    = Infisical machine-identity configured (preferred runtime)
+  # - warn  = legacy secrets.env exists (still works, but plaintext);
+  #          guide operator to migrate to Infisical.
+  # - fail  = neither path configured.
+  _secrets_runtime_probe() {
+    local secrets="${WALTER_CONFIG}/secrets.env"
+    local has_infisical_id=0
+    # Canonical var: INFISICAL_CLIENT_ID (matches scripts/secrets-bootstrap.sh
+    # + scripts/walter/lib/providers/detect.sh + install.sh step 8). The
+    # earlier probe used INFISICAL_MACHINE_IDENTITY_CLIENT_ID which doesn't
+    # exist anywhere else in the repo — would have left clean Infisical
+    # installs reporting ✗ instead of ✓. Codex R2 #131 catch.
+    if [[ -n "${INFISICAL_CLIENT_ID:-}" ]] \
+        || ([[ -f "${WALTER_CONFIG}/env" ]] && grep -qE '^INFISICAL_CLIENT_ID=.+' "${WALTER_CONFIG}/env" 2>/dev/null); then
+      has_infisical_id=1
+    fi
+    if [[ "$has_infisical_id" -eq 1 ]]; then
+      # Infisical runtime present. Plaintext file is either absent
+      # (clean install) or still around (legacy, harmless but worth a
+      # migration nudge). Either way the runtime check is green.
+      if [[ -f "$secrets" ]]; then
+        echo "warn"  # both paths present — migrate plaintext away
+      else
+        echo "ok"
+      fi
+    elif [[ -f "$secrets" ]]; then
+      echo "warn"  # legacy plaintext only; Infisical migration pending
+    else
+      echo "fail"
     fi
   }
 
@@ -1305,13 +1366,16 @@ cmd_doctor() {
   echo "Walter-OS config:"
   tier_check 1 "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
   tier_check 1 "env file present" test -f "${WALTER_CONFIG}/env"
-  tier_check 1 "secrets template present" test -f "${WALTER_CONFIG}/secrets.env"
-  # Codex R3 (#124): replace `bash -c "...$WALTER_OS_HOME..."` string
-  # interpolation with positional-arg passing. The previous form let a
-  # crafted WALTER_OS_HOME (e.g. `"; rm -rf ~; echo "`) break out of the
-  # quoted string and execute commands in the doctor subprocess. Passing
-  # the value as $1 via `bash -c '...' bash "$WALTER_OS_HOME"` keeps it
-  # inert as a variable inside the inner bash — no re-interpretation.
+  # F8 / #123: secrets runtime check is three-state (ok / warn / fail).
+  # ok = Infisical configured (preferred). warn = legacy plaintext
+  # secrets.env exists (still works, plan migration). fail = neither.
+  # Replaces the old `test -f .../secrets.env` tier_check which
+  # false-FAILed on clean Infisical installs (no plaintext file is
+  # the desired state).
+  if [[ -z "$tier_filter" ]] || [[ 1 -le "$tier_filter" ]]; then
+    check_three_state "secrets runtime configured" _secrets_runtime_probe \
+      "migrate to Infisical machine identity (legacy plaintext secrets.env detected)"
+  fi
   # shellcheck disable=SC2088,SC2016 # tildes are labels; single-quoted
   # `$HOME` / `$1` in bash -c is INTENTIONAL — that's the positional-arg
   # passing pattern from Codex R3 #124 that prevents WALTER_OS_HOME
@@ -1378,7 +1442,13 @@ cmd_doctor() {
   tier_check 2 "Tailscale" command -v tailscale
 
   echo
-  echo "${ok} ok / ${issues} issues"
+  if [[ "$warns" -gt 0 ]]; then
+    echo "${ok} ok / ${warns} warn / ${issues} issues"
+  else
+    echo "${ok} ok / ${issues} issues"
+  fi
+  # Warns do NOT fail the doctor — they're informational nudges
+  # (e.g. "migrate from plaintext secrets to Infisical"). Issues do.
   [[ "$issues" -eq 0 ]] || exit 1
 }
 
