@@ -15,11 +15,22 @@ Five artifacts are attached to every release from v0.4.1 onward:
 - `checksums.sha256.cosign.bundle` — cosign transparency log bundle (single
   file carrying signature + cert + Rekor entry — preferred verification path)
 
-Releases v0.3.0–v0.4.0 are missing the `.pem` cert (the legacy signing step
-emitted only the `.sig`, which is insufficient for keyless verification on
-its own). Use the `.cosign.bundle` for those releases — it carries the cert
-internally. v0.4.0 specifically was re-signed via `workflow_dispatch` after
-the fix landed (see PR #105).
+Releases tagged before PR #105 landed shipped only the `.sig`
+without the matching keyless certificate, so raw
+`cosign verify-blob --signature … --certificate …` cannot complete on
+those bundles. Two cases:
+
+- **v0.3.0** (and any earlier signed release): `.pem` is absent.
+  Use the `.cosign.bundle` path — it carries the cert internally.
+  The raw `.sig + .pem` path does not work for these tags.
+- **v0.4.0**: was originally tagged before #105 landed and therefore
+  shipped without the `.pem`. After #105 merges, the operator
+  re-runs `release.yml` via `workflow_dispatch` against the
+  existing `v0.4.0` tag to attach the `.pem` and re-sign the
+  artifacts with the corrected workflow. Once that re-run completes,
+  v0.4.0 has the full five-artifact set like later releases. Until
+  the operator runs the re-sign, v0.4.0 is in the same posture as
+  v0.3.0 (bundle path only).
 
 ## Verification steps
 

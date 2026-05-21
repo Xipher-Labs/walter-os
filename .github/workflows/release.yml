@@ -227,8 +227,11 @@ jobs:
           # 2. Without --bundle, with both --output-signature AND
           #    --output-certificate: produces the raw .sig + .pem pair
           #    that v0.3.x-era verification scripts consume. Keyless
-          #    cosign verification REQUIRES the cert in addition to the
-          #    sig (Codex R2: a .sig alone is unverifiable).
+          #    cosign verification REQUIRES the Fulcio-issued
+          #    certificate in addition to the signature — a .sig
+          #    alone cannot be verified. Earlier releases that
+          #    shipped only .sig are still verifiable via the bundle
+          #    path. See docs/security/verification.md.
           #
           # Both invocations use keyless OIDC; the second one re-signs
           # the same bytes, so the Rekor transparency log has two
