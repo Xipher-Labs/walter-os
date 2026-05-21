@@ -1,7 +1,7 @@
 # OSS Trust v0.5.0 small-batch — combined spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md`
+**Parent**: OSS Trust roadmap — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83) (post-merge in-tree path: `docs/specs/oss-trust-roadmap.md`).
 **Items**: C-3 (pre-commit framework), D-1 (Security Advisories), E-3 (`@types/*` allowlist), E-4 (`walter-os justify revoke`)
 **Target release**: v0.5.0
 **Why batched**: each item is small (≤200 LOC, ≤4h), well-bounded, and lands in the same release. Bundling reduces PR noise.
@@ -59,9 +59,13 @@ Register Walter-OS for GitHub Security Advisories. Update `SECURITY.md` to direc
 
 - [ ] Operator (manual action, NOT code) enables GHSA in repo settings: `Settings → Security → Code security → Private vulnerability reporting → Enable`.
 - [ ] `SECURITY.md` updated:
-  - Primary disclosure: `https://github.com/xipher-labs/walter-os/security/advisories/new`
-    (canonical lowercase casing — matches `.github/ISSUE_TEMPLATE/`
-    and `CONTRIBUTING.md` references).
+  - Primary disclosure: `https://github.com/Xipher-Labs/walter-os/security/advisories/new`
+    (mixed-case `Xipher-Labs` — the canonical org-slug casing used by every
+    other github.com URL in this repo, e.g. `docs/security/verification.md`'s
+    `--certificate-identity-regexp` and the GitHub Actions release workflow).
+    GitHub URLs are case-insensitive on the path but the rendered link
+    text should match the org's canonical casing for readability and
+    for tools that compare strings.
   - Secondary: existing email
   - Coordinated-disclosure timeline (90d default; faster for critical)
 - [ ] `.github/SECURITY.md` is a **duplicate file** (NOT a symlink),
@@ -109,7 +113,13 @@ Hardcoded allowlist of npm scopes that bypass the minimum-release-age check (wit
 
 ### Threat model
 
-`@types/*` is a documented-safe scope (DefinitelyTyped curators + automated bot publishing). The allowlist applies per-SCOPE: skipping `check-release-age` for `@types/*` means a hypothetical `@types/malicious-package` published from a compromised DefinitelyTyped maintainer account would NOT trip the release-age gate. It WOULD still go through `mcp-scanner`, semgrep, and Snyk (those are unchanged). The risk delta is reduced-but-non-zero — we trade some bypass of the age gate for the practical ability to consume DefinitelyTyped patches the day they ship. Operators who want stricter posture can clear the allowlist via env var.
+`@types/*` is a documented-safe scope (DefinitelyTyped curators + automated bot publishing). The allowlist applies per-SCOPE: skipping `check-release-age` for `@types/*` means a hypothetical `@types/malicious-package` published from a compromised DefinitelyTyped maintainer account would NOT trip the release-age gate. The remaining defenses on that path today are limited and worth stating accurately:
+
+- Snyk `mcp-scan` IF the operator has it installed (`skills/daily-supply-chain-audit/scripts/audit.sh` calls it only when `command -v mcp-scan` succeeds — see line 136). Not present on every host.
+- The static pinning + frontmatter + cross-reference lints (semgrep is wired into CI for the Walter-OS REPO itself, NOT for inspecting third-party `@types/*` payloads at audit time — `nosemgrep` comments in `check-release-age.py` are about the linter's view of Walter-OS source, not third-party-package scanning).
+- Operator's own review of the diff when a `@types/*` change shows up in `pnpm install` output.
+
+The risk delta is reduced-but-non-zero — we trade some bypass of the age gate for the practical ability to consume DefinitelyTyped patches the day they ship. Operators who want stricter posture can clear the allowlist via env var. Future Layer-A items (network-egress allowlist A-1, capability tokens A-2) tighten the runtime blast radius even when a malicious `@types/*` does land.
 
 ---
 
@@ -117,13 +127,15 @@ Hardcoded allowlist of npm scopes that bypass the minimum-release-age check (wit
 
 ### Problem
 
-`walter-os justify` (planned in the walter-debt-tracker spec #77) appends justify entries. There's no command to remove an entry early — the operator has to wait for the 90d TTL OR manually edit `justify-log.jsonl`. Manual edits break the future Merkle hash chain (Layer B from OSS Trust). A revoke command keeps the chain intact.
+`walter-os justify` is **already specified** in `docs/specs/walter-os-protection-levels.md` (and its `.plan.md` companion) — the CLI surface and `justify-log.jsonl` format land there. `check-release-age.py` is the consumer that already reads the log when filtering audit findings. The walter-debt-tracker spec (#77) extends `justify` with a debt-report view but does NOT introduce the command itself.
 
-Deferred from PR #60. Pairs with the walter-debt-tracker spec.
+The existing protection-levels plan stub-specs `walter-os justify revoke <pkg>@<ver>` as "adds expiry = now (soft revoke)" — one sentence, no detail on chain integrity. That stub works for the 90d-TTL use case but does NOT survive the Merkle-chain promise from OSS Trust Layer B (B-1 + B-2): editing an existing entry's `expires` field rewrites a JSONL row that's already been chained, which breaks the prev_hash → sig integrity.
+
+E-4 in this spec REFINES the stub: instead of mutating the original `expires`, append a NEW entry with `kind: "revoke"` and a `supersedes` pointer. Audit + debt-report views filter out revoked items by walking the supersession chain. Merkle chain stays intact because each entry is append-only. Deferred from PR #60.
 
 ### Decision
 
-`walter-os justify revoke <pkg>@<version> "<reason>"` appends a `kind: "revoke"` entry that supersedes the original. The audit + debt-report views filter out revoked items. Merkle chain stays intact (revoke is a new entry, not an edit).
+`walter-os justify revoke <pkg>@<version> "<reason>"` appends a `kind: "revoke"` entry that supersedes the original (replaces the protection-levels stub's "edit `expires`" approach with an append-only superseding entry; rationale above). The audit + debt-report views filter out revoked items by walking the supersession chain. Merkle chain stays intact (revoke is a new entry, not an edit).
 
 ### Acceptance criteria
 
@@ -160,8 +172,9 @@ All four are ≤200 LOC each, ≤4h each. Estimated total: 1 working day for an 
 
 ## Refs
 
-- Parent: `docs/specs/oss-trust-roadmap.md` Layer C item C-3 + Layer D D-1 + Layer E E-3 + E-4
-- Sibling: `docs/specs/walter-debt-tracker.md` (#77 — E-4 pairs with this)
-- `skills/daily-supply-chain-audit/scripts/check-release-age.py` (E-3 + E-4 modify this)
-- `SECURITY.md` (D-1 updates this)
-- Walter-OS PR #60 (where E-3 + E-4 were originally deferred from)
+- Parent: OSS Trust roadmap Layer C C-3 + Layer D D-1 + Layer E E-3 + E-4 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); post-merge in-tree path is `docs/specs/oss-trust-roadmap.md`.
+- **Existing `walter-os justify` spec**: `docs/specs/walter-os-protection-levels.md` (and `.plan.md` companion) — already on main, defines the CLI + log format that E-4 extends with `revoke`.
+- Sibling: walter-debt-tracker — [PR #77](https://github.com/Xipher-Labs/walter-os/pull/77) (post-merge: `docs/specs/walter-debt-tracker.md`). E-4's revoke entries surface in walter-debt's debt-report view; the CLI itself is owned by protection-levels.
+- `skills/daily-supply-chain-audit/scripts/check-release-age.py` (E-3 + E-4 modify this — already reads the justify log).
+- `SECURITY.md` (D-1 updates this).
+- Walter-OS [PR #60](https://github.com/Xipher-Labs/walter-os/pull/60) (where E-3 + E-4 were originally deferred from).
