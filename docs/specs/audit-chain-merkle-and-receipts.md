@@ -94,7 +94,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 ### AC-4 — Daily root + cross-day chaining
 - [ ] `walter-os audit close-day [<date>]` (or auto-run via cron from `walter-os audit verify-chain`) writes `root-YYYY-MM-DD.txt` = `sha256(last_row)` of the day's chain.
-- [ ] Day N's first row includes `prev_chain_root = sha256(root-YYYY-MM-(DD-1).txt)`; missing prev_chain_root only valid on day 0 of the deployment.
+- [ ] Day N's first row includes `prev_chain_root = <contents of root-YYYY-MM-(DD-1).txt, verbatim hex string>` (NOT `sha256(...)` of the file — re-hashing introduces file-encoding sensitivity that D-2 explicitly rules out). Missing `prev_chain_root` only valid on day 0 of the deployment.
 - [ ] `walter-os audit verify-chain --since <date>` walks multiple days' chains in order.
 
 ### AC-5 — Sigstore Rekor opt-in
