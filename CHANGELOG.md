@@ -18,10 +18,31 @@ Versioning: [SemVer](https://semver.org/)
 
 ## [Unreleased]
 
-Target release: **v0.3.0** — process hygiene + depersonalization
-cleanup pass. The big-rock founder-skills epic (issue #4 — terms,
-financial-plan, hiring, legal-doc-review, track-pending) moves to
-v0.4.0 to keep the v0.3.0 cycle short.
+Target release: **v0.4.0** — founder-skills epic + audit P1/P2
+cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
+
+### Added (v0.4.0 candidates already on main)
+
+- `skills/track-pending/SKILL.md` — the `walter-pending.md` ledger
+  convention. Closes #10. (PR #54)
+
+(Remaining founder skills — terms-policy-generator, legal-doc-review,
+financial-plan-builder, hiring-toolkit, founder-skills INDEX — are in
+PRs #55–#59 and land as the bundle epic completes.)
+
+### Out of scope for v0.3.0 (will retro-tag to v0.3.1 if needed)
+
+- PR #36 (overlay opener) — operator must merge via the GitHub UI.
+- PR #52 (P0-06 sanitization proposal) — operator decision pending.
+
+---
+
+## [0.3.0] — 2026-05-20
+
+Process hygiene + depersonalization cleanup. 8 PRs landed in one
+sprint; the security audit ledger gained closure marks on 5 of 6
+P0 findings; the configurable branch-flow gate replaced the rigid
+three-stage rule.
 
 ### Added
 
