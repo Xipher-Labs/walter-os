@@ -57,6 +57,58 @@ model_list:
   # none rock-solid. ChatGPT Plus → use Codex CLI directly. When a stable
   # free proxy lands, add it here. For now `gpt` (API key) is the only path.
 
+  # ============================================================================
+  # OPENROUTER (single API key fronts ~300 models — used as last-resort fallback)
+  # ============================================================================
+  # OpenRouter exposes open-weight models (DeepSeek, Qwen, Llama, Mistral,
+  # Grok) plus BYOK pass-through to Anthropic / OpenAI / Google under one
+  # billing surface. Wired into the fallback chain below so that an
+  # Anthropic 429 / budget-cap cascades through claude-sub → openrouter/claude
+  # before giving up. Spend tracked centrally by ai-spend-tripwire.
+  #
+  # If OPENROUTER_API_KEY is unset at runtime, LiteLLM still loads the
+  # config but these routes will error on use — the fallback chain skips
+  # past them. Leave unset to disable OpenRouter routing entirely.
+  #
+  # Model identifiers below are OpenRouter's canonical slugs. Re-check at
+  # https://openrouter.ai/models before bumping; OpenRouter retires legacy
+  # slugs from time to time.
+
+  # BYOK Claude through OpenRouter — last-resort failover when both the
+  # Anthropic API key and the claude-code-router subscription proxy are
+  # down or budget-exhausted.
+  - model_name: openrouter/claude
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-4.5
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/claude-opus
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4.5
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Open-weight tier — useful when API-keyed primaries are budget-capped
+  # and operators want cheap, unmetered (per-OpenRouter-credit) calls.
+  - model_name: openrouter/deepseek
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v3
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/qwen
+    litellm_params:
+      model: openrouter/qwen/qwen3-72b-instruct
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/mistral
+    litellm_params:
+      model: openrouter/mistralai/mistral-large-2411
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/grok
+    litellm_params:
+      model: openrouter/x-ai/grok-4
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # ---- Vision / image gen (nanobanana skill uses this) ----
   - model_name: nanobanana
     litellm_params:
@@ -69,14 +121,14 @@ router_settings:
   # Fallback chain: when budget cap (or upstream rate-limit) hits primary,
   # LiteLLM tries the next entry. Order = preference.
   fallbacks:
-    # Opus path: API → claude-sub-opus → claude-sub → sonnet
-    - opus: ["claude-sub-opus", "claude-sub", "sonnet"]
-    # Sonnet path: API → claude-sub → haiku
-    - sonnet: ["claude-sub", "haiku"]
-    # GPT path: API → sonnet (cross-provider fallback)
-    - gpt: ["sonnet", "haiku"]
-    # Haiku tier: API → cheap (Gemini Flash)
-    - haiku: ["cheap"]
+    # Opus path: API → claude-sub-opus → openrouter/claude-opus → claude-sub → sonnet
+    - opus: ["claude-sub-opus", "openrouter/claude-opus", "claude-sub", "sonnet"]
+    # Sonnet path: API → claude-sub → openrouter/claude → haiku
+    - sonnet: ["claude-sub", "openrouter/claude", "haiku"]
+    # GPT path: API → sonnet (cross-provider fallback) → openrouter/deepseek (open-weight)
+    - gpt: ["sonnet", "haiku", "openrouter/deepseek"]
+    # Haiku tier: API → cheap (Gemini Flash) → openrouter/qwen (open-weight)
+    - haiku: ["cheap", "openrouter/qwen"]
   # Treat 429 + 401 from any upstream as "fall over" trigger
   num_retries: 2
   request_timeout: 60

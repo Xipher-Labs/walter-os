@@ -30,6 +30,16 @@ cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
 financial-plan-builder, hiring-toolkit, founder-skills INDEX — are in
 PRs #55–#59 and land as the bundle epic completes.)
 
+- **OpenRouter as a LiteLLM provider** —
+  `setup/walter-host/services/litellm/config.yaml` now ships six
+  OpenRouter-routed model entries (`openrouter/claude`,
+  `openrouter/claude-opus`, `openrouter/deepseek`, `openrouter/qwen`,
+  `openrouter/mistral`, `openrouter/grok`) and wires them into the
+  fallback chain as last-resort failover after the Anthropic API and
+  the claude-code-router subscription proxy. New `OPENROUTER_API_KEY`
+  env var (optional — leave unset to disable OpenRouter routing
+  entirely). Closes #42.
+
 ### Fixed
 
 - `walter overlay --help` and `walter-os overlay --help` now reach the
