@@ -238,7 +238,34 @@ jobs:
       # Step F: Upload SBOM + checksums + bundle. --clobber so
       # workflow_dispatch re-runs overwrite previous artifacts
       # cleanly. The legacy .sig + .pem pair is no longer produced —
-      # cosign v3+ forces bundle-only output (see Step E).
+      # cosign v3+ forces bundle-only output (see Step E). For tags
+      # that previously had legacy `.sig` / `.pem` attached (v0.3.0,
+      # the abandoned v0.4.0 attempt), explicitly delete those
+      # assets first so the published artifact list matches the
+      # workflow's claim (Codex R2 on PR #108: --clobber only
+      # replaces files we LIST, not files we omit; stale legacy
+      # sidecars would otherwise remain on the release).
+      - name: Remove stale legacy assets from existing release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for stale in "${CHECKSUMS_FILE}.sig" "${CHECKSUMS_FILE}.pem"; do
+            # gh release delete-asset exits non-zero if the asset
+            # doesn't exist — that's fine for releases that never
+            # had it. `|| true` keeps the workflow moving; we log
+            # what happened for the audit trail.
+            if gh release view "$TAG" --repo "${RELEASE_REPO}" --json assets \
+                 --jq ".assets[].name" | grep -qx "$stale"; then
+              echo "Deleting stale legacy asset: $stale"
+              gh release delete-asset "$TAG" "$stale" \
+                --repo "${RELEASE_REPO}" --yes
+            else
+              echo "No stale $stale on $TAG — nothing to remove."
+            fi
+          done
+
       - name: Upload security artifacts to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
