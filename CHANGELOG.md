@@ -28,12 +28,13 @@ cleanup + Phase 5 spec docs. See `~/personal/walter-os-execution-plan.md`.
   `list_voices`, `list_templates`, `get_video_status`,
   `generate_video`, and `generate_from_template`. Pinned API
   versions, fail-loud on missing `HEYGEN_API_KEY`, 401 / 429
-  handling. State-changing endpoints listed in
-  `hooks/approval-gate.sh` `CATEGORY_MIN_TIER` as
-  `heygen-generate=high` so autonomous agents at medium tier cannot
-  trigger paid video generation. Replaces the unmaintained
-  `heygen-mcp@0.0.3` PyPI package (anonymous author, fails
-  minReleaseAge gate). Closes #41.
+  surface-only handling (no automatic retry on paid endpoints),
+  fail-fast on invalid `--ratio`. State-changing endpoints rely on
+  the operator-confirmation convention in chat — a dedicated
+  `heygen-generate` category for `hooks/approval-gate.sh`'s
+  `CATEGORY_MIN_TIER` is a follow-up after this PR lands. Replaces
+  the unmaintained `heygen-mcp@0.0.3` PyPI package (anonymous
+  author, fails minReleaseAge gate). Closes #41.
 
 - `skills/track-pending/SKILL.md` — the `walter-pending.md` ledger
   convention. Closes #10. (PR #54)

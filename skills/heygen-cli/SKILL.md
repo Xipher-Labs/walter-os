@@ -17,12 +17,25 @@ for `hcloud`, `postgres-cli`, `forgejo-cli`, etc.
 ## Money-spending — operator confirmation REQUIRED
 
 HeyGen bills per second of generated video. Every `heygen_generate_video`
-call costs real money. The `approval-gate.sh` hook treats all
-state-changing HeyGen calls as confirmation-required (operator must
-type "go" in chat per the multi-agent autonomy spec §7.1).
+call costs real money.
+
+The functions are sourced into the operator's shell rather than invoked
+via `Bash` tool patterns that `approval-gate.sh` classifies today, so
+the approval-gate hook does NOT have a dedicated `heygen-generate`
+category yet (see `hooks/approval-gate.sh::CATEGORY_MIN_TIER`). The
+guardrails are layered instead:
+
+- **Code-level**: `_heygen_preflight` requires `HEYGEN_API_KEY`; an
+  unauthenticated call exits 2 before any HTTP request.
+- **Convention**: every state-changing call (`heygen_generate_video`,
+  `heygen_generate_from_template`) MUST be preceded by explicit operator
+  confirmation in chat per the multi-agent autonomy spec §7.1.
+- **Followup TODO**: a dedicated approval-gate category is tracked as
+  follow-up work (see `docs/specs/ai-spend-tripwire.md`) — it will land
+  in a separate PR after the skill itself is merged.
 
 Read-only endpoints (`list_avatars`, `get_video_status`,
-`list_templates`) are free and need no confirmation.
+`list_templates`, `list_voices`) are free and need no confirmation.
 
 ## Setup
 
@@ -30,35 +43,52 @@ Read-only endpoints (`list_avatars`, `get_video_status`,
 
 1. Open <https://app.heygen.com/settings?nav=Subscriptions>
 2. Generate an API token (sidebar → API).
-3. Store in Infisical:
+3. Store the secret in your secrets manager of choice (Infisical,
+   Bitwarden/Vaultwarden, or macOS Keychain — depending on your
+   operator overlay). Add `HEYGEN_API_KEY` to your shell environment
+   via the manager-specific flow. Examples:
 
 ```bash
+# Infisical
 infisical secrets set HEYGEN_API_KEY=hg_v2_... --project walter-shared
+
+# macOS Keychain (via Walter-OS helper)
+scripts/secrets-keychain-init.sh set HEYGEN_API_KEY hg_v2_...
 ```
 
-4. Pull into the local env via the standard secrets flow:
+The current `walter-os secrets-pull` subcommand is the Bitwarden/
+Vaultwarden bridge and is documented as DEPRECATED in `bin/walter-os`
+— do NOT rely on it as the canonical sync path for new secrets.
 
-```bash
-walter-os secrets-pull
-# HEYGEN_API_KEY is now in $secret_env
+4. Add `HEYGEN_API_KEY` to your env-allowlist if it's not already
+   there (see the P1-09 env-loader docs):
+
+```
+# ~/.config/walter-os/overlay/env-allowlist.txt
+HEYGEN_API_KEY
 ```
 
-`HEYGEN_API_KEY` is **already in the `WALTER_ENV_ALLOWLIST` extension
-list** at `~/.config/walter-os/overlay/env-allowlist.txt` — see the
-P1-09 env-loader docs.
+### 2. Source the function library + verify
 
-### 2. Verify
+The skill ships as a sourceable bash library, not as a CLI on PATH:
 
 ```bash
+source "$WALTER_OS_HOME/skills/heygen-cli/heygen.sh"
 heygen_list_avatars | jq '.data.avatars | length'
 # → integer count of available avatars on your account
 ```
 
 ## Functions
 
-The skill exports four bash functions sourceable from operator skills
-and from `walter-os` subcommands. Each function defaults to
-`$HEYGEN_API_KEY` for auth and uses `jq` for response parsing.
+The skill exports SIX bash functions sourceable from operator skills
+and from `walter-os` subcommands. Each function reads `$HEYGEN_API_KEY`
+for auth and uses `jq` for response parsing.
+
+Read-only (free): `heygen_list_avatars`, `heygen_list_voices`,
+`heygen_list_templates`, `heygen_get_video_status`.
+
+State-changing (paid): `heygen_generate_video`,
+`heygen_generate_from_template`.
 
 ### Read-only (free)
 
@@ -147,16 +177,22 @@ The DevRel pipeline:
   (or `v1` where v2 is not yet available). Bump deliberately in this
   skill file, not transparently.
 - **No fallback to plaintext key**: if `HEYGEN_API_KEY` is unset, every
-  function exits 2 with `heygen-cli: HEYGEN_API_KEY not set — run walter-os secrets-pull`.
+  function exits 2 — set it via your secrets manager (Infisical /
+  macOS Keychain) before sourcing.
 - **No retries on 401**: a 401 means the key is wrong or revoked;
   bailing immediately avoids burning quota on a busted token.
-- **Rate-limit awareness**: HeyGen returns 429 with `Retry-After`; the
-  functions honor it and exit 4 if retry-after > 60 (operator decides
-  whether to wait).
-- **Audit-gate integration**: `state-changing` calls are listed in
-  `hooks/approval-gate.sh` under `CATEGORY_MIN_TIER` as
-  `heygen-generate=high` so any agent running with `tier=medium`
-  cannot trigger them without the operator's explicit go.
+- **No automatic retry on 429**: rate-limit responses are SURFACED but
+  not auto-retried. The function reports the `retry_after` value from
+  the response body (when present) and exits 4. Re-invocation is an
+  explicit operator action — automatic retry on a paid endpoint is a
+  recipe for runaway spend.
+- **Fail-fast on `--ratio`**: invalid ratios exit 2 rather than
+  silently falling back to 16:9. Paid endpoint should never bill the
+  operator for a dimension they didn't ask for.
+- **Audit-gate followup**: a dedicated `heygen-generate` category in
+  `hooks/approval-gate.sh::CATEGORY_MIN_TIER` is tracked as a
+  follow-up — until it lands, operators rely on the "explicit
+  confirmation in chat" convention described in §Money-spending.
 
 ## Why no MCP
 

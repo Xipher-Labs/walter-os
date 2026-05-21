@@ -7,13 +7,17 @@
 #   source "$WALTER_OS_HOME/skills/heygen-cli/heygen.sh"
 #   heygen_list_avatars
 #
-# Required env: HEYGEN_API_KEY (pulled via `walter-os secrets-pull`).
+# Required env: HEYGEN_API_KEY (set via your secrets manager —
+# Infisical, macOS Keychain, etc. Note: `walter-os secrets-pull` is the
+# DEPRECATED Bitwarden/Vaultwarden bridge and is NOT the canonical
+# sync path for new secrets. See SKILL.md "Setup" for the current
+# secrets-manager flows).
 # Required tools: curl, jq.
 
 # Internal — every public function calls this first.
 _heygen_preflight() {
   if [[ -z "${HEYGEN_API_KEY:-}" ]]; then
-    echo "heygen-cli: HEYGEN_API_KEY not set — run walter-os secrets-pull" >&2
+    echo "heygen-cli: HEYGEN_API_KEY not set — populate via your secrets manager (see skills/heygen-cli/SKILL.md)" >&2
     return 2
   fi
   if ! command -v curl >/dev/null 2>&1; then
@@ -55,10 +59,16 @@ _heygen_request() {
     2*) printf '%s\n' "$body_only" ;;
     401) echo "heygen-cli: 401 unauthorized — check HEYGEN_API_KEY" >&2; return 4 ;;
     429)
-      # Honor Retry-After if present.
+      # Rate-limited. We do NOT auto-retry. We surface the HTTP Retry-After
+      # header (or `retry_after` field in the response body if present) so
+      # the operator can decide whether to back off. The caller gets a
+      # non-zero exit; re-invocation is an explicit operator action.
+      # Per the skill's design note: paid-API back-pressure is the
+      # operator's call, not the script's — automatic retry on a paid
+      # endpoint is a recipe for runaway spend.
       local retry_after
       retry_after="$(printf '%s' "$body_only" | jq -r '.retry_after // empty' 2>/dev/null)"
-      echo "heygen-cli: 429 rate-limited (retry_after=${retry_after:-unknown})" >&2
+      echo "heygen-cli: 429 rate-limited (retry_after=${retry_after:-unknown}). Re-run after backoff." >&2
       return 4
       ;;
     *)
@@ -104,16 +114,39 @@ heygen_generate_video() {
   _heygen_preflight || return $?
   local avatar="" voice="" script="" background="#0a0a0a" ratio="16:9"
 
+  # Helper: require a value follows the flag, then shift past both. Copilot
+  # R1 flagged that bare `shift 2` would silently mis-parse if a flag was
+  # passed without its argument (e.g., `--avatar --voice ID`).
+  _require_value() {
+    local flag="$1" value="$2"
+    if [[ -z "$value" || "$value" == --* ]]; then
+      echo "heygen-cli: $flag requires a value" >&2
+      return 2
+    fi
+    return 0
+  }
+
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --avatar)     avatar="$2"; shift 2 ;;
-      --voice)      voice="$2"; shift 2 ;;
-      --script)     script="$2"; shift 2 ;;
-      --background) background="$2"; shift 2 ;;
-      --ratio)      ratio="$2"; shift 2 ;;
+      --avatar)     _require_value "$1" "${2:-}" || return $?; avatar="$2"; shift 2 ;;
+      --voice)      _require_value "$1" "${2:-}" || return $?; voice="$2"; shift 2 ;;
+      --script)     _require_value "$1" "${2:-}" || return $?; script="$2"; shift 2 ;;
+      --background) _require_value "$1" "${2:-}" || return $?; background="$2"; shift 2 ;;
+      --ratio)      _require_value "$1" "${2:-}" || return $?; ratio="$2"; shift 2 ;;
       *) echo "heygen-cli: unknown flag $1" >&2; return 2 ;;
     esac
   done
+
+  # Fail-fast on invalid --ratio. Previously the jq `else` branch silently
+  # produced 16:9 dimensions for any unknown value, which is risky on a
+  # paid endpoint (caller thinks they got 9:16, gets billed for 16:9).
+  case "$ratio" in
+    16:9|9:16|1:1) ;;
+    *)
+      echo "heygen-cli: --ratio must be one of 16:9 | 9:16 | 1:1 (got: $ratio)" >&2
+      return 2
+      ;;
+  esac
 
   if [[ -z "$avatar" || -z "$voice" || -z "$script" ]]; then
     echo "heygen-cli: --avatar, --voice, --script all required" >&2
@@ -156,7 +189,14 @@ heygen_generate_from_template() {
   local variables="{}"
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --variables) variables="$2"; shift 2 ;;
+      --variables)
+        if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+          echo "heygen-cli: --variables requires a JSON value" >&2
+          return 2
+        fi
+        variables="$2"
+        shift 2
+        ;;
       *) echo "heygen-cli: unknown flag $1" >&2; return 2 ;;
     esac
   done
