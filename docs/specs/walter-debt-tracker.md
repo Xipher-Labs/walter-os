@@ -28,8 +28,8 @@ For hackathons especially: the team that ships in 48h needs to know in week 3 (w
 | # | Decision | Why |
 |---|---|---|
 | D-1 | **`.walter-debt.md` lives at the REPO root**, committable. Gitignored by default — operator opts in to commit. | In-repo is reviewable + survives branch hops. Operators with sensitive repos can keep it private; operators sharing with a team commit it. |
-| D-2 | **Auto-write on every `walter-os justify` invocation.** Append to both the global JSONL log AND the per-repo `.walter-debt.md`. | One write path; no operator action needed. The file always reflects the current state of the justify log filtered to this repo. |
-| D-3 | **`walter-os debt-report` reads + reconciles**, never duplicates state. Source of truth = `justify-log.jsonl`; `.walter-debt.md` is a derived view. | Re-running `debt-report` after fixes regenerates the file with stale entries marked done. No drift between the two sources. |
+| D-2 | **The JSONL log is the source of truth; `.walter-debt.md` is a derived view rendered on demand by `walter-os debt-report --write`.** `walter-os justify` appends ONLY to `~/.config/walter-os/justify-log.jsonl` and never touches `.walter-debt.md` directly. The view file is regenerated explicitly via `debt-report --write` (called automatically by `walter-os protection set` and by a post-`justify` hook for operator convenience). | Single source of truth — eliminates the D-2 vs D-3 contradiction in earlier drafts where both files could be authoritative. `.walter-debt.md` is fully overwritable from the log; an operator who deletes it gets it back on the next `debt-report --write`. |
+| D-3 | **Manual `[ ]`→`[x]` toggles in `.walter-debt.md` are NOT trusted by the promotion gate (D-4).** The gate reads `justify-log.jsonl` directly. Operators CAN toggle checkboxes in the rendered view for personal-tracking purposes; the next `debt-report --write` will re-render based on the log state (auto-reconciled entries become `[x]`; unresolved entries remain `[ ]`). | Reconciles the trust boundary: the view file is editable for human convenience, the log is what the gate believes. Prevents an "I'll just edit the markdown" promotion bypass. |
 | D-4 | **Promotion gate via `walter-os protection set <level>`.** Refuses to upgrade if unchecked debt exists, unless `--clear-debt "reason"` is passed. The `--clear-debt` invocation itself is logged as a justify entry. | Forces the operator to acknowledge unaddressed debt before levelling up. Mirrors the existing `walter-os.toml audit_gate` discipline. |
 | D-5 | **Auto-close on reconciliation.** When a justify expires (90d TTL) OR the pinned-package check passes OR the audit clears the finding, mark the corresponding `.walter-debt.md` entry as `[x] done — auto-reconciled YYYY-MM-DD`. | The file stays useful without manual maintenance. |
 | D-6 | **Daily-audit integration.** `daily-supply-chain-audit` emits an `info`-level finding for any debt entry older than N days (configurable; default 30). | Surfaces debt rot without being noisy. |
@@ -51,7 +51,7 @@ For hackathons especially: the team that ships in 48h needs to know in week 3 (w
   
   - [ ] 2026-05-21 — `cool-new-mcp@latest` not pinned — hackathon launch
         - justify-id: `j-2026-05-21T03:14:22Z-abc12`
-        - expires: 2026-08-19 (89 days)
+        - expires: 2026-08-19 (90 days, matching the justify TTL)
   - [x] 2026-05-12 — bats coverage for `submitClaim()` skipped — re-added 2026-05-19 (`b1f9...`)
   
   ## Promotion checklist (clear before → production)
@@ -72,7 +72,7 @@ For hackathons especially: the team that ships in 48h needs to know in week 3 (w
 - [ ] Default behavior with no flags: prints markdown to stdout. With `--write`: regenerates `.walter-debt.md` at the repo root.
 - [ ] `--format json` emits an array of `{justify_id, ts, pkg, version, level, reason, expires, status}` records suitable for CI parsing.
 - [ ] `--format table` prints a terminal-friendly ANSI table.
-- [ ] Reads `~/.config/walter-os/justify-log.jsonl` and filters by `repo_path` (matched against `walter-os.toml` `repo_root` or fallback to `git rev-parse --show-toplevel`).
+- [ ] Reads `~/.config/walter-os/justify-log.jsonl` and filters entries to the current repo. The existing justify-log schema does NOT carry a repo identifier today, so this AC also adds a `repo` field to the schema (populated at justify-write time by `cmd_justify` via `git rev-parse --show-toplevel || pwd`). Pre-existing entries without `repo` are matched by best-effort heuristics (cwd + commit-graph proximity) for backwards-compat, with a one-time `walter-os debt-backfill` CLI to attach `repo` to historical entries.
 - [ ] Cross-references current state:
   - If the pkg is now pinned (no longer matches the `@latest` pattern that triggered the justify) → mark `[x] done`.
   - If the justify has expired (per `expires` field) → mark `[x] expired — debt is automatically void; re-justify if still needed`.
@@ -83,7 +83,7 @@ For hackathons especially: the team that ships in 48h needs to know in week 3 (w
 - [ ] Reads current level from `walter-os.toml`. If new level is a *promotion* (higher than current):
   - Runs `walter-os debt-report --format json` and counts unchecked items.
   - If count > 0 and `--clear-debt "reason"` was NOT passed → exits 1 with the count + a `walter-os debt-report` hint.
-  - If `--clear-debt "reason"` WAS passed → logs a new justify entry with `kind: "promotion-with-debt"` and proceeds.
+  - If `--clear-debt "reason"` WAS passed → logs a new justify entry with `kind: "promotion-with-debt"`. The existing `check-release-age.py` consumer doesn't recognize this kind today and would treat it as an opaque justify entry; this AC ALSO updates `check-release-age.py` to recognize `kind: "promotion-with-debt"` as a no-op (it's a promotion log, not a package-pin justification) so the daily audit doesn't misfire on it.
 - [ ] Demotions (e.g., `production → experimental`) are always allowed (no debt gate needed; operator is taking a precaution).
 - [ ] Updates `walter-os.toml` `protection_level` in place after the gate passes.
 
@@ -201,7 +201,7 @@ Each PR is ≤200 LOC, runs the 3-round review, and references this spec.
 ## Refs
 
 - Issue #2
-- `walter-os justify` implementation: `bin/walter-os` `cmd_justify`
-- `walter-os.toml` schema: `docs/specs/walter-os-toml-schema.md` (existing)
+- `walter-os justify` implementation: `bin/walter-os` will gain a `cmd_justify` subcommand as part of this spec's first PR (no current `justify` subcommand exists in `bin/walter-os` on `main` — this is one of the spec's first deliverables, NOT a precedent reference).
+- `walter-os.toml` schema: this spec also adds `docs/specs/walter-os-toml-schema.md` as a sibling deliverable — the file doesn't exist on `main` yet. The schema is referenced because `walter-os.toml` is the natural place for the per-repo `repo_root` + protection-level config that the debt tracker reads.
 - `~/.config/walter-os/justify-log.jsonl` schema: same spec
 - `skills/daily-supply-chain-audit/SKILL.md`: `check_min_release_age` already reads the justify log
