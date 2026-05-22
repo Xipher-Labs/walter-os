@@ -38,8 +38,15 @@ setup() {
 @test "no Apache-2.0 string outside allowlisted files" {
   # Allowlist:
   #   - docs/decisions/0010-oss-license.md          — ADR historical context
-  #   - docs/specs/walter-oss-license-switch.*      — this PR's own spec
+  #   - docs/decisions/0018-licensing-strategy.md   — dual-license ADR (Apache-2.0 + AGPL-3.0)
+  #   - docs/decisions/0019-contributor-license-agreement.md — CLA ADR references Apache-2.0 CLA scaffold
+  #   - docs/decisions/0021-v1-0-stability-charter.md — references ADR-0018
+  #   - docs/specs/walter-oss-license-switch.*      — historical spec
   #   - docs/specs/walter-oss-ready-docs.*          — sibling PR spec referencing the switch
+  #   - docs/specs/walter-os-oss-readiness-roadmap.md — roadmap referencing ADR-0018
+  #   - docs/specs/walter-os-v1-0-stability-charter.md — v1.0 spec referencing ADR-0018
+  #   - docs/specs/walter-contract-walter-host-split.md — repo-split spec discusses license-by-subtree
+  #   - docs/specs/founder-skills-bundle-extraction.md — discusses license posture for extraction
   #   - tests/oss/license-files.bats                — this test (self-ref)
   #   - skills/*/SKILL.md                           — third-party deps may be Apache-licensed
   local matches
@@ -50,8 +57,15 @@ setup() {
     --exclude-dir=.claude \
     2>/dev/null \
     | grep -v "$REPO_ROOT/docs/decisions/0010-oss-license.md" \
+    | grep -v "$REPO_ROOT/docs/decisions/0018-licensing-strategy.md" \
+    | grep -v "$REPO_ROOT/docs/decisions/0019-contributor-license-agreement.md" \
+    | grep -v "$REPO_ROOT/docs/decisions/0021-v1-0-stability-charter.md" \
     | grep -v "$REPO_ROOT/docs/specs/walter-oss-license-switch" \
     | grep -v "$REPO_ROOT/docs/specs/walter-oss-ready-docs" \
+    | grep -v "$REPO_ROOT/docs/specs/walter-os-oss-readiness-roadmap.md" \
+    | grep -v "$REPO_ROOT/docs/specs/walter-os-v1-0-stability-charter.md" \
+    | grep -v "$REPO_ROOT/docs/specs/walter-contract-walter-host-split.md" \
+    | grep -v "$REPO_ROOT/docs/specs/founder-skills-bundle-extraction.md" \
     | grep -v "$REPO_ROOT/tests/oss/license-files.bats" \
     | grep -v "$REPO_ROOT/CHANGELOG.md" \
     | grep -vE "$REPO_ROOT/skills/[^/]+/SKILL\.md" \
