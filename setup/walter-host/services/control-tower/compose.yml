@@ -50,9 +50,12 @@ services:
       - /var/lib/walter-council:/var/lib/walter-council:ro
       # Walter-council logs (events, consensus-votes, watchdog) — read-only
       - /var/log/walter-council:/var/log/walter-council:ro
-      # Operator config (mode.json, trust-tiers.yml) — read-only
-      # The mode toggle calls walter-os CLI via server-side exec, not direct file write
-      - /root/.config/walter-os:/root/.config/walter-os:ro
+      # Operator config (mode.json, trust-tiers.yml) — RW so the Council
+      # toggle (#176) can write mode.json via `walter-os mode consensus`
+      # invoked from /api/mode. The container runs as root because
+      # /root/ is mode 700 on the host; the security trade-off is
+      # documented in apps/control-tower/Dockerfile.
+      - /root/.config/walter-os:/root/.config/walter-os:rw
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s

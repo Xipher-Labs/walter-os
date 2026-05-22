@@ -113,6 +113,7 @@ jobs:
             tests/skills/ \
             tests/cloudflare/ \
             tests/github-actions/ \
+            tests/compose/ \
             tests/scripts/secrets-identity-init.bats \
             tests/install/hook-chain-content.bats \
             tests/install/makefile-ci-shellcheck-parity.bats \

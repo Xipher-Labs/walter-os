@@ -30,20 +30,51 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Council toggle (#176) needs bash + jq + the walter-os CLI to call
+# `walter-os mode consensus on|off` via execFile from /api/mode.
+# node:22-alpine is BusyBox-based; install bash + jq explicitly.
+RUN apk add --no-cache bash jq
 
 # Copy built output
-COPY --from=builder --chown=nextjs:nodejs /app/apps/control-tower/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/control-tower/.next/static ./apps/control-tower/.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/apps/control-tower/public ./apps/control-tower/public
+COPY --from=builder /app/apps/control-tower/.next/standalone ./
+COPY --from=builder /app/apps/control-tower/.next/static ./apps/control-tower/.next/static
+COPY --from=builder /app/apps/control-tower/public ./apps/control-tower/public
 
-USER nextjs
+# Bundle the walter-os CLI + its mode-management library so the Council
+# toggle (#176) can call `walter-os mode consensus on|off` at runtime.
+# WALTER_OS_HOME points at /opt/walter-os; bin/walter-os sources
+# scripts/agents/lib/mode.sh from it. Closes #176 (Council toggle fails
+# when CLI is missing).
+COPY bin/walter-os /usr/local/bin/walter-os
+COPY scripts/agents/lib/mode.sh /opt/walter-os/scripts/agents/lib/mode.sh
+COPY VERSION /opt/walter-os/VERSION
+RUN chmod +x /usr/local/bin/walter-os
+
+# CT runs as root (NOT the previous nextjs UID 1001) so it can write to
+# `/root/.config/walter-os/mode.json` via the host bind mount (#176).
+# The host directory is mode 700 root:root by default; non-root container
+# users cannot write to it without an operator-side chown deployment step,
+# and Walter-VM is a single-operator private VM behind Tailscale + CF
+# Access + admin-token gate — the security trade-off of running as root
+# inside this container is acceptable for the simplification.
+# Adopters running CT in a multi-tenant context should bake their own
+# Dockerfile with a non-root user + chowned host path.
 
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+# WALTER_OS_HOME is where bin/walter-os looks for its libs (VERSION,
+# scripts/agents/lib/mode.sh). It is NOT the place mode.json is written —
+# that goes to $WALTER_CONFIG (default $HOME/.config/walter-os, which is
+# mounted RW from the host at /root/.config/walter-os, see compose.yml).
+ENV WALTER_OS_HOME=/opt/walter-os
+# Both env vars must point at the same place — the route handler in
+# apps/control-tower/app/api/mode/route.ts reads `WALTER_CONFIG_DIR`
+# while bin/walter-os + scripts/agents/lib/mode.sh read `WALTER_CONFIG`.
+# Setting both pins them together so an operator override of one
+# doesn't silently desync the read/write paths (Copilot R1 #194).
+ENV WALTER_CONFIG=/root/.config/walter-os
+ENV WALTER_CONFIG_DIR=/root/.config/walter-os
 
 CMD ["node", "apps/control-tower/server.js"]

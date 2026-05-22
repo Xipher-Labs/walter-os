@@ -850,7 +850,12 @@ services:
     volumes:
       - /var/lib/walter-council:/var/lib/walter-council:ro
       - /var/log/walter-council:/var/log/walter-council:ro
-      - /root/.config/walter-os:/root/.config/walter-os:ro
+      # Mounted RW so the Council toggle (#176) can write mode.json via
+      # `walter-os mode consensus on|off` invoked from /api/mode. The
+      # container runs as root specifically because /root/ is mode 700
+      # on the host — see apps/control-tower/Dockerfile for the threat-
+      # model trade-off.
+      - /root/.config/walter-os:/root/.config/walter-os:rw
     depends_on:
       litellm:
         condition: service_healthy
