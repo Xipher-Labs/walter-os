@@ -53,15 +53,11 @@ Include:
 - Expected scale (single-tenant vs. multi-tenant, internal vs. external
   service, approximate user count).
 
-## Operator-side caveat
+## Contracting entity
 
-Per ADR-0022 the Xipher Labs legal entity is being constituted as of
-2026-05-21. Commercial-license execution will become fully unilateral once
-the copyright transfer to the entity completes. In the interim, the
-operator who founded the project is the sole copyright holder of record and
-will sign commercial grants personally if a request arrives before the
-entity formation is complete; the grant carries forward to the entity at
-transfer time.
+Xipher Labs S.R.L. (Sociedad de Responsabilidad Limitada, Argentina) is
+the constituted legal entity issuing commercial licenses for Walter-OS,
+per ADR-0022. The entity holds the Walter-OS copyright.
 
 ## Related ADRs
 

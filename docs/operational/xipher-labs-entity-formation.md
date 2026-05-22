@@ -31,48 +31,46 @@ operator can grant + relicense unilaterally), but it breaks down as soon as:
 Phase progress is tracked in this file. The operator updates the status
 checkboxes as each phase completes.
 
-### Phase 0 — Prerequisites (operator decisions)
+### Phase 0 — Prerequisites (operator decisions) — COMPLETE
 
-- [ ] Choose jurisdiction. Recommendation per ADR-0022: **Argentina SAS**
-  (fast, cheap, online registration, fits a bootstrapped solo founder). See
-  ADR-0022 §Decision for alternatives.
-- [ ] Choose entity name. Default: `Xipher Labs S.A.S.` (matching the
-  existing "Xipher Labs" trade name). If the registry rejects, fall back to
-  `Xipher Labs Argentina S.A.S.` and document the divergence here.
-- [ ] Choose registered address. Operator's residential address is sufficient
-  for SAS; reserve a P.O. Box / virtual address if privacy is a concern.
-- [ ] Engage a lawyer for the CLA review (ADR-0019 migration §1). This can
-  happen in parallel with entity formation.
+- [x] Jurisdiction chosen: **Argentina**.
+- [x] Entity name + form chosen: **Xipher Labs S.R.L.** (Sociedad de
+  Responsabilidad Limitada). The operator picked S.R.L. over the
+  ADR-0022-recommended S.A.S. for legal/tax reasons specific to their
+  situation. The "S.R.L." form is well-established, partner-friendly, and
+  works for the Walter-OS / IdeaOS dual-product plan.
+- [x] Registered address chosen (operator-private, not in repo).
+- [x] Lawyer engaged for the CLA review (ADR-0019 migration §1). Review
+  still pending; CLA gate stays inactive until lawyer signs off.
 
-### Phase 1 — Entity registration (operator action, ~2–6 weeks)
+### Phase 1 — Entity registration — COMPLETE
 
-- [ ] Submit SAS registration via the AAIP portal:
-  <https://www.argentina.gob.ar/aaip/sasorga>
-- [ ] Pay filing fees (~USD 200–400 equivalent).
-- [ ] Receive entity confirmation + CUIT (tax ID).
-- [ ] Open the entity's bank account (Argentine banks typically require a
-  proof-of-registration document).
-- [ ] Record entity formation details (CUIT, registration date, registered
-  address) in `~/.config/walter-os/overlay/personal.env` as
-  `WALTER_LEGAL_ENTITY_CUIT` etc. — never commit these to the public repo.
+- [x] Entity registered with Argentine registry. Xipher Labs S.R.L. is the
+  constituted legal entity.
+- [x] Filing fees paid.
+- [x] Entity confirmation + CUIT received (CUIT stored in operator's
+  overlay `~/.config/walter-os/overlay/personal.env` as
+  `WALTER_LEGAL_ENTITY_CUIT`, never committed).
+- [x] Entity bank account open (or in process — non-blocking for repo work).
 
-### Phase 2 — Repo updates (PR, post-entity-formation)
+Phase 2 (repo updates) is in flight via the PR that adds this update.
 
-These updates land in a follow-up PR once Phase 1 is complete. They are
-intentionally one-line-style edits to keep the diff reviewable:
+### Phase 2 — Repo updates (this PR)
 
-- [ ] `NOTICE`: change the "Xipher Labs is the trade name. ... entity is being
-  constituted" paragraph to reflect the constituted entity name + CUIT.
-- [ ] `COMMERCIAL.md`: change the operator-side caveat to reflect the
-  constituted entity name.
-- [ ] `CLA.md`: replace the "STATUS NOTE" block with the entity-formed
-  attribution; update the governing-law clause to name the registered
-  jurisdiction.
-- [ ] `LICENSE`'s adjacent NOTICE paragraph (in `NOTICE`, not `LICENSE`
-  itself which is canonical AGPL) names the entity.
-- [ ] README's License section names the entity.
+- [x] `NOTICE`: attribution updated to `Xipher Labs S.R.L.`; "entity is
+  being constituted" paragraph rewritten to reflect the constituted entity.
+- [x] `COMMERCIAL.md`: "Operator-side caveat" replaced with a "Contracting
+  entity" section naming Xipher Labs S.R.L.
+- [x] `CLA.md`: Owner attribution updated; STATUS NOTE rewritten to flag
+  that only the lawyer-review gate remains (Phase 3); governing-law clause
+  names Argentine Republic as the constituted-entity jurisdiction.
+- [x] README's License section already names Xipher Labs; no change needed
+  in the body (the legal entity name lives in NOTICE / COMMERCIAL.md / CLA).
+- [x] This runbook: Phase 0 + Phase 1 marked complete, Phase 2 status
+  updated below.
 
-A PR template for this work is at the bottom of this runbook.
+The STATUS NOTE in `CLA.md` is intentionally NOT removed yet — that is
+Phase 3, gated on lawyer sign-off per ADR-0019 migration §1.
 
 ### Phase 3 — CLA activation (post-entity-formation, post-lawyer-review)
 
@@ -106,12 +104,17 @@ overlay settings.
 ## Template — "post-formation repo update" PR
 
 When the operator gets here, this template generates the Phase 2 PR.
+Note: this template is left in place as a reference for any FUTURE
+post-formation attribution updates (e.g., if the entity is ever
+re-domiciled or renamed). The first Phase 2 PR was #165 which constituted
+Xipher Labs S.R.L. — replace the entity name + date in the template if
+re-using it.
 
 ```
 Title: [CHORE] -COMPLIANCE- update repo attribution post entity formation (ADR-0022)
 
 Body:
-Closes the post-formation half of #156. The Xipher Labs S.A.S. legal
+Closes the post-formation half of #156. The Xipher Labs S.R.L. legal
 entity was constituted on YYYY-MM-DD per ADR-0022 phase 1. This PR
 updates the repo's attribution to the constituted entity.
 
@@ -135,10 +138,10 @@ Refs: docs/decisions/0022-xipher-labs-legal-entity.md
 
 | Phase | Status |
 |---|---|
-| Phase 0 — prerequisites | pending |
-| Phase 1 — registration | pending |
-| Phase 2 — repo updates | pending (blocked by Phase 1) |
-| Phase 3 — CLA activation | pending (blocked by Phase 1 + lawyer review) |
+| Phase 0 — prerequisites | **complete** (entity form chosen: S.R.L.) |
+| Phase 1 — registration | **complete** (Xipher Labs S.R.L. constituted) |
+| Phase 2 — repo updates | **complete** (this PR) |
+| Phase 3 — CLA activation | pending (blocked by lawyer review of CLA.md) |
 | Phase 4 — external PRs unlocked | pending (blocked by Phase 3) |
 
 The operator updates this table as phases complete. CI does NOT enforce

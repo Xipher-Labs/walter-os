@@ -81,8 +81,11 @@ setup() {
   [[ -f "$REPO_ROOT/NOTICE" ]]
 }
 
-@test "NOTICE contains Xipher Labs" {
-  grep -q "Xipher Labs" "$REPO_ROOT/NOTICE"
+@test "NOTICE contains Xipher Labs S.R.L. (constituted entity)" {
+  # Post-ADR-0022 Phase 1: the legal entity is Xipher Labs S.R.L.
+  # (Argentine Sociedad de Responsabilidad Limitada). NOTICE must name
+  # the constituted entity, not just the trade name "Xipher Labs".
+  grep -q "Xipher Labs S.R.L." "$REPO_ROOT/NOTICE"
 }
 
 @test "NOTICE references the dual-license decision (ADR-0018)" {
