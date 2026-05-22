@@ -1,0 +1,188 @@
+import { describe, expect, it } from "vitest";
+import { getCanonicalBaseUrl } from "../../lib/canonical-url";
+
+// Helper: build Headers from a plain record so each test reads naturally.
+function makeHeaders(record: Record<string, string>): Headers {
+  return new Headers(record);
+}
+
+describe("getCanonicalBaseUrl", () => {
+  // ---------------------------------------------------------------------
+  // 1. Explicit operator override — CONTROL_TOWER_PUBLIC_URL
+  // ---------------------------------------------------------------------
+
+  it("uses CONTROL_TOWER_PUBLIC_URL when set (highest priority)", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "evil.example.com" }),
+      "http://0.0.0.0:3000/api/login",
+      { CONTROL_TOWER_PUBLIC_URL: "https://tower.example.com" }
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  it("strips trailing slash from CONTROL_TOWER_PUBLIC_URL", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({}),
+      "http://0.0.0.0:3000/api/login",
+      { CONTROL_TOWER_PUBLIC_URL: "https://tower.example.com/" }
+    );
+    expect(url.href).toBe("https://tower.example.com/");
+  });
+
+  it("falls through when CONTROL_TOWER_PUBLIC_URL is whitespace-only", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com" }),
+      "http://0.0.0.0:3000/api/login",
+      { CONTROL_TOWER_PUBLIC_URL: "   " }
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  it("ignores invalid CONTROL_TOWER_PUBLIC_URL (falls through to headers)", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com" }),
+      "http://0.0.0.0:3000/api/login",
+      { CONTROL_TOWER_PUBLIC_URL: "not-a-url" }
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  // ---------------------------------------------------------------------
+  // 2. Trusted proxy forwarded headers — X-Forwarded-Host + X-Forwarded-Proto
+  // ---------------------------------------------------------------------
+
+  it("uses X-Forwarded-Host + X-Forwarded-Proto when present", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({
+        "x-forwarded-host": "tower.example.com",
+        "x-forwarded-proto": "https",
+        host: "127.0.0.1:3000",
+      }),
+      "http://0.0.0.0:3000/api/login",
+      {}
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  it("defaults X-Forwarded-Proto to https when X-Forwarded-Host is present", () => {
+    // Cloudflare Tunnel + Tailscale Serve both terminate TLS; the origin
+    // request to the container is plain HTTP. So when X-Forwarded-Host is
+    // set without an explicit Proto, the public URL is virtually always
+    // HTTPS.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com" }),
+      "http://0.0.0.0:3000/api/login",
+      {}
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  it("honors http X-Forwarded-Proto when explicitly set", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({
+        "x-forwarded-host": "tower.local",
+        "x-forwarded-proto": "http",
+      }),
+      "http://0.0.0.0:3000/api/login",
+      {}
+    );
+    expect(url.origin).toBe("http://tower.local");
+  });
+
+  it("uses first value from comma-separated X-Forwarded-Host", () => {
+    // Multi-proxy chains may append; only the first (origin-most) is trusted.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({
+        "x-forwarded-host": "tower.example.com, internal.proxy",
+        "x-forwarded-proto": "https, https",
+      }),
+      "http://0.0.0.0:3000",
+      {}
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  // ---------------------------------------------------------------------
+  // 3. Host header — when running directly (e.g., dev, local tailnet IP)
+  // ---------------------------------------------------------------------
+
+  it("uses Host header when no X-Forwarded-Host but Host is routable", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ host: "localhost:3000" }),
+      "http://0.0.0.0:3000/api/login",
+      {}
+    );
+    expect(url.origin).toBe("http://localhost:3000");
+  });
+
+  it("skips Host header when it is 0.0.0.0 (unreachable from browsers)", () => {
+    // This is the bug we are fixing: Next.js standalone constructs
+    // request.url from HOSTNAME (=0.0.0.0), and that ends up in the
+    // Location header. The browser then refuses to navigate to 0.0.0.0.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ host: "0.0.0.0:3000" }),
+      "http://example.com/api/login",
+      {}
+    );
+    expect(url.origin).toBe("http://example.com");
+  });
+
+  it("skips bare 0.0.0.0 Host (no port)", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ host: "0.0.0.0" }),
+      "http://example.com",
+      {}
+    );
+    expect(url.origin).toBe("http://example.com");
+  });
+
+  // ---------------------------------------------------------------------
+  // 4. Fallback to request.url
+  // ---------------------------------------------------------------------
+
+  it("falls back to request.url as last resort", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({}),
+      "https://canonical.example.com/api/login",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  // ---------------------------------------------------------------------
+  // 5. Security regression guards
+  // ---------------------------------------------------------------------
+
+  it("does not honor untrusted X-Forwarded-Host when CONTROL_TOWER_PUBLIC_URL is set", () => {
+    // Defense in depth: even if the proxy chain is misconfigured and a
+    // hostile X-Forwarded-Host slips through, the explicit operator
+    // override wins. Prevents open-redirect when Control Tower is exposed
+    // without a trusted proxy in front.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "attacker.com" }),
+      "http://0.0.0.0:3000",
+      { CONTROL_TOWER_PUBLIC_URL: "https://tower.legitimate.com" }
+    );
+    expect(url.origin).toBe("https://tower.legitimate.com");
+  });
+
+  it("never honors an X-Forwarded-Host containing a path or query", () => {
+    // X-Forwarded-Host should be a bare host[:port]; reject anything else
+    // to avoid URL-parsing surprises.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com/evil" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  it("never honors an X-Forwarded-Host with embedded scheme", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "http://tower.example.com" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+});

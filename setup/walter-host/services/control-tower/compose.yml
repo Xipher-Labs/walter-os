@@ -36,6 +36,12 @@ services:
       # Control Tower admin auth
       CONTROL_TOWER_ADMIN_TOKEN: "${CONTROL_TOWER_ADMIN_TOKEN:?CONTROL_TOWER_ADMIN_TOKEN is required}"
       CONTROL_TOWER_AUTH_DISABLED: "${CONTROL_TOWER_AUTH_DISABLED:-false}"
+      # Canonical public URL — used to construct login redirect Location
+      # headers. Set this to the externally-reachable origin (typically
+      # https://tower.${WALTER_DOMAIN}). Without it, Next.js standalone
+      # falls back to HOSTNAME=0.0.0.0 and the browser refuses to follow
+      # the redirect. See apps/control-tower/lib/canonical-url.ts.
+      CONTROL_TOWER_PUBLIC_URL: "${CONTROL_TOWER_PUBLIC_URL:-}"
       # Tailscale access enforcement
       TAILSCALE_ENFORCE: "${TAILSCALE_ENFORCE:-true}"
       TAILSCALE_CGNAT_CIDR: "${TAILSCALE_CGNAT_CIDR:-100.64.0.0/10}"
