@@ -165,3 +165,93 @@ setup() {
 @test "AC-7: action README documents the Codex auth setup" {
   grep -qE "CODEX_AUTH_JSON|auth\\.json" "$ACTION_README"
 }
+
+# ---------------------------------------------------------------------------
+# Regression: issue #186 — pin the documented `rounds-completed` JSON
+# contract regardless of implementation details. Codex's sweep originally
+# claimed `IFS=',' rounds_json="..."` produced space-separated output, but
+# verification showed bash treats both as regular assignments when no
+# command follows the prefix (so IFS *is* set and `${rounds[*]}` *is*
+# comma-joined — output was always valid JSON). Refactor to the subshell
+# form was for clarity + to avoid leaking IFS, NOT to fix a runtime bug.
+# These tests assert the JSON-array contract so any future change is
+# safely covered.
+# ---------------------------------------------------------------------------
+
+# Helper that simulates the action's rounds-completed assembly block in a
+# subshell with controlled env, then validates the JSON output. The script
+# under test is the literal bash block from action.yml's "Collect findings
+# + emit status" step — extracted in a way the assertions can exercise
+# without spinning up a GitHub Actions runner.
+_simulate_rounds_completed() {
+  local copilot="$1"
+  local codex="$2"
+  local out
+  out=$(
+    export COPILOT_REQUESTED="$copilot"
+    export CODEX_RAN="$codex"
+    rounds=()
+    [[ "$COPILOT_REQUESTED" == "true" ]] && rounds+=('"copilot-round-1"')
+    [[ "$CODEX_RAN" == "true" ]] && rounds+=('"codex-round-2"')
+    # Pull the JSON-assembly line(s) from action.yml so this test stays
+    # honest as the action evolves. NB: filter the eval'd block with
+    # `[[:space:]]` — `\s` is a literal `s` in ERE, so `\s` would let the
+    # `echo "rounds-completed=..." >> "$GITHUB_OUTPUT"` line through and
+    # it would explode at eval time because GITHUB_OUTPUT is unset.
+    #
+    # Wrap the extracted block in a temp function so it tolerates `local`,
+    # `return`, `declare`, etc. inside the block — the prior bare-eval
+    # form would error with "local: can only be used in a function" if a
+    # future action.yml refactor used any of those. The function body is
+    # invoked immediately; `rounds_json` is exported back via the outer
+    # subshell.
+    local _block
+    _block=$(awk '/# rounds-completed JSON array/,/echo "rounds-completed=\$rounds_json"/' "$ACTION_YML" \
+      | grep -vE '^[[:space:]]*echo')
+    eval "_rounds_completed_block() { ${_block} }"
+    _rounds_completed_block
+    printf '%s' "$rounds_json"
+  )
+  printf '%s' "$out"
+}
+
+@test "AC-8: rounds-completed is valid JSON when both rounds ran (regression #186)" {
+  command -v jq >/dev/null 2>&1 || skip "jq required"
+  local out
+  out=$(_simulate_rounds_completed true true)
+  echo "Generated: $out" >&3
+  jq -e . <<< "$out" >/dev/null
+  # Specifically: must be a 2-element array
+  local n
+  n=$(jq -r 'length' <<< "$out")
+  [[ "$n" == "2" ]]
+  # And the values must match
+  [[ "$(jq -r '.[0]' <<< "$out")" == "copilot-round-1" ]]
+  [[ "$(jq -r '.[1]' <<< "$out")" == "codex-round-2" ]]
+}
+
+@test "AC-8: rounds-completed is valid JSON when only Copilot ran" {
+  command -v jq >/dev/null 2>&1 || skip "jq required"
+  local out
+  out=$(_simulate_rounds_completed true false)
+  jq -e . <<< "$out" >/dev/null
+  [[ "$(jq -r 'length' <<< "$out")" == "1" ]]
+  [[ "$(jq -r '.[0]' <<< "$out")" == "copilot-round-1" ]]
+}
+
+@test "AC-8: rounds-completed is valid JSON when only Codex ran" {
+  command -v jq >/dev/null 2>&1 || skip "jq required"
+  local out
+  out=$(_simulate_rounds_completed false true)
+  jq -e . <<< "$out" >/dev/null
+  [[ "$(jq -r 'length' <<< "$out")" == "1" ]]
+  [[ "$(jq -r '.[0]' <<< "$out")" == "codex-round-2" ]]
+}
+
+@test "AC-8: rounds-completed is [] when no rounds ran" {
+  command -v jq >/dev/null 2>&1 || skip "jq required"
+  local out
+  out=$(_simulate_rounds_completed false false)
+  jq -e . <<< "$out" >/dev/null
+  [[ "$(jq -r 'length' <<< "$out")" == "0" ]]
+}
