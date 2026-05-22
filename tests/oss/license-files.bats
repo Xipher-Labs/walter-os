@@ -120,6 +120,8 @@ setup() {
   #   - COMMERCIAL.md                                 — commercial entry point
   #   - README.md                                     — license section
   #   - CHANGELOG.md                                  — entries describing the switch
+  #   - CONTRIBUTING.md                               — dual-license preamble (ADR-0019)
+  #   - CLA.md                                        — CLA scaffold (ADR-0019)
   #   - docs/decisions/0010-oss-license.md            — ADR historical context
   #   - docs/decisions/0018-licensing-strategy.md     — dual-license ADR
   #   - docs/decisions/0019-contributor-license-agreement.md — CLA ADR
@@ -132,6 +134,8 @@ setup() {
   #   - docs/specs/founder-skills-bundle-extraction.md — discusses license posture for extraction
   #   - tests/oss/license-files.bats                  — this test (self-ref)
   #   - skills/*/SKILL.md                             — third-party deps may be Apache-licensed
+  #   - .github/workflows/*.yml                       — SPDX headers on workflow files
+  #   - hooks/*.sh                                    — SPDX headers on hook scripts
   local matches
   matches="$(grep -rEn "Apache-2\.0|Apache License, Version 2\.0|Apache License|Apache 2\.0" "$REPO_ROOT" \
     --exclude-dir=external \
@@ -144,6 +148,8 @@ setup() {
     | grep -v "$REPO_ROOT/COMMERCIAL.md" \
     | grep -v "$REPO_ROOT/README.md" \
     | grep -v "$REPO_ROOT/CHANGELOG.md" \
+    | grep -v "$REPO_ROOT/CONTRIBUTING.md" \
+    | grep -v "$REPO_ROOT/CLA.md" \
     | grep -v "$REPO_ROOT/docs/decisions/0010-oss-license.md" \
     | grep -v "$REPO_ROOT/docs/decisions/0018-licensing-strategy.md" \
     | grep -v "$REPO_ROOT/docs/decisions/0019-contributor-license-agreement.md" \
