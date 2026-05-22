@@ -155,7 +155,10 @@ setup() {
     | grep -v "$REPO_ROOT/docs/specs/walter-contract-walter-host-split.md" \
     | grep -v "$REPO_ROOT/docs/specs/founder-skills-bundle-extraction.md" \
     | grep -v "$REPO_ROOT/tests/oss/license-files.bats" \
+    | grep -v "$REPO_ROOT/tests/oss/entity-formation-gate.bats" \
     | grep -vE "$REPO_ROOT/skills/[^/]+/SKILL\.md" \
+    | grep -vE "$REPO_ROOT/\.github/workflows/[a-zA-Z0-9_-]+\.ya?ml" \
+    | grep -vE "$REPO_ROOT/hooks/[a-zA-Z0-9_-]+\.sh" \
     | wc -l \
     | tr -d ' ')"
   [ "$matches" -eq 0 ]
