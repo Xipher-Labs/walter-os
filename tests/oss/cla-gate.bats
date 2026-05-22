@@ -58,15 +58,23 @@ setup() {
 
 @test "CLA workflow uses contributor-assistant/github-action pinned by SHA" {
   # ADR-0019 specifies this action.
+  # ADR-0012 mandates SHA-pinning ("GitHub Actions steps use 40-char
+  # commit SHAs") + OpenSSF Scorecard Pinned-Dependencies.
   # #187 (Codex sweep, 2026-05-22): when WALTER_CLA_ACTIVE is enabled
   # this workflow runs under pull_request_target with access to
   # GITHUB_TOKEN AND the CLA signatures PAT. A mutable tag (`@v2.6.1`)
   # lets the upstream owner of the action repository swap in arbitrary
   # code on the next CI run. Pin to a 40-char commit SHA. The
   # human-readable tag may follow in a comment for traceability.
-  grep -qE "contributor-assistant/github-action@[0-9a-f]{40}" "$REPO_ROOT/.github/workflows/cla.yml"
-  # Belt-and-braces: forbid mutable refs explicitly.
-  ! grep -qE "contributor-assistant/github-action@(main|master|v[0-9])" "$REPO_ROOT/.github/workflows/cla.yml"
+  #
+  # Anchor on the `uses:` key (Copilot R1 #192) so a SHA appearing in
+  # a comment or unrelated line cannot inadvertently satisfy the
+  # regression guard.
+  grep -qE "^[[:space:]]*uses:[[:space:]]+contributor-assistant/github-action@[0-9a-f]{40}([[:space:]]|$)" \
+    "$REPO_ROOT/.github/workflows/cla.yml"
+  # Belt-and-braces: forbid mutable refs on the `uses:` line specifically.
+  ! grep -qE "^[[:space:]]*uses:[[:space:]]+contributor-assistant/github-action@(main|master|v[0-9]|refs/)" \
+    "$REPO_ROOT/.github/workflows/cla.yml"
 }
 
 @test "CLA workflow uses the canonical sign-comment phrase" {
