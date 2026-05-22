@@ -44,6 +44,16 @@ the implementation lives in dedicated follow-up PRs per the plan in
   cases verify the file layout. SPDX header convention documented in
   COMMERCIAL.md; new files must carry the matching SPDX-License-Identifier.
 
+- **v1.0 stability charter conformance suite (closes #153)**: new
+  `tests/oss/conformance.bats` with 24 cases covering the four frozen
+  layers from `docs/specs/walter-os-v1-0-stability-charter.md`: Layer 1
+  (AGENTS.md cascade + WALTER_BRANCH_FLOW + WALTER_CONTEXT), Layer 2
+  (SKILL.md format + skills/ directory structure), Layer 3 (`walter-os
+  baseline-hooks`/`doctor`/`profile` + `install.sh --upgrade`), Layer 4
+  (`approval-gate.sh` blocks-for-ALL + `branch-flow-guard.sh` push
+  blocks). README "Status" section rewritten to explain what v1.0
+  freezes vs what stays mutable.
+
 ---
 
 ## [0.4.5] — 2026-05-21
