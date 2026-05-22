@@ -136,6 +136,30 @@ describe("getCanonicalBaseUrl", () => {
     expect(url.origin).toBe("http://example.com");
   });
 
+  it("skips X-Forwarded-Host: 0.0.0.0 (misconfigured internal proxy)", () => {
+    // Symmetry with the Host-header guard: a proxy that mistakenly
+    // forwards the bind sentinel would otherwise reproduce the bug.
+    // Falls through to the Host header.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({
+        "x-forwarded-host": "0.0.0.0",
+        host: "tower.example.com",
+      }),
+      "http://0.0.0.0:3000",
+      {}
+    );
+    expect(url.origin).toBe("http://tower.example.com");
+  });
+
+  it("skips X-Forwarded-Host: 0.0.0.0:3000 with port", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "0.0.0.0:3000" }),
+      "https://tower.fallback.example",
+      {}
+    );
+    expect(url.origin).toBe("https://tower.fallback.example");
+  });
+
   // ---------------------------------------------------------------------
   // 4. Fallback to request.url
   // ---------------------------------------------------------------------
@@ -147,6 +171,26 @@ describe("getCanonicalBaseUrl", () => {
       {}
     );
     expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  it("documents the unreachable fallback: empty headers + 0.0.0.0 request.url returns 0.0.0.0", () => {
+    // The production failure mode this fix addresses. When no proxy is
+    // in front of Control Tower AND no headers are present AND the
+    // request.url is the bind URL, the helper has nothing to work with
+    // and returns the bad URL — this is the SAME behaviour as before
+    // the fix, intentionally preserved so we don't silently invent an
+    // origin. The cure for this corner case is `CONTROL_TOWER_PUBLIC_URL`:
+    // operators who run without a proxy MUST set it. README and
+    // `.env.example` document this requirement.
+    //
+    // This test exists to make the limitation explicit: any change in
+    // behaviour for this case requires deliberately updating the test.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({}),
+      "http://0.0.0.0:3000/api/login",
+      {}
+    );
+    expect(url.origin).toBe("http://0.0.0.0:3000");
   });
 
   // ---------------------------------------------------------------------

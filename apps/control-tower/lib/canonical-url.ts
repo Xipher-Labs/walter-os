@@ -36,19 +36,32 @@
  */
 type EnvLike = Record<string, string | undefined>;
 
-// Common "do not use this for URL construction" hostnames. The standalone
-// server uses `0.0.0.0` as the bind address; the IPv6 equivalent is `::`.
-const UNROUTABLE_HOSTS = new Set(["0.0.0.0", "::", "[::]"]);
+// Standalone server bind addresses we never want to leak into a Location
+// header. The IPv4 bind sentinel is `0.0.0.0`; the IPv6 forms (`::`,
+// `[::]`, `[::]:3000`) are rejected upstream by isPlausibleHostHeader
+// (which refuses values containing extra colons or square brackets), so
+// they cannot reach this guard. We keep the IPv4 check explicit and
+// trust the plausibility filter for IPv6 — extending the set without
+// also relaxing isPlausibleHostHeader would be dead code.
+const UNROUTABLE_HOSTS = new Set(["0.0.0.0"]);
 
 function isUnroutableHost(host: string): boolean {
   const bare = host.split(":")[0];
   return UNROUTABLE_HOSTS.has(bare);
 }
 
-// A header that came from the upstream proxy may contain a comma-separated
-// list when there are multiple proxies in the chain. Only the first hop is
-// the origin-most (operator-controlled) value; the rest are appended by
-// downstream proxies and not trustworthy.
+// X-Forwarded-* headers may carry a comma-separated list when the request
+// has traversed multiple proxies. The append semantics differ by proxy:
+// nginx and Caddy append (rightmost = closest to the server); Cloudflare
+// Tunnel and Tailscale Serve replace the header entirely with a single
+// value (the public-facing one). In the Walter-VM deployment topology
+// (CF Tunnel → Tailscale Serve → container) only one value is ever
+// present and it is the public hostname the operator's browser used.
+// We always take the first (leftmost) value: that matches the
+// CF-Tunnel / Tailscale-Serve replace semantics, and in an appending
+// chain it is the origin-most hop — also what we want. Operators who
+// front Control Tower with an appending proxy that they don't trust
+// should set CONTROL_TOWER_PUBLIC_URL to bypass header trust entirely.
 function firstHopHeaderValue(headers: Headers, name: string): string | null {
   const raw = headers.get(name);
   if (!raw) return null;
@@ -94,9 +107,16 @@ export function getCanonicalBaseUrl(
     return overrideUrl;
   }
 
-  // 2. Trusted proxy forwarded headers.
+  // 2. Trusted proxy forwarded headers. Symmetry with step 3: a
+  // misconfigured internal proxy that forwards `X-Forwarded-Host: 0.0.0.0`
+  // would otherwise reproduce the bug we are fixing. Reject the bind
+  // sentinel here too and fall through to the next source.
   const forwardedHost = firstHopHeaderValue(headers, "x-forwarded-host");
-  if (forwardedHost && isPlausibleHostHeader(forwardedHost)) {
+  if (
+    forwardedHost &&
+    isPlausibleHostHeader(forwardedHost) &&
+    !isUnroutableHost(forwardedHost)
+  ) {
     const forwardedProto = firstHopHeaderValue(headers, "x-forwarded-proto");
     // Default to https — both Cloudflare Tunnel and Tailscale Serve
     // terminate TLS in front of the container.
