@@ -1250,11 +1250,91 @@ cmd_version() {
 
 # ---------- doctor ----------
 
+# _doctor_cursor_probe: reports the state of the project-local Cursor
+# MDC adapter at <cwd>/.cursor/rules/walter-os.mdc.
+#
+# Three possible outputs (all exit 0 — informational, not gating):
+#   PASS         — file exists and recorded SHA matches current AGENTS.md
+#   STALE        — file exists but the hash is outdated
+#   NOT_GENERATED — file absent. Either:
+#                   - operator didn't opt in via install.sh --cursor-rules
+#                   - Cursor reads AGENTS.md natively (recent versions) so
+#                     no adapter is required.
+#
+# Spec: docs/specs/cursor-adapter-completion.md
+_doctor_cursor_probe() {
+  local cwd
+  cwd="$(pwd)"
+  local mdc="$cwd/.cursor/rules/walter-os.mdc"
+  local agents="$cwd/AGENTS.md"
+
+  echo "Walter-OS doctor — Cursor adapter probe"
+  echo
+
+  # Cursor presence (informational; not gating).
+  if command -v cursor >/dev/null 2>&1; then
+    printf "  ℹ Cursor CLI detected: %s\n" "$(command -v cursor)"
+  else
+    printf "  ℹ Cursor CLI not detected. Recent Cursor versions read\n"
+    printf "    AGENTS.md natively. The MDC adapter is opt-in convenience.\n"
+  fi
+
+  if [[ ! -f "$mdc" ]]; then
+    echo
+    printf "  STATUS: NOT_GENERATED\n"
+    printf "  Adapter file absent: %s\n" "$mdc"
+    printf "  Either Cursor reads AGENTS.md natively (no action needed),\n"
+    printf "  or run: ./install.sh --cursor-rules\n"
+    return 0
+  fi
+
+  if [[ ! -f "$agents" ]]; then
+    echo
+    printf "  STATUS: WARN — adapter exists but no AGENTS.md to compare against.\n"
+    printf "  Adapter: %s\n" "$mdc"
+    printf "  AGENTS.md path checked: %s (missing)\n" "$agents"
+    return 0
+  fi
+
+  # Extract recorded hash from the trailing comment in the adapter.
+  local recorded current
+  recorded="$(grep -oE 'agents-md-sha256: [0-9a-f]{64}' "$mdc" | awk '{print $2}' | head -1)"
+  current="$(shasum -a 256 "$agents" | awk '{print $1}')"
+
+  if [[ -z "$recorded" ]]; then
+    echo
+    printf "  STATUS: STALE\n"
+    printf "  Adapter has no recorded hash — predates the staleness mechanism.\n"
+    printf "  Run: ./install.sh --cursor-rules\n"
+    return 0
+  fi
+
+  if [[ "$recorded" == "$current" ]]; then
+    echo
+    printf "  STATUS: PASS\n"
+    printf "  Adapter is current.\n"
+    printf "    file: %s\n" "$mdc"
+    printf "    sha:  %s\n" "$current"
+    return 0
+  fi
+
+  echo
+  printf "  STATUS: STALE\n"
+  printf "  Adapter hash does not match the current AGENTS.md.\n"
+  printf "    recorded: %s\n" "$recorded"
+  printf "    current:  %s\n" "$current"
+  printf "  Run: ./install.sh --cursor-rules\n"
+  return 0
+}
+
 cmd_doctor() {
   # Parse optional --tier N flag. Without it, every check runs (legacy
   # contract preserved). With it, only checks tagged ≤ N run — useful
   # for verifying a tier install (see setup/agent-install/tier-*.md).
+  # --cursor: run ONLY the Cursor adapter probe and exit (no other
+  # checks). See docs/specs/cursor-adapter-completion.md.
   local tier_filter=""
+  local cursor_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --tier)
@@ -1263,6 +1343,10 @@ cmd_doctor() {
         ;;
       --tier=*)
         tier_filter="${1#--tier=}"
+        shift
+        ;;
+      --cursor)
+        cursor_only=1
         shift
         ;;
       *)
@@ -1274,6 +1358,11 @@ cmd_doctor() {
   if [[ -n "$tier_filter" ]] && ! [[ "$tier_filter" =~ ^[1-4]$ ]]; then
     echo "Error: --tier must be 1, 2, 3, or 4 (got: ${tier_filter})" >&2
     return 1
+  fi
+
+  if [[ "$cursor_only" -eq 1 ]]; then
+    _doctor_cursor_probe
+    return $?
   fi
 
   echo "Walter-OS doctor${tier_filter:+ (tier ${tier_filter})}"

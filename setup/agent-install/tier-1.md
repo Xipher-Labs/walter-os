@@ -185,7 +185,39 @@ The acceptable-✗ checks are informational; they tell you which agent
 CLIs the operator has on this box.
 
 ================================================================================
-STEP 6 — REPORT
+STEP 6 — CURSOR (if applicable)
+
+If the operator uses Cursor, there are two paths:
+
+  PATH A — Recent Cursor (v0.42+, native AGENTS.md support):
+    No extra step. Cursor reads the Walter-OS AGENTS.md cascade
+    automatically. Verify:
+
+      walter-os doctor --cursor
+
+    (Reports NOT_GENERATED — that's the correct state when relying
+    on native AGENTS.md. The probe is informational, not gating.)
+
+  PATH B — Older Cursor, OR you want the rules visible in Cursor's
+  "Rules for AI" panel:
+    Run from the repo root that contains AGENTS.md:
+
+      ./install.sh --cursor-rules
+
+    This generates <repo>/.cursor/rules/walter-os.mdc as a derived
+    artifact from the AGENTS.md cascade. Re-run after AGENTS.md
+    changes; `walter-os doctor --cursor` reports STALE when the
+    adapter is outdated.
+
+  USER-LEVEL PREFERENCES (optional, separate from the project adapter):
+    Cursor does NOT read from ~/.cursor/ on disk. To set rules that
+    apply across ALL your Cursor projects, open Cursor Settings →
+    Rules for AI → User Rules and paste the contents of your
+    overlay's preferences. The install script does NOT write to
+    ~/.cursor/ because Cursor doesn't read from there.
+
+================================================================================
+STEP 7 — REPORT
 
 Print to the operator:
 
@@ -194,6 +226,7 @@ Print to the operator:
   ✓ Branch flow: <single-tier|three-stage>
   ✓ Hooks active in: ~/.claude/, ~/.codex/
   ✓ CLI on PATH: walter-os <version>
+  ✓ Cursor: <native AGENTS.md | MDC adapter at .cursor/rules/walter-os.mdc>
 
   Next steps:
     - RESTART your agent (Claude Code / Codex CLI / Cursor) so the
