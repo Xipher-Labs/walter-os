@@ -243,9 +243,11 @@ describe("getCanonicalBaseUrl", () => {
     expect(url.origin).toBe("https://tower.legitimate.com");
   });
 
-  it("never honors an X-Forwarded-Host containing a path or query", () => {
+  it("never honors an X-Forwarded-Host containing a path", () => {
     // X-Forwarded-Host should be a bare host[:port]; reject anything else
-    // to avoid URL-parsing surprises.
+    // to avoid URL-parsing surprises. Dedicated query (?) and fragment (#)
+    // rejections live below as standalone tests so a regression in one
+    // delimiter doesn't accidentally pass on coverage from the others.
     const url = getCanonicalBaseUrl(
       makeHeaders({ "x-forwarded-host": "tower.example.com/evil" }),
       "https://canonical.example.com",
