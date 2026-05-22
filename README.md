@@ -46,8 +46,24 @@ overlay before it does anything useful for you.
 
 ## Status: alpha — read this before relying on it
 
-> **This is v0.4.5-alpha (latest tested). Things iterate fast, things break,
-> things get corrected on the fly while other work is in-flight.**
+> **Current**: v0.4.5-alpha. Things iterate fast, things break, things get
+> corrected on the fly. **Pin to a tag** if you depend on a specific
+> behavior.
+>
+> **The v1.0 stability promise** is documented in
+> [`docs/specs/walter-os-v1-0-stability-charter.md`](docs/specs/walter-os-v1-0-stability-charter.md).
+> At v1.0, four layers will be frozen with a deprecation policy: the
+> AGENTS.md cascade + env vars (Layer 1), the SKILL.md format (Layer 2),
+> the `walter-os` CLI subcommands (Layer 3), and the
+> `approval-gate`/`branch-flow-guard` hook invariants (Layer 4). Everything
+> else (service stack, MCP catalog, internal scripts, Council, Control
+> Tower UI) is intentionally NOT frozen and can evolve freely. The
+> conformance test suite at `tests/oss/conformance.bats` is the executable
+> form of the charter.
+>
+> Until v1.0, breaking changes are normal — but every release is tagged
+> and the CHANGELOG documents the diff.
+>
 >
 > Walter-OS started as a **100% tailor-made setup for a single operator**
 > and is in the process of being generalized for OSS adoption.
