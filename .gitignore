@@ -24,6 +24,13 @@ baselines/
 hook-checksums.json
 mcp-snapshots/
 
+# Generic runtime log files at any repo location. Specifically guards
+# against `report.log`-style artifacts that got committed by accident
+# in pre-v0.4.5 history (closes issue #144 / audit 2026-05-21 hygiene
+# finding). Operators with intentionally-tracked .log files: add them
+# above this block with a `!path/to/file.log` exception.
+*.log
+
 # Generated assets (regenerable, big)
 assets/generated/
 
