@@ -152,7 +152,7 @@ You can adopt those parts in four ways:
 | Mode | What you do | What you get | Why it exists |
 |---|---|---|---|
 | **1. Clone-only reference** | Clone the repo and read/copy from it. Do not run `install.sh`. | The agent contract, workflow rules, skills, docs, specs, hooks, and service recipes as plain files. | Useful when you only want to study the operating model, copy an `AGENTS.md` pattern into another repo, audit the system before trusting it, or use Walter-OS as a playbook without changing your machine. |
-| **2. Client install** | Run `./install.sh` on your workstation and configure a personal overlay. | A consistent agent environment across repos: same global/context/repo `AGENTS.md` cascade, same skills catalog, same commands, same hooks, same MCP profiles, same CLI. | This is the default starting point. It makes Claude Code, Codex CLI, and repo-level agents behave consistently without asking you to self-host anything. Cursor can follow the same rules once you wire its rules file manually. |
+| **2. Client install** | Run `./install.sh` on your workstation and configure a personal overlay. | A consistent agent environment across repos: same global/context/repo `AGENTS.md` cascade, same skills catalog, same commands, same hooks, same MCP profiles, same CLI. | This is the default starting point. It makes Claude Code, Codex CLI, and repo-level agents behave consistently without asking you to self-host anything. Cursor reads `AGENTS.md` natively in recent versions; older Cursor versions or operators who want the rules visible in the IDE rules panel can opt in to a generated MDC file with `./install.sh --cursor-rules`. |
 | **3. Client + selected services** | Keep the client install, then add only the services you need from `walter-host` or from existing SaaS. | Targeted upgrades such as Infisical for better secrets control, LiteLLM for model routing and spend visibility, Grafana for observability, Syncthing for memory/file sync, or n8n for automation. | Most operators do not need the full stack on day one. This lets you add control where it matters while keeping GitHub/Linear/hosted tools where they already work. |
 | **4. Full walter-host** | Deploy the self-hosted stack on a VM, homelab node, or local lab machine. | A complete operator control plane: secrets vault, model gateway, project tracker, git host, dashboards, automations, backups, and Control Tower for supervising agent activity. | This is for operators who want stronger data ownership, reproducible service wiring, human-visible agent telemetry, and a private backend for longer-running Council workflows. |
 
@@ -164,10 +164,13 @@ only when the additional control is worth the operational cost.
 Once installed, Walter-OS becomes the agent-behavior baseline for the tools you
 choose to wire into it. `install.sh` symlinks the global contract, skills,
 agents, commands, hooks, and MCP profiles into the local tool homes used by
-Claude Code and Codex CLI. Cursor can follow the same philosophy through a
-manual Cursor rules file today; a generated adapter is still backlog work. The
-goal is not to force a new editor; it is to make the same operating discipline
-available wherever you ask an agent to work.
+Claude Code and Codex CLI. Recent Cursor versions read `AGENTS.md` natively,
+so the same cascade applies there without extra wiring; operators who want the
+rules visible in Cursor's "Rules for AI" panel or who use an older Cursor
+version can opt in to a generated `.cursor/rules/walter-os.mdc` by running
+`./install.sh --cursor-rules`. The goal is not to force a new editor; it is
+to make the same operating discipline available wherever you ask an agent to
+work.
 
 That discipline is loaded as a three-level `AGENTS.md` cascade:
 
@@ -522,8 +525,10 @@ git clone https://github.com/xipher-labs/walter-os.git /opt/walter-os && cd /opt
 This gives you the local agent contract, skills, CLI, and overlay structure.
 It is the mode that makes agents behave consistently across repositories once
 the global/context/repo `AGENTS.md` cascade and symlinked skills are installed.
-Claude Code and Codex CLI pick up the symlinked Walter-OS contract and skills;
-Cursor requires a manual Cursor rules file until the adapter is implemented.
+Claude Code and Codex CLI pick up the symlinked Walter-OS contract and skills.
+Recent Cursor versions read `AGENTS.md` natively — no extra step. For older
+Cursor versions or to materialize the rules in Cursor's IDE rules panel, opt
+in with `./install.sh --cursor-rules` (generates `<repo>/.cursor/rules/walter-os.mdc`).
 The optional self-hosted service stack is a separate step:
 
 ```bash
@@ -1676,8 +1681,13 @@ minor versions. The following limitations are known and tracked:
 - **Cloudflare dependency**: the default networking setup requires a Cloudflare
   account. Alternative setups (direct DNS + Nginx + Let's Encrypt) are possible
   but not documented or tested in this repo.
-- **AGENTS.md is not auto-loaded by all tools**: Cursor requires the Cursor
-  rules file, not AGENTS.md. A Cursor adapter is tracked in the backlog.
+- **Cursor support**: Recent Cursor versions (v0.42+) read `AGENTS.md`
+  natively, so no adapter is required — the Walter-OS cascade works out of
+  the box. For older Cursor versions, or to make the rules visible in
+  Cursor's "Rules for AI" panel, run `./install.sh --cursor-rules` from the
+  repo root to generate `<repo>/.cursor/rules/walter-os.mdc`. Verify with
+  `walter-os doctor --cursor`. Re-run `--cursor-rules` after AGENTS.md
+  changes; `doctor --cursor` reports STALE when the adapter is outdated.
 - **No automatic secret rotation**: secrets in `.env.local` are static. Infisical
   provides rotation for service secrets, but operator keys (API tokens) must be
   rotated manually.
