@@ -49,6 +49,26 @@ setup() {
   grep -qE "^ENV[[:space:]]+WALTER_CONFIG=/root/\\.config/walter-os" "$DOCKERFILE"
 }
 
+@test "AC-1 (#176): Dockerfile sets WALTER_CONFIG_DIR (CT route alignment)" {
+  # apps/control-tower/app/api/mode/route.ts reads WALTER_CONFIG_DIR
+  # while bin/walter-os + mode.sh read WALTER_CONFIG. Both must point at
+  # the same path so the read (CT route) and write (CLI exec) paths
+  # agree (Copilot R1 #194).
+  grep -qE "^ENV[[:space:]]+WALTER_CONFIG_DIR=/root/\\.config/walter-os" "$DOCKERFILE"
+}
+
+@test "AC-1 (#176): .dockerignore allows the bundled paths (build context check)" {
+  # The Dockerfile is in apps/control-tower but the build context is the
+  # repo root (per compose.yml `build: { context: . }`). Without these
+  # entries the COPY instructions error with "not found in build context"
+  # at docker build time — caught by Copilot R1 #194.
+  local ignore="$REPO_ROOT/.dockerignore"
+  [[ -f "$ignore" ]] || skip ".dockerignore missing"
+  grep -qE "^!bin/walter-os$" "$ignore"
+  grep -qE "^!scripts/agents/lib/mode\\.sh$" "$ignore"
+  grep -qE "^!VERSION$" "$ignore"
+}
+
 @test "AC-1 (#176): Dockerfile installs bash + jq (mode.sh + execFile prerequisites)" {
   # bash is needed because bin/walter-os is a bash script; node:22-alpine
   # ships BusyBox /bin/sh only. jq is needed by mode.sh's atomic

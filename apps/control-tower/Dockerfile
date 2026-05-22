@@ -69,6 +69,12 @@ ENV HOSTNAME="0.0.0.0"
 # that goes to $WALTER_CONFIG (default $HOME/.config/walter-os, which is
 # mounted RW from the host at /root/.config/walter-os, see compose.yml).
 ENV WALTER_OS_HOME=/opt/walter-os
+# Both env vars must point at the same place — the route handler in
+# apps/control-tower/app/api/mode/route.ts reads `WALTER_CONFIG_DIR`
+# while bin/walter-os + scripts/agents/lib/mode.sh read `WALTER_CONFIG`.
+# Setting both pins them together so an operator override of one
+# doesn't silently desync the read/write paths (Copilot R1 #194).
 ENV WALTER_CONFIG=/root/.config/walter-os
+ENV WALTER_CONFIG_DIR=/root/.config/walter-os
 
 CMD ["node", "apps/control-tower/server.js"]

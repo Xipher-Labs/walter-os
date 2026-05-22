@@ -222,22 +222,30 @@ sys.exit(0)
   [ "$status" -eq 0 ]
 }
 
-@test "postiz smoke probe uses port 3000 not 5000 (W2)" {
-  # Postiz listens on 3000 inside the container; the old probe used 5000 (wrong).
-  # This static test guards the smoke test correctness without Docker.
-  # compose.yml healthcheck also uses port 3000 — both must agree.
+@test "postiz smoke probe uses port 3000 (W2)" {
+  # Postiz listens on 3000 inside the container; the historical bug was a
+  # probe pointed at 5000. The meaningful contract is that compose.yml's
+  # postiz healthcheck targets port 3000 — that's what we verify.
   #
-  # Scan the WHOLE postiz block (until the next service definition) — the
+  # Scan the WHOLE postiz block (until the next service definition). The
   # prior `grep -A5/-A30` windows could miss the healthcheck on Postiz
   # blocks with many env vars (the canonical block has 16+ env entries
   # before the healthcheck).
+  #
+  # Dropped the prior "no 5000 reference in this test file" assertion —
+  # it was self-referential (the regex pattern + the test name both
+  # contained the strings it was looking for), portable-grep-fragile
+  # (worked silently on BSD grep, failed on GNU), and provided no real
+  # value once the compose.yml port is verified directly.
   local postiz_block
   postiz_block=$(awk '/^  postiz:$/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:$/{flag=0} flag' \
     "$COMPOSE_FILE")
   echo "$postiz_block" | grep -q "healthcheck"
   echo "$postiz_block" | grep -q "127.0.0.1:3000"
-  # Confirm no 5000 reference in postiz probe section of this file
-  ! grep -qP "postiz.*5000|5000.*postiz" "$BATS_TEST_FILENAME"
+  # Belt-and-braces: explicitly forbid port 5000 inside the postiz
+  # block. Catches a regression where a future PR adds back a 5000
+  # reference inside the healthcheck without going through this test.
+  ! echo "$postiz_block" | grep -q "5000"
 }
 
 @test "devrel profile: postiz starts [requires Docker, slow]" {

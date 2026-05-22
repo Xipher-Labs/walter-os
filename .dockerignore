@@ -6,6 +6,19 @@
 !apps/control-tower
 !apps/control-tower/**
 
+# Control Tower's Dockerfile bundles the walter-os CLI + its mode-
+# management library so the Council toggle (#176) can call
+# `walter-os mode consensus on|off` via execFile. The build context
+# is the repo root; these paths must be sent to the docker daemon
+# or the COPY instructions fail with "not found in build context".
+!bin
+!bin/walter-os
+!scripts
+!scripts/agents
+!scripts/agents/lib
+!scripts/agents/lib/mode.sh
+!VERSION
+
 apps/control-tower/.next
 apps/control-tower/node_modules
 apps/control-tower/.env
