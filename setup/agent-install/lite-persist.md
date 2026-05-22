@@ -23,47 +23,52 @@ Perform these steps in order:
 
 1. Create the directory `.walter-os-lite/` in the current repository root.
 
-2. Write the file `.walter-os-lite/AGENTS.md` with the following content
-   verbatim:
+2. Write the file `.walter-os-lite/AGENTS.md` with the EXACT content
+   delimited by the BEGIN/END markers below. Write everything BETWEEN the
+   markers — do NOT include the marker lines themselves in the file.
 
----
-# Walter-OS Lite (persisted contract)
+   BEGIN .walter-os-lite/AGENTS.md
+   # Walter-OS Lite (persisted contract)
 
-These rules apply for every change in this repository. They are a minimal
-subset of the full Walter-OS contract (https://github.com/Xipher-Labs/walter-os).
+   These rules apply for every change in this repository. They are a minimal
+   subset of the full Walter-OS contract (https://github.com/Xipher-Labs/walter-os).
 
-## 1. Classify before you start (rigor)
-- tiny: typo / single-line config / dep bump. No spec. Atomic commit.
-- small: <50 LOC bug fix or function add. 2-3 sentence inline plan. TDD
-  mandatory. Atomic commit.
-- major: new feature / schema change / >200 LOC refactor / auth / crypto /
-  money / PHI / production migration. Write a spec first. Full TDD.
+   ## 1. Classify before you start (rigor)
+   - tiny: typo / single-line config / dep bump. No spec. Atomic commit.
+   - small: <50 LOC bug fix or function add. 2-3 sentence inline plan. TDD
+     mandatory. Atomic commit.
+   - major: new feature / schema change / >200 LOC refactor / auth / crypto /
+     money / PHI / production migration. Write a spec first. Full TDD.
 
-## 2. TDD gate (mandatory for small + major)
-RED (failing test) → GREEN (minimum code) → REFACTOR → COMMIT.
-Skipping RED is a violation. Disabling a failing test is a violation.
+   ## 2. TDD gate (mandatory for small + major)
+   RED (failing test) → GREEN (minimum code) → REFACTOR → COMMIT.
+   Skipping RED is a violation. Disabling a failing test is a violation.
 
-## 3. Conventional commits
-feat / fix / docs / refactor / test / chore / security / perf — subject
-<=72 chars, imperative mood, body explains WHY.
+   ## 3. Conventional commits
+   feat / fix / docs / refactor / test / chore / security / perf — subject
+   <=72 chars, imperative mood, body explains WHY.
 
-## 4. Branch flow + push policy
-feature/<slug> -> main via PR. NEVER push to main/master/staging/production
-directly. NEVER auto-merge. Operator clicks merge.
+   ## 4. Branch flow + push policy
+   feature/<slug> -> main via PR. NEVER push to main/master/staging/production
+   directly. NEVER auto-merge. Operator clicks merge.
 
-## 5. Self-review checklist (before reporting done)
-All tests pass / lint+typecheck clean / acceptance criteria covered by
-tests / no commented-out code or unaddressed TODOs.
+   ## 5. Self-review checklist (before reporting done)
+   All tests pass / lint+typecheck clean / acceptance criteria covered by
+   tests / no commented-out code or unaddressed TODOs.
 
-## 6. Hard nevers
-NEVER commit secrets / auto-merge / disable failing tests / push to
-protected branches.
+   ## 6. Hard nevers
+   NEVER commit secrets / auto-merge / disable failing tests / push to
+   protected branches.
 
-## Upgrade path
-For the full agent contract (skills, hooks, MCP profiles, walter-os CLI),
-install Tier I: <https://github.com/Xipher-Labs/walter-os/blob/main/setup/agent-install/tier-1.md>.
----
-   (end of .walter-os-lite/AGENTS.md content)
+   ## Upgrade path
+   For the full agent contract (skills, hooks, MCP profiles, walter-os CLI),
+   install Tier I: <https://github.com/Xipher-Labs/walter-os/blob/main/setup/agent-install/tier-1.md>.
+   END .walter-os-lite/AGENTS.md
+
+   When writing the file, strip the 3-space indent that prefixes each line
+   inside the BEGIN/END block (the indent is only present in this
+   instructions document for readability; the actual file content starts
+   at column 0).
 
 3. Append `.walter-os-lite/` to the repository root `.gitignore` if not
    already present. The .walter-os-lite/ directory is for personal

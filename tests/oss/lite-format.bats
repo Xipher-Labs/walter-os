@@ -107,3 +107,25 @@ _extract_block() {
   count="$(grep -c '^```$' "$LITE_PERSIST")"
   [[ "$count" -eq 2 ]]
 }
+
+@test "AC-4: lite-persist.md template covers all 6 discipline categories" {
+  # Reviewer R2 caught that lite-persist.md's persisted-contract template
+  # is structurally distinct from lite.md and needs its own coverage test.
+  # All 6 disciplines must appear (same as lite.md) so the persisted file
+  # is not a stripped-down version.
+  grep -qi "rigor" "$LITE_PERSIST"
+  grep -qi "TDD" "$LITE_PERSIST"
+  grep -qi "conventional commit" "$LITE_PERSIST"
+  grep -qi "branch flow" "$LITE_PERSIST"
+  grep -qi "self-review" "$LITE_PERSIST"
+  grep -qi "Hard nevers" "$LITE_PERSIST"
+}
+
+@test "AC-4: lite-persist.md uses unambiguous BEGIN/END markers (no bare ---)" {
+  # Reviewer R2 caught that the prior version used bare `---` lines as
+  # content markers inside the fenced block — an agent parsing this
+  # literally could mistake them for YAML frontmatter delimiters and
+  # truncate the file. Verify the unambiguous markers are present.
+  grep -q "BEGIN .walter-os-lite/AGENTS.md" "$LITE_PERSIST"
+  grep -q "END .walter-os-lite/AGENTS.md" "$LITE_PERSIST"
+}
