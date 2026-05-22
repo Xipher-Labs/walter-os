@@ -207,8 +207,13 @@ Some older Unix conventions prefer `~/bin/` over `~/.local/bin/`.
    removing the existing `PATH` export.
 3. Documentation references update in the same PR (the four
    `setup/agent-install/tier-*.md` files).
-4. `walter-os doctor` (existing, unchanged) reports whether `~/.local/bin/`
-   is on `$PATH`; operators see a clear error if it's not.
+4. `install.sh` (via `link_walter_cli`) prints a clear PATH warning at
+   install time if `~/.local/bin/` is not on `$PATH`. `walter-os doctor`
+   checks that the symlink exists; the PATH-on-`$PATH` check lives in
+   install.sh, not in doctor. The two checks together cover the failure
+   mode. (Corrected per PR #111 R4 Finding A: this paragraph previously
+   misattributed the PATH check to doctor; in reality install.sh prints
+   the warning.)
 
 ## Open questions (non-blocking)
 
