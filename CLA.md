@@ -3,19 +3,20 @@
 **Version**: 1.0 (DRAFT — pending lawyer review per ADR-0019 migration step 1)
 **Date**: 2026-05-21
 **Project**: Walter-OS (the "Project")
-**Owner**: Xipher Labs (the "Project Owner")
+**Owner**: Xipher Labs S.R.L. (the "Project Owner")
 
 > **STATUS NOTE — TO BE REMOVED ON ACTIVATION**
 >
 > This CLA scaffold has been committed to the repository per
 > [ADR-0019](docs/decisions/0019-contributor-license-agreement.md). It is
-> **NOT yet active**. Per the migration plan in ADR-0019, the text must
-> be reviewed and approved by a lawyer before the CLA Assistant bot is
-> enabled and external PRs are gated on it. Until activation, the
-> `.github/workflows/cla.yml` workflow is gated by `if:
-> ${{ vars.WALTER_CLA_ACTIVE == 'true' }}` — it will not block any PR.
+> **NOT yet active**. The legal entity (Xipher Labs S.R.L.) has been
+> constituted (ADR-0022 Phase 1 complete); the remaining gate is lawyer
+> review of the CLA text per ADR-0019 migration §1. Until activation,
+> the `.github/workflows/cla.yml` workflow is gated by
+> `if: ${{ vars.WALTER_CLA_ACTIVE == 'true' }}` — it will not block any
+> PR.
 >
-> Activation steps once approved:
+> Activation steps once lawyer approves:
 > 1. Remove this status note + the gating `if:` from the workflow.
 > 2. Set the `WALTER_CLA_ACTIVE` repo variable to `true`.
 > 3. The CLA Assistant bot starts enforcing the signature requirement
@@ -148,11 +149,10 @@ any respect.
 
 ## 8. Governing Law
 
-This Agreement is governed by the laws of the jurisdiction in which Xipher
-Labs is constituted (per ADR-0022). Until the entity is constituted, this
-Agreement is governed by the laws of Argentina (the operator's residence).
-Once the entity is constituted, this Agreement transfers to the entity by
-operation of the entity-formation documents; no re-signing is required.
+This Agreement is governed by the laws of the Argentine Republic, the
+jurisdiction in which Xipher Labs S.R.L. is constituted (per ADR-0022,
+Phase 1 complete). Jurisdiction for any dispute arising from this
+Agreement is the Argentine courts of competent jurisdiction.
 
 ---
 

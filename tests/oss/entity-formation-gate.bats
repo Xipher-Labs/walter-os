@@ -34,8 +34,12 @@ setup() {
   grep -q "Phase 4" "$RUNBOOK"
 }
 
-@test "runbook recommends Argentina SAS per ADR-0022 Decision" {
-  grep -qi "Argentina SAS" "$RUNBOOK"
+@test "runbook records the constituted Argentine entity (Xipher Labs S.R.L.)" {
+  # Post-Phase-1: the runbook records the constituted entity. ADR-0022
+  # originally recommended S.A.S. — the operator chose S.R.L. for their
+  # specific legal/tax situation, which the runbook documents.
+  grep -q "Xipher Labs S.R.L." "$RUNBOOK"
+  grep -qi "Argentina" "$RUNBOOK"
 }
 
 @test "runbook references the CLA activation (WALTER_CLA_ACTIVE)" {

@@ -1,5 +1,5 @@
 Walter-OS
-Copyright (C) 2026 Xipher Labs
+Copyright (C) 2026 Xipher Labs S.R.L.
 
 Walter-OS is dual-licensed by directory tree, per ADR-0018:
 
@@ -19,13 +19,10 @@ modifications to files in `setup/walter-host/` under the AGPL terms.
 Modifications to the contract layer (Apache-2.0) carry no copyleft
 obligation.
 
-Xipher Labs is the trade name. As of 2026-05-21 the legal entity is
-being constituted (ADR-0022). Until the entity transfer of copyright
-completes, the copyright holder of record is the individual operator
-who founded the project; the "Xipher Labs" attribution here represents
-the project owner and will be made fully unambiguous once entity
-formation is complete. Commercial licensing (COMMERCIAL.md) terms rest
-on the unified copyright posture and will take effect with the entity.
+Xipher Labs S.R.L. is the constituted legal entity (Sociedad de
+Responsabilidad Limitada, Argentina) that holds the Walter-OS copyright
+as of the entity formation date (Phase 1 complete per ADR-0022).
+Commercial licensing terms in COMMERCIAL.md are issued by the entity.
 
 Project URL: <https://github.com/xipher-labs/walter-os>
 ADRs:
