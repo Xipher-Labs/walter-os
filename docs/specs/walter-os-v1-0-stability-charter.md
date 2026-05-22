@@ -104,7 +104,7 @@ v1.0 is cut when ALL of the following are true:
 3. Walter-OS Lite complete (spec: `walter-os-lite-entry-tier.md`).
    `lite.md` installs in under 60 seconds, verified on macOS and Ubuntu 24.04.
 4. AGENTS.md cascade documented as a standalone spec document.
-5. CLA or DCO enforcement active (ADR-0019 implemented).
+5. CLA enforcement active (per ADR-0019, DCO is insufficient for the commercial-grant path) (ADR-0019 implemented).
 6. OSS Trust roadmap items through Layer B complete (per
    `docs/specs/oss-trust-roadmap.md` — items A-1 through B-3).
 7. The conformance test suite covers all items in the stability surface above.

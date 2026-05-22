@@ -168,24 +168,31 @@ require immediate implementation work.
 | WS-8 Founder-skills bundle extraction | major | 3 | — |
 | WS-9 walter-contract / walter-host split | major | 3 | WS-1, ADR-0020 |
 | WS-10 v1.0 stability charter | major | 4 | WS-1, WS-3, WS-5 |
-| ADR-0018 Licensing strategy | — | 1 | ADR-0019 |
-| ADR-0019 CLA vs DCO | — | 1 | — |
+| ADR-0018 Licensing strategy | — | 1 | ADR-0022, ADR-0019 |
+| ADR-0019 CLA (DCO rejected as insufficient) | — | 1 | ADR-0022 |
 | ADR-0020 Repo split decision | — | 2 | ADR-0018 |
 | ADR-0021 v1.0 stability charter | — | 4 | WS-10 |
-| ADR-0022 Xipher Labs legal entity | — | 1 | ADR-0018 |
+| ADR-0022 Xipher Labs legal entity | — | 1 | — |
 
 ### Dependency graph
 
 ```
 WS-4 (tiny, do immediately)
-ADR-0018 → ADR-0019 → WS-1 → WS-5 → WS-7
-                             → WS-9 (via ADR-0020)
-                             → WS-10 (via ADR-0021)
+ADR-0022 → ADR-0018 → ADR-0019 → WS-1 → WS-5 → WS-7
+                                      → WS-9 (via ADR-0020)
+                                      → WS-10 (via ADR-0021)
 WS-2 (independent, Sprint 1)
 WS-3 (Sprint 2, independent of WS-1)
 WS-6 (Sprint 2, independent)
 WS-8 (Sprint 3, independent)
 ```
+
+ADR-0022 (legal entity) gates ADR-0018 (licensing) because the
+"commercial license to self" rationale in 0018 only holds once Xipher
+Labs is constituted as a copyright-holding entity. The implementation
+of 0018 (LICENSE files + SPDX headers + commercial-grant terms) can
+land with NOTICE attributing to the operator personally as an interim
+state; the legal-entity update is then a one-line NOTICE change.
 
 ---
 
@@ -375,7 +382,7 @@ reference the spec or ADR where applicable.
 | I-09 | `[CHORE] -BUSINESS- walter-contract vs walter-host split decision` | MAJOR | `docs/specs/walter-contract-walter-host-split.md`, ADR-0020 |
 | I-10 | `[DOCS] -TECHNICAL- v1.0 stability charter and deprecation policy` | MAJOR | `docs/specs/walter-os-v1-0-stability-charter.md`, ADR-0021 |
 | I-11 | `[CHORE] -COMPLIANCE- define licensing strategy (ADR-0018)` | BLOCKER | `docs/decisions/0018-licensing-strategy.md` |
-| I-12 | `[CHORE] -COMPLIANCE- add CLA or DCO contributor gate (ADR-0019)` | BLOCKER | `docs/decisions/0019-contributor-license-agreement.md` |
+| I-12 | `[CHORE] -COMPLIANCE- add CLA contributor gate (ADR-0019)` | BLOCKER | `docs/decisions/0019-contributor-license-agreement.md` |
 | I-13 | `[CHORE] -COMPLIANCE- Xipher Labs legal entity registration (ADR-0022)` | BLOCKER | `docs/decisions/0022-xipher-labs-legal-entity.md` |
 | I-14 | `[DOCS] -TECHNICAL- document Council without walter-host (hosted Plane/LiteLLM)` | MINOR | README known-limitations section |
 | I-15 | `[FIX] -TECHNICAL- add report.log pattern to .gitignore before removal` | COSMETIC | WS-4 |

@@ -7,9 +7,16 @@
 ## Context
 
 Walter-OS is currently licensed under AGPL-3.0 across the entire repository,
-as decided in ADR-0010. Copyright is held by Xipher Labs (the operator's
-entity), which means the copyright holder can issue commercial licenses to
-specific downstream users without affecting the community's AGPL rights.
+as decided in ADR-0010. Copyright is held by the operator personally as of this
+writing. Per ADR-0022, Xipher Labs is being constituted as a legal entity;
+copyright is being transferred to the entity. The "commercial license to self"
+mechanism described in the Decision section is only fully sound once that
+transfer is complete — both the license assignment + the commercial grant rest
+on the copyright holder having unambiguous standing to grant both. **ADR-0022 is
+a prerequisite for the COMMERCIAL.md text + NOTICE attribution this ADR
+generates.** The LICENSE files + SPDX headers can land beforehand with operator-
+name attribution as an interim state; the NOTICE attribution updates in a one-
+line follow-up once the entity transfer completes.
 
 The operator is planning to build IdeaOS: a commercial SaaS product derived
 from Walter-OS. This requires re-examining the licensing strategy to ensure:

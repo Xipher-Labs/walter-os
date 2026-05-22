@@ -55,7 +55,7 @@ Changes to the stability surface require:
 2. Cursor adapter complete (`doctor --cursor` passes on clean install).
 3. Walter-OS Lite complete (60-second install verified on macOS and Ubuntu 24.04).
 4. AGENTS.md cascade documented as standalone vendor-neutral spec.
-5. CLA or DCO enforcement active.
+5. CLA enforcement active (per ADR-0019, DCO is insufficient for the commercial-grant path).
 6. OSS Trust roadmap items through Layer B complete.
 7. Conformance test suite covers all stability surface items.
 8. No open P0 or P1 security findings.
