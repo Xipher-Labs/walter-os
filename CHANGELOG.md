@@ -105,6 +105,18 @@ the implementation lives in dedicated follow-up PRs per the plan in
   blocks). README "Status" section rewritten to explain what v1.0
   freezes vs what stays mutable.
 
+- **AGENTS.md cascade vendor-neutral standalone spec (closes #148)**:
+  new `docs/specs/agents-md-cascade-spec.md` — RFC-style document
+  (RFC 2119 normative language) defining the three-layer cascade
+  (global / context / repository) + personal overlay + WALTER_BRANCH_FLOW
+  / WALTER_CONTEXT env vars + security considerations + conformance
+  criteria. Readable without Walter-OS knowledge. The doc is published
+  under Apache-2.0 (per ADR-0018) so any AI-coding-tool author or third
+  party can adopt the pattern. Companion conformance test suite at
+  `tests/oss/agents-md-cascade-conformance.bats` (24 cases) verifies
+  the Walter-OS reference implementation satisfies the spec — forks
+  can run the same suite against their own tree.
+
 ---
 
 ## [0.4.5] — 2026-05-21
