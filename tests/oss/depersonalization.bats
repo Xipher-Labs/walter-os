@@ -753,3 +753,59 @@ setup() {
     | tr -d ' ')"
   [ "$count" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# I-02 / WS-2: Depersonalization deep cleanup of global AGENTS.md
+# (spec: docs/specs/depersonalization-deep-cleanup.md)
+#
+# These tests guard against re-introducing operator-personal toolchain,
+# stack, or domain references in the global AGENTS.md. Operator-personal
+# content lives in the overlay (~/.config/walter-os/overlay/) or in
+# context-specific AGENTS.md files, never in the global contract.
+# ---------------------------------------------------------------------------
+
+@test "I-02: global AGENTS.md does not name 'Apple Silicon' as a default" {
+  ! grep -q "Apple Silicon" "$REPO_ROOT/AGENTS.md"
+}
+
+@test "I-02: global AGENTS.md does not name 'OrbStack' as a default container runtime" {
+  ! grep -q "OrbStack" "$REPO_ROOT/AGENTS.md"
+}
+
+@test "I-02: global AGENTS.md does not prescribe pnpm as the universal Node manager" {
+  ! grep -q "pnpm.* for Node" "$REPO_ROOT/AGENTS.md"
+}
+
+@test "I-02: global AGENTS.md does not name 'Solana' as a first-class concern" {
+  # Catches the originally identified phrases ("Solana TX" in the auto-
+  # escalation list, "Solana infrastructure" in the skills list) AND the
+  # broader pattern: bare "Solana" appearing anywhere in the global
+  # contract. Reviewer R2 caught a case where the testing-strategy callout
+  # named Solana in a parenthetical pointer — the narrow phrase-checks
+  # missed it. The bare-word guard prevents that regression.
+  ! grep -q "Solana TX" "$REPO_ROOT/AGENTS.md"
+  ! grep -q "Solana infrastructure" "$REPO_ROOT/AGENTS.md"
+  ! grep -q "Solana" "$REPO_ROOT/AGENTS.md"
+}
+
+@test "I-02: global AGENTS.md does not reference Stripe as the canonical payment example" {
+  ! grep -q "Stripe" "$REPO_ROOT/AGENTS.md"
+}
+
+@test "I-02: operator-preferences example file exists in _examples" {
+  [[ -f "$REPO_ROOT/contexts/_examples/operator-preferences.example.md" ]]
+}
+
+@test "I-02: operator-preferences example references the overlay path" {
+  grep -q "overlay" "$REPO_ROOT/contexts/_examples/operator-preferences.example.md"
+}
+
+@test "I-02: testing-strategy example file exists in _examples" {
+  [[ -f "$REPO_ROOT/contexts/_examples/testing-strategy.example.md" ]]
+}
+
+@test "I-02: testing-strategy example preserves the original three-archetype table" {
+  grep -q "Solana" "$REPO_ROOT/contexts/_examples/testing-strategy.example.md"
+  grep -q "React Native" "$REPO_ROOT/contexts/_examples/testing-strategy.example.md"
+  grep -q "Supabase" "$REPO_ROOT/contexts/_examples/testing-strategy.example.md"
+}
