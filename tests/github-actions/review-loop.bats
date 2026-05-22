@@ -167,19 +167,22 @@ setup() {
 }
 
 # ---------------------------------------------------------------------------
-# Regression: issue #186 — rounds-completed output must be valid JSON when
-# both Copilot Round 1 and Codex Round 2 ran. The pre-fix code did
-# `IFS=',' rounds_json="[$(printf '%s' "${rounds[*]}")]"` which does NOT
-# apply the temporary IFS to the inner expansion in the same statement;
-# the result was `["copilot-round-1" "codex-round-2"]` (space-separated,
-# invalid JSON). Consumers parsing with jq broke.
+# Regression: issue #186 — pin the documented `rounds-completed` JSON
+# contract regardless of implementation details. Codex's sweep originally
+# claimed `IFS=',' rounds_json="..."` produced space-separated output, but
+# verification showed bash treats both as regular assignments when no
+# command follows the prefix (so IFS *is* set and `${rounds[*]}` *is*
+# comma-joined — output was always valid JSON). Refactor to the subshell
+# form was for clarity + to avoid leaking IFS, NOT to fix a runtime bug.
+# These tests assert the JSON-array contract so any future change is
+# safely covered.
 # ---------------------------------------------------------------------------
 
 # Helper that simulates the action's rounds-completed assembly block in a
 # subshell with controlled env, then validates the JSON output. The script
 # under test is the literal bash block from action.yml's "Collect findings
-# + emit status" step — re-implemented here in a way the assertions can
-# exercise without spinning up a GitHub Actions runner.
+# + emit status" step — extracted in a way the assertions can exercise
+# without spinning up a GitHub Actions runner.
 _simulate_rounds_completed() {
   local copilot="$1"
   local codex="$2"
@@ -191,10 +194,12 @@ _simulate_rounds_completed() {
     [[ "$COPILOT_REQUESTED" == "true" ]] && rounds+=('"copilot-round-1"')
     [[ "$CODEX_RAN" == "true" ]] && rounds+=('"codex-round-2"')
     # Pull the JSON-assembly line(s) from action.yml so this test stays
-    # honest as the action evolves. We extract the LITERAL block instead
-    # of re-implementing it.
+    # honest as the action evolves. NB: filter the eval'd block with
+    # `[[:space:]]` — `\s` is a literal `s` in ERE, so `\s` would let the
+    # `echo "rounds-completed=..." >> "$GITHUB_OUTPUT"` line through and
+    # it would explode at eval time because GITHUB_OUTPUT is unset.
     eval "$(awk '/# rounds-completed JSON array/,/echo "rounds-completed=\$rounds_json"/' "$ACTION_YML" \
-      | grep -vE '^\s*echo')"
+      | grep -vE '^[[:space:]]*echo')"
     printf '%s' "$rounds_json"
   )
   printf '%s' "$out"
