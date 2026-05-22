@@ -50,12 +50,20 @@ export async function GET(): Promise<Response> {
 
   // Tier-A services as documented in homelab-topology.md.
   // standby_url points at an optional standby homelab node when configured.
+  //
+  // LiteLLM note (#177): we probe `/health/liveliness` — the
+  // unauthenticated liveness endpoint LiteLLM exposes for k8s probes.
+  // The richer `/health` endpoint requires `Authorization: Bearer
+  // <master-key>`; probing it without the key returns 401, which the
+  // tile then reports as unhealthy even when LiteLLM is fully up.
+  // /health/liveliness returns 200 OK whenever the process is alive,
+  // which is the exact contract a status tile wants.
   const targets: HealthTarget[] = [
     {
       name: "LiteLLM",
-      primary_url: `${litellmUrl}/health`,
+      primary_url: `${litellmUrl}/health/liveliness`,
       standby_url: process.env.LITELLM_STANDBY_URL
-        ? `${process.env.LITELLM_STANDBY_URL}/health`
+        ? `${process.env.LITELLM_STANDBY_URL}/health/liveliness`
         : undefined,
     },
     {
