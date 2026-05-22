@@ -39,7 +39,10 @@ TUNNEL_NAME="${TUNNEL_NAME:-walter-vm}"
 # Canonical subdomain list — single source of truth for what is publicly
 # reachable. Must match site blocks in setup/caddy/Caddyfile.template
 # (Caddy is the one that actually dispatches to the right container, so
-# adding a subdomain here without a matching Caddy block produces a 502).
+# adding a subdomain here without a matching Caddy block makes Caddy
+# return its default 404 — "no matching site" — for that hostname; a
+# 502 only appears if a Caddy block DOES exist but its upstream
+# container is unreachable).
 #
 # To add a new public service:
 #   1. Add a site block in setup/caddy/Caddyfile.template
