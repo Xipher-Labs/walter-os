@@ -69,77 +69,51 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-Target release: **v0.5.0+** — first OSS Trust roadmap implementation
-items (A-1 network egress allowlist, E-1 OpenSSF Passing badge), plus
-the severity-gate runtime build-out (spec landed in v0.4.4 as PR #114;
-the implementation lives in dedicated follow-up PRs per the plan in
-`docs/specs/pr-review-severity-gate.plan.md`).
+Target release: **v0.5.1+** — Walter-VM ops hardening wave (issues #174-#181 filed 2026-05-22 from operator triage). Plus the OSS Trust A–E implementation tasks (per the v0.4.3 specs in `docs/specs/`), severity-gate runtime implementation (Phase A-F tree from `docs/specs/pr-review-severity-gate.plan.md`), and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
 
-### Pending
+---
 
-- Severity-gate **runtime implementation** (spec was v0.4.4; this is the
-  Phase A-F task tree from the plan).
-- OSS Trust A–E implementation tasks (per the v0.4.3 specs in
-  `docs/specs/`).
-- **OpenClaw shrinkwrap implementation** (#132 spec landed in v0.4.5
-  PR #140; impl PR will pick Candidate A vs B + ship first shrinkwrap).
+## [0.5.0] — 2026-05-22
 
-### Added (will ship in v0.5.0)
+**OSS-readiness milestone: dual-license + CLA + entity formation + v1.0 stability charter + Cursor adapter + Lite tier + Control Tower production fix.**
 
-- **Dual-license structure (ADR-0018, closes #154)**: Apache-2.0 default
-  for the contract layer (skills, agents, hooks, AGENTS.md cascade);
-  AGPL-3.0-or-later for `setup/walter-host/`. Added `LICENSE-APACHE` at
-  repo root, `setup/walter-host/LICENSE` as canonical subtree marker,
-  updated `NOTICE` + `COMMERCIAL.md` with the dual-license map, and
-  added the licensing table to README. New `tests/oss/license-files.bats`
-  cases verify the file layout. SPDX header convention documented in
-  COMMERCIAL.md; new files must carry the matching SPDX-License-Identifier.
+Fifteen merged PRs since v0.4.5 operationalise the OSS Trust roadmap filed in PR #143, adopt the dual-license structure (Apache-2.0 default + AGPL-3.0-or-later for `setup/walter-host/`, per ADR-0018), land the CLA scaffold (ADR-0019), attribute the project to Xipher Labs S.R.L. (ADR-0022), ship the v1.0 stability charter conformance suite, publish the AGENTS.md cascade as a vendor-neutral RFC, add an adopter-facing Cursor adapter and a Walter-OS Lite zero-friction entry tier, package the 3-round review loop as a reusable composite GitHub Action, and fix the Control Tower login redirect that was blocking operator access to Walter-VM prod.
 
-- **v1.0 stability charter conformance suite (closes #153)**: new
-  `tests/oss/conformance.bats` with 24 cases covering the four frozen
-  layers from `docs/specs/walter-os-v1-0-stability-charter.md`: Layer 1
-  (AGENTS.md cascade + WALTER_BRANCH_FLOW + WALTER_CONTEXT), Layer 2
-  (SKILL.md format + skills/ directory structure), Layer 3 (`walter-os
-  baseline-hooks`/`doctor`/`profile` + `install.sh --upgrade`), Layer 4
-  (`approval-gate.sh` blocks-for-ALL + `branch-flow-guard.sh` push
-  blocks). README "Status" section rewritten to explain what v1.0
-  freezes vs what stays mutable.
+### Added
 
-- **AGENTS.md cascade vendor-neutral standalone spec (closes #148)**:
-  new `docs/specs/agents-md-cascade-spec.md` — RFC-style document
-  (RFC 2119 normative language) defining the three-layer cascade
-  (global / context / repository) + personal overlay + WALTER_BRANCH_FLOW
-  / WALTER_CONTEXT env vars + security considerations + conformance
-  criteria. Readable without Walter-OS knowledge. The doc is published
-  under Apache-2.0 (per ADR-0018) so any AI-coding-tool author or third
-  party can adopt the pattern. Companion conformance test suite at
-  `tests/oss/agents-md-cascade-conformance.bats` (24 cases) verifies
-  the Walter-OS reference implementation satisfies the spec — forks
-  can run the same suite against their own tree.
+- **Dual-license structure (ADR-0018, #159, closes #154)**: Apache-2.0 default for the contract layer (skills, agents, hooks, AGENTS.md cascade); AGPL-3.0-or-later for `setup/walter-host/`. Added `LICENSE-APACHE` at repo root, `setup/walter-host/LICENSE` as canonical subtree marker, updated `NOTICE` + `COMMERCIAL.md` with the dual-license map, and added the licensing table to README. New `tests/oss/license-files.bats` cases verify the file layout. SPDX header convention documented in COMMERCIAL.md; new files must carry the matching SPDX-License-Identifier.
 
-### Fixed (will ship in v0.5.0)
+- **CLA gate scaffold (ADR-0019, #160, closes #155)**: `CLA.md` + `.github/workflows/cla.yml` integration with [contributor-assistant/github-action@v2.6.1](https://github.com/contributor-assistant/github-action). The workflow is gated by `vars.WALTER_CLA_ACTIVE == 'true'` so it stays inert until Xipher Labs S.R.L. activates it post-entity-formation. New `tests/oss/cla-gate.bats` covers the activation gate, signature storage path (`.github/cla-signatures/v1.0.json`), and the recheck command.
 
-- **Control Tower: login redirect went to `http://0.0.0.0:3000/` on
-  Walter-VM prod (Tailscale + Cloudflare Tunnel).** After submitting the
-  admin token, the browser was sent to `0.0.0.0:3000` and refused to
-  follow — Chrome blocks the bind-address since the 2024 "0.0.0.0 Day"
-  mitigation, and on other browsers the address is unreachable across
-  the network. Root cause: the Next.js standalone server constructs
-  `request.url` from `HOSTNAME=0.0.0.0`, which then leaked into the
-  `Location` header. New helper `apps/control-tower/lib/canonical-url.ts`
-  resolves the canonical public URL from (in priority order)
-  `CONTROL_TOWER_PUBLIC_URL` (explicit operator override — recommended
-  for production), `X-Forwarded-Host` + `X-Forwarded-Proto` (set by
-  Cloudflare Tunnel and Tailscale Serve), the `Host` header (when not
-  `0.0.0.0`), then the framework URL as last resort. `app/api/login/route.ts`
-  and `middleware.ts` now both use it. Setting `CONTROL_TOWER_PUBLIC_URL`
-  also neutralises an open-redirect risk if Control Tower is ever exposed
-  without a trusted proxy in front (an attacker who can spoof
-  `X-Forwarded-Host` could otherwise trick the login flow into redirecting
-  to a hostile origin). New env var documented in `.env.example` + the
-  Control Tower README + the root and standalone compose.yml; vitest
-  coverage at `tests/unit/canonical-url.test.ts` (15 cases) and
-  `tests/unit/login-route-redirect.test.ts` (4 integration cases).
+- **Entity formation runbook + advisory merge gate (ADR-0022, #161, closes #156)**: `docs/operational/entity-formation-runbook.md` documents the 3-phase Xipher Labs constitution path (Phase 1 reserved name → Phase 2 constituted entity → Phase 3 operational). New `tests/oss/entity-formation-gate.bats` validates the runbook checkpoints. ADR-0022 itself captures the entity-type decision (Argentine Sociedad de Responsabilidad Limitada).
+
+- **Xipher Labs S.R.L. attribution (Phase 2, #165)**: `NOTICE`, `COMMERCIAL.md`, `CLA.md`, and the entity formation runbook all now name the constituted entity (`Xipher Labs S.R.L.`), not just the trade name. License-files bats hardened to assert the constituted name appears in NOTICE.
+
+- **Cursor adapter via `install.sh --cursor-rules` (#163, closes #147)**: install.sh now writes `<repo>/.cursor/rules/walter-os.mdc` for Cursor users who want the Walter-OS AGENTS.md cascade automatically available in Cursor's context. `walter-os doctor` learns a `--cursor` flag that checks for the MDC file. The rules file is project-scoped (per Cursor's documented behaviour) — not user-scoped. Tests at `tests/install/cursor-adapter.bats` + `tests/cli/doctor-cursor.bats`.
+
+- **Walter-OS Lite zero-friction entry tier (#164, closes #146)**: new minimal `.walter-os-lite/` template that adopters can drop into any repo for a 2-file install (AGENTS.md fragment + branch-flow rules). `install.sh` learns a `--lite` flag that scaffolds it. `walter-os doctor --lite` validates conformance. Designed for adopters who want the discipline (branch flow, review loop, commit hygiene) without the full host-stack. Format-stable per ADR-0020 and tested by `tests/oss/lite-format.bats`.
+
+- **v1.0 stability charter conformance suite (#166, closes #153)**: new `tests/oss/conformance.bats` with 24 cases covering the four frozen layers from `docs/specs/walter-os-v1-0-stability-charter.md`: Layer 1 (AGENTS.md cascade + WALTER_BRANCH_FLOW + WALTER_CONTEXT), Layer 2 (SKILL.md format + skills/ directory structure), Layer 3 (`walter-os baseline-hooks`/`doctor`/`profile` + `install.sh --upgrade`), Layer 4 (`approval-gate.sh` blocks-for-ALL + `branch-flow-guard.sh` push blocks). README "Status" section rewritten to explain what v1.0 freezes vs what stays mutable.
+
+- **AGENTS.md cascade vendor-neutral standalone spec (#168, closes #148)**: new `docs/specs/agents-md-cascade-spec.md` — RFC-style document (RFC 2119 normative language) defining the three-layer cascade (global / context / repository) + personal overlay + WALTER_BRANCH_FLOW / WALTER_CONTEXT env vars + security considerations + conformance criteria. Readable without Walter-OS knowledge. The doc is published under Apache-2.0 (per ADR-0018) so any AI-coding-tool author or third party can adopt the pattern. Companion conformance test suite at `tests/oss/agents-md-cascade-conformance.bats` (24 cases) verifies the Walter-OS reference implementation satisfies the spec — forks can run the same suite against their own tree.
+
+- **Review loop as reusable composite GitHub Action (#171, closes #149)**: new `.github/actions/walter-review-loop/` (composite action). Implements the 3-round Walter-OS review pattern (Round 1 Copilot via REST API → Round 2 Codex CLI if available → Round 3 collaborative verdict). Designed to be standalone — adopters can call `uses: Xipher-Labs/walter-os/.github/actions/walter-review-loop@<ref>` from their own workflow without adopting the rest of Walter-OS. Graceful degradation: Copilot unavailable or Codex CLI absent → step skipped with warning, action continues. Inputs: pr-number, base-branch, severity-gate-config, run-copilot, run-codex, github-token, codex-home. Outputs: findings-json, rounds-completed, status (clean/findings/escalate). Static-validation suite at `tests/github-actions/review-loop.bats`. Eat-our-own-cooking workflow at `.github/workflows/pr-review.yml` shows the canonical wiring.
+
+### Changed
+
+- **OSS-readiness roadmap + ADRs (#143)**: new `docs/specs/walter-os-oss-readiness-roadmap.md` plus six ADRs (0017-0022) covering license switch, CLA, OpenSSF Best Practices badge, OpenSSF Scorecard, security audit posture, and legal entity formation. The roadmap files 8 follow-up issues + the umbrella tracking issue (#122) that organises subsequent OSS-Trust implementation work.
+
+- **Depersonalization deep cleanup of global AGENTS.md (#162)**: removed operator-specific defaults from the global layer (Apple Silicon, OrbStack, pnpm-as-universal, Solana-as-first-class, Stripe-as-payment-example). Moved operator preferences to `~/.config/walter-os/overlay/`. Added `tests/oss/depersonalization.bats` with 70+ cases covering each removed default + a regression suite preventing personal references (`triton`, `licitar`, `biovault`, `xipherlabs.xyz`, operator email) from re-appearing in published files. Community-health files (SECURITY.md, COMMERCIAL.md, etc.) are explicitly exempted as the OSS project's contact addresses.
+
+- **Document Council coupling with walter-host (#167, closes #157)**: new `docs/operational/walter-council-host-coupling.md` clarifies which Council features require `setup/walter-host/` (and therefore the AGPL-3.0 subtree) vs which work standalone with the contract layer.
+
+### Fixed
+
+- **Control Tower: login redirect went to `http://0.0.0.0:3000/` on Walter-VM prod (#173)**. After submitting the admin token via Cloudflare Tunnel + Tailscale Serve, the browser was sent to `0.0.0.0:3000` and refused to follow — Chrome blocks the bind-address since the 2024 "0.0.0.0 Day" mitigation, and on other browsers the address is unreachable across the public Internet. Root cause: the Next.js standalone server constructs `request.url` from `HOSTNAME=0.0.0.0`, which then leaked into the `Location` header. New helper `apps/control-tower/lib/canonical-url.ts` resolves the canonical public URL from (in priority order) `CONTROL_TOWER_PUBLIC_URL` (explicit operator override — recommended for production, also closes an open-redirect risk via X-Forwarded-Host spoofing), `X-Forwarded-Host` + `X-Forwarded-Proto` (set by Cloudflare Tunnel and Tailscale Serve), the `Host` header (when not `0.0.0.0`), then the framework URL as last resort. `app/api/login/route.ts` and `middleware.ts` now both use it. The helper rejects URL-authority delimiters in `X-Forwarded-Host` (`@`, `\`, `#`, `?`, path) so a misconfigured proxy cannot smuggle in surprises; `CONTROL_TOWER_PUBLIC_URL` is restricted to `http:` / `https:` schemes. New env var documented in `.env.example` + the Control Tower README + both compose.yml entries. Coverage: 23 vitest unit cases + 4 integration cases + 3 middleware redirect cases.
+
+- **PR #111 R4 deferred MINOR findings A-D (#169, closes #112)**: closed four follow-up nits from the agent-installable-tiers PR R4 review — ADR-0014 text accuracy (install.sh prints PATH warning, not doctor), tier table mirrors cmd_doctor reality, AC10c added for deep-nested `walter-os agents trust <verb>`, `_require_docker` also checks Compose v2 availability.
+
+- **Untrack report.log + gitignore all .log files (#158, closes #144)**: stray `report.log` was being committed by `setup/personal-overlay-init.sh`. Untracked + added `*.log` to `.gitignore`.
 
 ---
 
@@ -1014,7 +988,10 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.0
+[0.4.5]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.5
+[0.4.4]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.4
 [0.4.3]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.3
 [0.4.2]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.2
 [0.4.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.1
