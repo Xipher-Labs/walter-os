@@ -69,8 +69,8 @@ Install in Claude Code (one-time, per machine):
 Then restart Claude Code. Walter-OS skills layer on top — where there's
 overlap, superpowers wins. Walter-OS provides domain-specific skills for
 common operator areas (branding, hackathons, DevRel, regulatory research,
-Solana infrastructure, security auditing). Operator-specific skills live in
-the personal overlay.
+security auditing, and others listed in `skills/INDEX.md`).
+Operator-specific skills live in the personal overlay.
 
 ## Universal disciplines (apply everywhere)
 
@@ -87,7 +87,8 @@ lower the minimum rigor level.
 | **major** | new feature, schema change, refactor > 200 LOC, anything in critical path (auth, money, PHI, audit-trail) | spec in `docs/specs/<slug>.md` + plan via `/write-plan` | full TDD + DoD validator | reviewer subagent + Copilot + security-auditor agent when applicable | atomic per task in plan |
 
 **Auto-escalate to major** (regardless of LOC):
-- Any change in `auth/`, `crypto/`, or code that moves money (Solana TX, Stripe).
+- Any change in `auth/`, `crypto/`, or code that moves money (payment
+  processing, token transfers, financial APIs).
 - Any change that touches PHI or `personal/health/*`.
 - Any change to an audit log for a project that requires traceability (tender history, patient access log, financial audit trail).
 - Any production DB migration.
@@ -368,28 +369,19 @@ the Penpot MCP are more flexible.
 
 ### Testing strategy (layered)
 
-Applicable test layers by project type:
-
-| Layer | Rust / systems | Next.js + Supabase | React Native + Solana |
-|---|---|---|---|
-| Unit | `cargo test` | `vitest` | `vitest` + `cargo test` (programs) |
-| Integration | solana-test-validator + fixtures | Supabase staging + Drizzle | local validator + RN dev mode |
-| E2E web | n/a | **Playwright** (MCP) | n/a |
-| E2E mobile | n/a | n/a | **Maestro** (MCP) |
-| Visual regression | n/a | Chromatic / Percy / Playwright snapshots | same |
-| Property-based | `proptest` | `fast-check` | both |
-| Mutation | `cargo-mutants` | `stryker` | both |
-| Load / perf | criterion + custom harness | k6 | n/a |
-| Solana program | `anchor test` + `solana-program-test` | n/a | `anchor test` |
-
-**Maestro vs Playwright**: they do not replace each other. Maestro is excellent
-for mobile (YAML flows, realistic gestures, easy maintenance). Playwright is
-better for web (granular DOM control, network interception, visual diffs).
-Projects with both a React Native app and a web portal need both.
+Define your project-type testing matrix in your overlay or your project's
+`CONTRIBUTING.md`. See `contexts/_examples/testing-strategy.example.md` for a
+fully worked example covering three project archetypes (Rust/systems,
+Next.js+Supabase, React Native+Solana) with rows per test layer (unit,
+integration, E2E web, E2E mobile, visual regression, property-based,
+mutation, load/perf).
 
 **When to write tests**: superpowers' `test-driven-development` skill enforces
-RED→GREEN→REFACTOR. That is the default discipline. Non-unit layers (E2E,
-visual, mutation) run separately in CI, not in pre-commit (too slow).
+RED → GREEN → REFACTOR. That is the default discipline across all project
+types and is part of the Walter-OS contract. Non-unit layers (E2E, visual,
+mutation) run separately in CI, not in pre-commit (too slow). Per-project
+decisions on which layers to run in which pipeline live in the project's own
+`CONTRIBUTING.md`, not in this global contract.
 
 ### MCP load profiles (default vs high-risk)
 
@@ -471,16 +463,20 @@ The audit verifies this on every run.
 
 ## Tooling preferences
 
-- **OS**: macOS (Apple Silicon), zsh.
-- **Package managers**: `pnpm` for Node, `uv` for Python, `cargo` for Rust.
-- **Editors**: Cursor primary; Claude Code in terminal for agentic work; Codex CLI
-  for second-opinion reviews and GPT-5.5 access.
-- **Containers**: OrbStack on Mac (faster than Docker Desktop). On Linux: native
-  Docker.
-- **Secrets**: `.env.local` for dev (gitignored). Production secrets in
-  Vaultwarden via Tailscale to local LLM node. Never hardcode, never commit.
-- **Testing**: Vitest/Jest for JS, pytest for Python, `cargo test` for Rust.
-  Playwright for e2e. Always.
+Walter-OS is **tooling-agnostic** in its global contract. Configure your
+preferred OS, shell, package managers, editor, container runtime, and
+secrets strategy in your personal overlay
+(`~/.config/walter-os/overlay/preferences.md`). See
+[`contexts/_examples/operator-preferences.example.md`](contexts/_examples/operator-preferences.example.md)
+for a complete example matrix covering macOS/Linux, three Node managers,
+several Python managers, two AI-native IDEs, two container runtimes, and
+the secrets-management approaches Walter-OS interoperates with.
+
+Operators who want their agents to follow specific defaults reference
+them in their context-specific `AGENTS.md` files (under `contexts/work/`,
+`contexts/projects-personal/`, etc.) — those files ARE loaded by the
+cascade. The global contract above stays neutral so adopters with
+different stacks are not misled.
 
 ## Multi-agent escalation pattern
 
