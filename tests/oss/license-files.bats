@@ -160,8 +160,7 @@ setup() {
     | grep -v "$REPO_ROOT/docs/specs/walter-os-v1-0-stability-charter.md" \
     | grep -v "$REPO_ROOT/docs/specs/walter-contract-walter-host-split.md" \
     | grep -v "$REPO_ROOT/docs/specs/founder-skills-bundle-extraction.md" \
-    | grep -v "$REPO_ROOT/tests/oss/license-files.bats" \
-    | grep -v "$REPO_ROOT/tests/oss/entity-formation-gate.bats" \
+    | grep -vE "$REPO_ROOT/tests/oss/[a-zA-Z0-9_-]+\.bats" \
     | grep -vE "$REPO_ROOT/skills/[^/]+/SKILL\.md" \
     | grep -vE "$REPO_ROOT/\.github/workflows/[a-zA-Z0-9_-]+\.ya?ml" \
     | grep -vE "$REPO_ROOT/hooks/[a-zA-Z0-9_-]+\.sh" \

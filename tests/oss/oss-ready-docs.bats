@@ -48,7 +48,9 @@ setup() {
   # Apache-2.0. CONTRIBUTING.md must still document the AGPL boundary so
   # contributors know which license governs their change. Accept any of the
   # canonical spellings: "AGPLv3", "AGPL v3", "AGPL-3.0", "AGPL-3.0-or-later".
-  grep -qE "AGPL(v3|[ -]3\.0)" "$REPO_ROOT/CONTRIBUTING.md"
+  # Regex matches "AGPL" followed by zero-or-one separator (space or dash),
+  # then optional "v", then "3", then optional ".0".
+  grep -qE "AGPL[ -]?v?3(\.0)?" "$REPO_ROOT/CONTRIBUTING.md"
 }
 
 # --- SECURITY.md content ---
