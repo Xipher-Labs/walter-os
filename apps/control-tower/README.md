@@ -55,7 +55,7 @@ the login flow into redirecting to a hostile origin. **Always set
 | Variable | Required | Description |
 | --- | --- | --- |
 | `CONTROL_TOWER_ADMIN_TOKEN` | yes (prod) | Bearer / cookie token gate for the dashboard. The container refuses to serve traffic without it. |
-| `CONTROL_TOWER_PUBLIC_URL` | recommended | External base URL the browser uses. Example: `https://tower.xipherlabs.xyz`. Closes the 0.0.0.0 redirect bug and prevents X-Forwarded-Host spoofing. |
+| `CONTROL_TOWER_PUBLIC_URL` | recommended | External base URL the browser uses. Example: `https://tower.your-domain.example`. Closes the 0.0.0.0 redirect bug and prevents X-Forwarded-Host spoofing. |
 | `CONTROL_TOWER_AUTH_DISABLED` | no | Skip the token gate. Only honoured when `NODE_ENV != production`. |
 | `TAILSCALE_ENFORCE` | no (default `true`) | When `true`, reject requests whose client IP is not in `TAILSCALE_CGNAT_CIDR`. |
 | `TAILSCALE_CGNAT_CIDR` | no (default `100.64.0.0/10`) | Tailnet CGNAT range. Override only if you run a custom Headscale topology. |

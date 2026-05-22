@@ -20,13 +20,46 @@ describe("getCanonicalBaseUrl", () => {
     expect(url.origin).toBe("https://tower.example.com");
   });
 
-  it("strips trailing slash from CONTROL_TOWER_PUBLIC_URL", () => {
+  it("accepts CONTROL_TOWER_PUBLIC_URL with or without trailing slash", () => {
+    // `new URL` normalises the trailing slash on the origin, so both
+    // `https://tower.example.com` and `https://tower.example.com/` produce
+    // the same canonical href. This test pins that behaviour.
     const url = getCanonicalBaseUrl(
       makeHeaders({}),
       "http://0.0.0.0:3000/api/login",
       { CONTROL_TOWER_PUBLIC_URL: "https://tower.example.com/" }
     );
     expect(url.href).toBe("https://tower.example.com/");
+  });
+
+  it("rejects CONTROL_TOWER_PUBLIC_URL with javascript: scheme", () => {
+    // An operator misconfiguration setting `javascript:alert(1)` would
+    // otherwise produce an unsafe Location header. Fall through to
+    // header-based resolution.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com" }),
+      "http://0.0.0.0:3000",
+      { CONTROL_TOWER_PUBLIC_URL: "javascript:alert(1)" }
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  it("rejects CONTROL_TOWER_PUBLIC_URL with file: scheme", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com" }),
+      "http://0.0.0.0:3000",
+      { CONTROL_TOWER_PUBLIC_URL: "file:///etc/passwd" }
+    );
+    expect(url.origin).toBe("https://tower.example.com");
+  });
+
+  it("rejects CONTROL_TOWER_PUBLIC_URL with data: scheme", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com" }),
+      "http://0.0.0.0:3000",
+      { CONTROL_TOWER_PUBLIC_URL: "data:text/html,<script>alert(1)</script>" }
+    );
+    expect(url.origin).toBe("https://tower.example.com");
   });
 
   it("falls through when CONTROL_TOWER_PUBLIC_URL is whitespace-only", () => {
@@ -224,6 +257,56 @@ describe("getCanonicalBaseUrl", () => {
   it("never honors an X-Forwarded-Host with embedded scheme", () => {
     const url = getCanonicalBaseUrl(
       makeHeaders({ "x-forwarded-host": "http://tower.example.com" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  it("rejects X-Forwarded-Host with @ (userinfo open-redirect vector)", () => {
+    // Critical: `new URL("https://tower.example.com@evil.com")` parses
+    // `tower.example.com` as userinfo and `evil.com` as the host. Without
+    // the @-reject guard a hostile proxy could steer the login redirect to
+    // any origin under its control.
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com@evil.com" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+    expect(url.origin).not.toContain("evil.com");
+  });
+
+  it("rejects X-Forwarded-Host with userinfo prefix (user:pass@host)", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "user:pass@evil.com" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  it("rejects X-Forwarded-Host with backslash (URL parser surprise)", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com\\@evil.com" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  it("rejects X-Forwarded-Host with fragment marker", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com#evil" }),
+      "https://canonical.example.com",
+      {}
+    );
+    expect(url.origin).toBe("https://canonical.example.com");
+  });
+
+  it("rejects X-Forwarded-Host with query marker", () => {
+    const url = getCanonicalBaseUrl(
+      makeHeaders({ "x-forwarded-host": "tower.example.com?evil" }),
       "https://canonical.example.com",
       {}
     );

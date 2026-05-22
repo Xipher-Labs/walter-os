@@ -10,9 +10,10 @@
  */
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
-// Stub crypto.subtle so we can run the route handler in plain Node (the
-// real implementation in jsdom-less Node 22 already has WebCrypto, but
-// we keep it dependency-free).
+// Node 22 already ships WebCrypto under the global `crypto` object, so the
+// real `crypto.subtle` is available — no stubbing required. We reset env
+// + module cache between tests so each case sees a fresh handler with
+// deterministic env.
 beforeEach(() => {
   process.env.CONTROL_TOWER_ADMIN_TOKEN = "test-admin-token";
   delete process.env.CONTROL_TOWER_PUBLIC_URL;

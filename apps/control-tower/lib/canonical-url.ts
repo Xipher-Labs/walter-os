@@ -18,9 +18,9 @@
  *
  *   1. `CONTROL_TOWER_PUBLIC_URL` env var — explicit operator override.
  *      Always wins. Operators set this when the deployment has a stable
- *      public hostname (e.g., `https://tower.xipherlabs.xyz`). It also
- *      neutralises X-Forwarded-Host spoofing if Control Tower is ever
- *      exposed directly (defense-in-depth).
+ *      public hostname (e.g., `https://tower.your-domain.example`). It
+ *      also neutralises X-Forwarded-Host spoofing if Control Tower is
+ *      ever exposed directly (defense-in-depth).
  *   2. `X-Forwarded-Host` + `X-Forwarded-Proto` from the inbound request.
  *      Used in production when no explicit override is configured.
  *   3. `Host` header, when it does not point to the bind hostname
@@ -70,13 +70,23 @@ function firstHopHeaderValue(headers: Headers, name: string): string | null {
 }
 
 // X-Forwarded-Host must be a bare `host` or `host:port` — never an absolute
-// URL, never a path. Anything else is rejected to avoid URL-parsing surprises
-// (an embedded scheme like `http://...` would be parsed as the path by
-// `new URL`, leading to unintended origins).
+// URL, never a path, never authority-delimiters that the URL parser would
+// reinterpret. Anything else is rejected to avoid URL-parsing surprises.
+//
+// Critical case: `tower.example.com@evil.com` looks plausible but
+// `new URL("https://tower.example.com@evil.com")` parses the part before `@`
+// as userinfo and the part after as the host. Without rejecting `@` here a
+// hostile proxy could turn the redirect into an open-redirect to `evil.com`.
+// Similar story for `\`, `#`, `?` — all are URL syntax markers that change
+// the meaning of what looks like a hostname.
+const HOST_REJECT_CHARS = ["/", " ", "@", "\\", "#", "?"];
+
 function isPlausibleHostHeader(value: string): boolean {
-  if (value.includes("/")) return false;
+  if (!value) return false;
   if (value.includes("://")) return false;
-  if (value.includes(" ")) return false;
+  for (const ch of HOST_REJECT_CHARS) {
+    if (value.includes(ch)) return false;
+  }
   // host or host:port — at most one colon, host non-empty.
   const [host, port, ...rest] = value.split(":");
   if (rest.length > 0) return false; // disallow extra colons (no IPv6 raw here)
@@ -84,6 +94,13 @@ function isPlausibleHostHeader(value: string): boolean {
   if (port !== undefined && !/^\d+$/.test(port)) return false;
   return true;
 }
+
+// CONTROL_TOWER_PUBLIC_URL is operator-controlled but still parsed by
+// `new URL`, which happily accepts schemes like `javascript:` or `file:`.
+// Using such a value as a redirect target would produce a non-navigable or
+// unsafe Location header. Restrict to plain web schemes — anything else is
+// almost certainly a misconfiguration.
+const ALLOWED_OVERRIDE_PROTOCOLS = new Set(["http:", "https:"]);
 
 function tryParseBaseUrl(value: string | undefined | null): URL | null {
   if (!value) return null;
@@ -101,9 +118,12 @@ export function getCanonicalBaseUrl(
   fallback: string,
   env: EnvLike = process.env
 ): URL {
-  // 1. Explicit operator override.
+  // 1. Explicit operator override. Reject non-web schemes — even though
+  // the env var is operator-controlled, a misconfiguration that sets
+  // `javascript:` or `file:` would produce an unsafe or non-navigable
+  // redirect Location.
   const overrideUrl = tryParseBaseUrl(env.CONTROL_TOWER_PUBLIC_URL);
-  if (overrideUrl) {
+  if (overrideUrl && ALLOWED_OVERRIDE_PROTOCOLS.has(overrideUrl.protocol)) {
     return overrideUrl;
   }
 
