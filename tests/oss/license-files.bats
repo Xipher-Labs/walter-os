@@ -135,6 +135,7 @@ setup() {
   #   - docs/specs/walter-os-v1-0-stability-charter.md — v1.0 spec referencing ADR-0018
   #   - docs/specs/walter-contract-walter-host-split.md — repo-split spec discusses license-by-subtree
   #   - docs/specs/founder-skills-bundle-extraction.md — discusses license posture for extraction
+  #   - docs/specs/agents-md-cascade-spec.md          — vendor-neutral RFC, published under Apache-2.0
   #   - tests/oss/license-files.bats                  — this test (self-ref)
   #   - skills/*/SKILL.md                             — third-party deps may be Apache-licensed
   #   - .github/workflows/*.yml                       — SPDX headers on workflow files
@@ -163,6 +164,7 @@ setup() {
     | grep -v "$REPO_ROOT/docs/specs/walter-os-v1-0-stability-charter.md" \
     | grep -v "$REPO_ROOT/docs/specs/walter-contract-walter-host-split.md" \
     | grep -v "$REPO_ROOT/docs/specs/founder-skills-bundle-extraction.md" \
+    | grep -v "$REPO_ROOT/docs/specs/agents-md-cascade-spec.md" \
     | grep -vE "$REPO_ROOT/tests/oss/[a-zA-Z0-9_-]+\.bats" \
     | grep -vE "$REPO_ROOT/skills/[^/]+/SKILL\.md" \
     | grep -vE "$REPO_ROOT/\.github/workflows/[a-zA-Z0-9_-]+\.ya?ml" \
