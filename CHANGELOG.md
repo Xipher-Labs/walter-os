@@ -33,6 +33,17 @@ the implementation lives in dedicated follow-up PRs per the plan in
 - **OpenClaw shrinkwrap implementation** (#132 spec landed in v0.4.5
   PR #140; impl PR will pick Candidate A vs B + ship first shrinkwrap).
 
+### Added (will ship in v0.5.0)
+
+- **Dual-license structure (ADR-0018, closes #154)**: Apache-2.0 default
+  for the contract layer (skills, agents, hooks, AGENTS.md cascade);
+  AGPL-3.0-or-later for `setup/walter-host/`. Added `LICENSE-APACHE` at
+  repo root, `setup/walter-host/LICENSE` as canonical subtree marker,
+  updated `NOTICE` + `COMMERCIAL.md` with the dual-license map, and
+  added the licensing table to README. New `tests/oss/license-files.bats`
+  cases verify the file layout. SPDX header convention documented in
+  COMMERCIAL.md; new files must carry the matching SPDX-License-Identifier.
+
 ---
 
 ## [0.4.5] — 2026-05-21
