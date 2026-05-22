@@ -42,6 +42,10 @@ jobs:
           base-branch: ${{ github.event.pull_request.base.ref }}
           run-copilot: true
           run-codex: true
+          # Explicit token pass — the action defaults `github-token`
+          # to `${{ github.token }}`, but explicit is more robust
+          # (#184) and makes the example self-contained.
+          github-token: ${{ github.token }}
       - name: Post status
         if: always()
         run: |
