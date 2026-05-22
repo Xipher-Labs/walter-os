@@ -43,8 +43,12 @@ setup() {
 @test "CONTRIBUTING.md mentions superpowers" {
   grep -q "superpowers" "$REPO_ROOT/CONTRIBUTING.md"
 }
-@test "CONTRIBUTING.md mentions AGPLv3" {
-  grep -q "AGPLv3" "$REPO_ROOT/CONTRIBUTING.md"
+@test "CONTRIBUTING.md mentions the host-stack license (AGPL)" {
+  # Post-ADR-0018: AGPL applies only to setup/walter-host/; default tree is
+  # Apache-2.0. CONTRIBUTING.md must still document the AGPL boundary so
+  # contributors know which license governs their change. Accept any of the
+  # canonical spellings: "AGPLv3", "AGPL v3", "AGPL-3.0", "AGPL-3.0-or-later".
+  grep -qE "AGPL(v3|[ -]3\.0)" "$REPO_ROOT/CONTRIBUTING.md"
 }
 
 # --- SECURITY.md content ---
