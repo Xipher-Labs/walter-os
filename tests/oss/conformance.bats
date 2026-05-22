@@ -76,27 +76,75 @@ setup() {
   # know when to load a skill. A SKILL.md without it is unusable.
   # Accept variations: "When to use", "When to use this skill", or
   # equivalent (e.g. "Use this skill when").
-  local skill missing=0
+  #
+  # Reviewer R2 caught that the prior version allowed up to 5 stragglers
+  # — but the actual count was 40, so the test passed silently on a
+  # tree that violated the constraint. Replaced with an explicit
+  # allowlist of the 40 known pre-v1.0 stragglers. NEW skills (or
+  # renamed skills) without a trigger section will fail this test. The
+  # allowlist must shrink monotonically (no additions); at v1.0 it
+  # must be empty.
+  local known_stragglers=(
+    agent-researcher ai-spend-tripwire alerting-stack brand-creation
+    daily-supply-chain-audit data-migration-safety deepsec-integration
+    definition-of-done-validator devrel-analyst financial-plan-builder
+    forgejo-cli frontend-quality hackathon-spinup hcloud-cli heygen-cli
+    hiring-toolkit infisical-agent landing-page-fast medical-data-compliance
+    nanobanana personal-assistant-stack postgres-cli pr-review
+    project-induction project-pivot quarterly-upgrade-cadence railway-cli
+    regulatory-research-argentina regulatory-research-international
+    secrets-yubikey-unlock solana-program-review solana-rpc-review
+    syncthing-cli telegram-bot-cli telegram-summary terms-policy-generator
+    track-pending vercel-agent-skills-bridge vercel-cli web-security-baseline
+  )
+
+  local skill skill_name unexpected=0
   while IFS= read -r skill; do
     if ! grep -qiE "^##? (When to use|Use this skill when|When this skill|Trigger)" "$skill"; then
-      echo "missing trigger section: $skill" >&2
-      missing=$((missing + 1))
+      skill_name="$(basename "$(dirname "$skill")")"
+      local in_allowlist=0
+      local s
+      for s in "${known_stragglers[@]}"; do
+        if [[ "$s" == "$skill_name" ]]; then
+          in_allowlist=1
+          break
+        fi
+      done
+      if [[ "$in_allowlist" -eq 0 ]]; then
+        echo "UNEXPECTED straggler (not in allowlist): $skill" >&2
+        unexpected=$((unexpected + 1))
+      fi
     fi
   done < <(find "$REPO_ROOT/skills" -name "SKILL.md" -type f 2>/dev/null)
-  # Allow up to 5 skills to lack the section in the current pre-v1.0
-  # snapshot (operator-side cleanup). At v1.0 this is hard-zero.
-  [[ "$missing" -le 5 ]]
+  [[ "$unexpected" -eq 0 ]]
 }
 
-@test "L2-3: skills directory structure is skills/<name>/SKILL.md" {
-  # Reject SKILL.md at any other depth — that breaks discovery.
-  # Standard layout: skills/foo/SKILL.md (depth 2 from repo root).
-  local depth
-  depth="$(find "$REPO_ROOT/skills" -name "SKILL.md" -type f 2>/dev/null | head -1 | tr '/' '\n' | wc -l | tr -d ' ')"
-  # The path "<repo>/skills/<name>/SKILL.md" has 3 components past
-  # $REPO_ROOT; depth varies by absolute path length, so just verify
-  # find returns at least one match (smoke check; deep audit is in L2-1).
-  [[ -n "$depth" ]]
+@test "L2-3: skills directory structure is skills/<name>/SKILL.md (no deeper, no shallower)" {
+  # Reject SKILL.md at the wrong depth — that breaks skill discovery.
+  # Canonical layout: <repo>/skills/<name>/SKILL.md (exactly 2 levels
+  # below the skills/ dir). Anything shallower (skills/SKILL.md) or
+  # deeper (skills/foo/bar/SKILL.md) is a layout regression.
+  #
+  # Reviewer R2 caught that the prior version of this test only
+  # checked "find returned at least one match" — vacuous, would pass
+  # for any tree containing any SKILL.md anywhere. Now uses find's
+  # -mindepth/-maxdepth to scope strictly.
+  local at_wrong_depth
+  at_wrong_depth="$(find "$REPO_ROOT/skills" -name "SKILL.md" -type f \
+    \( -not -path "$REPO_ROOT/skills/*/SKILL.md" -o \
+       -path "$REPO_ROOT/skills/*/*/SKILL.md" \) 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "$at_wrong_depth" -ne 0 ]]; then
+    echo "SKILL.md files at wrong depth:" >&2
+    find "$REPO_ROOT/skills" -name "SKILL.md" -type f \
+      \( -not -path "$REPO_ROOT/skills/*/SKILL.md" -o \
+         -path "$REPO_ROOT/skills/*/*/SKILL.md" \) 2>/dev/null >&2
+    return 1
+  fi
+  # Sanity: at least one SKILL.md at the correct depth exists.
+  local at_correct_depth
+  at_correct_depth="$(find "$REPO_ROOT/skills" -maxdepth 2 -mindepth 2 \
+    -name "SKILL.md" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  [[ "$at_correct_depth" -ge 1 ]]
 }
 
 # ===========================================================================

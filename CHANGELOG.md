@@ -16,6 +16,57 @@ Versioning: [SemVer](https://semver.org/)
 
 ---
 
+## [1.0.0] — Stability Charter (target — date TBD)
+
+Walter-OS v1.0 is a **stability milestone**, not a feature milestone. The
+charter ([`docs/specs/walter-os-v1-0-stability-charter.md`](docs/specs/walter-os-v1-0-stability-charter.md))
+freezes four interface surfaces with a deprecation policy:
+
+- **Layer 1 — Agent contract.** `AGENTS.md` cascade mechanism (global →
+  context → repository), the conflict-resolution rule (most-specific-wins),
+  the overlay path (`~/.config/walter-os/overlay/`), `WALTER_BRANCH_FLOW`
+  values (`single-tier`/`three-stage`), `WALTER_CONTEXT` env var.
+- **Layer 2 — Skills format.** `SKILL.md` file format (trigger + workflow
+  sections required), the `skills/<name>/SKILL.md` directory layout,
+  skills discovery via symlinks in `~/.claude/skills/`.
+- **Layer 3 — CLI interface.** `walter-os baseline-hooks` /
+  `walter-os doctor` / `walter-os profile` subcommand names + output
+  contracts, `install.sh --upgrade` idempotency.
+- **Layer 4 — Hook behavior.** `hooks/approval-gate.sh` "blocked for ALL
+  tiers" list (items can be added, not removed without deprecation),
+  `hooks/branch-flow-guard.sh` push blocks on `main`/`master`/`staging`/
+  `production`.
+
+**NOT in the stability surface** (these stay mutable post-v1.0):
+- The service composition in `setup/walter-host/` (Compose files, service
+  versions, configuration).
+- The MCP catalog (`mcp/servers.json`).
+- The skills catalog content (existing skills can be updated; format is
+  frozen but content is not).
+- Internal scripts in `bin/`, `scripts/`, and `setup/`.
+- The Walter Council agent definitions.
+- Control Tower UI.
+
+**Conformance test suite**: [`tests/oss/conformance.bats`](tests/oss/conformance.bats)
+is the executable form of the charter — 24 cases, one per stability-surface
+item. Removing a test from this suite at v1.0+ is a deprecation event and
+requires the one-minor-version notice cycle.
+
+**Trigger conditions for cutting v1.0** (all must be true):
+1. Depersonalization deep cleanup complete (shipped in PR #162).
+2. Cursor adapter complete (shipped in PR #163).
+3. Walter-OS Lite complete (shipped in PR #164).
+4. AGENTS.md cascade documented as a standalone spec.
+5. CLA enforcement active (CLA scaffold shipped in PR #160; lawyer-review
+   gate pending).
+6. OSS Trust roadmap items A-1 through B-3 complete.
+7. Conformance suite covers all stability-surface items (this PR).
+8. No open P0/P1 security findings.
+9. `report.log` removed (shipped in PR #158).
+10. CHANGELOG documents a stable v1.0 entry (this section).
+
+---
+
 ## [Unreleased]
 
 Target release: **v0.5.0+** — first OSS Trust roadmap implementation
