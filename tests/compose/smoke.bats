@@ -226,9 +226,16 @@ sys.exit(0)
   # Postiz listens on 3000 inside the container; the old probe used 5000 (wrong).
   # This static test guards the smoke test correctness without Docker.
   # compose.yml healthcheck also uses port 3000 — both must agree.
-  local postiz_hc
-  postiz_hc=$(grep -A5 "^  postiz:" "$COMPOSE_FILE" | grep "healthcheck\|127.0.0.1:3000" || true)
-  grep -A30 "^  postiz:" "$COMPOSE_FILE" | grep -q "3000"
+  #
+  # Scan the WHOLE postiz block (until the next service definition) — the
+  # prior `grep -A5/-A30` windows could miss the healthcheck on Postiz
+  # blocks with many env vars (the canonical block has 16+ env entries
+  # before the healthcheck).
+  local postiz_block
+  postiz_block=$(awk '/^  postiz:$/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:$/{flag=0} flag' \
+    "$COMPOSE_FILE")
+  echo "$postiz_block" | grep -q "healthcheck"
+  echo "$postiz_block" | grep -q "127.0.0.1:3000"
   # Confirm no 5000 reference in postiz probe section of this file
   ! grep -qP "postiz.*5000|5000.*postiz" "$BATS_TEST_FILENAME"
 }

@@ -156,10 +156,14 @@ setup() {
 }
 
 @test "compose.yml has healthcheck for n8n" {
-  # AC-4
+  # AC-4. Scan from `n8n:` to the NEXT service definition (line starting
+  # with `^  [a-z][a-z0-9-]+:`) — n8n's block is 47+ lines because it has
+  # many env vars, so the prior `head -40` window missed the healthcheck
+  # that DOES exist further down.
   grep -q "^  n8n:" "$COMPOSE_FILE"
-  n8n_line=$(grep -n "^  n8n:" "$COMPOSE_FILE" | head -1 | cut -d: -f1)
-  tail -n "+$n8n_line" "$COMPOSE_FILE" | head -40 | grep -q "healthcheck"
+  awk '/^  n8n:$/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:$/{flag=0} flag' \
+    "$COMPOSE_FILE" \
+    | grep -q "healthcheck"
 }
 
 @test "compose.yml: openclaw npm install is pinned to specific version (W5)" {
