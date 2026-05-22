@@ -1297,9 +1297,19 @@ _doctor_cursor_probe() {
   fi
 
   # Extract recorded hash from the trailing comment in the adapter.
+  # Use the portable sha256 helper (sha256sum on Debian/Ubuntu/Alpine;
+  # shasum on macOS). Matches the pattern at lines 311-314.
   local recorded current
   recorded="$(grep -oE 'agents-md-sha256: [0-9a-f]{64}' "$mdc" | awk '{print $2}' | head -1)"
-  current="$(shasum -a 256 "$agents" | awk '{print $1}')"
+  if command -v sha256sum >/dev/null 2>&1; then
+    current="$(sha256sum "$agents" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    current="$(shasum -a 256 "$agents" | awk '{print $1}')"
+  else
+    echo
+    printf "  STATUS: ERROR — no sha256 tool available (need sha256sum or shasum).\n"
+    return 1
+  fi
 
   if [[ -z "$recorded" ]]; then
     echo

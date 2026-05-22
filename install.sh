@@ -2036,9 +2036,19 @@ generate_cursor_adapter() {
   mkdir -p "$cursor_dir"
 
   # Compute the AGENTS.md content hash so `doctor --cursor` can detect
-  # stale adapters. shasum is universally available on macOS + Linux.
+  # stale adapters. Portable across macOS (shasum) + Linux (sha256sum on
+  # Debian/Ubuntu/Alpine images without perl). Match the pattern bin/walter-os
+  # already uses (lines 311-314, 440-443).
   local agents_sha
-  agents_sha="$(shasum -a 256 "$project_root/AGENTS.md" | awk '{print $1}')"
+  if command -v sha256sum >/dev/null 2>&1; then
+    agents_sha="$(sha256sum "$project_root/AGENTS.md" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    agents_sha="$(shasum -a 256 "$project_root/AGENTS.md" | awk '{print $1}')"
+  else
+    err "Neither sha256sum nor shasum is available — cannot compute"
+    err "AGENTS.md content hash for staleness detection."
+    return 2
+  fi
 
   # Generate the MDC file with frontmatter + header + body.
   # Body extraction strategy: copy AGENTS.md whole into the body.  Cursor's

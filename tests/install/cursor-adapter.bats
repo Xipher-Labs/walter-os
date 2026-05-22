@@ -13,6 +13,10 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   INSTALL_SH="$REPO_ROOT/install.sh"
+  # Match the WALTER_OS_HOME convention used by tests/cli/*.bats. install.sh
+  # itself doesn't read WALTER_OS_HOME, but if the generator ever shells out
+  # to bin/walter-os in the future, the env var will be set correctly.
+  export WALTER_OS_HOME="$REPO_ROOT"
   # Use BATS_TEST_TMPDIR as the fake project root.
   FAKE_REPO="$BATS_TEST_TMPDIR/fake-repo"
   mkdir -p "$FAKE_REPO"
