@@ -198,15 +198,25 @@ _simulate_rounds_completed() {
     # `[[:space:]]` — `\s` is a literal `s` in ERE, so `\s` would let the
     # `echo "rounds-completed=..." >> "$GITHUB_OUTPUT"` line through and
     # it would explode at eval time because GITHUB_OUTPUT is unset.
-    eval "$(awk '/# rounds-completed JSON array/,/echo "rounds-completed=\$rounds_json"/' "$ACTION_YML" \
-      | grep -vE '^[[:space:]]*echo')"
+    #
+    # Wrap the extracted block in a temp function so it tolerates `local`,
+    # `return`, `declare`, etc. inside the block — the prior bare-eval
+    # form would error with "local: can only be used in a function" if a
+    # future action.yml refactor used any of those. The function body is
+    # invoked immediately; `rounds_json` is exported back via the outer
+    # subshell.
+    local _block
+    _block=$(awk '/# rounds-completed JSON array/,/echo "rounds-completed=\$rounds_json"/' "$ACTION_YML" \
+      | grep -vE '^[[:space:]]*echo')
+    eval "_rounds_completed_block() { ${_block} }"
+    _rounds_completed_block
     printf '%s' "$rounds_json"
   )
   printf '%s' "$out"
 }
 
 @test "AC-8: rounds-completed is valid JSON when both rounds ran (regression #186)" {
-  command -v jq >/dev/null 2>&1 || skip "jq not available"
+  command -v jq >/dev/null 2>&1 || skip "jq required"
   local out
   out=$(_simulate_rounds_completed true true)
   echo "Generated: $out" >&3
@@ -221,7 +231,7 @@ _simulate_rounds_completed() {
 }
 
 @test "AC-8: rounds-completed is valid JSON when only Copilot ran" {
-  command -v jq >/dev/null 2>&1 || skip "jq not available"
+  command -v jq >/dev/null 2>&1 || skip "jq required"
   local out
   out=$(_simulate_rounds_completed true false)
   jq -e . <<< "$out" >/dev/null
@@ -230,7 +240,7 @@ _simulate_rounds_completed() {
 }
 
 @test "AC-8: rounds-completed is valid JSON when only Codex ran" {
-  command -v jq >/dev/null 2>&1 || skip "jq not available"
+  command -v jq >/dev/null 2>&1 || skip "jq required"
   local out
   out=$(_simulate_rounds_completed false true)
   jq -e . <<< "$out" >/dev/null
@@ -239,7 +249,7 @@ _simulate_rounds_completed() {
 }
 
 @test "AC-8: rounds-completed is [] when no rounds ran" {
-  command -v jq >/dev/null 2>&1 || skip "jq not available"
+  command -v jq >/dev/null 2>&1 || skip "jq required"
   local out
   out=$(_simulate_rounds_completed false false)
   jq -e . <<< "$out" >/dev/null
