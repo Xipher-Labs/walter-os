@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 # 02-create-tunnel.sh — create the Walter-VM Cloudflare Tunnel + service CNAMEs.
 #
+# Architecture (closes #174 — operator-reported "grafana / matrix / posthog
+# / element / etc unreachable on Walter-VM prod, 2026-05-22"):
+#
+#       internet                cloudflared        Caddy            container
+#       --------                -----------        -----            ---------
+#       https://...  --(TLS)--> :443 inside  -->  127.0.0.1:80 -->  forgejo:3000
+#                                tunnel             (host port)      grafana:3000
+#                                                                    matrix:8008
+#                                                                    ...
+#
+# Cloudflared is the public TLS edge; Caddy is the internal reverse proxy
+# that already knows the canonical subdomain → container map (see
+# setup/caddy/Caddyfile.template). Routing through Caddy means the
+# subdomain table lives in ONE place — no risk of cloudflared and Caddy
+# drifting (the old config routed 8 subdomains directly to per-service
+# host ports and left 15+ others publicly unreachable).
+#
 # Required env: CF_EMAIL, CF_KEY, CF_ACCOUNT, ZONE_ID
 # Args: $1 = primary domain (e.g. example.com)
 #
@@ -17,6 +34,45 @@ set -euo pipefail
 
 DOMAIN="${1:-${WALTER_DOMAIN:-example.com}}"
 TUNNEL_NAME="${TUNNEL_NAME:-walter-vm}"
+
+# ---------------------------------------------------------------------------
+# Canonical subdomain list — single source of truth for what is publicly
+# reachable. Must match site blocks in setup/caddy/Caddyfile.template
+# (Caddy is the one that actually dispatches to the right container, so
+# adding a subdomain here without a matching Caddy block makes Caddy
+# return its default 404 — "no matching site" — for that hostname; a
+# 502 only appears if a Caddy block DOES exist but its upstream
+# container is unreachable).
+#
+# To add a new public service:
+#   1. Add a site block in setup/caddy/Caddyfile.template
+#   2. Add the subdomain to this list
+#   3. tests/cloudflare/tunnel-ingress-caddy-routing.bats asserts parity
+# ---------------------------------------------------------------------------
+SUBDOMAINS=(
+  chat
+  chat-matrix
+  claw
+  draw
+  git
+  grafana
+  headscale
+  headscale-admin
+  home
+  llm
+  matrix
+  metabase
+  n8n
+  penpot
+  plane
+  posthog
+  postiz
+  secrets
+  status
+  sync
+  tower
+  vpn
+)
 
 cf() {
   curl -sS -H "X-Auth-Email: $CF_EMAIL" -H "X-Auth-Key: $CF_KEY" -H "Content-Type: application/json" "$@"
@@ -73,36 +129,33 @@ add_cname() {
   fi
 }
 
-for sub in vault llm plane git status home secrets uptime; do
+# Iterate the canonical SUBDOMAINS array (single source of truth — keep
+# in sync with the Caddyfile.template site blocks;
+# tests/cloudflare/tunnel-ingress-caddy-routing.bats enforces).
+# Same array also drives the ingress generation below — so CNAMEs and
+# ingress can never silently drift. Tracking: issue #174 (Copilot R1).
+for sub in "${SUBDOMAINS[@]}"; do
   add_cname "${sub}.${DOMAIN}"
 done
 
 echo
 echo "==> Generate cloudflared config.yml..."
 mkdir -p /tmp/walter-cf
-cat > /tmp/walter-cf/config.yml <<EOF
-tunnel: $TUNNEL_ID
-credentials-file: /etc/cloudflared/credentials.json
 
-ingress:
-  - hostname: vault.${DOMAIN}
-    service: http://127.0.0.1:8222
-  - hostname: llm.${DOMAIN}
-    service: http://127.0.0.1:4000
-  - hostname: plane.${DOMAIN}
-    service: http://127.0.0.1:8090
-  - hostname: git.${DOMAIN}
-    service: http://127.0.0.1:3000
-  - hostname: status.${DOMAIN}
-    service: http://127.0.0.1:3001
-  - hostname: home.${DOMAIN}
-    service: http://127.0.0.1:3010
-  - hostname: secrets.${DOMAIN}
-    service: http://127.0.0.1:8800
-  - hostname: uptime.${DOMAIN}
-    service: http://127.0.0.1:3001
-  - service: http_status:404
-EOF
+# Emit one ingress entry per subdomain pointing at Caddy on host port 80.
+# Caddy then dispatches via the Host header to the correct container
+# (see setup/caddy/Caddyfile.template). All routing decisions live in
+# Caddy — cloudflared only does TLS termination and host-based fan-in.
+{
+  printf 'tunnel: %s\n' "$TUNNEL_ID"
+  printf 'credentials-file: /etc/cloudflared/credentials.json\n\n'
+  printf 'ingress:\n'
+  for sub in "${SUBDOMAINS[@]}"; do
+    printf '  - hostname: %s.%s\n' "$sub" "$DOMAIN"
+    printf '    service: http://127.0.0.1:80\n'
+  done
+  printf '  - service: http_status:404\n'
+} > /tmp/walter-cf/config.yml
 
 echo "Config saved to /tmp/walter-cf/config.yml"
 echo "TUNNEL_ID=$TUNNEL_ID" > /tmp/walter-cf/.env
