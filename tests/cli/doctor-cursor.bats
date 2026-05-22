@@ -12,6 +12,10 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   WO_BIN="$REPO_ROOT/bin/walter-os"
+  # bin/walter-os requires WALTER_OS_HOME so it can locate VERSION, the
+  # subcommand scripts, etc. Tests in tests/cli/ all export this — match
+  # the established pattern.
+  export WALTER_OS_HOME="$REPO_ROOT"
   FAKE_REPO="$BATS_TEST_TMPDIR/fake-repo"
   mkdir -p "$FAKE_REPO"
   cat > "$FAKE_REPO/AGENTS.md" <<'EOF'
@@ -31,7 +35,7 @@ _generate_adapter() {
 }
 
 _run_doctor() {
-  (cd "$FAKE_REPO" && bash "$WO_BIN" doctor --cursor)
+  (cd "$FAKE_REPO" && WALTER_OS_HOME="$REPO_ROOT" bash "$WO_BIN" doctor --cursor)
 }
 
 @test "AC-3: doctor --cursor reports NOT_GENERATED when adapter is absent" {
