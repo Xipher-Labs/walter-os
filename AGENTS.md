@@ -370,11 +370,11 @@ the Penpot MCP are more flexible.
 ### Testing strategy (layered)
 
 Define your project-type testing matrix in your overlay or your project's
-`CONTRIBUTING.md`. See `contexts/_examples/testing-strategy.example.md` for a
-fully worked example covering three project archetypes (Rust/systems,
-Next.js+Supabase, React Native+Solana) with rows per test layer (unit,
+`CONTRIBUTING.md`. See `contexts/_examples/testing-strategy.example.md` for
+a fully worked example showing how to express test layers (unit,
 integration, E2E web, E2E mobile, visual regression, property-based,
-mutation, load/perf).
+mutation, load/perf) for several common project archetypes. The global
+contract is archetype-agnostic — pick what fits your stack.
 
 **When to write tests**: superpowers' `test-driven-development` skill enforces
 RED → GREEN → REFACTOR. That is the default discipline across all project

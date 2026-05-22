@@ -774,8 +774,15 @@ setup() {
 }
 
 @test "I-02: global AGENTS.md does not name 'Solana' as a first-class concern" {
+  # Catches the originally identified phrases ("Solana TX" in the auto-
+  # escalation list, "Solana infrastructure" in the skills list) AND the
+  # broader pattern: bare "Solana" appearing anywhere in the global
+  # contract. Reviewer R2 caught a case where the testing-strategy callout
+  # named Solana in a parenthetical pointer — the narrow phrase-checks
+  # missed it. The bare-word guard prevents that regression.
   ! grep -q "Solana TX" "$REPO_ROOT/AGENTS.md"
   ! grep -q "Solana infrastructure" "$REPO_ROOT/AGENTS.md"
+  ! grep -q "Solana" "$REPO_ROOT/AGENTS.md"
 }
 
 @test "I-02: global AGENTS.md does not reference Stripe as the canonical payment example" {
