@@ -126,13 +126,12 @@ add_cname() {
   fi
 }
 
-# Iterate the canonical list (single source of truth — keep in sync with
-# the Caddyfile.template site blocks; tests/cloudflare/...-bats enforces).
-# Bash word-splitting compatible: enumerate so grep -E '\<sub\>' on the
-# script still matches each name. Tracking: issue #174.
-for sub in chat chat-matrix claw draw git grafana headscale headscale-admin \
-           home llm matrix metabase n8n penpot plane posthog postiz secrets \
-           status sync tower vpn; do
+# Iterate the canonical SUBDOMAINS array (single source of truth — keep
+# in sync with the Caddyfile.template site blocks;
+# tests/cloudflare/tunnel-ingress-caddy-routing.bats enforces).
+# Same array also drives the ingress generation below — so CNAMEs and
+# ingress can never silently drift. Tracking: issue #174 (Copilot R1).
+for sub in "${SUBDOMAINS[@]}"; do
   add_cname "${sub}.${DOMAIN}"
 done
 

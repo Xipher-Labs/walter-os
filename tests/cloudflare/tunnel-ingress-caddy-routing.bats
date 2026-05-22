@@ -24,21 +24,39 @@ setup() {
 }
 
 # ---------------------------------------------------------------------------
-# Helper: extract the SUBDOMAINS bash array literal from the tunnel script.
-# The array is the source of truth — both the ingress generator and the
-# CNAME loop iterate it (or, in the case of the for-loop, a flattened
-# multi-line equivalent that this helper also catches).
+# Helpers — separated so each test asserts against the right source-of-truth
+# (Copilot R1 #188 finding):
+#
+#   _subdomains_array     : ONLY the SUBDOMAINS bash array literal — the
+#                           single source-of-truth the ingress emitter
+#                           iterates. AC-1 / AC-4 validate against this.
+#                           A subdomain that drops out of SUBDOMAINS but
+#                           lingers in some legacy for-loop must NOT
+#                           silently pass.
+#
+#   _for_loop_subdomains  : the CNAME-create for-loop's word list. After
+#                           Copilot R1, the loop iterates `${SUBDOMAINS[@]}`
+#                           directly — in that case this helper just
+#                           defers back to the array, which keeps any
+#                           future drift detectable.
 # ---------------------------------------------------------------------------
-_tunnel_script_subdomains() {
-  # 1) Pull the array body between `SUBDOMAINS=(` and the closing `)`
-  # 2) Also pull every word from `for sub in ...; do add_cname` blocks
-  #    (these may wrap across lines with `\`)
-  # 3) Combine + sort -u
+_subdomains_array() {
   awk '/^SUBDOMAINS=\(/{capture=1; next} capture && /^\)/{capture=0} capture {print}' "$TUNNEL_SCRIPT" \
     | tr -s ' \t' '\n' \
     | grep -E '^[a-z][a-z0-9-]*$'
+}
 
-  awk '/for sub in/,/do$/' "$TUNNEL_SCRIPT" \
+_for_loop_subdomains() {
+  local block
+  block=$(awk '/for sub in/,/do$/' "$TUNNEL_SCRIPT")
+  if [[ "$block" == *'"${SUBDOMAINS[@]}"'* ]]; then
+    # Loop iterates the array literal — defer to the array. Any drift
+    # surfaces in AC-1 (against the array) rather than producing a
+    # false-positive AC-4 from a stale flat list.
+    _subdomains_array
+    return
+  fi
+  printf '%s\n' "$block" \
     | tr '\\' ' ' \
     | tr -s ' \t' '\n' \
     | grep -E '^[a-z][a-z0-9-]*$' \
@@ -63,8 +81,12 @@ _tunnel_script_subdomains() {
 
   [[ -n "$caddy_subs" ]] || skip "no subdomains parsed from Caddyfile.template"
 
+  # Validate against the SUBDOMAINS array specifically — NOT a combined
+  # set with the for-loop fallback (Copilot R1 #188). The ingress emitter
+  # only iterates SUBDOMAINS, so that array is the source of truth that
+  # must contain every Caddy subdomain.
   local script_subs
-  script_subs=$(_tunnel_script_subdomains | sort -u)
+  script_subs=$(_subdomains_array | sort -u)
 
   local missing=()
   while read -r sub; do
@@ -74,8 +96,8 @@ _tunnel_script_subdomains() {
   done <<< "$caddy_subs"
 
   if [[ ${#missing[@]} -gt 0 ]]; then
-    printf 'Missing ingress for Caddy subdomains: %s\n' "${missing[*]}"
-    printf 'Script-known subdomains:\n%s\n' "$script_subs"
+    printf 'Missing from SUBDOMAINS array: %s\n' "${missing[*]}"
+    printf 'SUBDOMAINS currently contains:\n%s\n' "$script_subs"
     return 1
   fi
 }
@@ -113,14 +135,37 @@ _tunnel_script_subdomains() {
 @test "AC-3: catch-all http_status:404 is the final ingress entry" {
   [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
 
-  # The closing 404 must be the LAST printf in the config-generation
-  # block — i.e., appear AFTER every other `hostname:` printf and AFTER
-  # the SUBDOMAINS-iteration loop. Catch it via the literal string and
-  # assert it's the only such reference.
+  # Two assertions (Copilot R1 #188):
+  #   (a) the http_status:404 literal appears EXACTLY ONCE in the script
+  #       (no accidental duplicate would silently become the catch-all)
+  #   (b) the 404 printf is the LAST ingress-emitting printf — i.e., no
+  #       `hostname:`-emitting printf appears after it. Otherwise
+  #       cloudflared would short-circuit on the 404 before reaching the
+  #       real ingress.
+  #
+  # NB: avoid `count=$(grep -c ... || echo 0)` — when grep finds 0
+  # matches, it exits 1, and the `|| echo 0` produces a multi-line value.
+  # Use grep -c with a fallback assignment that doesn't chain echo.
   local count
-  count=$(grep -c 'http_status:404' "$TUNNEL_SCRIPT" 2>/dev/null || echo 0)
-  [[ "$count" -ge 1 ]] || {
-    echo "Missing the http_status:404 catch-all" >&2
+  count=$(grep -c 'http_status:404' "$TUNNEL_SCRIPT" || true)
+  count=${count:-0}
+  [[ "$count" -eq 1 ]] || {
+    printf 'http_status:404 occurrences: %d (expected exactly 1)\n' "$count" >&2
+    return 1
+  }
+
+  # Ordering: extract the config-generation block (between the printf for
+  # 'ingress:\n' and the redirect to config.yml) and confirm no `hostname:`
+  # printf appears AFTER the 404 line.
+  local block_lines
+  block_lines=$(awk '/printf .ingress:/,/} > .*config\.yml/' "$TUNNEL_SCRIPT")
+  local last_ingress_printf
+  last_ingress_printf=$(printf '%s\n' "$block_lines" \
+    | grep -nE 'printf .* (hostname|http_status):' \
+    | tail -1)
+  [[ "$last_ingress_printf" == *"http_status:404"* ]] || {
+    echo "Last ingress printf is NOT the http_status:404 catch-all:" >&2
+    echo "  $last_ingress_printf" >&2
     return 1
   }
 }
@@ -141,12 +186,17 @@ _tunnel_script_subdomains() {
     | sed -E 's/\.\$\{WALTER_DOMAIN\}.*//' \
     | sort -u)
 
-  local script_subs
-  script_subs=$(_tunnel_script_subdomains | sort -u)
+  # Validate against the CNAME for-loop specifically. _for_loop_subdomains
+  # returns the array (via fallback) when the loop iterates
+  # `${SUBDOMAINS[@]}`, so this asserts a real "would the CNAME be
+  # created" property regardless of whether the loop is direct or array-
+  # backed.
+  local loop_subs
+  loop_subs=$(_for_loop_subdomains | sort -u)
 
   local missing=()
   while read -r sub; do
-    if ! grep -qE "^${sub}$" <<< "$script_subs"; then
+    if ! grep -qE "^${sub}$" <<< "$loop_subs"; then
       missing+=("$sub")
     fi
   done <<< "$caddy_subs"
