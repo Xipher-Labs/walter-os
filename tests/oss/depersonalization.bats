@@ -42,6 +42,7 @@ count_matches() {
     | grep -v "$REPO_ROOT/README.md" \
     | grep -v "$REPO_ROOT/CHANGELOG.md" \
     | grep -v "$REPO_ROOT/COMMERCIAL.md" \
+    | grep -v "$REPO_ROOT/CLA.md" \
     | grep -v "$REPO_ROOT/NOTICE" \
     | wc -l \
     | tr -d ' '
@@ -323,6 +324,7 @@ count_matches() {
     | grep -v "$REPO_ROOT/README.md" \
     | grep -v "$REPO_ROOT/CHANGELOG.md" \
     | grep -v "$REPO_ROOT/COMMERCIAL.md" \
+    | grep -v "$REPO_ROOT/CLA.md" \
     | grep -v "$REPO_ROOT/NOTICE" \
     | wc -l \
     | tr -d ' ')"
@@ -414,6 +416,7 @@ count_matches() {
     | grep -v '/README.md' \
     | grep -v '/CHANGELOG.md' \
     | grep -v '/COMMERCIAL.md' \
+    | grep -v '/CLA.md' \
     | grep -v '/NOTICE'"
   [ "$status" -eq 1 ]
 }

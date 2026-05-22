@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# .github/workflows/cla.yml
+# Contributor License Agreement gate — see CLA.md + ADR-0019.
+#
+# This workflow is gated by the WALTER_CLA_ACTIVE repo variable. The CLA
+# scaffold (CLA.md + this workflow) lands in #155 but the gate is INACTIVE
+# until the operator sets WALTER_CLA_ACTIVE=true (per ADR-0019 migration
+# step 1: lawyer review). Once activated, every external PR is blocked
+# until the contributor signs the CLA via a comment.
+#
+# Activation checklist (operator):
+#   1. Lawyer reviews + approves CLA.md text.
+#   2. Remove the "STATUS NOTE" block from CLA.md.
+#   3. Operator (and any other maintainers) sign the CLA retroactively.
+#   4. Set repo variable: gh variable set WALTER_CLA_ACTIVE --body 'true'
+#   5. Verify on a test PR.
+
+name: cla-gate
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla-assistant:
+    runs-on: ubuntu-latest
+    # Gate the entire job behind the activation variable.  Until the
+    # operator opts in, the job is a no-op (succeeds without doing
+    # anything) so the workflow file can ship without disrupting open PRs.
+    if: ${{ vars.WALTER_CLA_ACTIVE == 'true' }}
+    steps:
+      - name: CLA Assistant
+        if: |
+          (github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
+          (github.event_name == 'pull_request_target')
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PERSONAL_ACCESS_TOKEN must be a fine-scoped PAT with write
+          # access to the signatures repository.  Stored in repo secrets.
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_SIGNATURES_TOKEN }}
+        with:
+          path-to-signatures: 'signatures/cla.json'
+          path-to-document: 'https://github.com/Xipher-Labs/walter-os/blob/main/CLA.md'
+          branch: 'cla-signatures'
+          allowlist: 'dependabot[bot],renovate[bot],copilot-pull-request-reviewer[bot]'
+          remote-organization-name: 'Xipher-Labs'
+          remote-repository-name: 'walter-os-cla-signatures'
+          custom-notsigned-prflag: 'cla-signature-required'
+          custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
+          custom-allsigned-prcomment: 'CLA signature verified. Thank you for contributing to Walter-OS.'
+          lock-pullrequest-aftermerge: false
