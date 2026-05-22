@@ -6,7 +6,7 @@
 
 **A self-hostable AI-agent operations framework by Xipher Labs**
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
+[![License: Apache-2.0 + AGPL-3.0](https://img.shields.io/badge/License-Apache--2.0%20%2B%20AGPL--3.0-blue.svg)](#license)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-v0.4.5--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
@@ -1726,25 +1726,51 @@ are unresolved.
 
 ## License
 
-### AGPLv3
+Walter-OS is **dual-licensed by directory tree** as of ADR-0018. See
+[NOTICE](NOTICE) for the canonical map and
+[docs/decisions/0018-licensing-strategy.md](docs/decisions/0018-licensing-strategy.md)
+for the decision record.
 
-Walter-OS is licensed under the **GNU Affero General Public License v3.0 or
-later** (AGPL-3.0-or-later). See `LICENSE` for the full text.
+### Licensing map
 
-Key implications of the AGPL:
+| Tree | License | SPDX | Why |
+|---|---|---|---|
+| Default (everything outside the listed subtrees) | Apache License 2.0 | `Apache-2.0` | Lowers friction for corporate adoption of the agent contract layer. No copyleft. |
+| `setup/walter-host/` | GNU AGPL v3 (or later) | `AGPL-3.0-or-later` | Network-service copyleft (§13) closes the SaaS-loophole for the heavy infrastructure stack. |
 
-- **Copyleft**: if you build a public network service on Walter-OS, you must
-  open-source your modifications under the same AGPL terms.
-- **No SaaS loophole**: serving Walter-OS over a network counts as distribution.
-  The AGPL closes the "SaaS loophole" present in the GPL.
-- **Free for personal use**: self-hosting for your own use (single operator,
-  private network) does not trigger the copyleft requirement.
+Files in `setup/walter-host/` carry SPDX header
+`# SPDX-License-Identifier: AGPL-3.0-or-later`. Files outside that subtree
+carry `# SPDX-License-Identifier: Apache-2.0`. The convention applies to new
+files; the existing tree is not back-filled in the dual-license switch
+itself to keep the diff reviewable. See
+[`LICENSE`](LICENSE) (AGPL canonical text),
+[`LICENSE-APACHE`](LICENSE-APACHE) (Apache-2.0 canonical text), and
+[`setup/walter-host/LICENSE`](setup/walter-host/LICENSE) (canonical subtree
+marker, identical to the root AGPL).
+
+### Key implications
+
+- **Apache-2.0 (contract layer)**: build proprietary products on top of the
+  agent contract (skills, agents, hooks, AGENTS.md cascade) without
+  obligation to publish your modifications. Preserve attribution per the
+  Apache-2.0 NOTICE clause.
+- **AGPL-3.0 (host stack)**: if you deploy modified `setup/walter-host/` as
+  a network service, you must publish the modifications under the AGPL. If
+  you only self-host for your own use, the §13 trigger does not fire.
+- **Free for personal use** (both trees): self-hosting on your own
+  infrastructure for your own use carries no obligation under either license.
 
 ### Commercial license
 
-Operators who need to keep their modifications private (closed-source commercial
-derivative) may obtain a commercial license. Contact
-`licensing@xipherlabs.xyz` or see `COMMERCIAL.md` for terms and pricing.
+Operators who need to ship closed-source modifications of `setup/walter-host/`
+as a network service, who want OEM/embedding rights with extra legal
+certainty, or who need trademark grants beyond fair use may obtain a
+commercial license. Contact `licensing@xipherlabs.xyz` or see
+[COMMERCIAL.md](COMMERCIAL.md) for terms and the request process.
+
+The Xipher Labs legal entity is being constituted per ADR-0022; the
+operator who founded the project is the sole copyright holder of record
+and can grant commercial licenses unilaterally in the interim.
 
 ### Brand
 

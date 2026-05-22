@@ -1,8 +1,34 @@
 Walter-OS
 Copyright (C) 2026 Xipher Labs
 
-Walter-OS is licensed under the GNU Affero General Public License, Version 3
-(AGPL-3.0-or-later). See the LICENSE file at the root of this repository or
-<https://www.gnu.org/licenses/agpl-3.0.html> for the full license text.
+Walter-OS is dual-licensed by directory tree, per ADR-0018:
+
+- Contract layer (default, repo root and all subdirectories EXCEPT those
+  listed below) is licensed under the Apache License, Version 2.0
+  (Apache-2.0). See LICENSE-APACHE at the repo root or
+  <https://www.apache.org/licenses/LICENSE-2.0> for the full text.
+
+- Host stack (`setup/walter-host/`) is licensed under the GNU Affero
+  General Public License, Version 3 (AGPL-3.0-or-later). See LICENSE at
+  the repo root, setup/walter-host/LICENSE (canonical subtree marker), or
+  <https://www.gnu.org/licenses/agpl-3.0.html> for the full text.
+
+The AGPL §13 network-service-modifications clause applies to the host
+stack only. Operators who deploy Walter-OS as a service must publish
+modifications to files in `setup/walter-host/` under the AGPL terms.
+Modifications to the contract layer (Apache-2.0) carry no copyleft
+obligation.
+
+Xipher Labs is the trade name. As of 2026-05-21 the legal entity is
+being constituted (ADR-0022). Until the entity transfer of copyright
+completes, the copyright holder of record is the individual operator
+who founded the project; the "Xipher Labs" attribution here represents
+the project owner and will be made fully unambiguous once entity
+formation is complete. Commercial licensing (COMMERCIAL.md) terms rest
+on the unified copyright posture and will take effect with the entity.
 
 Project URL: <https://github.com/xipher-labs/walter-os>
+ADRs:
+- docs/decisions/0010-oss-license.md (original AGPL decision, partially superseded)
+- docs/decisions/0018-licensing-strategy.md (dual-license)
+- docs/decisions/0022-xipher-labs-legal-entity.md (legal entity)
