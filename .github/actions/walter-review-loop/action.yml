@@ -1,0 +1,209 @@
+# SPDX-License-Identifier: Apache-2.0
+# .github/actions/walter-review-loop/action.yml
+#
+# Walter-OS Review Loop — composite GitHub Action that runs the
+# Copilot → Codex → Collaborative review pattern documented in
+# AGENTS.md "Review loop (standard pattern for every substantive PR)".
+#
+# Spec: docs/specs/review-loop-as-action.md
+# AGENTS.md section: "Review loop (standard pattern)"
+#
+# Designed to be reusable: another project's workflow can call this
+# action via `uses: Xipher-Labs/walter-os/.github/actions/walter-review-loop@<ref>`.
+
+name: Walter-OS review loop
+description: |
+  Runs the Walter-OS 3-round review loop on a PR: Round 1 Copilot via
+  GitHub REST API, Round 2 Codex CLI (if available), Round 3 collaborative
+  (operator-driven). Outputs structured findings + a status verdict.
+
+inputs:
+  pr-number:
+    description: The PR number to review.
+    required: true
+  base-branch:
+    description: The base branch for the diff (e.g. main).
+    required: true
+    default: main
+  severity-gate-config:
+    description: |
+      Path to a severity-gate config file (see
+      docs/specs/pr-review-severity-gate.md). If empty, the action uses
+      built-in defaults.
+    required: false
+    default: ''
+  run-copilot:
+    description: Whether to request Copilot review (Round 1).
+    required: false
+    default: 'true'
+  run-codex:
+    description: Whether to run Codex review (Round 2).
+    required: false
+    default: 'true'
+  github-token:
+    description: |
+      GitHub token used to request Copilot review via REST. Defaults to
+      the workflow's own GITHUB_TOKEN; override if your workflow needs
+      to request review on behalf of a different identity.
+    required: false
+    default: ${{ github.token }}
+  codex-home:
+    description: |
+      CODEX_HOME path for the Codex CLI invocation. The action uses a
+      minimal bypass config so it inherits auth from the workflow's
+      mounted Codex auth.json without picking up a broken
+      ~/.codex/config.toml.
+    required: false
+    default: /tmp/codex-minimal
+
+outputs:
+  findings-json:
+    description: |
+      JSON array of {round, tool, severity, file, line, message}
+      objects. Empty array if no findings.
+    value: ${{ steps.collect.outputs.findings-json }}
+  rounds-completed:
+    description: |
+      JSON array listing which review rounds actually ran (subset of
+      ['copilot-round-1', 'codex-round-2', 'collaborative-round-3']).
+      A round may be skipped if the corresponding tool was unavailable.
+    value: ${{ steps.collect.outputs.rounds-completed }}
+  status:
+    description: |
+      Overall verdict — one of:
+        clean     — no findings remaining; safe to merge.
+        findings  — MINOR/COSMETIC findings remain; operator decides.
+        escalate  — BLOCKER/MAJOR findings remain; do not merge.
+    value: ${{ steps.collect.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    # ----------------------------------------------------------------
+    # Round 1 — Copilot via REST
+    # ----------------------------------------------------------------
+    - name: Copilot Round 1
+      id: copilot
+      if: ${{ inputs.run-copilot == 'true' }}
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -uo pipefail
+        echo "::group::Copilot Round 1 — request review"
+
+        # Per AGENTS.md "How to auto-request Copilot review": only the
+        # REST API endpoint works; gh pr edit / GraphQL variants fail.
+        response_body=$(mktemp)
+        http_code=$(curl -sS -o "$response_body" -w "%{http_code}" \
+          -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+          -d '{"reviewers":["copilot-pull-request-reviewer[bot]"]}' || true)
+
+        if [[ "$http_code" =~ ^2 ]]; then
+          echo "copilot-requested=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Copilot review requested for PR #$PR_NUMBER (HTTP $http_code)"
+        else
+          # Copilot may be at capacity / PR too large / org policy blocks.
+          # Per spec AC-3, the action degrades gracefully.
+          echo "copilot-requested=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Copilot review request failed (HTTP $http_code). Continuing without Round 1."
+          cat "$response_body" >&2 || true
+        fi
+        rm -f "$response_body"
+        echo "::endgroup::"
+
+    # ----------------------------------------------------------------
+    # Round 2 — Codex CLI (if available)
+    # ----------------------------------------------------------------
+    - name: Codex Round 2
+      id: codex
+      if: ${{ inputs.run-codex == 'true' }}
+      shell: bash
+      env:
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        CODEX_HOME_INPUT: ${{ inputs.codex-home }}
+      run: |
+        set -uo pipefail
+        echo "::group::Codex Round 2"
+
+        if ! command -v codex >/dev/null 2>&1; then
+          # Per spec AC-4: warn but don't fail.
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::codex CLI not found on PATH. Skipping Round 2."
+          echo "::endgroup::"
+          exit 0
+        fi
+
+        # Per AGENTS.md "How to invoke Codex review": use the minimal
+        # bypass config that inherits auth.json. The workflow that calls
+        # this action is responsible for mounting auth.json at
+        # ${CODEX_HOME_INPUT}/auth.json before the step runs.
+        mkdir -p "$CODEX_HOME_INPUT"
+        echo 'approval_policy = "never"' > "$CODEX_HOME_INPUT/config.toml"
+
+        if [[ ! -f "$CODEX_HOME_INPUT/auth.json" ]]; then
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::No auth.json at $CODEX_HOME_INPUT/auth.json. Skipping Codex Round 2. Mount your auth.json before this action to enable it."
+          echo "::endgroup::"
+          exit 0
+        fi
+
+        CODEX_HOME="$CODEX_HOME_INPUT" \
+          codex exec review --base "$BASE_BRANCH" \
+          > /tmp/codex-review.txt 2>&1 || true
+
+        if [[ -s /tmp/codex-review.txt ]]; then
+          echo "codex-ran=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Codex Round 2 complete. Output at /tmp/codex-review.txt ($(wc -l < /tmp/codex-review.txt) lines)."
+        else
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Codex produced no output. Skipping Round 2 results."
+        fi
+        echo "::endgroup::"
+
+    # ----------------------------------------------------------------
+    # Collect findings + emit structured output
+    # ----------------------------------------------------------------
+    - name: Collect findings + emit status
+      id: collect
+      shell: bash
+      env:
+        COPILOT_REQUESTED: ${{ steps.copilot.outputs.copilot-requested }}
+        CODEX_RAN: ${{ steps.codex.outputs.codex-ran }}
+      run: |
+        set -uo pipefail
+        rounds=()
+        [[ "$COPILOT_REQUESTED" == "true" ]] && rounds+=('"copilot-round-1"')
+        [[ "$CODEX_RAN" == "true" ]] && rounds+=('"codex-round-2"')
+
+        # rounds-completed JSON array
+        if [[ ${#rounds[@]} -gt 0 ]]; then
+          IFS=',' rounds_json="[$(printf '%s' "${rounds[*]}")]"
+        else
+          rounds_json="[]"
+        fi
+        echo "rounds-completed=$rounds_json" >> "$GITHUB_OUTPUT"
+
+        # findings-json — placeholder. A future iteration parses
+        # Copilot review comments + Codex output into structured
+        # findings. For v1 of this action, the calling workflow reads
+        # the raw outputs from /tmp/codex-review.txt and the PR
+        # comments via the GitHub API.
+        echo "findings-json=[]" >> "$GITHUB_OUTPUT"
+
+        # Status verdict — v1 default is 'findings' if any round ran,
+        # 'escalate' if no rounds ran (caller should investigate why).
+        # Future: parse findings by severity and emit clean/findings/escalate.
+        if [[ ${#rounds[@]} -eq 0 ]]; then
+          echo "status=escalate" >> "$GITHUB_OUTPUT"
+          echo "::warning::No review rounds completed. Status: escalate."
+        else
+          echo "status=findings" >> "$GITHUB_OUTPUT"
+          echo "::notice::Review loop complete. ${#rounds[@]} round(s) ran. See PR comments + /tmp/codex-review.txt for findings."
+        fi

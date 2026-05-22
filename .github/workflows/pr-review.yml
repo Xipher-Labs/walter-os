@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+# .github/workflows/pr-review.yml
+#
+# Eat-our-own-cooking workflow that runs the Walter-OS review loop on
+# every PR against main. Demonstrates the canonical setup the action
+# README documents.
+#
+# This is OPT-IN for downstream forks: if you fork Walter-OS and don't
+# want the auto-review, delete this file. The action itself (in
+# .github/actions/walter-review-loop/) remains usable from your own
+# workflow.
+
+name: PR review loop
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+# Permissions: read repo content + write PR comments / requested
+# reviewers. The action does NOT need broader scopes.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Skip on draft PRs — review during draft is operator-driven, not
+    # auto-triggered.
+    if: ${{ github.event.pull_request.draft == false }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0  # need full history for the diff base-branch resolution
+
+      # Mount Codex auth if the secret is set. If not, Round 2 is
+      # skipped gracefully.
+      - name: Mount Codex auth (Round 2 enable)
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        if: ${{ env.CODEX_AUTH_JSON != '' }}
+        run: |
+          mkdir -p /tmp/codex-minimal
+          printf '%s' "$CODEX_AUTH_JSON" > /tmp/codex-minimal/auth.json
+          echo "Codex auth.json mounted at /tmp/codex-minimal/auth.json"
+
+      - name: Run Walter-OS review loop
+        id: review
+        uses: ./.github/actions/walter-review-loop
+        with:
+          pr-number: ${{ github.event.pull_request.number }}
+          base-branch: ${{ github.event.pull_request.base.ref }}
+          run-copilot: true
+          run-codex: true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Walter-OS review loop" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rounds completed: \`${{ steps.review.outputs.rounds-completed }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: \`${{ steps.review.outputs.status }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "See PR comments for Copilot findings. Codex output (if Round 2 ran) is in the runner's \`/tmp/codex-review.txt\`." >> "$GITHUB_STEP_SUMMARY"

@@ -166,8 +166,11 @@ setup() {
     | grep -v "$REPO_ROOT/docs/specs/founder-skills-bundle-extraction.md" \
     | grep -v "$REPO_ROOT/docs/specs/agents-md-cascade-spec.md" \
     | grep -vE "$REPO_ROOT/tests/oss/[a-zA-Z0-9_-]+\.bats" \
+    | grep -vE "$REPO_ROOT/tests/github-actions/[a-zA-Z0-9_-]+\.bats" \
     | grep -vE "$REPO_ROOT/skills/[^/]+/SKILL\.md" \
     | grep -vE "$REPO_ROOT/\.github/workflows/[a-zA-Z0-9_-]+\.ya?ml" \
+    | grep -vE "$REPO_ROOT/\.github/actions/[a-zA-Z0-9_-]+/action\.ya?ml" \
+    | grep -vE "$REPO_ROOT/\.github/actions/[a-zA-Z0-9_-]+/README\.md" \
     | grep -vE "$REPO_ROOT/hooks/[a-zA-Z0-9_-]+\.sh" \
     | wc -l \
     | tr -d ' ')"
