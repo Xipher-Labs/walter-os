@@ -1337,14 +1337,49 @@ _doctor_cursor_probe() {
   return 0
 }
 
+# _doctor_lite_probe: reports the state of the Lite-persist contract at
+# <cwd>/.walter-os-lite/AGENTS.md. See docs/specs/walter-os-lite-entry-tier.md.
+#
+# Outputs (informational, exit 0/1 follows the spec AC-6):
+#   PASS — .walter-os-lite/AGENTS.md present; print the discipline headings.
+#   NONE — file absent; print the install callout.
+_doctor_lite_probe() {
+  local cwd
+  cwd="$(pwd)"
+  local lite_md="$cwd/.walter-os-lite/AGENTS.md"
+
+  echo "Walter-OS doctor — Lite contract probe"
+  echo
+
+  if [[ ! -f "$lite_md" ]]; then
+    printf "  STATUS: NONE\n"
+    printf "  No Lite contract installed in this repo (file absent: %s).\n" "$lite_md"
+    printf "  Install:\n"
+    printf "    1. Paste setup/agent-install/lite.md into your agent (in-session only).\n"
+    printf "    2. OR paste setup/agent-install/lite-persist.md to persist to %s\n" "$lite_md"
+    printf "       across all future sessions in this repo.\n"
+    return 1
+  fi
+
+  printf "  STATUS: PASS\n"
+  printf "  Lite contract installed: %s\n" "$lite_md"
+  printf "  Disciplines:\n"
+  # Extract the ## headings from the Lite-persist AGENTS.md.
+  grep -E '^## [0-9]+\.' "$lite_md" | sed 's/^/    /'
+  return 0
+}
+
 cmd_doctor() {
   # Parse optional --tier N flag. Without it, every check runs (legacy
   # contract preserved). With it, only checks tagged ≤ N run — useful
   # for verifying a tier install (see setup/agent-install/tier-*.md).
   # --cursor: run ONLY the Cursor adapter probe and exit (no other
   # checks). See docs/specs/cursor-adapter-completion.md.
+  # --lite: run ONLY the Lite contract probe + exit. See
+  # docs/specs/walter-os-lite-entry-tier.md.
   local tier_filter=""
   local cursor_only=0
+  local lite_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --tier)
@@ -1357,6 +1392,10 @@ cmd_doctor() {
         ;;
       --cursor)
         cursor_only=1
+        shift
+        ;;
+      --lite)
+        lite_only=1
         shift
         ;;
       *)
@@ -1372,6 +1411,11 @@ cmd_doctor() {
 
   if [[ "$cursor_only" -eq 1 ]]; then
     _doctor_cursor_probe
+    return $?
+  fi
+
+  if [[ "$lite_only" -eq 1 ]]; then
+    _doctor_lite_probe
     return $?
   fi
 

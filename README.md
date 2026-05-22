@@ -541,7 +541,27 @@ with DNS, Cloudflare Tunnel, secrets bootstrap, and Control Tower build.
 
 ---
 
-## Install via agent (Tier I → IV)
+## Install via agent (Lite → Tier I → IV)
+
+### Walter-OS Lite — start here
+
+> **Start here. No install. 30 seconds.**
+
+Paste the fenced block from [`setup/agent-install/lite.md`](setup/agent-install/lite.md)
+into a Claude Code or Codex CLI conversation. Your agent adopts the
+minimum Walter-OS disciplines (rigor classification, TDD gate, conventional
+commits, branch flow, self-review, hard nevers) for that session. No
+prerequisites. No file changes. No tools required.
+
+Ready to make it stick across all future sessions in this repo (still
+without `install.sh`)? Paste [`setup/agent-install/lite-persist.md`](setup/agent-install/lite-persist.md)
+after Lite — it writes `.walter-os-lite/AGENTS.md` to the current repo and
+adds the directory to `.gitignore`. Verify with `walter-os doctor --lite`.
+
+Ready to make it permanent (across all your repos, with the full agent
+contract — skills, hooks, MCP profiles, CLI)? Continue to Tier I below.
+
+### Tier I → IV — full install
 
 Don't want to memorize steps? Walter-OS ships four copy-paste prompts
 you hand to your agent (Claude Code, Codex CLI, or Cursor). The agent
@@ -580,7 +600,7 @@ below cover the same ground without an agent.
 
 ## Table of contents
 
-- [Install via agent (Tier I → IV)](#install-via-agent-tier-i--iv)
+- [Install via agent (Lite → Tier I → IV)](#install-via-agent-lite--tier-i--iv)
 - [Personas](#personas)
 - [Stack at a glance](#stack-at-a-glance)
 - [Networking and access](#networking-and-access)
