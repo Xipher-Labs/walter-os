@@ -841,6 +841,10 @@ services:
       GRAFANA_SA_TOKEN: "${GRAFANA_SA_TOKEN:?required}"
       CONTROL_TOWER_ADMIN_TOKEN: "${CONTROL_TOWER_ADMIN_TOKEN:?required}"
       CONTROL_TOWER_AUTH_DISABLED: "${CONTROL_TOWER_AUTH_DISABLED:-false}"
+      # Canonical public URL for redirect Location headers — Next.js
+      # standalone falls back to HOSTNAME=0.0.0.0 in request.url and
+      # browsers refuse to follow it. Set this in .env.
+      CONTROL_TOWER_PUBLIC_URL: "${CONTROL_TOWER_PUBLIC_URL:-}"
       TAILSCALE_ENFORCE: "${TAILSCALE_ENFORCE:-true}"
       TAILSCALE_CGNAT_CIDR: "${TAILSCALE_CGNAT_CIDR:-100.64.0.0/10}"
     volumes:

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getCanonicalBaseUrl } from "@/lib/canonical-url";
 import {
   CONTROL_TOWER_SESSION_COOKIE,
   authorizeControlTowerRequest,
@@ -77,9 +78,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.search = "";
+    // Build /login against the canonical PUBLIC base URL — request.nextUrl
+    // is constructed from HOSTNAME (=0.0.0.0) in the standalone server,
+    // and browsers refuse to follow a Location header pointing there.
+    // See lib/canonical-url.ts.
+    const baseUrl = getCanonicalBaseUrl(request.headers, request.url);
+    const loginUrl = new URL("/login", baseUrl);
     loginUrl.searchParams.set(
       "next",
       `${request.nextUrl.pathname}${request.nextUrl.search}`

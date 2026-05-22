@@ -117,6 +117,30 @@ the implementation lives in dedicated follow-up PRs per the plan in
   the Walter-OS reference implementation satisfies the spec — forks
   can run the same suite against their own tree.
 
+### Fixed (will ship in v0.5.0)
+
+- **Control Tower: login redirect went to `http://0.0.0.0:3000/` on
+  Walter-VM prod (Tailscale + Cloudflare Tunnel).** After submitting the
+  admin token, the browser was sent to `0.0.0.0:3000` and refused to
+  follow — Chrome blocks the bind-address since the 2024 "0.0.0.0 Day"
+  mitigation, and on other browsers the address is unreachable across
+  the network. Root cause: the Next.js standalone server constructs
+  `request.url` from `HOSTNAME=0.0.0.0`, which then leaked into the
+  `Location` header. New helper `apps/control-tower/lib/canonical-url.ts`
+  resolves the canonical public URL from (in priority order)
+  `CONTROL_TOWER_PUBLIC_URL` (explicit operator override — recommended
+  for production), `X-Forwarded-Host` + `X-Forwarded-Proto` (set by
+  Cloudflare Tunnel and Tailscale Serve), the `Host` header (when not
+  `0.0.0.0`), then the framework URL as last resort. `app/api/login/route.ts`
+  and `middleware.ts` now both use it. Setting `CONTROL_TOWER_PUBLIC_URL`
+  also neutralises an open-redirect risk if Control Tower is ever exposed
+  without a trusted proxy in front (an attacker who can spoof
+  `X-Forwarded-Host` could otherwise trick the login flow into redirecting
+  to a hostile origin). New env var documented in `.env.example` + the
+  Control Tower README + the root and standalone compose.yml; vitest
+  coverage at `tests/unit/canonical-url.test.ts` (15 cases) and
+  `tests/unit/login-route-redirect.test.ts` (4 integration cases).
+
 ---
 
 ## [0.4.5] — 2026-05-21
