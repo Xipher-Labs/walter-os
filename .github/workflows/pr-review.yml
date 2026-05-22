@@ -38,11 +38,22 @@ jobs:
 
       # Mount Codex auth if the secret is set. If not, Round 2 is
       # skipped gracefully.
+      #
+      # NB (#185, Codex sweep 2026-05-22): the step's `if:` expression
+      # is evaluated BEFORE the step-level `env:` block is applied, so
+      # `${{ env.CODEX_AUTH_JSON }}` was always empty in the `if:` and
+      # the step would never run — `/tmp/codex-minimal/auth.json` was
+      # never written, and the walter-review-loop action would always
+      # degrade out of Codex Round 2 on this repo. Move the gate into
+      # the shell so the env var has been mapped by the time we check.
       - name: Mount Codex auth (Round 2 enable)
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
-        if: ${{ env.CODEX_AUTH_JSON != '' }}
         run: |
+          if [[ -z "$CODEX_AUTH_JSON" ]]; then
+            echo "::notice::CODEX_AUTH_JSON not set; Round 2 (Codex review) will skip."
+            exit 0
+          fi
           mkdir -p /tmp/codex-minimal
           printf '%s' "$CODEX_AUTH_JSON" > /tmp/codex-minimal/auth.json
           echo "Codex auth.json mounted at /tmp/codex-minimal/auth.json"
@@ -55,6 +66,14 @@ jobs:
           base-branch: ${{ github.event.pull_request.base.ref }}
           run-copilot: true
           run-codex: true
+          # Pass github-token explicitly even though the action defaults
+          # it to `${{ github.token }}`. Composite action input defaults
+          # using the github context have evaluated correctly across
+          # all our runs so far, but #184 (Codex sweep) flagged the
+          # subtle reliance on default-resolution timing as fragile.
+          # Explicit passing here is belt-and-braces + makes the example
+          # self-contained for adopters who copy this workflow.
+          github-token: ${{ github.token }}
 
       - name: Summary
         if: always()

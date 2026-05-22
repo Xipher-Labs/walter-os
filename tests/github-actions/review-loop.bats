@@ -167,6 +167,82 @@ setup() {
 }
 
 # ---------------------------------------------------------------------------
+# Regression: issue #185 — pr-review.yml's Codex auth mount step used a
+# step-level `if: ${{ env.CODEX_AUTH_JSON != '' }}` which is evaluated
+# BEFORE the step-level env block, so the step was always skipped on
+# this repo. The fix is to drop the `if:` and gate inside the shell.
+# ---------------------------------------------------------------------------
+
+@test "AC-9 (#185): pr-review.yml Codex mount step does NOT use step-level if-on-env" {
+  # The buggy pattern was:
+  #   - name: Mount Codex auth (Round 2 enable)
+  #     env:
+  #       CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+  #     if: ${{ env.CODEX_AUTH_JSON != '' }}
+  # GitHub evaluates `if:` BEFORE the step's `env:` block, so the
+  # env reference is always empty → step never runs.
+  ! grep -qE 'if: \$\{\{ env\.CODEX_AUTH_JSON' "$WORKFLOW" || {
+    echo "pr-review.yml still uses the broken step-level if-on-env pattern (#185)" >&2
+    return 1
+  }
+}
+
+@test "AC-9 (#185): pr-review.yml Codex mount step gates inside the shell" {
+  # The fix is to remove the `if:` and check `[[ -z "$CODEX_AUTH_JSON" ]]`
+  # in the shell. That ensures the step runs and the env var has been
+  # mapped by the time we check.
+  awk '/Mount Codex auth/,/Run Walter-OS review loop/' "$WORKFLOW" \
+    | grep -qE '\[\[ -z "\$CODEX_AUTH_JSON" \]\]|\[ -z "\$CODEX_AUTH_JSON" \]'
+}
+
+# ---------------------------------------------------------------------------
+# Regression: issue #184 — pr-review.yml example should pass github-token
+# explicitly even though the action defaults it (defensive — composite
+# action input default resolution timing has been fragile in past
+# GitHub-Actions versions).
+# ---------------------------------------------------------------------------
+
+@test "AC-9 (#184): pr-review.yml passes github-token to the action explicitly" {
+  awk '/uses:.*walter-review-loop/,/^      - name:/' "$WORKFLOW" \
+    | grep -qE 'github-token:[[:space:]]+\$\{\{[[:space:]]*github\.token[[:space:]]*\}\}'
+}
+
+@test "AC-9 (#184): action README example passes github-token explicitly" {
+  # The README's quickstart example should match what pr-review.yml does
+  # so adopters copying the example don't hit the issue.
+  awk '/uses: Xipher-Labs\/walter-os\/.github\/actions\/walter-review-loop/,/Post status/' \
+    "$ACTION_README" \
+    | grep -qE 'github-token:[[:space:]]+\$\{\{[[:space:]]*github\.token[[:space:]]*\}\}'
+}
+
+@test "AC-9 (#185): action README Codex-auth snippet does NOT use step-level if-on-env" {
+  # The README "Setting up Codex Round 2" snippet had the same foot-gun
+  # as pr-review.yml's workflow step (`if: ${{ env.CODEX_AUTH_JSON ... }}`
+  # is evaluated before step `env:` is applied, so the snippet would
+  # always skip when adopters copied it verbatim). Copilot R1 #193.
+  # Awk-range gotcha: `/^## Setting up.../,/^## /` matches the start
+  # line for BOTH bounds (since ^## also matches the start heading
+  # itself), so it captures only one line. Use a flag-driven extraction
+  # that flips on at the section header + flips off at the NEXT
+  # heading.
+  #
+  # Anchor the grep on optional-whitespace-then-`if:` so a markdown
+  # blockquote (`> **Note**: Do NOT use ...`) explaining the foot-gun
+  # is correctly NOT flagged. The actual broken pattern would appear
+  # at the start of a yaml step line (`  if: ...`), with only
+  # whitespace as the prefix.
+  awk '/^## Setting up Codex Round 2/{flag=1;next} flag && /^## /{flag=0} flag' \
+    "$ACTION_README" \
+    | { ! grep -qE '^[[:space:]]+if:[[:space:]]*\$\{\{[[:space:]]*env\.CODEX_AUTH_JSON'; }
+}
+
+@test "AC-9 (#185): action README Codex-auth snippet gates inside the shell" {
+  awk '/^## Setting up Codex Round 2/{flag=1;next} flag && /^## /{flag=0} flag' \
+    "$ACTION_README" \
+    | grep -qE '\[\[ -z "\$CODEX_AUTH_JSON" \]\]|\[ -z "\$CODEX_AUTH_JSON" \]'
+}
+
+# ---------------------------------------------------------------------------
 # Regression: issue #186 — pin the documented `rounds-completed` JSON
 # contract regardless of implementation details. Codex's sweep originally
 # claimed `IFS=',' rounds_json="..."` produced space-separated output, but
