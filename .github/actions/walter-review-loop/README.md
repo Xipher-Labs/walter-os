@@ -83,15 +83,24 @@ Recommended workflow:
 - name: Mount Codex auth
   env:
     CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
-  if: ${{ env.CODEX_AUTH_JSON != '' }}
   run: |
+    if [[ -z "$CODEX_AUTH_JSON" ]]; then
+      echo "::notice::CODEX_AUTH_JSON not set; Round 2 will skip."
+      exit 0
+    fi
     mkdir -p /tmp/codex-minimal
     printf '%s' "$CODEX_AUTH_JSON" > /tmp/codex-minimal/auth.json
 - uses: Xipher-Labs/walter-os/.github/actions/walter-review-loop@main
   with:
     pr-number: ${{ github.event.pull_request.number }}
     base-branch: main
+    github-token: ${{ github.token }}
 ```
+
+> **Note**: Do NOT use a step-level `if: ${{ env.CODEX_AUTH_JSON != '' }}`
+> here — GitHub Actions evaluates the step's `if:` BEFORE applying the
+> step's `env:` block, so the env reference is always empty and the step
+> never runs. Gate inside the shell after env is mapped (issue #185).
 
 Without `CODEX_AUTH_JSON`, Round 2 is automatically skipped and the action still runs Round 1.
 

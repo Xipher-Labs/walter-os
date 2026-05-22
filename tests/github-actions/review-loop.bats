@@ -215,6 +215,33 @@ setup() {
     | grep -qE 'github-token:[[:space:]]+\$\{\{[[:space:]]*github\.token[[:space:]]*\}\}'
 }
 
+@test "AC-9 (#185): action README Codex-auth snippet does NOT use step-level if-on-env" {
+  # The README "Setting up Codex Round 2" snippet had the same foot-gun
+  # as pr-review.yml's workflow step (`if: ${{ env.CODEX_AUTH_JSON ... }}`
+  # is evaluated before step `env:` is applied, so the snippet would
+  # always skip when adopters copied it verbatim). Copilot R1 #193.
+  # Awk-range gotcha: `/^## Setting up.../,/^## /` matches the start
+  # line for BOTH bounds (since ^## also matches the start heading
+  # itself), so it captures only one line. Use a flag-driven extraction
+  # that flips on at the section header + flips off at the NEXT
+  # heading.
+  #
+  # Anchor the grep on optional-whitespace-then-`if:` so a markdown
+  # blockquote (`> **Note**: Do NOT use ...`) explaining the foot-gun
+  # is correctly NOT flagged. The actual broken pattern would appear
+  # at the start of a yaml step line (`  if: ...`), with only
+  # whitespace as the prefix.
+  awk '/^## Setting up Codex Round 2/{flag=1;next} flag && /^## /{flag=0} flag' \
+    "$ACTION_README" \
+    | { ! grep -qE '^[[:space:]]+if:[[:space:]]*\$\{\{[[:space:]]*env\.CODEX_AUTH_JSON'; }
+}
+
+@test "AC-9 (#185): action README Codex-auth snippet gates inside the shell" {
+  awk '/^## Setting up Codex Round 2/{flag=1;next} flag && /^## /{flag=0} flag' \
+    "$ACTION_README" \
+    | grep -qE '\[\[ -z "\$CODEX_AUTH_JSON" \]\]|\[ -z "\$CODEX_AUTH_JSON" \]'
+}
+
 # ---------------------------------------------------------------------------
 # Regression: issue #186 — pin the documented `rounds-completed` JSON
 # contract regardless of implementation details. Codex's sweep originally
