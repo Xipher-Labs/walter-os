@@ -182,9 +182,18 @@ runs:
         [[ "$COPILOT_REQUESTED" == "true" ]] && rounds+=('"copilot-round-1"')
         [[ "$CODEX_RAN" == "true" ]] && rounds+=('"codex-round-2"')
 
-        # rounds-completed JSON array
+        # rounds-completed JSON array. NB: the prior form
+        # `IFS=',' rounds_json="..."` was flagged by Codex (#186) as
+        # producing space-separated output. In practice both are
+        # regular assignments here (no command follows), so IFS IS
+        # set and `${rounds[*]}` IS comma-joined — output is valid
+        # JSON. But the subshell form below is unambiguous to any
+        # reviewer who hasn't memorised bash's assignment-prefix
+        # semantics, and it avoids leaking IFS into the rest of the
+        # step. The contract is pinned by tests/github-actions/
+        # review-loop.bats:AC-8.
         if [[ ${#rounds[@]} -gt 0 ]]; then
-          IFS=',' rounds_json="[$(printf '%s' "${rounds[*]}")]"
+          rounds_json="[$(IFS=','; printf '%s' "${rounds[*]}")]"
         else
           rounds_json="[]"
         fi
