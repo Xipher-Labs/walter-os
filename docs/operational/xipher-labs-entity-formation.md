@@ -104,12 +104,17 @@ overlay settings.
 ## Template — "post-formation repo update" PR
 
 When the operator gets here, this template generates the Phase 2 PR.
+Note: this template is left in place as a reference for any FUTURE
+post-formation attribution updates (e.g., if the entity is ever
+re-domiciled or renamed). The first Phase 2 PR was #165 which constituted
+Xipher Labs S.R.L. — replace the entity name + date in the template if
+re-using it.
 
 ```
 Title: [CHORE] -COMPLIANCE- update repo attribution post entity formation (ADR-0022)
 
 Body:
-Closes the post-formation half of #156. The Xipher Labs S.A.S. legal
+Closes the post-formation half of #156. The Xipher Labs S.R.L. legal
 entity was constituted on YYYY-MM-DD per ADR-0022 phase 1. This PR
 updates the repo's attribution to the constituted entity.
 
