@@ -1,11 +1,39 @@
 # Contributing to Walter-OS
 
-Walter-OS is developed by Xipher Labs and accepts contributions under the
-GNU Affero General Public License v3.
+Walter-OS is developed by Xipher Labs and is **dual-licensed by directory
+tree** per [ADR-0018](docs/decisions/0018-licensing-strategy.md):
 
-**By submitting a pull request you agree that your contribution is
-AGPLv3-compatible and may be used, distributed, and modified under the terms
-of the AGPLv3.** See [LICENSE](LICENSE) for the full text.
+- **Default tree** (skills, agents, hooks, the `AGENTS.md` cascade, install
+  scripts, docs, tests) — Apache License 2.0. See [LICENSE-APACHE](LICENSE-APACHE).
+- **Host stack** (`setup/walter-host/`) — GNU AGPL v3 (or later). See [LICENSE](LICENSE)
+  and [setup/walter-host/LICENSE](setup/walter-host/LICENSE).
+
+**By submitting a pull request you agree that your contribution is licensed
+under the SPDX-License-Identifier that the file you edit carries** (or, if
+the file has no SPDX header, the license that applies to its directory
+subtree per [NOTICE](NOTICE)). See [COMMERCIAL.md](COMMERCIAL.md) for the
+full license map.
+
+## Contributor License Agreement (CLA)
+
+Per [ADR-0019](docs/decisions/0019-contributor-license-agreement.md),
+Walter-OS uses a CLA enforced by the CLA Assistant bot. The CLA grants
+Xipher Labs the right to sublicense your contribution under a commercial
+license in addition to the OSI license shown above; the community's right to
+use your contribution under the OSI license is **not affected**.
+
+How to sign:
+1. Open your PR. The CLA Assistant bot will comment with a signing link.
+2. Read [CLA.md](CLA.md).
+3. Comment on the PR with the exact phrase:
+   `I have read the CLA Document and I hereby sign the CLA`.
+   Your signature is recorded against your GitHub account and inherited by
+   all your future PRs.
+
+Until the operator activates the CLA gate (per ADR-0019 migration step 1,
+pending lawyer review of the CLA text), the bot is gated by the
+`WALTER_CLA_ACTIVE` repo variable and does NOT block PRs. The text in
+`CLA.md` is the draft scaffold.
 
 ---
 

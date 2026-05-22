@@ -49,7 +49,19 @@ codex review --base main > /tmp/codex-review.txt 2>&1
 
 ## Checklist
 
-- [ ] Branch targets `dev` (not `main`)
+- [ ] Branch targets the correct base (default `main` per single-tier flow; `dev` if `WALTER_BRANCH_FLOW=three-stage`)
 - [ ] Conventional commit subject ≤72 chars, imperative mood
 - [ ] Spec updated if acceptance criteria changed during implementation
 - [ ] `Refs: docs/specs/<slug>.md` in commit footer (for major tasks)
+
+## Contributor License Agreement
+
+By opening this PR you agree to sign the [Contributor License Agreement](../blob/main/CLA.md)
+once the CLA gate is active (see ADR-0019). The CLA Assistant bot will guide
+you on your first PR — comment `I have read the CLA Document and I hereby sign
+the CLA` on the PR. The signature persists for all future PRs from your
+GitHub account.
+
+Until the operator activates the CLA gate (per ADR-0019 migration step 1),
+the bot is gated by the `WALTER_CLA_ACTIVE` repo variable and will not block
+PRs.
