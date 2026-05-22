@@ -152,3 +152,48 @@ setup() {
     return 1
   fi
 }
+
+# -----------------------------------------------------------------------
+# AC10c: deep-nested walter-os <parent> <sub> <subsub> usages are valid
+#
+# AC10b validates immediate-child nesting but not deeper forms used in
+# the prompts (e.g. `walter-os agents trust list`, `walter-os agents
+# trust set`). The prompts only use:
+#   - `walter-os agents trust list` (verb subsub)
+#   - `walter-os agents trust set <agent>` (verb subsub)
+#   - `walter-os agents trust <agent-name>` (bare-agent-name passthrough)
+# all of which the `agents trust` dispatcher accepts. But if a future
+# prompt invents a `trust grant` or `trust revoke`, AC10b alone would
+# miss it.
+#
+# Closes PR #111 R4 Finding C.
+# -----------------------------------------------------------------------
+@test "AC10c: deep-nested walter-os agents trust <verb> usages are valid" {
+  # agents trust valid verbs sourced from scripts/agents/trust.sh case
+  # dispatch: list / set. Any other token is treated as an agent name
+  # (bare-agent-name passthrough is intentional, not a drift bug).
+  local valid_verbs="list set"
+
+  # Known agent names that are legitimate as the third token.
+  # Read from the canonical trust-tiers.yml if present in repo; else
+  # use the hardcoded Council roster.
+  local valid_agent_names="reviewer triage researcher coder liaison janitor"
+
+  local missing=""
+  while IFS= read -r used_subsub; do
+    [ -z "$used_subsub" ] && continue
+    case " $valid_verbs " in
+      *" $used_subsub "*) continue ;;  # valid verb
+    esac
+    case " $valid_agent_names " in
+      *" $used_subsub "*) continue ;;  # valid agent-name passthrough
+    esac
+    missing="${missing}"$'\n'"  ✗ walter-os agents trust ${used_subsub}"
+  done < <(grep -hoE "walter-os agents trust [a-z][a-z0-9-]*" "$PROMPT_DIR"/tier-*.md 2>/dev/null \
+            | awk '{print $4}' | sort -u)
+
+  if [ -n "$missing" ]; then
+    printf "Deep-nested walter-os agents trust subcommands in prompts that don't exist:%s\n" "$missing" >&2
+    return 1
+  fi
+}

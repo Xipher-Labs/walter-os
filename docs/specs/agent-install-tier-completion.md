@@ -58,12 +58,21 @@ Extend the existing `cmd_doctor()` in `bin/walter-os` (~line 1086) to accept an 
 
 | Tier | Checks |
 |---|---|
-| 1 | `WALTER_OS_HOME`, env file, `~/.claude/CLAUDE.md` symlink, `~/.codex/AGENTS.md` symlink, branch-flow-guard hook installed |
-| 2 | All of tier 1 + skills symlinked + `~/.claude/settings.json` present + slash commands present + audit ran today |
-| 3 | All of tier 2 + VM-side checks (delegated — `walter-os doctor --tier 3` on local validates the operator's Hetzner token works; the actual service health checks run from the VM via the existing tier-3 verification commands) |
-| 4 | All of tier 3 + per-Council-agent virtual key configured (via Infisical lookup) + `trust-tiers.yml` present + Plane workspace API reachable |
+| 1 | `WALTER_OS_HOME` directory exists, `${WALTER_CONFIG}/env` file present, `~/.claude/CLAUDE.md` symlink, `~/.codex/AGENTS.md` symlink, `~/.local/bin/walter-os` symlink, agent CLI in PATH (claude/codex), bootstrap tooling (jq/git/gh) |
+| 2 | All of tier 1 + skills symlinked into `~/.claude/skills/` + `~/.claude/settings.json` present + audit ran today + bootstrap tooling (brew/mise/docker/rg/shellcheck/bats/gitleaks/uvx + Solana CLI / Anchor / Maestro / Tailscale per personal context) |
+| 3 | All of tier 2 + `WALTER_DOMAIN` env set + `HCLOUD_TOKEN` env set. The actual VM-side health checks run from the VM via the existing tier-3 verification commands; `walter-os doctor --tier 3` on local validates the env prerequisites only. |
+| 4 | All of tier 3 + `~/.config/walter-os/trust-tiers.yml` present + Council agent definitions present (`agents/` populated) |
 
-Implementation pattern: tag each existing `check` call inside `cmd_doctor` with a tier number; the `--tier N` flag filters the calls before execution. New tier 3 and tier 4 checks are added at the end of the function.
+Implementation pattern: each existing `check` / `tier_check` call inside `cmd_doctor` is tagged with a tier number (1-4); the `--tier N` flag filters the calls before execution. New tier 3 and tier 4 checks are added at the end of the function.
+
+> **Drift fix (PR #111 R4 Finding B)**: this table was previously
+> aspirational — it mentioned a `branch-flow-guard hook installed`
+> tier-1 check that doesn't exist in `cmd_doctor`, and tier-4 checks
+> for "per-Council-agent virtual key (via Infisical lookup)" + "Plane
+> workspace API reachable" that aren't implemented. Table rewritten to
+> mirror `cmd_doctor` line-by-line. If any of the aspirational checks
+> are later added (e.g. Plane API reachability under tier 4), update
+> the table at the same time.
 
 ### 4.3 `compose.yml` profile gates
 

@@ -19,6 +19,12 @@ _require_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     skip "docker not available — this test exercises the compose CLI"
   fi
+  # CI environments may have docker without the Compose v2 plugin. Without
+  # this check, `docker compose config` fails with the cryptic
+  # "docker: unknown command 'compose'". Closes PR #111 R4 Finding D.
+  if ! docker compose version >/dev/null 2>&1; then
+    skip "docker compose v2 plugin not available — this test exercises the compose CLI"
+  fi
 }
 
 # -----------------------------------------------------------------------
