@@ -68,7 +68,11 @@ export async function GET(): Promise<Response> {
     },
     {
       name: "Plane",
-      primary_url: `${planeUrl}/api/health`,
+      // Plane does NOT expose `/api/health` — that path 404s on
+      // plane-proxy. Verified 2026-05-23 (#195): `/api/instances/`
+      // returns 200 + the canonical instance metadata, which is what
+      // Plane's own startup logic uses to confirm the API is up.
+      primary_url: `${planeUrl}/api/instances/`,
       standby_url: undefined,
     },
     {
