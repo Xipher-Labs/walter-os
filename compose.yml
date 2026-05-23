@@ -740,7 +740,11 @@ services:
 
   postiz:
     <<: *walter-common
-    image: ghcr.io/gitroomhq/postiz-app:v2.21.7
+    # Pinned to v2.20.2 (last pre-Temporal release). v2.21.x introduced
+    # a Temporal-backed visibility store that crashes against Postgres
+    # with the search-attribute limit error — see #172. Bump back only
+    # after upstream fix lands. Track via gitroomhq/postiz-app issues.
+    image: ghcr.io/gitroomhq/postiz-app:v2.20.2
     container_name: postiz
     environment:
       MAIN_URL: https://postiz.${WALTER_DOMAIN}

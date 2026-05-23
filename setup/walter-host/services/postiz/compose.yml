@@ -1,24 +1,44 @@
 # Walter-VM — Postiz social media scheduling
 #
-# Postiz (AGPL-3.0, 30k+ stars, v2.21.7 as of 2026-05-11)
+# Postiz (AGPL-3.0, 30k+ stars)
 # Replaces the evaluated-and-dropped Mixpost — covers all platforms
 # (YouTube, X, LinkedIn, Instagram, TikTok, Facebook, Threads, Bluesky,
 # Pinterest, Reddit, Mastodon) free under AGPL-3.0.
 #
 # URL: https://postiz.${WALTER_DOMAIN} (behind CF Tunnel + CF Access)
 #
-# AC-17: Postiz version verified >= v2.21.7
-# To upgrade: docker compose pull && docker compose up -d
+# Current pin: v2.20.2 (last pre-Temporal release; see service block
+# below for the full rationale). The forward-looking AC-17 target from
+# docs/specs/devrel-analytics-stack.md is >= v2.21.7, but that target
+# is OVERRIDDEN by the #172 Temporal/Postgres incompatibility until
+# upstream ships a fix.
 #
-# Refs: docs/specs/devrel-analytics-stack.md (AC-17, AC-18)
+# To upgrade (only after upstream Postgres-visibility fix):
+#   docker compose pull && docker compose up -d
+#
+# Refs: docs/specs/devrel-analytics-stack.md (AC-17, AC-18 — currently
+#       superseded by the #172 pin)
 # Refs: docs/operational/phase-v-tools-availability.md (Postiz section)
+# Refs: #172 (pin rationale + bump criteria)
 
 services:
   postiz:
-    # Pin to v2.21.7 (latest stable as of 2026-05-11).
+    # Pinned to v2.20.2 (last pre-Temporal release). v2.21.x introduced
+    # a Temporal-backed visibility store that crashes against Postgres
+    # with "cannot have more than 3 search attribute of type Text" —
+    # see #172. Bump back to 2.21.x (or later) ONLY after upstream
+    # gitroomhq/postiz-app ships a fix that respects the Postgres
+    # visibility-store search-attribute limit; verify by running the
+    # smoke test (does the backend listener actually bind to :3000?)
+    # before merging the bump.
     # Upgrade: docker compose pull && docker compose up -d
-    # See UPGRADE.md for version verification steps.
-    image: ghcr.io/gitroomhq/postiz-app:v2.21.7
+    # NB: UPGRADE.md (sibling file) still references the >= v2.21.7 AC
+    # from devrel-analytics-stack.md AC-17 / AC-18 — that's the
+    # FORWARD-LOOKING target once upstream ships the Postgres-visibility
+    # fix. Until then this image pin OVERRIDES the AC. Track via #172.
+    # When the pin moves back to a fixed 2.21.x+ release, revisit
+    # UPGRADE.md to align AC-17. Copilot R1 #199.
+    image: ghcr.io/gitroomhq/postiz-app:v2.20.2
     container_name: postiz
     restart: unless-stopped
     environment:
