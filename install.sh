@@ -598,9 +598,8 @@ _restore_oldest_backup() {
   backups=$(ls -1 "${dest}".pre-walter-os.* 2>/dev/null || true)
   [[ -n "$backups" ]] || return 0
 
-  local oldest newest
+  local oldest
   oldest="$(echo "$backups" | head -1)"
-  newest="$(echo "$backups" | tail -1)"
   local backup_count
   backup_count="$(echo "$backups" | wc -l | tr -d ' ')"
 
