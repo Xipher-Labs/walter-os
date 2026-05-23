@@ -168,7 +168,7 @@ You can adopt those parts in four ways:
 | Mode | What you do | What you get | Why it exists |
 |---|---|---|---|
 | **1. Clone-only reference** | Clone the repo and read/copy from it. Do not run `install.sh`. | The agent contract, workflow rules, skills, docs, specs, hooks, and service recipes as plain files. | Useful when you only want to study the operating model, copy an `AGENTS.md` pattern into another repo, audit the system before trusting it, or use Walter-OS as a playbook without changing your machine. |
-| **2. Client install** | Run `./install.sh` on your workstation and configure a personal overlay. | A consistent agent environment across repos: same global/context/repo `AGENTS.md` cascade, same skills catalog, same commands, same hooks, same MCP profiles, same CLI. | This is the default starting point. It makes Claude Code, Codex CLI, and repo-level agents behave consistently without asking you to self-host anything. Cursor reads `AGENTS.md` natively in recent versions; older Cursor versions or operators who want the rules visible in the IDE rules panel can opt in to a generated MDC file with `./install.sh --cursor-rules`. |
+| **2. Client install** | Run `./install.sh` on your workstation and configure a personal overlay. | A consistent agent environment across repos: same global/context/repo `AGENTS.md` cascade, same skills catalog, same commands, same hooks, same MCP profiles, same CLI. | This is the default starting point. It makes Claude Code, Codex CLI, and repo-level agents behave consistently without asking you to self-host anything. Cursor reads `AGENTS.md` natively in recent versions; older Cursor versions or operators who want the rules visible in the IDE rules panel can opt in to a generated MDC file with `./install.sh --cursor-rules`. Antigravity v1.20.3+ also reads `AGENTS.md` natively; operators who want a stable per-tool mirror can opt in to `./install.sh --antigravity-rules` (generates `<repo>/.agent/rules/walter-os.md`). |
 | **3. Client + selected services** | Keep the client install, then add only the services you need from `walter-host` or from existing SaaS. | Targeted upgrades such as Infisical for better secrets control, LiteLLM for model routing and spend visibility, Grafana for observability, Syncthing for memory/file sync, or n8n for automation. | Most operators do not need the full stack on day one. This lets you add control where it matters while keeping GitHub/Linear/hosted tools where they already work. |
 | **4. Full walter-host** | Deploy the self-hosted stack on a VM, homelab node, or local lab machine. | A complete operator control plane: secrets vault, model gateway, project tracker, git host, dashboards, automations, backups, and Control Tower for supervising agent activity. | This is for operators who want stronger data ownership, reproducible service wiring, human-visible agent telemetry, and a private backend for longer-running Council workflows. |
 
@@ -1759,6 +1759,17 @@ minor versions. The following limitations are known and tracked:
   repo root to generate `<repo>/.cursor/rules/walter-os.mdc`. Verify with
   `walter-os doctor --cursor`. Re-run `--cursor-rules` after AGENTS.md
   changes; `doctor --cursor` reports STALE when the adapter is outdated.
+- **Antigravity support**: Antigravity v1.20.3+ reads `AGENTS.md` natively
+  at the repo root, so no adapter is required by default. Operators who
+  want a stable per-tool mirror (isolation from third-party `AGENTS.md`
+  edits, or for monorepo layouts with `.agent/rules/` supplementing
+  per-directory rules) can opt in with `./install.sh --antigravity-rules`,
+  which generates `<repo>/.agent/rules/walter-os.md`. Verify with
+  `walter-os doctor --antigravity`. The probe also warns about a stray
+  `GEMINI.md` — Antigravity gives it precedence over `AGENTS.md` and
+  would silently shadow the Walter-OS cascade. See
+  [`docs/specs/antigravity-adapter.md`](docs/specs/antigravity-adapter.md)
+  for the full spec.
 - **No automatic secret rotation**: secrets in `.env.local` are static. Infisical
   provides rotation for service secrets, but operator keys (API tokens) must be
   rotated manually.
