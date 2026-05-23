@@ -106,10 +106,10 @@ describe("GET /api/ha-status — LiteLLM probe URL", () => {
     expect(standbyUrl).toMatch(/\/health\/liveliness$/);
   });
 
-  it("does not regress other tiles (Plane / Grafana / Control Tower keep /api/health)", async () => {
-    // The fix targets ONLY the LiteLLM tile. Plane, Grafana, and Control
-    // Tower expose unauthenticated /api/health endpoints; they should
-    // keep that probe path.
+  it("Grafana + Control Tower probe /api/health (unauthenticated)", async () => {
+    // Grafana and Control Tower both expose unauthenticated /api/health
+    // endpoints; Plane does NOT (see the next test — it 404s on
+    // /api/health and we probe /api/instances/ instead, #195).
     const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(
       async () => new Response("OK", { status: 200 })
     );
@@ -119,10 +119,29 @@ describe("GET /api/ha-status — LiteLLM probe URL", () => {
     const calls = fetchSpy.mock.calls.map(([input]) =>
       typeof input === "string" ? input : input.toString()
     );
-    expect(calls.some((u) => u === "http://plane:8080/api/health")).toBe(true);
     expect(calls.some((u) => u === "http://grafana:3000/api/health")).toBe(true);
     expect(
       calls.some((u) => u === "http://localhost:3000/api/health")
     ).toBe(true);
+  });
+
+  it("Plane probes /api/instances/ — NOT /api/health which 404s (#195)", async () => {
+    // Verified 2026-05-23 on Walter-VM: plane-proxy returns 404 on
+    // /api/health and 200 on /api/instances/. The HA tile was showing
+    // false-RED because of the wrong endpoint. The fix is to probe
+    // /api/instances/ which Plane's own startup logic uses to confirm
+    // the API is reachable.
+    const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(
+      async () => new Response("OK", { status: 200 })
+    );
+
+    await callGet();
+
+    const calls = fetchSpy.mock.calls.map(([input]) =>
+      typeof input === "string" ? input : input.toString()
+    );
+    expect(calls.some((u) => u === "http://plane:8080/api/instances/")).toBe(true);
+    // Guard: the previous broken URL must NOT be probed anymore.
+    expect(calls.some((u) => u === "http://plane:8080/api/health")).toBe(false);
   });
 });
