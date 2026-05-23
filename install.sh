@@ -12,6 +12,14 @@
 #   ./install.sh --step N    # run only step N (1–9, for recovery)
 #   ./install.sh --step N --dry-run   # preview step N only
 #   ./install.sh --uninstall # remove all symlinks and launchd job
+#                            # (interactive: prompts to restore the
+#                            # operator's pre-Walter-OS files from
+#                            # the OLDEST `.pre-walter-os.<ts>` backup.
+#                            # Add --restore-backups for non-interactive
+#                            # yes; --no-restore-backups for non-
+#                            # interactive no. Closes #191.)
+#   ./install.sh --uninstall --restore-backups      # auto-restore on uninstall
+#   ./install.sh --uninstall --no-restore-backups   # never restore on uninstall
 #   ./install.sh --cursor-rules
 #     opt-in: generate <cwd>/.cursor/rules/walter-os.mdc from the
 #     AGENTS.md cascade (Cursor MDC adapter). Recent Cursor versions
@@ -69,6 +77,8 @@ UNINSTALL=0
 STEP_ONLY=""     # if set, run only this step number (1-9)
 CURSOR_RULES_ONLY=0  # if 1, only run the Cursor MDC generator and exit
 ANTIGRAVITY_RULES_ONLY=0  # if 1, only run the Antigravity adapter and exit
+RESTORE_BACKUPS="${RESTORE_BACKUPS:-}"  # yes/no/prompt — see _restore_oldest_backup
+                                        # (default: prompt when TTY, skip when non-TTY)
 
 _args=("$@")
 i=0
@@ -79,6 +89,19 @@ while [[ $i -lt ${#_args[@]} ]]; do
     --dry-run)   DRY_RUN=1 ;;
     --upgrade)   UPGRADE=1 ;;
     --uninstall) UNINSTALL=1 ;;
+    --restore-backups)
+      # During --uninstall, automatically restore the operator's
+      # pre-Walter-OS file from the OLDEST `.pre-walter-os.<ts>`
+      # backup (and clean up stale Walter-OS-captured copies).
+      # See _restore_oldest_backup. Closes #191 Gap 1.
+      RESTORE_BACKUPS=yes
+      ;;
+    --no-restore-backups)
+      # During --uninstall, leave all backup files in place — never
+      # restore. Useful when the operator already manually restored
+      # what they wanted and just wants a clean uninstall.
+      RESTORE_BACKUPS=no
+      ;;
     --cursor-rules)
       # Generate the project-local Cursor MDC adapter at
       # <repo-root>/.cursor/rules/walter-os.mdc from the AGENTS.md cascade.
@@ -545,6 +568,92 @@ check_preflight() {
 
 # ---------- uninstall ----------
 
+# _restore_oldest_backup <dest> [--quiet]
+#
+# After uninstall removes a Walter-OS symlink at $dest, look for a
+# `${dest}.pre-walter-os.<timestamp>` sibling that link_safe() created
+# the FIRST time Walter-OS overwrote this path. Restore it (the
+# operator's pristine pre-install file) and remove redundant copies.
+#
+# Behaviour:
+#   RESTORE_BACKUPS=yes   -> always restore the oldest backup, no prompt
+#   RESTORE_BACKUPS=no    -> never restore (leave backups in place)
+#   RESTORE_BACKUPS=prompt (default for interactive TTY)
+#                         -> ask y/N; default is yes
+#   RESTORE_BACKUPS=prompt (no TTY)
+#                         -> skip (don't restore — operator would not
+#                            see the prompt; surface backup paths instead)
+#
+# Closes #191 Gap 1 + Gap 3 (the new ISO-timestamp naming sorts
+# lexicographically, so `ls -1 <dest>.pre-walter-os.*` returns oldest
+# first).
+_restore_oldest_backup() {
+  local dest="$1"
+  local backups
+  # Glob match with nullglob-style fallback (`|| true` so 0 matches is
+  # not an error). The OLDEST is `head -1` of the sorted listing —
+  # both naming schemes (legacy `.<unix>` and new
+  # `.<iso>.<unix>`) sort the operator's pristine file first because
+  # it has the SMALLEST timestamp.
+  backups=$(ls -1 "${dest}".pre-walter-os.* 2>/dev/null || true)
+  [[ -n "$backups" ]] || return 0
+
+  local oldest newest
+  oldest="$(echo "$backups" | head -1)"
+  newest="$(echo "$backups" | tail -1)"
+  local backup_count
+  backup_count="$(echo "$backups" | wc -l | tr -d ' ')"
+
+  local choice="${RESTORE_BACKUPS:-prompt}"
+  if [[ "$choice" == "prompt" ]]; then
+    if [[ -t 0 ]] && [[ -t 1 ]]; then
+      printf "  ? Restore %s\n" "$dest"
+      printf "    from %s (operator's pre-Walter-OS file)? [Y/n] " "$oldest"
+      local answer
+      read -r answer
+      case "${answer,,}" in
+        n|no) choice="no" ;;
+        *)    choice="yes" ;;
+      esac
+    else
+      # No TTY (CI / scripted invocation). Don't restore silently;
+      # surface the backup paths so the operator can do it themselves.
+      warn "  Found ${backup_count} backup(s) for $dest (oldest: $oldest)."
+      warn "  Skipping restore (no TTY). To restore: mv $oldest $dest"
+      warn "  Use --restore-backups to restore non-interactively."
+      return 0
+    fi
+  fi
+
+  case "$choice" in
+    yes)
+      if [[ $DRY_RUN -eq 1 ]]; then
+        dry "restore $oldest → $dest (${backup_count} backup(s) total)"
+        return 0
+      fi
+      run_args mv -- "$oldest" "$dest"
+      ok "Restored $dest from $oldest"
+      # Remove any LATER `.pre-walter-os.<*>` files — those are
+      # captures of previous Walter-OS symlinks (or repeated copies
+      # of the operator file made by un-deduplicated runs). They are
+      # not operator content. Skip if there was only the one backup.
+      if [[ "$backup_count" -gt 1 ]]; then
+        local extras
+        extras=$(echo "$backups" | tail -n +2)
+        while IFS= read -r extra; do
+          [[ -n "$extra" ]] || continue
+          run_args rm -- "$extra"
+          ok "Cleaned stale Walter-OS-captured backup: $extra"
+        done <<< "$extras"
+      fi
+      ;;
+    no)
+      warn "  Kept ${backup_count} backup(s) for $dest (oldest: $oldest)"
+      warn "  To restore manually: mv $oldest $dest"
+      ;;
+  esac
+}
+
 do_uninstall() {
   step "Uninstall"
 
@@ -565,6 +674,17 @@ do_uninstall() {
     if [[ -L "$f" ]] && [[ "$(readlink "$f")" == "$REPO_ROOT/"* ]]; then
       run_args rm -- "$f"
       ok "Unlinked $f"
+      # Gap 1 from #191: restore the operator's pristine pre-Walter-OS
+      # file. link_safe() (line 603) creates a `.pre-walter-os.<stamp>`
+      # whenever it's about to overwrite operator content. The OLDEST
+      # one is the operator's original — newer ones are previous
+      # Walter-OS links that link_safe captured during accumulated
+      # --upgrade runs (this is largely mitigated by the link-safe
+      # symlink-skip in the same commit, but historical operator state
+      # may have accumulated extras). We pick the OLDEST via `ls -1`
+      # alphabetical order — works because the new naming scheme uses
+      # ISO-8601 UTC datestamps which sort lexicographically.
+      _restore_oldest_backup "$f"
     fi
   done
 
@@ -638,11 +758,31 @@ link_safe() {
       ok "Already linked: $dest"
       return 0
     fi
-    warn "Replacing existing symlink: $dest (was → $current)"
+    # Existing symlink points elsewhere. If it points into REPO_ROOT
+    # (i.e., it's a previous Walter-OS link from another commit), we
+    # can replace it WITHOUT making a backup — the "operator content"
+    # this would back up is just an older Walter-OS symlink, not
+    # operator-authored content. Gap 2 from #191: avoid the rolling
+    # `.pre-walter-os.<n>` files that accumulate across upgrades.
+    if [[ "$current" == "$REPO_ROOT/"* ]]; then
+      warn "Replacing existing Walter-OS symlink: $dest (was → $current)"
+    else
+      warn "Replacing existing symlink: $dest (was → $current)"
+    fi
     run_args rm -- "$dest"
   elif [[ -e "$dest" ]]; then
-    local backup
-    backup="${dest}.pre-walter-os.$(date +%s)"
+    # Backup naming combines a human-readable UTC datestamp with the
+    # unix seconds for guaranteed uniqueness within the same second.
+    # Gap 3 from #191: `.pre-walter-os.1712345678` was opaque; the
+    # new `.pre-walter-os.2026-05-23T11-04-22Z.1712345678` is
+    # immediately recognizable to an operator browsing `~/.claude/`.
+    local stamp_iso stamp_unix
+    stamp_unix="$(date +%s)"
+    # ISO-8601 with colons replaced by `-` (legal in all filesystems
+    # incl. SMB shares + Windows-formatted volumes the operator may
+    # have mounted).
+    stamp_iso="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+    local backup="${dest}.pre-walter-os.${stamp_iso}.${stamp_unix}"
     warn "Backing up existing $dest → $backup"
     run_args mv -- "$dest" "$backup"
   fi
