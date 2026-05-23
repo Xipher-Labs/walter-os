@@ -1452,6 +1452,25 @@ _doctor_lite_probe() {
   return 0
 }
 
+# cmd_uninstall: front for `install.sh --uninstall`.
+#
+# Walter-OS Gap 4 from #191: operators who lose the repo clone need a
+# way to uninstall via the CLI. This dispatches to the install.sh in
+# WALTER_OS_HOME so logic stays single-sourced.
+#
+# Flags are forwarded as-is, so `walter-os uninstall --restore-backups`
+# and `walter-os uninstall --no-restore-backups` work transparently.
+cmd_uninstall() {
+  local install_sh="${WALTER_OS_HOME}/install.sh"
+  if [[ ! -x "$install_sh" ]] && [[ ! -f "$install_sh" ]]; then
+    echo "walter-os uninstall: install.sh not found at $install_sh" >&2
+    echo "  Set WALTER_OS_HOME to the repo root and retry, or run" >&2
+    echo "  install.sh --uninstall directly from the clone." >&2
+    return 2
+  fi
+  exec bash "$install_sh" --uninstall "$@"
+}
+
 cmd_doctor() {
   # Parse optional --tier N flag. Without it, every check runs (legacy
   # contract preserved). With it, only checks tagged ≤ N run — useful
@@ -1751,6 +1770,7 @@ case "$cmd" in
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;
+  uninstall)          cmd_uninstall "$@" ;;
   -h|--help|help) print_help ;;
   *)
     echo "walter-os: unknown command: $cmd" >&2
