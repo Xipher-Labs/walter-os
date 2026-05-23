@@ -12,6 +12,19 @@
 #   ./install.sh --step N    # run only step N (1–9, for recovery)
 #   ./install.sh --step N --dry-run   # preview step N only
 #   ./install.sh --uninstall # remove all symlinks and launchd job
+#   ./install.sh --cursor-rules
+#     opt-in: generate <cwd>/.cursor/rules/walter-os.mdc from the
+#     AGENTS.md cascade (Cursor MDC adapter). Recent Cursor versions
+#     read AGENTS.md natively — this materialises the rules in the
+#     IDE's "Rules for AI" panel. Verify with `walter-os doctor --cursor`.
+#     Spec: docs/specs/cursor-adapter-completion.md
+#   ./install.sh --antigravity-rules
+#     opt-in: generate <cwd>/.agent/rules/walter-os.md from the
+#     AGENTS.md cascade (Antigravity adapter). Antigravity v1.20.3+
+#     reads AGENTS.md natively — this materialises the rules for
+#     operators who want a stable per-tool mirror. Verify with
+#     `walter-os doctor --antigravity`.
+#     Spec: docs/specs/antigravity-adapter.md
 #   ./install.sh --help      # this help text
 #
 # Steps:
@@ -55,6 +68,7 @@ UPGRADE=0
 UNINSTALL=0
 STEP_ONLY=""     # if set, run only this step number (1-9)
 CURSOR_RULES_ONLY=0  # if 1, only run the Cursor MDC generator and exit
+ANTIGRAVITY_RULES_ONLY=0  # if 1, only run the Antigravity adapter and exit
 
 _args=("$@")
 i=0
@@ -71,6 +85,17 @@ while [[ $i -lt ${#_args[@]} ]]; do
       # See ADR / spec: docs/specs/cursor-adapter-completion.md
       # Opt-in only — recent Cursor versions read AGENTS.md natively.
       CURSOR_RULES_ONLY=1
+      ;;
+    --antigravity-rules)
+      # Generate the project-local Antigravity adapter at
+      # <repo-root>/.agent/rules/walter-os.md from the AGENTS.md cascade.
+      # See spec: docs/specs/antigravity-adapter.md
+      # Opt-in only — Antigravity v1.20.3+ reads AGENTS.md natively at
+      # the repo root. The .agent/rules/ mirror is for operators who
+      # want isolation from third-party AGENTS.md edits OR who need to
+      # distribute team-specific Walter-OS rules across multiple
+      # AGENTS.md hierarchies.
+      ANTIGRAVITY_RULES_ONLY=1
       ;;
     --step)
       i=$(( i + 1 ))
@@ -2077,6 +2102,107 @@ generate_cursor_adapter() {
 }
 
 # ==========================================================================
+# ANTIGRAVITY ADAPTER (--antigravity-rules)
+# ==========================================================================
+#
+# Generates a project-local Antigravity adapter at
+# <project-root>/.agent/rules/walter-os.md from the AGENTS.md cascade.
+# See docs/specs/antigravity-adapter.md.
+#
+# Output: <project-root>/.agent/rules/walter-os.md
+# Source: <project-root>/AGENTS.md (required — function errors if missing)
+#
+# Antigravity v1.20.3+ reads AGENTS.md natively at the repo root, so this
+# adapter is OPTIONAL. Use it when:
+#   - You want to isolate Walter-OS rules from third-party AGENTS.md edits.
+#   - You distribute Walter-OS-derived rules across nested project hierarchies
+#     (.agent/rules/ supplements per-directory AGENTS.md without replacing).
+#   - You want to commit a stable per-tool rule mirror separate from the
+#     evolving AGENTS.md.
+#
+# Caveats baked into the generator:
+#   - We DO NOT emit a GEMINI.md (which would take precedence over AGENTS.md
+#     in Antigravity and silently shadow it). The probe `walter-os doctor
+#     --antigravity` warns if a stray GEMINI.md exists.
+#   - The adapter is a *derived artifact*. Re-run after AGENTS.md changes:
+#       ./install.sh --antigravity-rules
+#   - Use `walter-os doctor --antigravity` to detect a stale adapter.
+
+generate_antigravity_adapter() {
+  step "Generating Antigravity adapter (--antigravity-rules)"
+
+  local project_root
+  project_root="$(pwd)"
+
+  if [[ ! -f "$project_root/AGENTS.md" ]]; then
+    err "No AGENTS.md at $project_root. The Antigravity adapter needs the"
+    err "AGENTS.md cascade to be installed first. Run install.sh from"
+    err "the repo root that contains AGENTS.md."
+    return 2
+  fi
+
+  # Defensive: warn if a GEMINI.md exists in the same directory. GEMINI.md
+  # takes precedence over AGENTS.md in Antigravity, so it would silently
+  # shadow any rules we emit through the cascade.
+  if [[ -f "$project_root/GEMINI.md" ]]; then
+    warn "GEMINI.md detected at $project_root — Antigravity gives it precedence"
+    warn "over AGENTS.md. If GEMINI.md is operator-managed it will SHADOW the"
+    warn "Walter-OS adapter. Either remove GEMINI.md or merge its rules into"
+    warn "AGENTS.md before relying on the adapter."
+  fi
+
+  local antigravity_dir="$project_root/.agent/rules"
+  local md_file="$antigravity_dir/walter-os.md"
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "mkdir -p $antigravity_dir"
+    dry "generate $md_file from $project_root/AGENTS.md"
+    return 0
+  fi
+
+  mkdir -p "$antigravity_dir"
+
+  # Same SHA-based staleness pattern as the Cursor adapter — portable
+  # across macOS (shasum) + Linux (sha256sum).
+  local agents_sha
+  if command -v sha256sum >/dev/null 2>&1; then
+    agents_sha="$(sha256sum "$project_root/AGENTS.md" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    agents_sha="$(shasum -a 256 "$project_root/AGENTS.md" | awk '{print $1}')"
+  else
+    err "Neither sha256sum nor shasum is available — cannot compute"
+    err "AGENTS.md content hash for staleness detection."
+    return 2
+  fi
+
+  # Generate the adapter file. Antigravity reads plain Markdown — no
+  # frontmatter required (unlike Cursor's MDC format). Embedding AGENTS.md
+  # whole keeps the cascade as the single source of truth.
+  {
+    printf '%s\n' '<!--'
+    printf '%s\n' 'Generated by walter-os install.sh --antigravity-rules — do not edit'
+    printf '%s\n' 'manually. Re-run to update after AGENTS.md changes.'
+    printf '%s\n' ''
+    printf '%s\n' 'This file mirrors AGENTS.md at the repo root. Antigravity v1.20.3+'
+    printf '%s\n' 'reads AGENTS.md natively, so this adapter is for operators who want'
+    printf '%s\n' 'a stable per-tool mirror or to isolate Walter-OS rules from'
+    printf '%s\n' 'third-party AGENTS.md edits.'
+    printf '%s\n' '-->'
+    printf '%s\n' ''
+    printf '%s\n' '# Walter-OS — Antigravity rules (derived from AGENTS.md)'
+    printf '%s\n' ''
+    cat "$project_root/AGENTS.md"
+    printf '%s\n' ''
+    printf '<!-- agents-md-sha256: %s -->\n' "$agents_sha"
+  } > "$md_file"
+
+  ok "Antigravity adapter written: $md_file"
+  say "  source hash: $agents_sha"
+  say "  Verify with: walter-os doctor --antigravity"
+  return 0
+}
+
+# ==========================================================================
 # MAIN
 # ==========================================================================
 
@@ -2101,6 +2227,11 @@ main() {
   # for Cursor versions that pre-date AGENTS.md support.
   if [[ $CURSOR_RULES_ONLY -eq 1 ]]; then
     generate_cursor_adapter
+    exit $?
+  fi
+
+  if [[ $ANTIGRAVITY_RULES_ONLY -eq 1 ]]; then
+    generate_antigravity_adapter
     exit $?
   fi
 

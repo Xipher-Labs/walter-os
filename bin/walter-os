@@ -1337,6 +1337,89 @@ _doctor_cursor_probe() {
   return 0
 }
 
+# _doctor_antigravity_probe: reports the state of the project-local
+# Antigravity adapter at <cwd>/.agent/rules/walter-os.md, AND surfaces a
+# GEMINI.md collision that would silently shadow AGENTS.md.
+#
+# Outputs (all exit 0 — informational, not gating):
+#   PASS         — adapter present and SHA matches AGENTS.md
+#   STALE        — adapter present but hash is outdated
+#   NOT_GENERATED — adapter absent. Either:
+#                   - operator didn't opt in via install.sh --antigravity-rules
+#                   - Antigravity v1.20.3+ reads AGENTS.md natively so no
+#                     adapter is required.
+#   WARN — adapter exists but no AGENTS.md to compare against, OR a stray
+#          GEMINI.md takes precedence over AGENTS.md.
+#
+# Spec: docs/specs/antigravity-adapter.md
+_doctor_antigravity_probe() {
+  local cwd
+  cwd="$(pwd)"
+  local md="$cwd/.agent/rules/walter-os.md"
+  local agents="$cwd/AGENTS.md"
+  local gemini="$cwd/GEMINI.md"
+
+  echo "Walter-OS doctor — Antigravity adapter probe"
+  echo
+
+  # GEMINI.md takes precedence over AGENTS.md in Antigravity — it
+  # silently shadows the cascade. Warn (independent of adapter state).
+  if [[ -f "$gemini" ]]; then
+    printf "  ⚠ GEMINI.md present at %s — Antigravity gives it precedence\n" "$gemini"
+    printf "    over AGENTS.md, silently shadowing the Walter-OS cascade.\n"
+    printf "    Either remove GEMINI.md or merge its rules into AGENTS.md.\n"
+    echo
+  fi
+
+  if [[ ! -f "$md" ]]; then
+    printf "  STATUS: NOT_GENERATED\n"
+    printf "  Adapter file absent: %s\n" "$md"
+    printf "  Either Antigravity reads AGENTS.md natively (v1.20.3+ — no action),\n"
+    printf "  or run: ./install.sh --antigravity-rules\n"
+    return 0
+  fi
+
+  if [[ ! -f "$agents" ]]; then
+    printf "  STATUS: WARN — adapter exists but no AGENTS.md to compare against.\n"
+    printf "  Adapter: %s\n" "$md"
+    printf "  AGENTS.md path checked: %s (missing)\n" "$agents"
+    return 0
+  fi
+
+  local recorded current
+  recorded="$(grep -oE 'agents-md-sha256: [0-9a-f]{64}' "$md" | awk '{print $2}' | head -1)"
+  if command -v sha256sum >/dev/null 2>&1; then
+    current="$(sha256sum "$agents" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    current="$(shasum -a 256 "$agents" | awk '{print $1}')"
+  else
+    printf "  STATUS: ERROR — no sha256 tool available (need sha256sum or shasum).\n"
+    return 1
+  fi
+
+  if [[ -z "$recorded" ]]; then
+    printf "  STATUS: STALE\n"
+    printf "  Adapter has no recorded hash — predates the staleness mechanism.\n"
+    printf "  Run: ./install.sh --antigravity-rules\n"
+    return 0
+  fi
+
+  if [[ "$recorded" == "$current" ]]; then
+    printf "  STATUS: PASS\n"
+    printf "  Adapter is current.\n"
+    printf "    file: %s\n" "$md"
+    printf "    sha:  %s\n" "$current"
+    return 0
+  fi
+
+  printf "  STATUS: STALE\n"
+  printf "  Adapter hash does not match the current AGENTS.md.\n"
+  printf "    recorded: %s\n" "$recorded"
+  printf "    current:  %s\n" "$current"
+  printf "  Run: ./install.sh --antigravity-rules\n"
+  return 0
+}
+
 # _doctor_lite_probe: reports the state of the Lite-persist contract at
 # <cwd>/.walter-os-lite/AGENTS.md. See docs/specs/walter-os-lite-entry-tier.md.
 #
@@ -1379,6 +1462,7 @@ cmd_doctor() {
   # docs/specs/walter-os-lite-entry-tier.md.
   local tier_filter=""
   local cursor_only=0
+  local antigravity_only=0
   local lite_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1392,6 +1476,10 @@ cmd_doctor() {
         ;;
       --cursor)
         cursor_only=1
+        shift
+        ;;
+      --antigravity)
+        antigravity_only=1
         shift
         ;;
       --lite)
@@ -1411,6 +1499,11 @@ cmd_doctor() {
 
   if [[ "$cursor_only" -eq 1 ]]; then
     _doctor_cursor_probe
+    return $?
+  fi
+
+  if [[ "$antigravity_only" -eq 1 ]]; then
+    _doctor_antigravity_probe
     return $?
   fi
 

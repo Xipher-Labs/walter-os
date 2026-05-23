@@ -20,8 +20,9 @@
 ## Abstract
 
 The AGENTS.md cascade defines a three-layer, file-based mechanism for
-configuring AI coding agents (Claude Code, Cursor, Codex CLI, and similar
-tools that already read a project-root `AGENTS.md` file). The mechanism
+configuring AI coding agents (Claude Code, Cursor, Codex CLI,
+Antigravity v1.20.3+, and similar tools that already read a
+project-root `AGENTS.md` file). The mechanism
 addresses a real coordination problem: an operator working across several
 projects, each with its own conventions, plus a personal style that should
 apply everywhere, currently has no standard way to express "this rule
