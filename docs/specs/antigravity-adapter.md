@@ -75,7 +75,17 @@ informational, not gating):
 | `NOT_GENERATED` | Adapter absent. Operator opted out, or Antigravity reads natively. |
 | `PASS`          | Adapter present and the recorded SHA matches the current `AGENTS.md`. |
 | `STALE`         | Adapter present but the hash is outdated. Re-run `--antigravity-rules`. |
-| `WARN`          | Adapter exists but `AGENTS.md` is missing OR `GEMINI.md` shadows it. |
+| `WARN`          | Adapter exists but `AGENTS.md` is missing (no source to compare against). |
+
+**Orthogonal warning — `GEMINI.md` collision.** If `<cwd>/GEMINI.md`
+exists, the probe ALSO prints a `⚠ GEMINI.md present ...` callout in
+addition to whichever STATUS line above applies. The two are
+independent: a fully-current adapter (`STATUS: PASS`) still produces
+the GEMINI warning if a stray `GEMINI.md` is present, because
+Antigravity gives `GEMINI.md` precedence and would silently shadow
+the cascade regardless of adapter state. The operator's fix is the
+same in either case — remove `GEMINI.md` or merge its rules into
+`AGENTS.md`.
 
 ## Acceptance criteria
 
@@ -91,14 +101,21 @@ informational, not gating):
 - [ ] **AC-5**: `--dry-run --antigravity-rules` prints intended
       `mkdir`/`generate` lines without writing.
 - [ ] **AC-6**: `walter-os doctor --antigravity` reports each of
-      `NOT_GENERATED`, `PASS`, `STALE`, and `WARN` per the table above.
+      `NOT_GENERATED`, `PASS`, `STALE`, and `WARN` per the table above,
+      PLUS an orthogonal `⚠ GEMINI.md present ...` callout when a stray
+      `GEMINI.md` is found (independent of the STATUS line).
 - [ ] **AC-7**: `tests/install/antigravity-adapter.bats` covers the
       generator + dry-run + AGENTS.md-missing error + GEMINI.md warning.
 - [ ] **AC-8**: `tests/cli/doctor-antigravity.bats` covers the four
-      probe states (NOT_GENERATED, PASS, STALE, WARN-no-agents,
-      WARN-gemini-collision).
-- [ ] **AC-9**: README has a "Working with Antigravity" subsection
-      alongside the existing tool sections (Claude Code, Codex CLI, Cursor).
+      probe statuses (NOT_GENERATED, PASS, STALE, WARN-no-agents) plus
+      the orthogonal GEMINI.md collision warning emitted in addition to
+      any status.
+- [ ] **AC-9**: README documents Antigravity support — matching the
+      existing pattern for Cursor (inline callout in the "Known
+      limitations / tool integrations" block + a mention in the
+      install-modes table). A dedicated heading is NOT required because
+      the rest of the README does not have one for Cursor either; we
+      preserve the existing READING-pattern symmetry.
 - [ ] **AC-10**: `docs/specs/agents-md-cascade-spec.md` mentions
       Antigravity as a conforming consumer (since v1.20.3).
 - [ ] **AC-11**: Bats covers idempotency — running `--antigravity-rules`

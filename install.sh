@@ -12,6 +12,19 @@
 #   ./install.sh --step N    # run only step N (1–9, for recovery)
 #   ./install.sh --step N --dry-run   # preview step N only
 #   ./install.sh --uninstall # remove all symlinks and launchd job
+#   ./install.sh --cursor-rules
+#     opt-in: generate <cwd>/.cursor/rules/walter-os.mdc from the
+#     AGENTS.md cascade (Cursor MDC adapter). Recent Cursor versions
+#     read AGENTS.md natively — this materialises the rules in the
+#     IDE's "Rules for AI" panel. Verify with `walter-os doctor --cursor`.
+#     Spec: docs/specs/cursor-adapter-completion.md
+#   ./install.sh --antigravity-rules
+#     opt-in: generate <cwd>/.agent/rules/walter-os.md from the
+#     AGENTS.md cascade (Antigravity adapter). Antigravity v1.20.3+
+#     reads AGENTS.md natively — this materialises the rules for
+#     operators who want a stable per-tool mirror. Verify with
+#     `walter-os doctor --antigravity`.
+#     Spec: docs/specs/antigravity-adapter.md
 #   ./install.sh --help      # this help text
 #
 # Steps:
