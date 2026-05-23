@@ -230,8 +230,14 @@ sys.exit(0)
   # well-intentioned but premature bump.
   #
   # Match both the root compose.yml + the standalone postiz compose.
+  # FAIL (don't silently skip) if either expected compose file is missing
+  # — a refactor that deletes one template would otherwise pass this
+  # guard unnoticed, defeating the purpose. Copilot R1 #199.
   for compose in "$COMPOSE_FILE" "$REPO_ROOT/setup/walter-host/services/postiz/compose.yml"; do
-    [[ -f "$compose" ]] || continue
+    [[ -f "$compose" ]] || {
+      echo "expected postiz compose file missing: $compose" >&2
+      return 1
+    }
     local image
     image=$(grep -E "^[[:space:]]+image:[[:space:]]+ghcr\.io/gitroomhq/postiz-app:" "$compose" \
       | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -1)

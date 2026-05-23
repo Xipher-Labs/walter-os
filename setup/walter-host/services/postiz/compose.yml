@@ -24,7 +24,12 @@ services:
     # smoke test (does the backend listener actually bind to :3000?)
     # before merging the bump.
     # Upgrade: docker compose pull && docker compose up -d
-    # See UPGRADE.md for version verification steps.
+    # NB: UPGRADE.md (sibling file) still references the >= v2.21.7 AC
+    # from devrel-analytics-stack.md AC-17 / AC-18 — that's the
+    # FORWARD-LOOKING target once upstream ships the Postgres-visibility
+    # fix. Until then this image pin OVERRIDES the AC. Track via #172.
+    # When the pin moves back to a fixed 2.21.x+ release, revisit
+    # UPGRADE.md to align AC-17. Copilot R1 #199.
     image: ghcr.io/gitroomhq/postiz-app:v2.20.2
     container_name: postiz
     restart: unless-stopped
