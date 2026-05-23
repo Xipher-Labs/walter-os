@@ -222,6 +222,30 @@ sys.exit(0)
   [ "$status" -eq 0 ]
 }
 
+@test "postiz pinned to v2.20.x (pre-Temporal, closes #172)" {
+  # v2.21.x introduced a Temporal-backed visibility store that crashes
+  # against Postgres with the search-attribute limit (#172). Until
+  # upstream ships a fix that respects the Postgres limit, the compose
+  # template MUST stay on v2.20.x. This regression guard catches a
+  # well-intentioned but premature bump.
+  #
+  # Match both the root compose.yml + the standalone postiz compose.
+  for compose in "$COMPOSE_FILE" "$REPO_ROOT/setup/walter-host/services/postiz/compose.yml"; do
+    [[ -f "$compose" ]] || continue
+    local image
+    image=$(grep -E "^[[:space:]]+image:[[:space:]]+ghcr\.io/gitroomhq/postiz-app:" "$compose" \
+      | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+    [[ -n "$image" ]] || {
+      echo "no postiz image found in $compose" >&2
+      return 1
+    }
+    [[ "$image" =~ ^v2\.20\.[0-9]+$ ]] || {
+      echo "postiz image in $compose is $image — must be v2.20.x until upstream Temporal fix (#172)" >&2
+      return 1
+    }
+  done
+}
+
 @test "postiz smoke probe uses port 3000 (W2)" {
   # Postiz listens on 3000 inside the container; the historical bug was a
   # probe pointed at 5000. The meaningful contract is that compose.yml's
