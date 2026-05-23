@@ -58,10 +58,16 @@ print_install_help() {
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT
-readonly CLAUDE_HOME="${HOME}/.claude"
-readonly CODEX_HOME="${HOME}/.codex"
-readonly WALTER_CONFIG="${HOME}/.config/walter-os"
-readonly LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
+# Allow env-set overrides BEFORE the readonly is fixed. This makes the
+# script testable in isolation (bats can point CLAUDE_HOME at a tmpdir
+# without writing to the operator's real ~/.claude) and also lets
+# packagers redirect install paths when invoking from a wrapper.
+# Operator-set values take precedence; sensible defaults otherwise.
+# Copilot R1 #201.
+readonly CLAUDE_HOME="${CLAUDE_HOME:-${HOME}/.claude}"
+readonly CODEX_HOME="${CODEX_HOME:-${HOME}/.codex}"
+readonly WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+readonly LAUNCH_AGENTS="${LAUNCH_AGENTS:-${HOME}/Library/LaunchAgents}"
 readonly DAILY_AUDIT_LABEL="com.walter-os.daily-audit"
 
 # Env file where wizard-collected vars are written (step 2)
@@ -568,7 +574,7 @@ check_preflight() {
 
 # ---------- uninstall ----------
 
-# _restore_oldest_backup <dest> [--quiet]
+# _restore_oldest_backup <dest>
 #
 # After uninstall removes a Walter-OS symlink at $dest, look for a
 # `${dest}.pre-walter-os.<timestamp>` sibling that link_safe() created
@@ -626,23 +632,60 @@ _restore_oldest_backup() {
 
   case "$choice" in
     yes)
+      # Safer multi-backup handling (Copilot R1 #201 #1 + #5).
+      #
+      # In multi-install/uninstall cycles, EXTRA backups beyond the
+      # oldest are NOT guaranteed to be stale Walter-OS captures —
+      # they can be legitimate operator snapshots from a subsequent
+      # reinstall (operator restored, edited the file, reinstalled
+      # walter-os, and link_safe captured the edited version as a
+      # backup). Unconditionally deleting them risks data loss.
+      #
+      # When multiple backups exist AND they have distinct content,
+      # restore the oldest but RENAME the later ones with a clear
+      # ".kept-on-uninstall" suffix so the operator can review/recover
+      # them at leisure. When all backups have IDENTICAL content
+      # (likely all from a single install run), the extras are safe
+      # to remove — they're literal duplicates.
       if [[ $DRY_RUN -eq 1 ]]; then
         dry "restore $oldest → $dest (${backup_count} backup(s) total)"
         return 0
       fi
       run_args mv -- "$oldest" "$dest"
       ok "Restored $dest from $oldest"
-      # Remove any LATER `.pre-walter-os.<*>` files — those are
-      # captures of previous Walter-OS symlinks (or repeated copies
-      # of the operator file made by un-deduplicated runs). They are
-      # not operator content. Skip if there was only the one backup.
       if [[ "$backup_count" -gt 1 ]]; then
+        local oldest_sha
+        if command -v sha256sum >/dev/null 2>&1; then
+          oldest_sha="$(sha256sum "$dest" | awk '{print $1}')"
+        elif command -v shasum >/dev/null 2>&1; then
+          oldest_sha="$(shasum -a 256 "$dest" | awk '{print $1}')"
+        else
+          oldest_sha=""  # no hashing available; treat extras as distinct
+        fi
         local extras
         extras=$(echo "$backups" | tail -n +2)
         while IFS= read -r extra; do
           [[ -n "$extra" ]] || continue
-          run_args rm -- "$extra"
-          ok "Cleaned stale Walter-OS-captured backup: $extra"
+          local extra_sha=""
+          if [[ -n "$oldest_sha" ]]; then
+            if command -v sha256sum >/dev/null 2>&1; then
+              extra_sha="$(sha256sum "$extra" | awk '{print $1}')"
+            else
+              extra_sha="$(shasum -a 256 "$extra" | awk '{print $1}')"
+            fi
+          fi
+          if [[ -n "$oldest_sha" ]] && [[ "$oldest_sha" == "$extra_sha" ]]; then
+            # Literal duplicate of the restored file — safe to remove.
+            run_args rm -- "$extra"
+            ok "Removed duplicate of restored content: $extra"
+          else
+            # Distinct content — could be a legitimate later operator
+            # snapshot. Rename to `.kept-on-uninstall.` so it's
+            # obvious to the operator but not silently deleted.
+            local kept="${extra%.pre-walter-os.*}.kept-on-uninstall.${extra##*.pre-walter-os.}"
+            run_args mv -- "$extra" "$kept"
+            warn "Kept distinct backup (could be later operator content): $kept"
+          fi
         done <<< "$extras"
       fi
       ;;
@@ -775,12 +818,15 @@ link_safe() {
     # Gap 3 from #191: `.pre-walter-os.1712345678` was opaque; the
     # new `.pre-walter-os.2026-05-23T11-04-22Z.1712345678` is
     # immediately recognizable to an operator browsing `~/.claude/`.
-    local stamp_iso stamp_unix
-    stamp_unix="$(date +%s)"
+    # Single `date` call for both stamps — guarantees they agree even
+    # if the wall-clock second rolls between sub-calls (Copilot R1 #201
+    # avoids the implied lexicographic == chronological invariant
+    # breaking on second boundaries).
     # ISO-8601 with colons replaced by `-` (legal in all filesystems
     # incl. SMB shares + Windows-formatted volumes the operator may
     # have mounted).
-    stamp_iso="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+    local stamp_iso stamp_unix
+    read -r stamp_iso stamp_unix < <(date -u +"%Y-%m-%dT%H-%M-%SZ %s")
     local backup="${dest}.pre-walter-os.${stamp_iso}.${stamp_unix}"
     warn "Backing up existing $dest → $backup"
     run_args mv -- "$dest" "$backup"

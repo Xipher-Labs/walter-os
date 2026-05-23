@@ -41,7 +41,12 @@ setup() {
 @test "Gap 3 (#191): link_safe backup naming includes ISO-8601 datestamp" {
   # Source the new naming pattern out of install.sh and assert it
   # matches `.pre-walter-os.<ISO>.<unix>` not just `.pre-walter-os.<unix>`.
-  grep -qE 'stamp_iso="\$\(date -u \+%Y-%m-%dT%H-%M-%SZ\)"' "$REPO_ROOT/install.sh"
+  # Both stamps emitted from a SINGLE `date` call to avoid the
+  # second-boundary race (Copilot R1 #201): assert via grep that the
+  # iso + unix tokens are in a single command, and that the final
+  # filename concatenates both.
+  grep -qE 'date -u \+"%Y-%m-%dT%H-%M-%SZ %s"' "$REPO_ROOT/install.sh"
+  grep -qE 'read -r stamp_iso stamp_unix' "$REPO_ROOT/install.sh"
   grep -qE 'backup="\$\{dest\}\.pre-walter-os\.\$\{stamp_iso\}\.\$\{stamp_unix\}"' \
     "$REPO_ROOT/install.sh"
 }
