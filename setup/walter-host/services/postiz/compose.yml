@@ -1,17 +1,25 @@
 # Walter-VM — Postiz social media scheduling
 #
-# Postiz (AGPL-3.0, 30k+ stars, v2.21.7 as of 2026-05-11)
+# Postiz (AGPL-3.0, 30k+ stars)
 # Replaces the evaluated-and-dropped Mixpost — covers all platforms
 # (YouTube, X, LinkedIn, Instagram, TikTok, Facebook, Threads, Bluesky,
 # Pinterest, Reddit, Mastodon) free under AGPL-3.0.
 #
 # URL: https://postiz.${WALTER_DOMAIN} (behind CF Tunnel + CF Access)
 #
-# AC-17: Postiz version verified >= v2.21.7
-# To upgrade: docker compose pull && docker compose up -d
+# Current pin: v2.20.2 (last pre-Temporal release; see service block
+# below for the full rationale). The forward-looking AC-17 target from
+# docs/specs/devrel-analytics-stack.md is >= v2.21.7, but that target
+# is OVERRIDDEN by the #172 Temporal/Postgres incompatibility until
+# upstream ships a fix.
 #
-# Refs: docs/specs/devrel-analytics-stack.md (AC-17, AC-18)
+# To upgrade (only after upstream Postgres-visibility fix):
+#   docker compose pull && docker compose up -d
+#
+# Refs: docs/specs/devrel-analytics-stack.md (AC-17, AC-18 — currently
+#       superseded by the #172 pin)
 # Refs: docs/operational/phase-v-tools-availability.md (Postiz section)
+# Refs: #172 (pin rationale + bump criteria)
 
 services:
   postiz:
