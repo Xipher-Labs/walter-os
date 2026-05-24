@@ -2256,14 +2256,17 @@ prompt_egress_import() {
     *)
       mkdir -p "$cfg"
       local walter_os_bin="${REPO_ROOT}/bin/walter-os"
-      if [[ -x "$walter_os_bin" ]]; then
-        WALTER_OS_HOME="$REPO_ROOT" WALTER_CONFIG="$cfg" \
-          "$walter_os_bin" egress import "$example" \
-          && ok "  Imported $(wc -l < "$allowlist" | tr -d ' ') line(s) into $allowlist" \
-          || warn "  Import failed — review stderr above. Retry with: walter-os egress import \"$example\""
-      else
+      if [[ ! -x "$walter_os_bin" ]]; then
         err "  walter-os CLI not found at $walter_os_bin — cannot import. Re-run after install completes."
         return 1
+      fi
+      # NOT `cmd && ok || warn` — that would also fire `warn` if `ok`
+      # returns non-zero (shellcheck SC2015). Explicit if/else.
+      if WALTER_OS_HOME="$REPO_ROOT" WALTER_CONFIG="$cfg" \
+          "$walter_os_bin" egress import "$example"; then
+        ok "  Imported $(wc -l < "$allowlist" | tr -d ' ') line(s) into $allowlist"
+      else
+        warn "  Import failed — review stderr above. Retry with: walter-os egress import \"$example\""
       fi
       ;;
   esac
