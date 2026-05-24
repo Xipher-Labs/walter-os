@@ -35,3 +35,42 @@ setup() {
   [ -n "$approval_line" ]
   [ "$denylist_line" -lt "$approval_line" ]
 }
+
+# ---------------------------------------------------------------------------
+# OSS Trust A-2 (#122): default-deny network egress hook must be in the
+# chain after approval-gate.sh. Without this pin the hook ships but is
+# INERT — an operator-visible bug.
+# ---------------------------------------------------------------------------
+
+@test "AC-5 (#122 A-2): install.sh PreToolUse Bash chain includes network-gate.sh" {
+  grep -q 'hooks/network-gate.sh' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-5 (#122 A-2): network-gate.sh runs AFTER approval-gate.sh" {
+  # bash-denylist → approval-gate → network-gate ordering: cheap regex
+  # block first, destructive-op gate second, host check last (the host
+  # check needs to source the loader + parse the command — heaviest of
+  # the three).
+  approval_line=$(grep -n 'hooks/approval-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  network_line=$(grep -n 'hooks/network-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  [ -n "$approval_line" ]
+  [ -n "$network_line" ]
+  [ "$approval_line" -lt "$network_line" ]
+}
+
+@test "AC-5 (#122 A-2): network-gate.sh appears BEFORE branch-flow-guard.sh" {
+  # branch-flow-guard is about push-target policy, which only matters
+  # for git pushes that ALREADY passed the network-gate host check.
+  # Keeping the network gate before the branch gate means an attempted
+  # push to a disallowed host fails on the cheaper / more universal
+  # check first.
+  network_line=$(grep -n 'hooks/network-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  branchflow_line=$(grep -n 'hooks/branch-flow-guard.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  [ -n "$network_line" ]
+  [ -n "$branchflow_line" ]
+  [ "$network_line" -lt "$branchflow_line" ]
+}
