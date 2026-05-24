@@ -755,7 +755,31 @@ _inspect_segment() {
           -J)
             jumphosts="${tokens[$((i + 1))]:-}"
             i=$((i + 2)); continue ;;
-          -i|-p|-o|-l|-F|-L|-R|-D|-B|-b|-c|-E|-e|-I|-m|-O|-Q|-S|-W|-w)
+          -o)
+            # `-o option=value` — option name is case-insensitive in ssh.
+            # The dangerous options for the egress gate are:
+            #   ProxyJump=host[,host...]   — equivalent to -J
+            #   ProxyCommand=cmd           — runs an arbitrary command
+            # Codex R4 finding CR4-B: previously `-o ProxyJump=evil` was
+            # eaten as a generic value-taking flag pair without
+            # inspecting the value, so `ssh -o ProxyJump=evil.example
+            # allowed.example` reached evil.example unchecked.
+            local _oval="${tokens[$((i + 1))]:-}"
+            local _olower
+            _olower="$(printf '%s' "$_oval" | tr '[:upper:]' '[:lower:]')"
+            case "$_olower" in
+              proxyjump=*)
+                jumphosts="${_oval#*=}"
+                ;;
+              proxycommand=*)
+                # ProxyCommand runs an arbitrary shell command — fail
+                # CLOSED rather than try to parse a sub-command here.
+                echo "BLOCK: network-gate: 'ssh -o ProxyCommand=' runs an arbitrary command (potential exfil). Use the two-factor bypass if intentional."
+                return 0
+                ;;
+            esac
+            i=$((i + 2)); continue ;;
+          -i|-p|-l|-F|-L|-R|-D|-B|-b|-c|-E|-e|-I|-m|-O|-Q|-S|-W|-w)
             i=$((i + 2)); continue ;;
           -*)
             i=$((i + 1)); continue ;;
@@ -908,15 +932,25 @@ _inspect_and_dispatch() {
   esac
 }
 
-while IFS= read -r _segment; do
-  [[ -z "${_segment// }" ]] && continue
-  # Inspect the segment as-is first.
-  _inspect_and_dispatch "$_segment"
-  # Then recurse into any command/process substitutions it contains.
+# Recursively inspect a segment + every substitution body nested inside
+# it, depth-first. Codex R4 finding CR4-A: `echo "$(echo $(curl evil))"`
+# previously only extracted the OUTER body `echo $(curl ...)` and
+# inspected it once — classified on `echo` → ALLOW, inner curl bypass.
+# Now we walk extracted bodies + recursively extract THEIR substitutions
+# until no more substitutions remain.
+_recurse_inspect() {
+  local seg="$1"
+  _inspect_and_dispatch "$seg"
+  local _subst_body
   while IFS= read -r _subst_body; do
     [[ -z "${_subst_body// }" ]] && continue
-    _inspect_and_dispatch "$_subst_body"
-  done < <(_extract_substitutions "$_segment")
+    _recurse_inspect "$_subst_body"
+  done < <(_extract_substitutions "$seg")
+}
+
+while IFS= read -r _segment; do
+  [[ -z "${_segment// }" ]] && continue
+  _recurse_inspect "$_segment"
 done < <(_split_segments "$CMD")
 
 _emit_allow
