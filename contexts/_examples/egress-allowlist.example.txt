@@ -1,0 +1,62 @@
+# Walter-OS bootstrap egress allowlist — bundled example.
+#
+# Walter-OS ships with a DEFAULT-DENY network gate (spec
+# docs/specs/network-egress-allowlist.md, OSS Trust epic #122 A-2).
+# After install, your `~/.config/walter-os/egress-allowlist.txt` is
+# empty, and every outbound network call from the agent is blocked.
+#
+# This file is the recommended starting set: GitHub, the common package
+# registries, the LLM APIs Walter-OS officially supports, the
+# Walter-OS-managed services under your domain, and system NTP.
+#
+# Import via:
+#   walter-os egress import \
+#     "${WALTER_OS_HOME}/contexts/_examples/egress-allowlist.example.txt"
+#
+# The import command expands `${WALTER_DOMAIN}` and any other env vars at
+# import time. If WALTER_DOMAIN is unset, the two `*.${WALTER_DOMAIN}`
+# lines are SKIPPED with a WARN — the rest is still imported.
+#
+# After import, edit the file directly (the loader re-reads it on every
+# request) or use `walter-os egress {add,remove,list}` for one-off
+# changes. See `docs/operational/network-egress.md` for the full guide.
+
+# ---------------------------------------------------------------------------
+# GitHub (clone, fetch, push, gh CLI, raw / objects downloads, code search).
+# ---------------------------------------------------------------------------
+api.github.com
+github.com
+objects.githubusercontent.com
+raw.githubusercontent.com
+codeload.github.com
+uploads.github.com
+
+# ---------------------------------------------------------------------------
+# Public package registries (Node, Python). Add Rust/Go mirrors as needed.
+# ---------------------------------------------------------------------------
+registry.npmjs.org
+pypi.org
+files.pythonhosted.org
+
+# ---------------------------------------------------------------------------
+# LLM APIs (Walter-OS-supported providers). Trim to only the ones you use
+# — every entry here is a host that the agent is permitted to reach.
+# ---------------------------------------------------------------------------
+api.anthropic.com
+api.openai.com
+generativelanguage.googleapis.com
+openrouter.ai
+api.openrouter.ai
+
+# ---------------------------------------------------------------------------
+# Walter-OS infrastructure — your own services under ${WALTER_DOMAIN}.
+# `walter-os egress import` runs envsubst at import time. If
+# WALTER_DOMAIN is unset, these two lines are skipped with a WARN.
+# ---------------------------------------------------------------------------
+llm.${WALTER_DOMAIN}
+secrets.${WALTER_DOMAIN}
+
+# ---------------------------------------------------------------------------
+# System time sync (NTP). Operators on private NTP pools should replace.
+# ---------------------------------------------------------------------------
+pool.ntp.org
