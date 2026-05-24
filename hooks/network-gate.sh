@@ -501,6 +501,44 @@ _inspect_segment() {
   while [[ ${#tokens[@]} -gt 0 && "${tokens[0]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
     tokens=("${tokens[@]:1}")
   done
+  # Strip shell compound-syntax prefixes from each leading token so
+  # `(curl evil)`, `{ curl evil; }`, `if true; then curl evil; fi`, etc.
+  # don't fall through to ALLOW. Codex R5 finding CR5-A.
+  #
+  # Per-token strip: leading `(` / `{` removed; trailing `)` / `}` /
+  # `;` removed from a leading token. Then if the resulting token is a
+  # known shell keyword (`if`/`then`/`else`/`elif`/`do`/`while`/`until`
+  # /`case`/`esac`/`function`), drop it and re-classify.
+  while [[ ${#tokens[@]} -gt 0 ]]; do
+    local _t0="${tokens[0]}"
+    # Strip leading compound-opener chars.
+    _t0="${_t0#(}"
+    _t0="${_t0#\{}"
+    # Strip trailing terminators on a bare keyword (so `then` matches
+    # even from `then;`).
+    _t0="${_t0%;}"
+    _t0="${_t0%\}}"
+    _t0="${_t0%)}"
+    if [[ -z "$_t0" ]]; then
+      tokens=("${tokens[@]:1}")
+      continue
+    fi
+    case "$_t0" in
+      if|then|else|elif|fi|do|done|while|until|case|esac|function|select|coproc)
+        # Shell keyword — drop it.
+        tokens=("${tokens[@]:1}")
+        continue ;;
+      *)
+        # The first token was not (only) a compound-syntax prefix or
+        # keyword — install the stripped form back and stop unwrapping.
+        tokens[0]="$_t0"
+        break ;;
+    esac
+  done
+  if [[ ${#tokens[@]} -eq 0 ]]; then
+    echo "ALLOW"
+    return 0
+  fi
   # Segment was pure assignments → no CLI here → ALLOW (any
   # substitution-smuggled CLI was inspected separately).
   if [[ ${#tokens[@]} -eq 0 ]]; then
@@ -564,6 +602,55 @@ _inspect_segment() {
 
   # Strip absolute paths: /usr/bin/curl → curl.
   cli="${cli##*/}"
+
+  # Codex R5 CR5-A: shell interpreter invocations (`bash -c CMD`,
+  # `sh -c CMD`, etc.) previously had cli=`bash` → unknown → ALLOW.
+  # When we see `<shell> -c CMD`, recover CMD via xargs (which honors
+  # the original shell quoting that `read -ra` discarded) and recurse
+  # into it as a synthetic segment.
+  case "$cli" in
+    bash|sh|zsh|dash|ksh|fish)
+      # xargs-based recovery of the original -c argument. `read -ra`
+      # split the segment by whitespace, so the contents of `-c '...'`
+      # became multiple tokens (`'curl`, `https://...exfil'`). xargs
+      # respects POSIX quoting and emits real argv-style tokens.
+      local _shell_tokfile
+      _shell_tokfile="$(mktemp 2>/dev/null)"
+      if [[ -n "$_shell_tokfile" ]] \
+         && printf '%s' "$seg" | xargs -n1 > "$_shell_tokfile" 2>/dev/null; then
+        # Skip the shell binary name (token 1), walk flags until -c.
+        local _cmd_arg="" _saw_c=0 _first=1
+        while IFS= read -r _stok; do
+          if [[ "$_first" -eq 1 ]]; then _first=0; continue; fi
+          if [[ "$_saw_c" -eq 1 ]]; then
+            _cmd_arg="$_stok"; break
+          fi
+          case "$_stok" in
+            -c) _saw_c=1 ;;
+            -c*) _cmd_arg="${_stok#-c}"; break ;;
+            --) break ;;
+            -*) ;;
+            *) break ;;
+          esac
+        done < "$_shell_tokfile"
+        rm -f "$_shell_tokfile"
+        if [[ -n "$_cmd_arg" ]]; then
+          while IFS= read -r _sub_seg; do
+            [[ -z "${_sub_seg// }" ]] && continue
+            _recurse_inspect "$_sub_seg"
+          done < <(_split_segments "$_cmd_arg")
+          echo "ALLOW"
+          return 0
+        fi
+      else
+        rm -f "$_shell_tokfile" 2>/dev/null
+      fi
+      # `bash` / `sh` etc. with NO -c → interactive shell, no embedded
+      # command — let it pass.
+      echo "ALLOW"
+      return 0
+      ;;
+  esac
 
   # After unwrapping, if the resulting CLI looks suspicious (empty, a
   # leftover flag, or still a VAR=val) we cannot make a safe decision.
@@ -755,15 +842,15 @@ _inspect_segment() {
           -J)
             jumphosts="${tokens[$((i + 1))]:-}"
             i=$((i + 2)); continue ;;
+          -J*)
+            # Codex R5 CR5-B: compact form `-Jjumphost` (no space).
+            # The generic `-*` branch would otherwise eat this as a
+            # valueless flag and skip the jumphost entirely.
+            jumphosts="${tok#-J}"
+            i=$((i + 1)); continue ;;
           -o)
-            # `-o option=value` — option name is case-insensitive in ssh.
-            # The dangerous options for the egress gate are:
-            #   ProxyJump=host[,host...]   — equivalent to -J
-            #   ProxyCommand=cmd           — runs an arbitrary command
-            # Codex R4 finding CR4-B: previously `-o ProxyJump=evil` was
-            # eaten as a generic value-taking flag pair without
-            # inspecting the value, so `ssh -o ProxyJump=evil.example
-            # allowed.example` reached evil.example unchecked.
+            # `-o option=value` spaced form. The compact form `-oOPT=val`
+            # is handled by the `-o*` case below.
             local _oval="${tokens[$((i + 1))]:-}"
             local _olower
             _olower="$(printf '%s' "$_oval" | tr '[:upper:]' '[:lower:]')"
@@ -772,13 +859,28 @@ _inspect_segment() {
                 jumphosts="${_oval#*=}"
                 ;;
               proxycommand=*)
-                # ProxyCommand runs an arbitrary shell command — fail
-                # CLOSED rather than try to parse a sub-command here.
                 echo "BLOCK: network-gate: 'ssh -o ProxyCommand=' runs an arbitrary command (potential exfil). Use the two-factor bypass if intentional."
                 return 0
                 ;;
             esac
             i=$((i + 2)); continue ;;
+          -o*)
+            # Codex R5 CR5-B: compact form `-oProxyJump=value` (no
+            # space). The generic `-*` branch would otherwise eat this
+            # as a valueless flag and skip the jumphost.
+            local _oval_c="${tok#-o}"
+            local _olower_c
+            _olower_c="$(printf '%s' "$_oval_c" | tr '[:upper:]' '[:lower:]')"
+            case "$_olower_c" in
+              proxyjump=*)
+                jumphosts="${_oval_c#*=}"
+                ;;
+              proxycommand=*)
+                echo "BLOCK: network-gate: 'ssh -oProxyCommand=' runs an arbitrary command (potential exfil). Use the two-factor bypass if intentional."
+                return 0
+                ;;
+            esac
+            i=$((i + 1)); continue ;;
           -i|-p|-l|-F|-L|-R|-D|-B|-b|-c|-E|-e|-I|-m|-O|-Q|-S|-W|-w)
             i=$((i + 2)); continue ;;
           -*)
