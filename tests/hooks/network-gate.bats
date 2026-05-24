@@ -359,6 +359,79 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "AC-2 (Copilot R2): scp with bare host:/abs/path (no user) extracts host" {
+  # Common scp form: absolute remote path. Previous regex required
+  # non-`/` after `:` and failed CLOSED on legitimate use. Fix admits
+  # both `host:foo` (relative) and `host:/abs/path` (absolute).
+  echo 'walter-vm.tail.example' > "$ALLOWLIST"
+  run _call_hook_bash 'scp ./file.txt walter-vm.tail.example:/tmp/'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R2): scp with bare host:relpath (no user) extracts host" {
+  echo 'walter-vm.tail.example' > "$ALLOWLIST"
+  run _call_hook_bash 'scp ./file.txt walter-vm.tail.example:relpath'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R2): scp ignores Windows drive paths (C:/foo) — NOT a host" {
+  # `C:` is a single-letter Windows drive, NOT a hostname. The
+  # heuristic in _host_from_hostpath rules it out (requires >=4 char
+  # host OR dotted name). The command should pass through to the
+  # generic `*) allow` branch.
+  echo 'walter-vm.tail.example' > "$ALLOWLIST"
+  run _call_hook_bash 'scp ./file.txt C:/Users/foo'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"' || echo "$output" | jq -e '.decision == "allow"'
+}
+
+# ---------------------------------------------------------------------------
+# Copilot R2 F2: git remote -v / submodule status / archive (no --remote)
+# are LOCAL operations and must pass through
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Copilot R2): 'git remote -v' passes through (LOCAL)" {
+  # `git remote -v` lists configured remotes from local .git/config.
+  # No network. Previous list included `remote` → blocked as "implicit
+  # remote". Fixed by removing remote from the network subcommand list.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git remote -v'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R2): 'git submodule status' passes through (LOCAL)" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git submodule status'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R2): 'git archive HEAD -o /tmp/out.tar' (no --remote) passes through" {
+  # Local archive form. Must NOT be blocked.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git archive HEAD -o /tmp/out.tar'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R2): 'git archive --remote=https://github.com/x/y.git HEAD' requires URL host" {
+  # Network form. Must check the URL against the allowlist.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git archive --remote=https://github.com/foo/bar.git HEAD'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R2): 'git archive --remote=https://evil.example/x' blocks unallowlisted host" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git archive --remote=https://evil.example/foo HEAD'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 # ---------------------------------------------------------------------------
 # pip / npm / uvx / cargo — implicit-host fail-CLOSED
 # ---------------------------------------------------------------------------

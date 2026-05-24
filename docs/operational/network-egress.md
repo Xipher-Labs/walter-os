@@ -1,6 +1,6 @@
 # Network egress allowlist — operator guide
 
-> **Status**: shipped in v0.5.1+ via OSS Trust epic A-2 (#122).
+> **Status**: available starting v0.5.1 (unreleased — `[Unreleased]` in CHANGELOG) via OSS Trust epic A-2 (#122).
 > **Spec**: [`docs/specs/network-egress-allowlist.md`](../specs/network-egress-allowlist.md).
 
 Walter-OS ships a **default-deny** network egress gate. Without explicit
@@ -175,16 +175,22 @@ inspects each one.
 | CLI | Host extraction | Notes |
 |---|---|---|
 | `curl`, `wget` | URL host token | Fail-CLOSED if no URL token present |
-| `git clone\|fetch\|pull\|push\|ls-remote\|archive\|remote\|submodule\|cherry` | URL host or `user@host:` | `git status`/`log`/`diff` etc. pass through |
+| `git clone\|fetch\|pull\|push\|ls-remote\|fetch-pack\|send-pack\|bundle\|send-email\|http-fetch\|http-push\|imap-send\|upload-pack\|upload-archive\|receive-pack\|lfs\|svn\|annex\|p4` | URL host or `user@host:` | Local subcommands (`status`/`log`/`diff`/`branch`/`cherry`/`remote`/`submodule`/…) pass through |
+| `git archive` | URL host only when `--remote=URL` is passed | Local archive form passes through |
 | `gh` | `${GH_HOST:-github.com}` | Implicit host |
 | `ssh` | First non-flag positional, with awareness of value-taking flags (`-i`, `-p`, `-o`, …) | `user@host` form supported |
-| `scp`, `rsync` | `user@host:path`, `host:path`, or `rsync://host/...` | |
+| `scp`, `rsync` | `user@host:path`, `host:/abs/path`, `host:relative/path`, or `rsync://host/...` | Drive-letter-style local paths (`C:\foo`) are NOT treated as hosts |
 | `nc`, `ncat`, `netcat` | First non-flag positional | |
 | `pip`, `pip3`, `npm`, `pnpm`, `yarn`, `uv`, `uvx`, `cargo`, `brew`, `gem`, `go` | Explicit URL token if present | Otherwise fail-CLOSED (their default registry lives in config/env we don't see) |
 
 Local-only Git operations (`status`, `log`, `diff`, `add`, `commit`,
-`rev-parse`, `config`, …) pass through. You can still run `git status`
-inside a tight allowlist.
+`branch`, `cherry`, `rev-parse`, `config`, `remote -v`, `submodule status`,
+`archive` without `--remote=`, …) pass through. You can still run
+`git status` inside a tight allowlist. The few network-touching forms
+of `git remote` (`update`, `show`, `prune`) and
+`git submodule update --remote` are deliberately treated as LOCAL by
+this parser — they're rare in agent workflows. If you need the gate to
+cover them, use the two-factor bypass.
 
 ## When pip / npm / cargo block you
 
@@ -242,12 +248,26 @@ by both being in the chain.
 
 The daily supply-chain audit (`walter-os audit`) snapshots the SHA256
 of the allowlist file. Drift between runs is reported as a finding.
-A future enhancement (#122 A-2 follow-up) will add a
-`check_egress_allowlist()` probe that:
+It also runs `check_egress_allowlist()` (in
+`skills/daily-supply-chain-audit/scripts/audit.sh`), which:
 
-- WARNs if the file is empty (every call blocked — probably a misconfig).
-- HIGHs if a host in the allowlist resolves to a private IP
-  (10/8, 192.168/16, etc.) — rebinding risk.
+- Emits an `info` finding `egress-allowlist-missing` when the file
+  doesn't exist (every outbound call is blocked — fine on day 0, worth
+  surfacing once a day so it doesn't sit forever).
+- Emits an `info` finding `egress-allowlist-empty` when the file
+  exists but has only comments/blanks (every outbound call is blocked
+  — usually a misconfig).
+- Emits a `high` finding `egress-allowlist-private-ip` when any
+  allowlist entry resolves to a private / loopback / link-local IP
+  (10/8, 192.168/16, 172.16-31/12, 127/8, 169.254/16, ::1, fc00::/7,
+  fe80::/10). Pure DNS lookup via `getent` / `dscacheutil` / `dig`,
+  no probe traffic. Resolver failures are treated as benign (the
+  host may be unreachable from the audit box but reachable where the
+  agent runs).
+
+Wildcard patterns (`*.example`) and IPv6 bracketed literals
+(`[::1]`, `[fd00::1]`) are skipped — wildcards can't be resolved,
+and an IPv6 literal that's loopback is operator-explicit.
 
 ## Troubleshooting
 

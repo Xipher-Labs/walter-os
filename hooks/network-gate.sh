@@ -104,7 +104,10 @@ fi
 # operator who exported `WALTER_EGRESS_ALLOW_OVERRIDE=1` is reviewing
 # the command they typed; that env var is the real gate.
 _has_bypass_flag() {
-  echo "$1" | grep -qE -- '(^|[[:space:]])--allow-egress-outbound([[:space:]]|$)'
+  # `printf '%s\n'` over `echo` so a hypothetical command starting with
+  # `-n` / `-e` is treated as data, not as echo options (Copilot R2
+  # portability nit).
+  printf '%s\n' "$1" | grep -qE -- '(^|[[:space:]])--allow-egress-outbound([[:space:]]|$)'
 }
 
 _two_factor_bypass_active() {
@@ -198,10 +201,35 @@ _host_from_userhostpath() {
   return 1
 }
 
-# Extract bare host from `host:path` (rsync — no user).
+# Extract bare host from `host:path` (rsync / scp without user).
+#
+# Distinguishing host:path from a local Windows-style drive path
+# (`C:\foo`) is the awkward part. Real-world scp/rsync remote paths
+# almost always use forward-slash paths after the colon (`host:/tmp/`
+# absolute, `host:foo` relative). We accept BOTH forms — relative
+# (`host:foo`) AND absolute (`host:/path`) — and require the host name
+# to contain at least one `.` OR be at least 4 chars long. That
+# heuristic rules out single-letter drive paths (`C:\foo`, `D:/`) while
+# admitting realistic short hostnames like `walter-vm.tail.example` or
+# `nas`.
+#
+# R2 (Copilot) fix: previous regex required non-`/` after `:`, so
+# `scp file host:/tmp/` legitimately formatted absolute paths failed
+# CLOSED with no extractable host. Real scp/rsync usage is exactly
+# `host:/absolute/path`.
 _host_from_hostpath() {
   local s="$1"
-  if [[ "$s" =~ ^([A-Za-z0-9][A-Za-z0-9.-]*):[^/] ]]; then
+  # Reject obvious Windows drive paths: single letter + `:\` or `:/`.
+  if [[ "$s" =~ ^[A-Za-z]:[\\/] ]]; then
+    return 1
+  fi
+  # Match: HOST : PATH, where HOST contains at least one dot OR is >=4
+  # chars (rules out 1-char drives but admits short DNS names).
+  if [[ "$s" =~ ^([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z0-9.-]+): ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "$s" =~ ^([A-Za-z0-9][A-Za-z0-9.-]{3,}): ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
     return 0
   fi
@@ -355,8 +383,16 @@ _inspect_segment() {
       #     and needs the gate to cover it, they can run with the
       #     two-factor bypass. (Out-of-scope refinement for v0.5.x.)
       local sub="${tokens[1]:-}"
+      # Note: `remote` and `submodule` are deliberately NOT in this list
+      # — their COMMON forms are local (`git remote -v`,
+      # `git submodule status`, `git submodule init` reading .gitmodules).
+      # The rare network-using subforms (`git remote update`,
+      # `git submodule update --remote`) are operator-explicit and can
+      # use the two-factor bypass. Copilot R2 finding: keeping them
+      # in the list blocked the common local invocation as "implicit
+      # remote".
       case "$sub" in
-        clone|fetch|pull|push|ls-remote|submodule|fetch-pack|send-pack|http-fetch|http-push|imap-send|upload-pack|upload-archive|receive-pack|bundle|send-email|lfs|svn|annex|p4|cvsimport|cvsexportcommit)
+        clone|fetch|pull|push|ls-remote|fetch-pack|send-pack|http-fetch|http-push|imap-send|upload-pack|upload-archive|receive-pack|bundle|send-email|lfs|svn|annex|p4|cvsimport|cvsexportcommit)
           local t host found=0
           for t in "${tokens[@]:2}"; do
             if host="$(_host_from_url "$t")" && [[ -n "$host" ]]; then

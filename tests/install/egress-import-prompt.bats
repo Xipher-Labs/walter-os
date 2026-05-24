@@ -35,26 +35,45 @@ setup() {
 }
 
 @test "AC-5: prompt skips cleanly when no TTY (non-interactive default)" {
-  # Source the function in isolation and call it with DRY_RUN=0 +
-  # a fresh fake-WALTER_CONFIG. Stdin/stdout aren't TTYs under `run`
-  # so the function must take the non-TTY branch and exit 0 without
-  # writing the allowlist.
+  # Build a harness that actually CALLS prompt_egress_import in a
+  # non-TTY context, and verify both the no-write invariant AND the
+  # function-level signal (a stderr WARN with the manual-import hint).
+  # Previously this test only sourced install.sh + checked no file was
+  # written — it would have passed even if prompt_egress_import never
+  # ran. Copilot R2 finding.
   TMP_HOME="$(mktemp -d)"
   TMP_CFG="$TMP_HOME/.config/walter-os"
   mkdir -p "$TMP_CFG"
 
-  run env \
-    HOME="$TMP_HOME" \
-    WALTER_CONFIG="$TMP_CFG" \
-    DRY_RUN=0 CHECK_ONLY=0 UPGRADE=0 UNINSTALL=0 STEP_ONLY="" \
-    bash -c "
-      set -uo pipefail
-      REPO_ROOT='$REPO_ROOT'
-      # source helpers
-      . '$INSTALL_SH' --check 2>/dev/null || true
-    "
-  # Don't care about the exit status of the synthetic --check call;
-  # care only that no allowlist got written.
+  HARNESS="$TMP_HOME/harness.sh"
+  cat > "$HARNESS" <<HARNESS_EOF
+#!/usr/bin/env bash
+set -uo pipefail
+REPO_ROOT='$REPO_ROOT'
+WALTER_CONFIG='$TMP_CFG'
+DRY_RUN=0
+# Minimal stubs (install.sh uses these for colored output).
+step() { echo "STEP: \$*"; }
+say()  { echo "\$*"; }
+warn() { echo "WARN: \$*"; }
+ok()   { echo "OK: \$*"; }
+err()  { echo "ERR: \$*" >&2; }
+dry()  { echo "DRY: \$*"; }
+# Extract + invoke just the function.
+eval "\$(awk '/^prompt_egress_import\(\) {/,/^}\$/' '$INSTALL_SH')"
+prompt_egress_import
+HARNESS_EOF
+  chmod +x "$HARNESS"
+
+  # `< /dev/null` ensures stdin is NOT a TTY; bats redirects stdout too,
+  # so [[ -t 0 ]] && [[ -t 1 ]] in the function is false → non-TTY branch.
+  run bash "$HARNESS" < /dev/null
+  [ "$status" -eq 0 ]
+  # Non-TTY branch must emit the "No TTY — skipping" hint with the
+  # manual-import command.
+  [[ "$output" == *"No TTY"* ]] || [[ "$output" == *"Skipping"* ]] || { echo "expected non-TTY skip message: $output"; return 1; }
+  [[ "$output" == *"walter-os egress import"* ]]
+  # And no allowlist file gets written.
   [[ ! -f "$TMP_CFG/egress-allowlist.txt" ]]
 
   case "$TMP_HOME" in

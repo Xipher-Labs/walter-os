@@ -1490,18 +1490,18 @@ cmd_uninstall() {
 #                           with WARN on stderr).
 
 _egress_allowlist_path() {
-  # R2 NIT: delegate to the loader's resolver when present so both halves
+  # Delegate to the loader's resolver when sourceable so both halves
   # (`add`/`remove`/`list`/`import` here + `test` via sourced loader)
-  # see the same on-disk file even when XDG_CONFIG_HOME is set. Falls
-  # back to the literal expansion if the loader isn't sourceable (e.g.
-  # walter-os symlinked outside its repo).
+  # see the same on-disk file. Falls back to the same default literal
+  # if the loader isn't reachable (e.g. walter-os symlinked outside
+  # its repo). Copilot R2 NIT.
   local loader="${WALTER_OS_HOME}/scripts/walter/lib/egress-loader.sh"
   if [[ -f "$loader" ]]; then
     # shellcheck disable=SC1090
     ( source "$loader" && walter_egress_allowlist_path )
     return
   fi
-  echo "${WALTER_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/walter-os}/egress-allowlist.txt"
+  echo "${WALTER_CONFIG:-${HOME}/.config/walter-os}/egress-allowlist.txt"
 }
 
 _egress_print_usage() {

@@ -42,7 +42,13 @@
 # so tests and the install.sh first-run prompt can point at an alternate
 # location.
 walter_egress_allowlist_path() {
-  local base="${WALTER_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/walter-os}"
+  # Resolve from $WALTER_CONFIG, falling back to the repo-standard
+  # ~/.config/walter-os (matches install.sh + the rest of the codebase).
+  # We deliberately do NOT honour $XDG_CONFIG_HOME here — the rest of
+  # Walter-OS doesn't, and a partial XDG implementation would cause
+  # `walter-os egress {add,list}` and the loader to read from different
+  # files when XDG_CONFIG_HOME is set. Copilot R2 finding.
+  local base="${WALTER_CONFIG:-$HOME/.config/walter-os}"
   printf '%s/egress-allowlist.txt' "$base"
 }
 
