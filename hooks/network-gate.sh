@@ -154,6 +154,96 @@ _emit_allow_with_warn() {
 # `|`, `&`). We then inspect each segment as if it were its own command.
 # Using `sed` to insert NEWLINE markers + reading line by line is the
 # portable way to do this in bash 3.2.
+# Extract the body of every $( ... ), <( ... ), and `...` substitution
+# in the segment. Emits each body on a separate line. Tracks nesting
+# depth + quote state so `echo "$(curl url)"` correctly extracts
+# `curl url`, and nested forms like `echo $(curl $(other))` extract the
+# OUTER body (which itself starts with curl + a nested $() — the inner
+# one is exposed when the outer body is inspected as a synthetic
+# segment, so the recursion is implicit).
+#
+# Codex R3 fix CR2-A: `echo $(curl https://evil.example/p)` previously
+# returned ALLOW because cli="echo" (a local builtin) and the curl
+# inside the substitution was never inspected. With this extractor +
+# the main loop running each substitution body through _inspect_segment,
+# substitution-smuggled CLIs are now gated like top-level CLIs.
+_extract_substitutions() {
+  local s="$1"
+  local n=${#s} i=0
+  local in_sq=0 in_dq=0
+  local depth=0 start=0 esc=0
+  local in_bt=0 bt_start=0
+  local c c2
+  while [[ $i -lt $n ]]; do
+    c="${s:$i:1}"
+    c2="${s:$i:2}"
+    if [[ "$esc" -eq 1 ]]; then
+      esc=0; i=$((i + 1)); continue
+    fi
+    # Inside a $( … ) / <( … ) — depth-tracking + quote-aware.
+    if [[ $depth -gt 0 ]]; then
+      if [[ $in_sq -eq 1 ]]; then
+        [[ "$c" == "'" ]] && in_sq=0
+      elif [[ $in_dq -eq 1 ]]; then
+        case "$c" in
+          '"') in_dq=0 ;;
+          '\\') esc=1 ;;
+        esac
+      else
+        case "$c" in
+          "'") in_sq=1 ;;
+          '"') in_dq=1 ;;
+        esac
+        case "$c2" in
+          '$('|'<(') depth=$((depth + 1)); i=$((i + 2)); continue ;;
+        esac
+        if [[ "$c" == ')' ]]; then
+          depth=$((depth - 1))
+          if [[ $depth -eq 0 ]]; then
+            printf '%s\n' "${s:$start:$((i - start))}"
+          fi
+        fi
+      fi
+      i=$((i + 1)); continue
+    fi
+    # Inside a `…` backtick substitution.
+    if [[ $in_bt -eq 1 ]]; then
+      if [[ "$c" == '\\' ]]; then esc=1; i=$((i + 1)); continue; fi
+      if [[ "$c" == '`' ]]; then
+        printf '%s\n' "${s:$bt_start:$((i - bt_start))}"
+        in_bt=0
+      fi
+      i=$((i + 1)); continue
+    fi
+    # Top level (depth 0, not in backtick).
+    if [[ $in_sq -eq 1 ]]; then
+      [[ "$c" == "'" ]] && in_sq=0
+    elif [[ $in_dq -eq 1 ]]; then
+      case "$c" in
+        '"') in_dq=0 ;;
+        '\\') esc=1 ;;
+      esac
+    else
+      case "$c" in
+        "'") in_sq=1 ;;
+        '"') in_dq=1 ;;
+        '`')
+          in_bt=1
+          bt_start=$((i + 1))
+          ;;
+      esac
+      case "$c2" in
+        '$('|'<(')
+          depth=1
+          start=$((i + 2))
+          i=$((i + 2)); continue
+          ;;
+      esac
+    fi
+    i=$((i + 1))
+  done
+}
+
 _split_segments() {
   # Quote-aware segment split. Walks the command character by character
   # tracking single-quote / double-quote / backtick state, and emits a
@@ -364,6 +454,24 @@ _inspect_segment() {
     fi
     tokens+=("$_t")
   done
+  # Skip leading shell assignments (`VAR=value`, `FOO=$(cmd)`,
+  # `LC_ALL=C cmd …`). These are valid prefix syntax in bash; if the
+  # segment is ONLY assignments (no following command) the assignments
+  # run in the current shell — there's no CLI to inspect. The
+  # _extract_substitutions step at the dispatch layer will catch any
+  # `$(curl ...)` inside an assignment value. Codex R3 follow-up: this
+  # avoids fail-CLOSED on legitimate `X=$(curl allowed.example/x); ...`
+  # which previously had cli=`X=$(curl` → the "unable to identify"
+  # branch.
+  while [[ ${#tokens[@]} -gt 0 && "${tokens[0]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+    tokens=("${tokens[@]:1}")
+  done
+  # Segment was pure assignments → no CLI here → ALLOW (any
+  # substitution-smuggled CLI was inspected separately).
+  if [[ ${#tokens[@]} -eq 0 ]]; then
+    echo "ALLOW"
+    return 0
+  fi
   local cli="${tokens[0]:-}"
 
   # Strip leading command wrappers + their flags / value-pairs / VAR=val
@@ -382,7 +490,14 @@ _inspect_segment() {
   while [[ "$_strip_more" -eq 1 ]]; do
     _strip_more=0
     case "${cli##*/}" in
-      sudo|env|nice|nohup|time|stdbuf|setsid|chrt|taskset|ionice)
+      # Codex R3 fix CR2-B: `command` and `exec` are shell builtins
+      # that invoke the named binary bypassing functions/aliases —
+      # `command curl https://evil.example` was previously treated as
+      # an unknown CLI (`cli="command"`) and fell to `*) ALLOW`.
+      # `builtin` would let an attacker substitute a function-shadowed
+      # name; strip it the same way. (We intentionally do NOT strip
+      # `eval` — bash-denylist.sh catches eval-of-variable as RCE.)
+      sudo|env|nice|nohup|time|stdbuf|setsid|chrt|taskset|ionice|command|exec|builtin)
         # Drop the wrapper itself.
         tokens=("${tokens[@]:1}")
         # Eat any flags, optional flag values, and VAR=val assignments.
@@ -471,7 +586,35 @@ _inspect_segment() {
       #     are rare in agent workflows. If an operator hits one of those
       #     and needs the gate to cover it, they can run with the
       #     two-factor bypass. (Out-of-scope refinement for v0.5.x.)
-      local sub="${tokens[1]:-}"
+      #
+      # Codex R3 fix CR2-C: walk past git global options
+      # (`-C dir`, `-c key=val`, `--git-dir=...`, `--work-tree=...`,
+      # `--namespace=...`, `-p` / `--paginate`, `--no-pager`, `--bare`,
+      # `--exec-path[=path]`, `--help`, `-v` / `--version`, etc.) before
+      # reading the subcommand. Previously `git -c protocol.version=2
+      # clone https://evil.example/repo` treated `-c` as the subcommand,
+      # fell to the local-only ALLOW branch, and never checked the URL.
+      local _gi=1
+      while [[ $_gi -lt ${#tokens[@]} ]]; do
+        local _gt="${tokens[$_gi]}"
+        case "$_gt" in
+          # Value-taking global options (next token is the value).
+          -C|-c)
+            _gi=$((_gi + 2)); continue ;;
+          # Value-on-same-token (--flag=value) AND valueless global flags.
+          --git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--list-cmds=*|--super-prefix=*|--config-env=*|--attr-source=*)
+            _gi=$((_gi + 1)); continue ;;
+          # Value-taking long options where the value is the NEXT token.
+          --git-dir|--work-tree|--namespace|--exec-path|--super-prefix|--list-cmds|--config-env|--attr-source)
+            _gi=$((_gi + 2)); continue ;;
+          # Valueless global flags.
+          -p|--paginate|-P|--no-pager|--no-replace-objects|--no-optional-locks|--bare|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|--no-replace|-v|--version|-h|--help|--html-path|--man-path|--info-path)
+            _gi=$((_gi + 1)); continue ;;
+          *)
+            break ;;
+        esac
+      done
+      local sub="${tokens[$_gi]:-}"
       # Note: `remote` and `submodule` are deliberately NOT in this list
       # — their COMMON forms are local (`git remote -v`,
       # `git submodule status`, `git submodule init` reading .gitmodules).
@@ -483,7 +626,10 @@ _inspect_segment() {
       case "$sub" in
         clone|fetch|pull|push|ls-remote|fetch-pack|send-pack|http-fetch|http-push|imap-send|upload-pack|upload-archive|receive-pack|bundle|send-email|lfs|svn|annex|p4|cvsimport|cvsexportcommit)
           local t host found=0
-          for t in "${tokens[@]:2}"; do
+          # Scan tokens AFTER the subcommand position (_gi). Was
+          # hard-coded to ${tokens[@]:2} pre-CR2-C, which silently
+          # ignored URLs when git global options were present.
+          for t in "${tokens[@]:$((_gi + 1))}"; do
             if host="$(_host_from_url "$t")" && [[ -n "$host" ]]; then
               found=1
             elif host="$(_host_from_userhostpath "$t")" && [[ -n "$host" ]]; then
@@ -513,7 +659,7 @@ _inspect_segment() {
           # through. R6 finding F20: previous code only handled the
           # `=`-form, fail-CLOSED on the space form even though the URL
           # was right there on the command line.
-          local _i=2 found_remote=0 found=0 host remote_url=""
+          local _i=$((_gi + 1)) found_remote=0 found=0 host remote_url=""
           while [[ $_i -lt ${#tokens[@]} ]]; do
             local _tok="${tokens[$_i]}"
             case "$_tok" in
@@ -708,17 +854,34 @@ if _two_factor_bypass_active; then
 fi
 
 # Inspect each segment. First BLOCK wins.
-while IFS= read -r _segment; do
-  [[ -z "${_segment// }" ]] && continue
-  result="$(_inspect_segment "$_segment")"
+# Codex R3 CR2-A: also extract command/process substitutions ($(...),
+# <(...), `...`) from each segment and inspect THEIR bodies as
+# synthetic segments. This catches `echo $(curl https://evil.example)`
+# which would otherwise classify on `echo` (a local builtin) and miss
+# the curl entirely.
+_inspect_and_dispatch() {
+  local seg="$1"
+  [[ -z "${seg// }" ]] && return 0
+  local result
+  result="$(_inspect_segment "$seg")"
   case "$result" in
     ALLOW) ;;
     BLOCK:\ *)
       _emit_block "${result#BLOCK: }" ;;
     *)
-      # Inspector returned something unexpected — fail-CLOSED.
       _emit_block "network-gate: unexpected inspector output: $result" ;;
   esac
+}
+
+while IFS= read -r _segment; do
+  [[ -z "${_segment// }" ]] && continue
+  # Inspect the segment as-is first.
+  _inspect_and_dispatch "$_segment"
+  # Then recurse into any command/process substitutions it contains.
+  while IFS= read -r _subst_body; do
+    [[ -z "${_subst_body// }" ]] && continue
+    _inspect_and_dispatch "$_subst_body"
+  done < <(_extract_substitutions "$_segment")
 done < <(_split_segments "$CMD")
 
 _emit_allow
