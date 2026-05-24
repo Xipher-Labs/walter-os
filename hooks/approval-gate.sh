@@ -27,6 +27,14 @@
 # This hook just decides + reports.
 #
 # Spec: docs/specs/multi-agent-autonomy.md §7
+#
+# Composition with hooks/network-gate.sh (#122 OSS Trust A-2 — AC-6):
+#   approval-gate handles WHAT (destructive ops + standing approvals).
+#   network-gate  handles WHERE (allowed outbound hosts).
+# Both run in the PreToolUse Bash chain (spec D-8: all hooks must allow).
+# Either blocking → command blocked. No control-flow coupling between the
+# two — they compose by both being in the chain, not by one calling the
+# other.
 
 set -uo pipefail
 

@@ -71,6 +71,24 @@ requires the one-minor-version notice cycle.
 
 Target release: **v0.5.1+** — Walter-VM ops hardening wave (issues #174-#181 filed 2026-05-22 from operator triage). Plus the OSS Trust A–E implementation tasks (per the v0.4.3 specs in `docs/specs/`), severity-gate runtime implementation (Phase A-F tree from `docs/specs/pr-review-severity-gate.plan.md`), and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
 
+### Added (default-deny security floor)
+
+- **`#122` OSS Trust A-2 — default-deny network egress allowlist.** Walter-OS
+  now ships with `hooks/network-gate.sh`, a PreToolUse hook that inspects every
+  agent-issued Bash command for outbound network calls (curl, wget, git,
+  gh, ssh, scp, rsync, nc, pip, npm, uvx, cargo, brew, gem, go) and blocks
+  any target host that isn't in the operator's
+  `~/.config/walter-os/egress-allowlist.txt`. The new
+  `walter-os egress {add,remove,list,test,import}` CLI manages the file,
+  `contexts/_examples/egress-allowlist.example.txt` ships a recommended
+  bootstrap set, and `install.sh` offers a one-time prompt to import it.
+  Composes with `bash-denylist.sh` (WHAT — RCE patterns) and
+  `approval-gate.sh` (WHAT — destructive ops) — network-gate is the WHERE
+  layer. Two-factor bypass via `WALTER_EGRESS_ALLOW_OVERRIDE=1` +
+  `--allow-egress-outbound`. Full operator docs at
+  `docs/operational/network-egress.md`. Spec:
+  `docs/specs/network-egress-allowlist.md`.
+
 ---
 
 ## [0.5.0] — 2026-05-22
