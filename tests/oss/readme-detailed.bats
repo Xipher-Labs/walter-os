@@ -321,3 +321,57 @@ setup() {
 @test "README.md points to SUPPORT.md for help" {
   grep -qF "SUPPORT.md" README.md
 }
+
+# ── Mermaid diagrams + visual polish (readme-craft skill tool #8) ──────────
+
+@test "README.md contains Mermaid architecture diagram" {
+  # Top-level "How it fits together" diagram. The skill explicitly
+  # endorses Mermaid as the lowest-supply-chain-risk visual tool —
+  # native to GitHub Markdown, no external image hosting.
+  grep -qF '```mermaid' README.md
+  # At least 2 mermaid blocks (architecture + disciplines flow).
+  count=$(grep -cF '```mermaid' README.md)
+  [ "$count" -ge 2 ]
+}
+
+@test "README.md contains discipline-flow diagram with SDD + TDD steps" {
+  # The Disciplines section has a flowchart showing SDD → TDD → review
+  # → merge gates. Pinned because SDD was missing in the prior cut.
+  grep -qE 'SDD|Spec-Driven' README.md
+}
+
+# ── Disciplines: SDD + TDD (not just TDD) ──────────────────────────────────
+
+@test "README.md disciplines table includes SDD (Spec-Driven Development)" {
+  # Operator-flagged regression: previous version only mentioned TDD.
+  # The methodology is SDD + TDD. Pin both.
+  grep -qE 'SDD.*Spec-Driven Development|Spec-Driven Development.*SDD' README.md
+  grep -qE 'TDD.*Test-Driven Development|Test-Driven Development.*TDD' README.md
+}
+
+# ── Auto-merge touchfile convention ────────────────────────────────────────
+
+@test "README.md documents the .walter-os/auto-merge-authorized touchfile" {
+  # Per-repo opt-in to auto-merge. Without this section operators
+  # think the rule is hardcoded "never auto-merge" forever, which
+  # is not true.
+  grep -qF ".walter-os/auto-merge-authorized" README.md
+}
+
+# ── Per-section deep-dive callouts ─────────────────────────────────────────
+
+@test "README.md has per-section deep-dive callouts (at least 4 📖 markers)" {
+  # Each major section ends with a "📖 Deep dive" callout linking to
+  # the relevant docs/operational/* file. At least 4 sections should
+  # have one (Mode 3 install, Security floor, Catalogs, Configuration,
+  # Disciplines, Personas).
+  count=$(grep -c '📖' README.md)
+  [ "$count" -ge 4 ]
+}
+
+# ── ADR-0018 link removed per operator request ─────────────────────────────
+
+@test "README.md does NOT link to ADR-0018 (operator-removed)" {
+  ! grep -qF "ADR-0018" README.md
+  ! grep -qF "0018-licensing-strategy.md" README.md
+}

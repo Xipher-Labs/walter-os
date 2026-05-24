@@ -36,6 +36,33 @@ prompt-injection and the open internet.
 A self-hosted service stack (`setup/walter-host/`) is optional — most
 adopters never deploy it. The agent framework works fully without it.
 
+### How it fits together
+
+```mermaid
+flowchart TD
+    Operator(["👤 Operator"]) --> Agent["AI agent<br/>(Claude / Codex / Cursor / Antigravity)"]
+    Agent -->|reads| AGENTS["AGENTS.md cascade<br/>(global → context → repo)"]
+    Agent -->|invokes| Bash["Bash tool call"]
+    Bash --> H1["bash-denylist<br/>(RCE patterns)"]
+    H1 --> H2["approval-gate<br/>(destructive ops)"]
+    H2 --> H3["network-gate<br/>(default-deny egress)"]
+    H3 --> H4["branch-flow-guard<br/>(push targets)"]
+    H4 --> H5["pre-commit-tests<br/>(tests/lint)"]
+    H5 -->|all-allow| Exec["✅ command runs"]
+    H1 -.->|block| Stop1["❌"]
+    H2 -.->|block| Stop2["❌"]
+    H3 -.->|block| Stop3["❌"]
+    H4 -.->|block| Stop4["❌"]
+    H5 -.->|block| Stop5["❌"]
+
+    Agent -->|optional| Stack["walter-host<br/>(25+ services on Hetzner)"]
+    Stack --> Plane["Plane"] & Forgejo["Forgejo"] & Grafana["Grafana"] & LiteLLM["LiteLLM"] & Council["Walter Council<br/>(6 agents)"]
+
+    style H3 stroke:#1976d2,stroke-width:3px
+    style Operator fill:#fff3e0
+    style Exec fill:#c8e6c9
+```
+
 ### Why
 
 | If you want… | Walter-OS gives you… |
@@ -54,11 +81,53 @@ diverge.
 
 ### Who is this for
 
-- **Builder** — solo engineer shipping product fast. Wants TDD + branch flow + 3-round review on every PR without writing a CI pipeline. Picks **Mode 1 or 2**.
-- **Founder** — pre-PMF, needs GTM tooling without a DevOps hire. Adds the founder-skills bundle (`brand-creation`, `landing-page-fast`, `pricing-experiment`, `cold-outreach-sequencer`, …) on top of the agent layer. Picks **Mode 2**.
-- **Operator** — homelab enthusiast, life-OS curious. Self-hosts the full stack (Plane, Forgejo, Grafana, Infisical, LiteLLM, Council) on Hetzner / a NAS / a homelab node. Picks **Mode 3**.
+Three primary personas. Read the "**NOT for you**" lines carefully — they
+matter more than the positive ones.
 
-If you're working on a hackathon, set `WALTER_CONTEXT=hackathons` in your shell — the [hackathon context](contexts/hackathons/AGENTS.md) drops rigor floors for 48-hour build windows.
+#### 🛠 Builder — solo engineer, shipping product fast
+
+- **For you if**: you write code most of the day; you context-switch between
+  Claude Code / Codex CLI / Cursor / Antigravity / terminal; you want the
+  same TDD + branch flow + 3-round review discipline on every PR without
+  writing a CI pipeline.
+- **NOT for you if**: you want a no-configuration experience; you need
+  enterprise SSO / RBAC / audit trails; you're not comfortable with Docker
+  + DNS + Linux sysadmin basics.
+- **Pick**: Mode 1 (Lite) or Mode 2 (client install).
+
+#### 🚀 Founder — pre-PMF, needs GTM tooling without a DevOps hire
+
+- **For you if**: you want self-hosted PostHog + Postiz + n8n + Metabase
+  without $300+/mo SaaS bills; you want AI agents that handle content +
+  analytics + competitive research routed through your own LiteLLM gateway
+  with cost visibility; you're OK spending a one-time 4-8 hour setup window.
+- **NOT for you if**: you need uptime SLAs (single-VM setup); you want
+  managed SaaS with customer support; your team is bigger than 2-3 people.
+- **Pick**: Mode 2 + the founder-skills bundle, OR Mode 3 for the full
+  GTM stack.
+
+#### 🏠 Operator — homelab enthusiast, life-OS
+
+- **For you if**: you want Syncthing + Headscale + Synapse/Element + Grafana
+  in one composable stack; you think of your VM as an "always-on personal
+  brain"; you want AI tools that respect privacy (secrets on your VM,
+  PHI on a local LLM).
+- **NOT for you if**: you want NAS-first setup; you want zero-downtime
+  auto-updates (updates are manual `git pull` + `compose up`); you need
+  mobile-first management.
+- **Pick**: Mode 3 (self-hosted stack).
+
+#### 🏁 Hackathon — time-boxed sprint mode (48h)
+
+Set `WALTER_CONTEXT=hackathons` in your shell — the
+[hackathon context](contexts/hackathons/AGENTS.md) drops rigor floors for
+sprint mode. The [`hackathon-spinup`](skills/hackathon-spinup/SKILL.md)
+skill orchestrates brand → landing → MVP → demo. Doesn't require the full
+VM stack.
+
+> 📖 **Deep dive**: [`docs/operational/personas.md`](docs/operational/personas.md)
+> — the same three personas with longer NOT-for-you sections, explicit
+> context-template paths, and the "relevant skills bundle" map.
 
 ---
 
@@ -98,11 +167,16 @@ Don't read this README for the full sequence — there are 15 steps with DNS, se
 
 - [`setup/agent-install/tier-3.md`](setup/agent-install/tier-3.md) — Tier III prompt (~1–2 hrs, ~€25–50/mo on Hetzner)
 - [`setup/agent-install/tier-4.md`](setup/agent-install/tier-4.md) — Tier IV adds Walter Council + automation (+~$10–50/mo LLM)
-- [`docs/operational/operator-setup-runbook.md`](docs/operational/operator-setup-runbook.md) — full step-by-step if you'd rather drive it yourself
-- [`docs/operational/requirements.md`](docs/operational/requirements.md) — hardware + DNS + SSH prerequisites
-- [`docs/operational/resource-budget.md`](docs/operational/resource-budget.md) — VM sizing per profile combo
-- [`docs/operational/stack-overview.md`](docs/operational/stack-overview.md) — service-by-service catalogue (hostname / RAM / profile)
-- [`docs/operational/walter-bridge.md`](docs/operational/walter-bridge.md) — LiteLLM gateway + CLI client setup
+
+> 📖 **Deep dives**:
+> [`operator-setup-runbook.md`](docs/operational/operator-setup-runbook.md) (full step-by-step) ·
+> [`requirements.md`](docs/operational/requirements.md) (hardware + DNS + SSH) ·
+> [`resource-budget.md`](docs/operational/resource-budget.md) (VM sizing per profile) ·
+> [`stack-overview.md`](docs/operational/stack-overview.md) (service-by-service catalogue) ·
+> [`walter-bridge.md`](docs/operational/walter-bridge.md) (LiteLLM + CLI clients) ·
+> [`customization-patterns.md`](docs/operational/customization-patterns.md) (4-layer customization) ·
+> [`troubleshooting.md`](docs/operational/troubleshooting.md) (22 symptom-cause-fix rows) ·
+> [`n8n-workflows.md`](docs/operational/n8n-workflows.md) (6 bundled workflows).
 
 ---
 
@@ -141,24 +215,57 @@ Every `Bash` tool call an agent issues passes through **five PreToolUse hooks**.
 | [`branch-flow-guard.sh`](hooks/branch-flow-guard.sh) | Push violates configured branch flow (`single-tier` vs `three-stage`)? |
 | [`pre-commit-tests.sh`](hooks/pre-commit-tests.sh) | Tests + lint + typecheck pass before commit? |
 
-Full operator guide: [`docs/operational/network-egress.md`](docs/operational/network-egress.md) covers wildcard syntax, two-factor bypass, per-CLI host extraction (curl/wget/git/gh/ssh/scp/rsync/nc/pip/npm/uvx/cargo/brew/gem/go + git extensions lfs/svn/annex/p4 + shell wrappers/substitutions), and known limitations.
-
 Daily supply-chain audit (`walter-os audit`) snapshots the SHA256 of every hook + the MCP server registry, diffs against baselines, and checks NVD for new CVEs in installed MCP servers. Hard-fails the next session if CVSS ≥ 7 findings are unresolved. Skill: [`skills/daily-supply-chain-audit/SKILL.md`](skills/daily-supply-chain-audit/SKILL.md).
+
+> 📖 **Deep dive**: [`docs/operational/network-egress.md`](docs/operational/network-egress.md)
+> — wildcard syntax, two-factor bypass, per-CLI host extraction
+> (curl/wget/git/gh/ssh/scp/rsync/nc/pip/npm/uvx/cargo/brew/gem/go + git
+> extensions lfs/svn/annex/p4 + shell wrappers/substitutions),
+> known limitations.
 
 ---
 
 ## Disciplines
 
+The core methodology is **SDD + TDD**: write the spec first, then drive
+the implementation through tests. Disciplines stack like this:
+
+```mermaid
+flowchart LR
+    Idea([Operator idea]) --> Brainstorm["/brainstorm<br/>(superpowers)"]
+    Brainstorm --> Spec["docs/specs/&lt;slug&gt;.md<br/>(SDD — spec first)"]
+    Spec --> Plan["/write-plan<br/>(2-5 min tasks)"]
+    Plan --> RGR{"Per-task<br/>RED → GREEN<br/>→ REFACTOR<br/>(TDD)"}
+    RGR --> Commit["Commit<br/>(conventional)"]
+    Commit --> Review["3-round review<br/>Copilot R1 → reviewer R2 → Codex R2"]
+    Review --> Merge{".walter-os/<br/>auto-merge<br/>file exists?"}
+    Merge -->|yes| Auto["✅ agent merges"]
+    Merge -->|no| Manual["👤 operator clicks Merge"]
+
+    style Spec fill:#fff3e0
+    style RGR fill:#e1f5fe
+    style Auto fill:#c8e6c9
+    style Manual fill:#ffe0b2
+```
+
 | Discipline | What it means |
 |---|---|
 | **Rigor** | Every task classified `tiny` / `small` / `major` before work starts. Major needs a spec at `docs/specs/<slug>.md` + a `/write-plan` execution plan. |
-| **TDD** | RED → GREEN → REFACTOR per task. The `test-driven-development` skill (from `obra/superpowers`) enforces it. |
+| **SDD (Spec-Driven Development)** | No code without a spec. The spec at `docs/specs/<slug>.md` declares acceptance criteria up front; tests reference them by ID (`[AC-1]`); the `definition-of-done-validator` refuses to let the PR open until every AC has at least one test. |
+| **TDD (Test-Driven Development)** | RED → GREEN → REFACTOR per task. The `test-driven-development` skill (from `obra/superpowers`) enforces it — skipping RED is a discipline violation. |
 | **Branch flow** | Operator-configurable via `WALTER_BRANCH_FLOW`. Default `single-tier` (feature → main); opt-in `three-stage` (feature → dev → staging → main). Direct pushes to `main`/`master`/`staging`/`production` are blocked unconditionally. |
 | **Review loop** | Copilot R1 → reviewer-subagent R2 → Codex R2 (standard, not fallback) → fix loop. Each round produces fix-commits referencing `Refs: copilot-review-round-N` / `codex-review-round-N` in the footer. |
 | **Definition of Done** | Spec ACs map 1:1 to tests, all tests pass, lint/typecheck/format clean, security scan clean, reviewer-subagent approved. The [`definition-of-done-validator`](skills/definition-of-done-validator/SKILL.md) skill enforces this before PR. |
+| **Merge policy** | **Default**: operator clicks merge. **Per-repo opt-in**: `touch .walter-os/auto-merge-authorized` in the repo root authorizes the agent to merge a PR once all gates pass (CI green + DoD validator clean + review loop converged). The touch-file is committed (so the policy travels with the repo) and is the only place where the otherwise-hardcoded "never auto-merge" rule yields. Removing the file restores manual-merge. |
 | **Commit hygiene** | Conventional commits: `feat:` / `fix:` / `chore:` / `docs:` / `refactor:` / `test:` / `perf:` / `security:`. Body explains *why*; subject ≤ 72 chars imperative. |
 
 PR titles use `[TYPE] -CATEGORY- title` (≤ 60 chars). CI gate: [`.github/workflows/pr-title-lint.yml`](.github/workflows/pr-title-lint.yml).
+
+> 📖 **Deep dive**: `obra/superpowers` skills
+> ([`brainstorming`](https://github.com/obra/superpowers) / `writing-plans` /
+> `executing-plans` / `test-driven-development`) own the per-step methodology.
+> The Walter-OS layer adds the spec template + the review-loop + the
+> auto-merge touchfile convention.
 
 ---
 
@@ -196,7 +303,13 @@ Four contexts auto-load based on cwd:
 | **personal** | `~/personal/*` | [`contexts/personal/AGENTS.md`](contexts/personal/AGENTS.md) |
 | **hackathons** | `WALTER_CONTEXT=hackathons` (env) | [`contexts/hackathons/AGENTS.md`](contexts/hackathons/AGENTS.md) |
 
-The cascade resolves most-specific-wins: repo > context > global. See [`docs/operational/operator-contexts.md`](docs/operational/operator-contexts.md) for the full diagram + customization guide.
+The cascade resolves most-specific-wins: repo > context > global.
+
+> 📖 **Deep dives**:
+> [`operator-contexts.md`](docs/operational/operator-contexts.md) (cascade diagram + customization) ·
+> [`skills/INDEX.md`](skills/INDEX.md) (full skills catalogue) ·
+> [`mcp/servers.json`](mcp/servers.json) (canonical MCP registry) ·
+> [`agents/`](agents/) (Walter Council definitions).
 
 ---
 
@@ -212,9 +325,12 @@ The operator's personal overlay lives at `~/.config/walter-os/overlay/` (private
 | `~/.config/walter-os/egress-allowlist.txt` | Network egress allowlist — `walter-os egress {add,remove,list,test,import}` to manage |
 | `~/.config/walter-os/trust-tiers.yml` | Per-agent trust tier for Council `approval-gate.sh` |
 
-`WALTER_BRANCH_FLOW` accepts `single-tier` (default) or `three-stage`. See [ADR-0013](docs/decisions/0013-solo-operator-merge-policy.md) for the trade-offs.
+`WALTER_BRANCH_FLOW` accepts `single-tier` (default) or `three-stage`. See [docs/decisions/0013-solo-operator-merge-policy.md](docs/decisions/0013-solo-operator-merge-policy.md) for the trade-offs.
 
-Full env-var reference: [`docs/operational/operator-contexts.md`](docs/operational/operator-contexts.md). Per-context customization examples: [`contexts/_examples/`](contexts/_examples/).
+> 📖 **Deep dive**: [`customization-patterns.md`](docs/operational/customization-patterns.md)
+> (4 layers: per-service / profiles / per-skill / per-context) ·
+> [`operator-contexts.md`](docs/operational/operator-contexts.md) (env-var reference) ·
+> [`contexts/_examples/`](contexts/_examples/) (real-world templates).
 
 ---
 
@@ -344,7 +460,7 @@ Reference platforms: macOS (Apple Silicon) + Hetzner Cloud Ubuntu 24.04. Other L
 
 ## License
 
-Dual-licensed by directory tree per [ADR-0018](docs/decisions/0018-licensing-strategy.md):
+Dual-licensed by directory tree:
 
 | Tree | License | SPDX |
 |---|---|---|
