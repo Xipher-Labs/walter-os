@@ -191,6 +191,26 @@ teardown() {
   [[ "$output" == *"WALTER_DOMAIN"* ]]
 }
 
+@test "AC-3 (R2 B3): import SKIPS lowercase \${var} when unset (no silent corruption)" {
+  # R2 finding B3: previous uppercase-only regex `[A-Z_][A-Z0-9_]*` missed
+  # lowercase / mixedCase vars → envsubst silently expanded them to "" →
+  # `llm.` / `secrets.` bogus hosts in the allowlist. With the regex
+  # extended to [A-Za-z_][A-Za-z0-9_]*, unset lowercase vars are also
+  # detected + skipped with WARN.
+  local src="$TMP_HOME/src.txt"
+  printf '%s\n' "api.github.com" 'llm.${walter_domain}' > "$src"
+
+  run bash -c "unset walter_domain; bash '$WALTER_OS_BIN' egress import '$src' 2>&1"
+  [ "$status" -eq 0 ]
+  # Bogus `llm.` host must NOT be in the file.
+  ! grep -q '^llm\.$' "$ALLOWLIST"
+  # Real host stays.
+  grep -qxF "api.github.com" "$ALLOWLIST"
+  # WARN names the unset var (case-preserving).
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"walter_domain"* ]]
+}
+
 @test "AC-3: egress import preserves comments + blanks" {
   local src="$TMP_HOME/src.txt"
   printf '%s\n' "# header comment" "" "api.github.com" > "$src"

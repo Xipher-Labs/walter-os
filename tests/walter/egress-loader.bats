@@ -211,11 +211,39 @@ EOF
   [ "$status" -eq 1 ]
 }
 
-@test "AC-1: wildcard star alone is NOT a catch-all" {
+@test "AC-1: wildcard star alone is NOT a catch-all (multi-label host)" {
   # A bare `*` line must not match any host. Operators who genuinely want
   # to disable the gate set WALTER_EGRESS_ALLOW_OVERRIDE=1 instead.
   echo '*' > "$TMP_CFG/egress-allowlist.txt"
   run bash -c "source '$LOADER'; walter_egress_host_allowed api.github.com"
+  [ "$status" -eq 1 ]
+}
+
+@test "AC-1 (R2): bare * does NOT match single-label hosts like 'localhost' either" {
+  # R2 finding: under per-label semantics, a 1-label `*` would otherwise
+  # match every 1-label hostname (`localhost`, any private hostname).
+  # The loader must explicitly reject the 1-label `*` case.
+  echo '*' > "$TMP_CFG/egress-allowlist.txt"
+  for h in localhost myserver vm intranet-host; do
+    run bash -c "source '$LOADER'; walter_egress_host_allowed '$h'"
+    [ "$status" -eq 1 ] || { echo "expected DENY for '$h', got $status"; return 1; }
+  done
+}
+
+@test "AC-1 (R2): mid-label '*' is treated as LITERAL string, not fnmatch glob" {
+  # Pattern `a*b.example.com` matches the LITERAL host whose first label
+  # is `a*b` (rare but valid), NOT `axb.example.com` (which would only
+  # match under fnmatch-style semantics). Pins per-label whole-token
+  # `*`-vs-literal compare so a future refactor that adds fnmatch fails
+  # this test.
+  echo 'a*b.example.com' > "$TMP_CFG/egress-allowlist.txt"
+  # Literal `a*b` host → match (the pattern matches its own literal).
+  run bash -c "source '$LOADER'; walter_egress_host_allowed 'a*b.example.com'"
+  [ "$status" -eq 0 ]
+  # fnmatch-style `axb` → DENY (no expansion).
+  run bash -c "source '$LOADER'; walter_egress_host_allowed 'axb.example.com'"
+  [ "$status" -eq 1 ]
+  run bash -c "source '$LOADER'; walter_egress_host_allowed 'ab.example.com'"
   [ "$status" -eq 1 ]
 }
 

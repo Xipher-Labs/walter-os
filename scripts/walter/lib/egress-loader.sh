@@ -86,6 +86,16 @@ walter_egress_host_allowed() {
     IFS='.' read -r -a pat_labels <<< "$lowered"
     pat_n="${#pat_labels[@]}"
 
+    # A bare single-label `*` is REJECTED. Under per-label semantics it
+    # would otherwise match every 1-label hostname — including
+    # `localhost` and any unqualified host an operator might pass to
+    # `ssh hostname`. R2 finding (network-egress-allowlist) — the
+    # original "wildcard star alone is NOT a catch-all" claim was only
+    # true for multi-label hosts. Fix-closed: refuse to match.
+    if [[ "$pat_n" -eq 1 && "${pat_labels[0]}" == "*" ]]; then
+      continue
+    fi
+
     # Per spec D-5: `*` does NOT cross dots. Patterns and hosts must
     # therefore have the same label count. `*.foo.com` (3 labels) only
     # matches `X.foo.com` (3 labels), never `foo.com` (2) or `a.b.foo.com`
@@ -94,7 +104,10 @@ walter_egress_host_allowed() {
 
     match=1
     for ((i = 0; i < pat_n; i++)); do
-      # A single `*` token matches exactly one label.
+      # A single `*` token matches exactly one label. Mid-label glob
+      # (`a*b`) is treated as a LITERAL string match against the host
+      # label (no fnmatch-style expansion) — `a*b.example.com` only
+      # matches a host whose first label is literally `a*b`.
       [[ "${pat_labels[$i]}" == "*" ]] && continue
       # Otherwise literal compare (already lowercased on both sides).
       [[ "${pat_labels[$i]}" == "${host_labels[$i]}" ]] && continue

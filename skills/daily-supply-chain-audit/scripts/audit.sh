@@ -845,6 +845,97 @@ check_external_hooks() {
   rm -f "$current_tmp"
 }
 
+# ---------- 8c. Egress allowlist sanity (#122 OSS Trust A-2, AC-5) ----------
+#
+# Three checks against the operator's ~/.config/walter-os/egress-allowlist.txt:
+#   1. File missing → info finding (operator hasn't opted in; that's fine
+#      on day 0, but worth surfacing once a day so it doesn't sit forever).
+#   2. File present but empty (all comments/blanks) → info finding (every
+#      outbound call is blocked — usually a misconfig).
+#   3. Any allowlist entry whose host resolves to a private / loopback /
+#      link-local IP → high finding (DNS-rebinding risk: an attacker who
+#      controls DNS for the host can redirect calls inside the operator's
+#      LAN). Pure DNS lookup, no probe-traffic.
+#
+# Sibling pattern: this check ALSO snapshots the file's SHA256 alongside
+# the other config-drift baselines, so drift between audit runs is
+# reported by check_config_drift. We don't duplicate that here.
+check_egress_allowlist() {
+  local cfg="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+  local allowlist="$cfg/egress-allowlist.txt"
+
+  if [[ ! -f "$allowlist" ]]; then
+    finding info "egress-allowlist-missing" \
+      "No egress allowlist at $allowlist — network-gate hook blocks every outbound call from the agent." \
+      "Import the bundled example: walter-os egress import \"\${WALTER_OS_HOME}/contexts/_examples/egress-allowlist.example.txt\""
+    return 0
+  fi
+
+  # Count non-blank, non-comment lines. awk over grep here because
+  # `grep -c` exits non-zero on no-match which combined with `||` would
+  # corrupt the variable on empty files (`entry_count` could become
+  # "0\n0" — fails arithmetic comparison).
+  local entry_count
+  entry_count="$(awk '/^[[:space:]]*(#|$)/ {next} {n++} END {print n+0}' "$allowlist" 2>/dev/null)"
+  if [[ "${entry_count:-0}" -eq 0 ]]; then
+    finding info "egress-allowlist-empty" \
+      "Egress allowlist at $allowlist exists but has no entries — network-gate blocks every outbound call." \
+      "Add hosts via: walter-os egress add <host>  OR  walter-os egress import <path>"
+    return 0
+  fi
+
+  # Private-IP rebinding check. Per-entry DNS lookup; treat resolver
+  # failures as benign (the host may legitimately be unreachable from
+  # the audit host but reachable from where the agent runs). Only flag
+  # SUCCESSFUL lookups that land on private space.
+  local resolver=""
+  if command -v getent >/dev/null 2>&1; then
+    resolver="getent"
+  elif command -v dscacheutil >/dev/null 2>&1; then
+    resolver="dscacheutil"
+  elif command -v dig >/dev/null 2>&1; then
+    resolver="dig"
+  fi
+  [[ -z "$resolver" ]] && return 0  # no resolver → skip (no false-positives)
+
+  local entry private_hits=""
+  while IFS= read -r entry; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    [[ -z "$entry" || "${entry:0:1}" == "#" ]] && continue
+    # Skip wildcard patterns + IPv6 bracketed literals — we can't / don't
+    # want to resolve a wildcard, and an IPv6 literal that's loopback
+    # (`[::1]`) is operator-explicit (they wrote the literal IP).
+    case "$entry" in
+      \**|*\**) continue ;;       # wildcard
+      \[*\]) continue ;;          # IPv6 literal
+    esac
+    local first_ip=""
+    case "$resolver" in
+      getent)
+        first_ip="$(getent ahosts "$entry" 2>/dev/null | awk 'NR==1 {print $1}')" ;;
+      dscacheutil)
+        first_ip="$(dscacheutil -q host -a name "$entry" 2>/dev/null | awk '/^ip_address:/ {print $2; exit}')" ;;
+      dig)
+        first_ip="$(dig +short +time=2 +tries=1 "$entry" 2>/dev/null | awk 'NR==1')" ;;
+    esac
+    [[ -z "$first_ip" ]] && continue
+    # Private / loopback / link-local IPv4 ranges. IPv6 ULA + loopback
+    # are covered too (fc00::/7, ::1, fe80::/10).
+    case "$first_ip" in
+      10.*|127.*|169.254.*|192.168.*) private_hits+="$entry → $first_ip; " ;;
+      172.1[6-9].*|172.2[0-9].*|172.3[01].*) private_hits+="$entry → $first_ip; " ;;
+      ::1|fc??:*|fd??:*|fe8?:*|fe9?:*|fea?:*|feb?:*) private_hits+="$entry → $first_ip; " ;;
+    esac
+  done < "$allowlist"
+
+  if [[ -n "$private_hits" ]]; then
+    finding high "egress-allowlist-private-ip" \
+      "Allowlist entries resolve to private/loopback/link-local IPs (DNS-rebinding risk): ${private_hits}" \
+      "Either remove the entry (walter-os egress remove <host>) OR document the intent (replace the host with an IP literal: walter-os egress add <literal-ip>)."
+  fi
+}
+
 # ---------- 9. Notifications ----------
 
 notify() {
@@ -874,6 +965,7 @@ main() {
   check_min_release_age
   check_skill_scripts
   check_external_hooks
+  check_egress_allowlist
 
   # Write report
   {

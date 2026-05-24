@@ -1490,7 +1490,18 @@ cmd_uninstall() {
 #                           with WARN on stderr).
 
 _egress_allowlist_path() {
-  echo "${WALTER_CONFIG:-${HOME}/.config/walter-os}/egress-allowlist.txt"
+  # R2 NIT: delegate to the loader's resolver when present so both halves
+  # (`add`/`remove`/`list`/`import` here + `test` via sourced loader)
+  # see the same on-disk file even when XDG_CONFIG_HOME is set. Falls
+  # back to the literal expansion if the loader isn't sourceable (e.g.
+  # walter-os symlinked outside its repo).
+  local loader="${WALTER_OS_HOME}/scripts/walter/lib/egress-loader.sh"
+  if [[ -f "$loader" ]]; then
+    # shellcheck disable=SC1090
+    ( source "$loader" && walter_egress_allowlist_path )
+    return
+  fi
+  echo "${WALTER_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/walter-os}/egress-allowlist.txt"
 }
 
 _egress_print_usage() {
@@ -1508,7 +1519,8 @@ USAGE
 }
 
 # Validate a host argument. Accepts apex domains (`foo.com`),
-# subdomains, and per-spec wildcards (`*.foo.com`, `*.*.foo.com`).
+# subdomains, per-spec wildcards (`*.foo.com`, `*.*.foo.com`), and IPv6
+# bracketed literals (`[::1]`, `[fd00::1]`).
 # Rejects empty strings + anything with whitespace or shell metachars.
 _egress_validate_host() {
   local host="$1"
@@ -1516,14 +1528,19 @@ _egress_validate_host() {
     echo "walter-os egress: host argument is required" >&2
     return 2
   fi
-  # No whitespace, no shell metachars. We permit `*`, `.`, `-`, `_`,
-  # alphanumerics — covers DNS + wildcard syntax. Reject everything else
-  # loudly rather than write junk the loader will never match.
-  if [[ ! "$host" =~ ^[A-Za-z0-9._*-]+$ ]]; then
-    echo "walter-os egress: invalid host '$host' — must match [A-Za-z0-9._*-]" >&2
-    return 2
+  # Two valid shapes (covering DNS hostnames, wildcards, and IPv6
+  # bracketed literals). Split the check to dodge POSIX character-class
+  # escaping for `[` and `]`, which differs subtly across regex engines.
+  #   1. DNS hostname or wildcard: `[A-Za-z0-9._*-]+`
+  #   2. IPv6 bracketed literal:   `\[[0-9a-fA-F:]+\]`  (R2 W1)
+  if [[ "$host" =~ ^[A-Za-z0-9._*-]+$ ]]; then
+    return 0
   fi
-  return 0
+  if [[ "$host" =~ ^\[[0-9a-fA-F:]+\]$ ]]; then
+    return 0
+  fi
+  echo "walter-os egress: invalid host '$host' — must be a DNS hostname (with optional '*' label) or an IPv6 bracketed literal like '[::1]'" >&2
+  return 2
 }
 
 cmd_egress() {
@@ -1627,7 +1644,7 @@ cmd_egress() {
             var_unset=1
             line_missing+=" \$${var}"
           fi
-        done < <(printf '%s\n' "$line" | grep -oE '\$\{?[A-Z_][A-Z0-9_]*\}?' || true)
+        done < <(printf '%s\n' "$line" | grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*\}?' || true)
         if [[ "$var_unset" -eq 1 ]]; then
           echo "walter-os egress import: WARN line $line_no skipped (unset:${line_missing}): $line" >&2
           skipped_lines+="$line"$'\n'
