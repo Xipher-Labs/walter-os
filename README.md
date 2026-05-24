@@ -38,9 +38,10 @@ machines and tools.
 curated skills library (80+ skills incl. the `obra/superpowers` plugin), a
 default-deny security floor (`bash-denylist` + `approval-gate` + `network-gate`
 in the PreToolUse chain — every outbound network call is blocked unless the
-host is in the operator's allowlist), an `install.sh` with one-touch `--upgrade`
-+ `--uninstall` (operator's pristine `.md` files are restored from the oldest
-backup), a self-hosted service stack (25+ services in `setup/walter-host/`),
+host is in the operator's allowlist), an `install.sh` with one-touch
+`--upgrade` / `--uninstall` (operator's pristine `.md` files are restored
+from the oldest backup), a self-hosted service stack (25+ services in
+`setup/walter-host/`),
 a Walter Council of six specialized agents, and an MCP catalog of 22 servers.
 
 **Walter-OS IS NOT**: a zero-config starter kit you can `./install.sh` and

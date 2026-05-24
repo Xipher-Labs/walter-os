@@ -1033,17 +1033,76 @@ _inspect_segment() {
       return 0
       ;;
     pip|pip3|npm|pnpm|yarn|uv|uvx|cargo|brew|gem|go)
-      # These read host config from environment / config files. Per spec
-      # AC-2, fail-CLOSED on implicit host.
-      #
-      # An OPERATOR who explicitly passes `--index-url` / `--registry` /
-      # equivalent can extract a parseable host — we honour that. The
-      # absence of any URL token in the command line is the trigger to
-      # block. Codex R2 finding C1: previously we only ran
-      # `_host_from_url` against each TOKEN, but `--registry=URL` /
-      # `--index-url=URL` puts the URL inside the token (after `=`),
-      # so the regex (anchored on `^scheme://`) didn't match. Now we
-      # peel the `--<flag>=` prefix before extraction.
+      # Per-tool network-subcommand allowlists. Codex R7 finding CR7-A:
+      # the previous logic fail-CLOSED on ANY invocation without an
+      # explicit URL — but `npm test`, `npm run build`, `pnpm lint`,
+      # `cargo --version`, `cargo build`, `go test`, etc. are LOCAL
+      # operations that don't open the network. Treat unknown
+      # subcommands as LOCAL by default; only the listed
+      # network-touching subcommands fail-CLOSED on implicit host.
+      local _sub="${tokens[1]:-}"
+      # Strip a leading `-` if the first token is a global flag
+      # (e.g. `npm -g install …` — but normalise to subcommand).
+      local _sub_i=1
+      while [[ $_sub_i -lt ${#tokens[@]} && "${tokens[$_sub_i]:0:1}" == "-" ]]; do
+        _sub_i=$((_sub_i + 1))
+      done
+      _sub="${tokens[$_sub_i]:-}"
+
+      local _is_network=0
+      case "$cli" in
+        npm|pnpm|yarn)
+          case "$_sub" in
+            install|i|add|update|up|upgrade|fetch|publish|ci|audit|search|view|info|outdated|deprecate|access|owner|adduser|login|logout|whoami|hook|org|profile|star|stars|team|token|unpublish|dist-tag|sb|version)
+              _is_network=1 ;;
+          esac ;;
+        pip|pip3|uv|uvx)
+          case "$_sub" in
+            install|download|search|wheel|hash|index|publish|upload)
+              _is_network=1 ;;
+          esac ;;
+        cargo)
+          case "$_sub" in
+            install|publish|update|fetch|search|login|logout|owner|yank|package|add|remove)
+              _is_network=1 ;;
+          esac ;;
+        brew)
+          case "$_sub" in
+            install|reinstall|upgrade|update|fetch|audit|tap|untap|search|info|home|outdated|missing|deps|uses|bump-formula-pr|bump-cask-pr)
+              _is_network=1 ;;
+          esac ;;
+        gem)
+          case "$_sub" in
+            install|update|fetch|search|push|owner|outdated|pristine|signin|signout)
+              _is_network=1 ;;
+          esac ;;
+        go)
+          case "$_sub" in
+            get|install|mod)
+              # `go mod download` / `go mod tidy` / `go mod why -m` touch network.
+              # `go mod edit` / `go mod init` / `go mod verify` are local.
+              if [[ "$_sub" == "mod" ]]; then
+                local _gosubsub="${tokens[$((_sub_i + 1))]:-}"
+                case "$_gosubsub" in
+                  download|tidy|why) _is_network=1 ;;
+                esac
+              else
+                _is_network=1
+              fi
+              ;;
+          esac ;;
+      esac
+
+      if [[ "$_is_network" -eq 0 ]]; then
+        # Local subcommand — allow. Operator's `npm test` / `cargo
+        # build` / `go test` / `brew list` etc. don't touch network.
+        echo "ALLOW"
+        return 0
+      fi
+
+      # Network-touching subcommand. Look for an explicit URL host;
+      # otherwise fail-CLOSED on implicit-host (operator must pass
+      # --index-url / --registry or use the two-factor bypass).
       local t host found=0 url_candidate
       for t in "${tokens[@]:1}"; do
         url_candidate="$t"
@@ -1053,13 +1112,13 @@ _inspect_segment() {
         if host="$(_host_from_url "$url_candidate")" && [[ -n "$host" ]]; then
           found=1
           if ! walter_egress_host_allowed "$host"; then
-            echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via '$cli'). Add via: walter-os egress add '$host'"
+            echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via '$cli $_sub'). Add via: walter-os egress add '$host'"
             return 0
           fi
         fi
       done
       if [[ "$found" -eq 0 ]]; then
-        echo "BLOCK: network-gate: '$cli' uses an implicit host (config/env). Explicitly pass --index-url / --registry / equivalent host argument, OR allowlist the default host and re-run with WALTER_EGRESS_ALLOW_OVERRIDE=1 + --allow-egress-outbound."
+        echo "BLOCK: network-gate: '$cli $_sub' uses an implicit host (config/env). Explicitly pass --index-url / --registry / equivalent host argument, OR allowlist the default host and re-run with WALTER_EGRESS_ALLOW_OVERRIDE=1 + --allow-egress-outbound."
         return 0
       fi
       echo "ALLOW"

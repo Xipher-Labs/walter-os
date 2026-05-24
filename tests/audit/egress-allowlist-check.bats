@@ -89,6 +89,23 @@ EOF
   [[ "$output" != *"egress-allowlist-empty"* ]]
 }
 
+@test "AC-5 (Codex R7 CR7-B): IPv4 literal entries are NOT flagged as private (operator-explicit)" {
+  # The remediation hint tells operators to replace a hostname with
+  # a literal IP if the private destination is intentional. Without
+  # this skip, operators following the remediation got the same
+  # `egress-allowlist-private-ip` alert daily forever.
+  cat > "$ALLOWLIST" <<'EOF'
+192.168.1.10
+127.0.0.1
+10.0.0.1
+EOF
+  run _run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"egress-allowlist-private-ip"* ]]
+  # And the file isn't reported as empty.
+  [[ "$output" != *"egress-allowlist-empty"* ]]
+}
+
 @test "AC-5 (R2 B6): wildcard entries are skipped (no false-positive on '*')" {
   cat > "$ALLOWLIST" <<'EOF'
 *.openrouter.ai

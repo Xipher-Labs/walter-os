@@ -909,13 +909,22 @@ check_egress_allowlist() {
     entry="${entry#"${entry%%[![:space:]]*}"}"
     entry="${entry%"${entry##*[![:space:]]}"}"
     [[ -z "$entry" || "${entry:0:1}" == "#" ]] && continue
-    # Skip wildcard patterns + IPv6 bracketed literals — we can't / don't
-    # want to resolve a wildcard, and an IPv6 literal that's loopback
-    # (`[::1]`) is operator-explicit (they wrote the literal IP).
+    # Skip wildcard patterns + IPv4/IPv6 literals. Codex R7 finding
+    # CR7-B: the remediation says operators can document an
+    # intentional private target by replacing the hostname with a
+    # literal IP, but IPv4 literals (`192.168.1.10`, `127.0.0.1`)
+    # were still resolved through DNS (no-op for literals) and
+    # reported as high findings, so operators who followed the
+    # remediation kept getting the same alert daily. Treat IPv4 +
+    # IPv6 literals as operator-explicit (they wrote the IP, they
+    # know).
     case "$entry" in
       \**|*\**) continue ;;       # wildcard
       \[*\]) continue ;;          # IPv6 literal
     esac
+    if [[ "$entry" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      continue                     # IPv4 literal — operator-explicit
+    fi
     # Resolve ALL addresses, not just the first. Copilot R3 finding: a
     # host whose first A/AAAA record is public but whose second is
     # 10.x.x.x would otherwise miss the rebinding-risk check.

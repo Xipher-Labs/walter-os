@@ -965,6 +965,90 @@ _call_hook_other() {
 }
 
 # ---------------------------------------------------------------------------
+# Codex R7 CR7-A: local package-manager subcommands must pass through
+# (npm test, cargo --version, go test, brew list, etc.)
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Codex CR7-A): 'npm test' (local subcommand) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'npm test'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'npm run build' (local subcommand) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'npm run build'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'pnpm lint' (local subcommand) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'pnpm lint'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'cargo build' (local) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'cargo build --release'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'cargo --version' (local) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'cargo --version'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'go test ./...' (local) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'go test ./...'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'go get example.com/x' (network) still fail-CLOSED on implicit host" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'go get example.com/x'
+  [ "$status" -eq 0 ]
+  # go get without URL → fall to implicit-host block
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR7-A): 'go mod tidy' (network sub-sub) fail-CLOSED on implicit host" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'go mod tidy'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR7-A): 'go mod init mypkg' (local sub-sub) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'go mod init github.com/foo/mypkg'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR7-A): 'npm install lodash' (network) still fail-CLOSED on implicit registry" {
+  # The prior behavior is preserved for network-touching subcommands.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'npm install lodash'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR7-A): 'brew list' (local) passes through" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'brew list'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+# ---------------------------------------------------------------------------
 # Two-factor bypass (WALTER_EGRESS_ALLOW_OVERRIDE=1 + --allow-egress-outbound)
 # ---------------------------------------------------------------------------
 
