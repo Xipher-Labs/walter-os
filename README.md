@@ -100,6 +100,9 @@ Don't read this README for the full sequence — there are 15 steps with DNS, se
 - [`setup/agent-install/tier-4.md`](setup/agent-install/tier-4.md) — Tier IV adds Walter Council + automation (+~$10–50/mo LLM)
 - [`docs/operational/operator-setup-runbook.md`](docs/operational/operator-setup-runbook.md) — full step-by-step if you'd rather drive it yourself
 - [`docs/operational/requirements.md`](docs/operational/requirements.md) — hardware + DNS + SSH prerequisites
+- [`docs/operational/resource-budget.md`](docs/operational/resource-budget.md) — VM sizing per profile combo
+- [`docs/operational/stack-overview.md`](docs/operational/stack-overview.md) — service-by-service catalogue (hostname / RAM / profile)
+- [`docs/operational/walter-bridge.md`](docs/operational/walter-bridge.md) — LiteLLM gateway + CLI client setup
 
 ---
 
@@ -248,6 +251,31 @@ What is left alone:
 **Non-TTY default is SAFE**: in headless contexts (CI / pipe / scripted), the uninstall skips restore + emits the manual `mv` command instead of silently deleting operator backups. Pass `--restore-backups` explicitly to force restore in non-interactive runs.
 
 Spec: [`docs/specs/install-uninstall-restore-backups.md`](docs/specs/install-uninstall-restore-backups.md). Closing PR: [#191](https://github.com/Xipher-Labs/walter-os/issues/191).
+
+---
+
+## Further reading
+
+The README only covers the top of the funnel. Deep-dive docs by topic:
+
+| Topic | Doc |
+|---|---|
+| Detailed personas (with "NOT for you" sections) | [`docs/operational/personas.md`](docs/operational/personas.md) |
+| Self-hosted stack catalogue (25+ services) | [`docs/operational/stack-overview.md`](docs/operational/stack-overview.md) |
+| VM sizing per profile combo | [`docs/operational/resource-budget.md`](docs/operational/resource-budget.md) |
+| LiteLLM gateway + CLI client setup | [`docs/operational/walter-bridge.md`](docs/operational/walter-bridge.md) |
+| Default-deny egress allowlist guide | [`docs/operational/network-egress.md`](docs/operational/network-egress.md) |
+| Customization patterns (4 layers) | [`docs/operational/customization-patterns.md`](docs/operational/customization-patterns.md) |
+| Symptom-cause-fix troubleshooting | [`docs/operational/troubleshooting.md`](docs/operational/troubleshooting.md) |
+| n8n workflow catalogue | [`docs/operational/n8n-workflows.md`](docs/operational/n8n-workflows.md) |
+| Full step-by-step VM install | [`docs/operational/operator-setup-runbook.md`](docs/operational/operator-setup-runbook.md) |
+| Operator contexts cascade | [`docs/operational/operator-contexts.md`](docs/operational/operator-contexts.md) |
+| Multi-device sync (Syncthing) | [`docs/operational/multi-device-sync.md`](docs/operational/multi-device-sync.md) |
+| Control Tower runbook | [`docs/operational/control-tower-runbook.md`](docs/operational/control-tower-runbook.md) |
+| ADRs (architecture decisions) | [`docs/decisions/`](docs/decisions/) |
+| Feature specs + implementation plans | [`docs/specs/`](docs/specs/) |
+
+For "how do I get help?" → [SUPPORT.md](SUPPORT.md).
 
 ---
 

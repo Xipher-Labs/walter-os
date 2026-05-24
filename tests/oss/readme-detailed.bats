@@ -269,3 +269,55 @@ setup() {
 @test "cross-link: apps/control-tower/ exists" {
   [ -d "apps/control-tower" ]
 }
+
+# ── New deep-dive docs extracted from the v0.5.1 rewrite ───────────────────
+
+@test "cross-link: docs/operational/personas.md exists (extracted from old README)" {
+  [ -f "docs/operational/personas.md" ]
+}
+
+@test "cross-link: docs/operational/stack-overview.md exists (extracted from old README)" {
+  [ -f "docs/operational/stack-overview.md" ]
+}
+
+@test "cross-link: docs/operational/walter-bridge.md exists (extracted from old README)" {
+  [ -f "docs/operational/walter-bridge.md" ]
+}
+
+@test "cross-link: docs/operational/troubleshooting.md exists (extracted from old README)" {
+  [ -f "docs/operational/troubleshooting.md" ]
+}
+
+@test "cross-link: docs/operational/customization-patterns.md exists (extracted from old README)" {
+  [ -f "docs/operational/customization-patterns.md" ]
+}
+
+@test "cross-link: docs/operational/resource-budget.md exists (extracted from old README)" {
+  [ -f "docs/operational/resource-budget.md" ]
+}
+
+@test "cross-link: docs/operational/n8n-workflows.md exists (extracted from old README)" {
+  [ -f "docs/operational/n8n-workflows.md" ]
+}
+
+@test "cross-link: SUPPORT.md exists at repo root" {
+  [ -f "SUPPORT.md" ]
+}
+
+@test "README.md Further reading section exists" {
+  grep -qF "## Further reading" README.md
+}
+
+@test "README.md Further reading links all 7 extracted deep-dive docs" {
+  grep -qF "docs/operational/personas.md" README.md
+  grep -qF "docs/operational/stack-overview.md" README.md
+  grep -qF "docs/operational/walter-bridge.md" README.md
+  grep -qF "docs/operational/troubleshooting.md" README.md
+  grep -qF "docs/operational/customization-patterns.md" README.md
+  grep -qF "docs/operational/resource-budget.md" README.md
+  grep -qF "docs/operational/n8n-workflows.md" README.md
+}
+
+@test "README.md points to SUPPORT.md for help" {
+  grep -qF "SUPPORT.md" README.md
+}
