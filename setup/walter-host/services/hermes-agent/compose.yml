@@ -10,7 +10,15 @@
 
 services:
   hermes-agent:
-    image: nousresearch/hermes-agent:v2026.5.7
+    # walter-os flavor: upstream + faster-whisper for local STT. See Dockerfile.
+    # First-time build (~30s): `docker compose --profile hermes-agent build`.
+    # `up` auto-builds if the tag is missing locally.
+    image: walter-os/hermes-agent:v2026.5.7-stt
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_VERSION: v2026.5.7
     container_name: hermes-agent
     restart: unless-stopped
     profiles:
