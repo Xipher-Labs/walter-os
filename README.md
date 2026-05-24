@@ -8,9 +8,9 @@
 
 [![License: Apache-2.0 + AGPL-3.0](https://img.shields.io/badge/License-Apache--2.0%20%2B%20AGPL--3.0-blue.svg)](#license)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.4.5--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.5.1--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
-[![Audit: 6/6 P0 closed](https://img.shields.io/badge/audit-6%2F6_P0_closed-brightgreen.svg)](docs/operational/security-audit-2026-05-11.md)
+[![Security: default-deny egress](https://img.shields.io/badge/security-default--deny_egress-brightgreen.svg)](docs/operational/network-egress.md)
 
 </div>
 
@@ -24,17 +24,24 @@ This release is still alpha, but the core idea is ready to study, fork, and
 improve.
 
 Walter-OS is an opinionated, single-repository operations framework that wires
-Claude Code, Codex CLI, and Cursor-friendly repo rules together under the same
-agent contract, the same skills catalog, and the same MCP configuration. A
-self-hosted service stack (`walter-host`) is the optional fourth layer — most
-adopters never deploy it, and the agent framework works fully without it.
-You fork the repo, apply a personal overlay, and get a consistent AI-agent
-environment that follows you across machines and tools.
+Claude Code, Codex CLI, Cursor, and Google Antigravity together under the same
+agent contract, the same skills catalog, and the same MCP configuration. All
+four read `AGENTS.md` natively (Cursor + Antigravity ship adapter generators
+too — `install.sh --cursor-rules` / `--antigravity-rules` — for environments
+that prefer the per-tool mirror). A self-hosted service stack (`walter-host`)
+is the optional fourth layer — most adopters never deploy it, and the agent
+framework works fully without it. You fork the repo, apply a personal
+overlay, and get a consistent AI-agent environment that follows you across
+machines and tools.
 
 **Walter-OS IS**: an agent contract layer (`AGENTS.md` + context files), a
-curated skills library (50+ skills), a VM bootstrap stack (25+ self-hosted
-services), a Walter Council of six specialized agents, and an MCP catalog
-(29 servers across default and high-risk profiles).
+curated skills library (80+ skills incl. the `obra/superpowers` plugin), a
+default-deny security floor (`bash-denylist` + `approval-gate` + `network-gate`
+in the PreToolUse chain — every outbound network call is blocked unless the
+host is in the operator's allowlist), an `install.sh` with one-touch `--upgrade`
++ `--uninstall` (operator's pristine `.md` files are restored from the oldest
+backup), a self-hosted service stack (25+ services in `setup/walter-host/`),
+a Walter Council of six specialized agents, and an MCP catalog of 22 servers.
 
 **Walter-OS IS NOT**: a zero-config starter kit you can `./install.sh` and
 walk away from. It is not a stable API — this is alpha software with breaking
@@ -46,7 +53,7 @@ overlay before it does anything useful for you.
 
 ## Status: alpha — read this before relying on it
 
-> **Current**: v0.4.5-alpha. Things iterate fast, things break, things get
+> **Current**: v0.5.1-alpha. Things iterate fast, things break, things get
 > corrected on the fly. **Pin to a tag** if you depend on a specific
 > behavior.
 >
@@ -55,98 +62,92 @@ overlay before it does anything useful for you.
 > At v1.0, four layers will be frozen with a deprecation policy: the
 > AGENTS.md cascade + env vars (Layer 1), the SKILL.md format (Layer 2),
 > the `walter-os` CLI subcommands (Layer 3), and the
-> `approval-gate`/`branch-flow-guard` hook invariants (Layer 4). Everything
-> else (service stack, MCP catalog, internal scripts, Council, Control
-> Tower UI) is intentionally NOT frozen and can evolve freely. The
-> conformance test suite at `tests/oss/conformance.bats` is the executable
-> form of the charter.
+> `approval-gate`/`branch-flow-guard`/`network-gate` hook invariants
+> (Layer 4). Everything else (service stack, MCP catalog, internal
+> scripts, Council, Control Tower UI) is intentionally NOT frozen and can
+> evolve freely. The conformance test suite at
+> `tests/oss/conformance.bats` is the executable form of the charter.
 >
 > Until v1.0, breaking changes are normal — but every release is tagged
 > and the CHANGELOG documents the diff.
->
->
-> Walter-OS started as a **100% tailor-made setup for a single operator**
-> and is in the process of being generalized for OSS adoption.
-> v0.2.0 was the first release intended for third parties. v0.3.0
-> shipped process-hygiene + depersonalization cleanup plus the first
-> founder-skills (track-pending). v0.4.0 added the rest of the
-> founder-skills bundle + OpenRouter LiteLLM fallback + audit P0/P1
-> closures. v0.4.3 landed the OSS Trust spec batch (11 specs / no
-> behavior change). **v0.4.4 (this release) closes the 2026-05-21
-> external-review remediation:** the severity-gate framework spec
-> (PR #114), the BLOCKER audit-hook content-hashing + RCE fix (#124),
-> defense-in-depth admin auth on 17 dashboards (#130), npm-install
-> integrity + lifecycle-script blocking for OpenClaw (#127), and six
-> other security/operational fixes. See `CHANGELOG.md` for the full
-> set + the related follow-up issues opened during the cycle.
 
-### What's new since v0.3.0
+### What's new in v0.5.x
 
-- **6/6 P0 audit findings closed.** Indirect prompt injection through
-  `.claude/lessons.md` (P0-06 / P1-08) is fixed via bounded-section
-  framing of the SessionStart / PreCompact hook output. See
-  `docs/operational/security-audit-2026-05-11.md`.
-- **P1 hardening sweep.** approval-gate fails closed on missing
-  `yq`, standing-approvals path is hardcoded (the previous
-  `WALTER_STANDING_APPROVALS` env var is now ignored with a WARN log;
-  `WALTER_STANDING_APPROVALS_OVERRIDE` is an explicit testing-only
-  hatch that ALSO requires `WALTER_AGENT_ALLOW_OVERRIDE=1` in the
-  same shell), external submodule hooks now under a sha256-baseline
-  integrity gate (stored separately at
-  `~/.config/walter-os/external-hook-checksums.json` — distinct from
-  the in-repo `hook-checksums.json` baseline, since the submodule
-  tree and the repo hook table are managed independently),
-  `~/.config/walter-os/env` will load through an allowlist parser
-  instead of `source` (in flight via PR #69; not yet on `main` at
-  the time of this README refresh), n8n basic auth on as
-  defense-in-depth behind Cloudflare Access, `@latest` npm pins
-  replaced in sub-router Dockerfiles.
-- **Founder-skills bundle complete.** `track-pending`,
-  `terms-policy-generator`, `legal-doc-review`,
-  `financial-plan-builder`, `hiring-toolkit`, plus the
-  [`skills/founder-skills/INDEX.md`](skills/founder-skills/INDEX.md)
-  workflow catalogue (the INDEX itself is a sixth `founder-skills`
-  skill — it's both an index document and a skill the agent
-  activates to navigate the bundle).
-- **OpenRouter as a LiteLLM provider.** Six routes
-  (`openrouter/claude`, `openrouter/claude-opus`, `openrouter/deepseek`,
-  `openrouter/qwen`, `openrouter/mistral`, `openrouter/grok`) wired
-  into the fallback chain as last-resort failover after the primary
-  Anthropic / OpenAI / Google API keys + claude-code-router
-  subscription proxy.
-- **Release workflow consolidation.** `release.yml` and the previous
-  `release-security.yml` collapsed into one workflow with two jobs
-  (`release` → `security`). `workflow_dispatch` input lets operators
-  re-sign an existing tag without rolling a new one. Closes the
-  GitHub-token-can't-dispatch-release-event gap.
->
-> **What this means for adopters:**
->
-> - **Breaking changes are normal until v1.0.** Pin to a specific commit or
->   tag in production. Read the CHANGELOG before pulling.
-> - **IaC idempotency is the goal**, not always the reality. Some bootstrap
->   sequences may need a second `./install.sh` invocation or a
->   `docker compose up -d` retry. We're tightening this every release.
-> - **The framework is opinionated by design.** The opinions came from one
->   operator's daily workflow. We've stripped operator-personal config (for
->   example, personal operator-specific configuration and defaults) but some
->   opinions persist (TDD discipline, branch flow, 3-round review, AGPLv3). If
->   they don't fit your style, fork + diverge.
-> - **Cross-compatibility is best-effort.** Tested primarily on macOS (Apple
->   Silicon) + Hetzner Cloud Ubuntu 24.04. Linux dev workstations should work;
->   Windows / WSL is unverified. Other cloud providers are documented as
->   alternatives but only Hetzner is the reference deployment.
-> - **Issues and PRs are appreciated.** Especially for: reproducible bugs on
->   non-reference platforms, depersonalization leaks we missed, security
->   findings, doc gaps that confused you the first time. See
->   [CONTRIBUTING.md](CONTRIBUTING.md) for the convention.
-> - **Security disclosures are private.** See [SECURITY.md](SECURITY.md) — do
->   not file public issues for vulnerabilities.
->
-> If you want a polished, stable, support-contracted agent framework, this
-> isn't it yet. If you want to see how one operator runs ten products with AI
-> at the wheel and learn the discipline they enforce — and contribute back —
-> you're in the right place.
+**v0.5.1 — default-deny security floor + Antigravity + uninstall + Walter-VM
+ops hardening** (12 merged PRs since v0.5.0; details in
+[CHANGELOG.md](CHANGELOG.md)).
+
+- **`#122` OSS Trust A-2 — default-deny network egress allowlist.**
+  `hooks/network-gate.sh` blocks every outbound network call (curl,
+  wget, git, gh, ssh, scp, rsync, nc, pip, npm, uvx, cargo, brew,
+  gem, go + git extensions lfs/svn/annex/p4) unless the target host
+  is in `~/.config/walter-os/egress-allowlist.txt`. New
+  `walter-os egress {add,remove,list,test,import}` CLI;
+  `install.sh` offers a one-touch import of the bundled allowlist.
+  Token-aware two-factor bypass for emergencies. Full guide at
+  [`docs/operational/network-egress.md`](docs/operational/network-egress.md).
+- **`#190` Antigravity adapter** (`install.sh --antigravity-rules`)
+  — sibling of the Cursor adapter. Generates a project-local
+  `.agent/rules/walter-os.md` from `AGENTS.md` with an
+  `agents-md-sha256` trailer for `walter-os doctor --antigravity`
+  to detect drift.
+- **`#191` Uninstall + backup restore.** `install.sh --uninstall`
+  and `walter-os uninstall` remove the symlinks AND restore the
+  OPERATOR'S PRISTINE pre-Walter-OS `.md` files from the OLDEST
+  `.pre-walter-os.<ts>` backup. Naming switched to ISO-8601 UTC
+  so the oldest-by-name is the oldest-by-time. Non-TTY default is
+  SAFE (skip-restore + print the manual `mv` command — never
+  silently delete operator backups).
+- **Walter-VM ops triage wave (#174 / #176 / #195 / #172 / #183 /
+  #189 / #186 / #187).** Cloudflared tunnel routes ALL Caddy
+  subdomains via Caddy from a single source-of-truth array;
+  Control Tower image bundles the walter-os CLI so the Council
+  toggle works; CT HA-status uses `/api/instances/` (Plane
+  returns 404 on `/api/health`); postiz pinned to v2.20.2
+  pre-Temporal; LiteLLM tile false-unreachable fixed (CF Access
+  auth gap); review-loop composite Action emits a stable
+  `rounds-completed` JSON contract + mounts Codex CLI auth
+  properly; CLA gate pinned by SHA.
+
+**v0.5.0 — OSS-readiness milestone** (15 merged PRs since v0.4.5).
+Dual-license posture (Apache-2.0 default + AGPL-3.0-or-later for
+`setup/walter-host/`, per ADR-0018), CLA scaffold (ADR-0019),
+Xipher Labs S.R.L. legal entity attribution (ADR-0022), v1.0
+stability charter conformance suite, AGENTS.md cascade published as
+a vendor-neutral RFC, Cursor adapter, Walter-OS Lite zero-friction
+entry tier, 3-round review loop packaged as a reusable composite
+GitHub Action, Control Tower login-redirect production fix.
+
+**v0.4.x and earlier**: see [CHANGELOG.md](CHANGELOG.md).
+
+### What this means for adopters
+
+- **Breaking changes are normal until v1.0.** Pin to a specific commit or
+  tag in production. Read the CHANGELOG before pulling.
+- **IaC idempotency is the goal**, not always the reality. Some bootstrap
+  sequences may need a second `./install.sh` invocation or a
+  `docker compose up -d` retry. We're tightening this every release.
+- **The framework is opinionated by design.** The opinions came from one
+  operator's daily workflow. We've stripped operator-personal config
+  (personal-overlay scaffolding lives in `~/.config/walter-os/overlay/`
+  under your control, not in the repo) but some opinions persist (TDD
+  discipline, branch flow, 3-round review, dual-license). If they don't
+  fit your style, fork + diverge.
+- **Cross-compatibility is best-effort.** Tested primarily on macOS (Apple
+  Silicon) + Hetzner Cloud Ubuntu 24.04. Linux dev workstations should work;
+  Windows / WSL is unverified. Other cloud providers are documented as
+  alternatives but only Hetzner is the reference deployment.
+- **Issues and PRs are appreciated.** Especially for: reproducible bugs on
+  non-reference platforms, depersonalization leaks we missed, security
+  findings, doc gaps that confused you the first time. See
+  [CONTRIBUTING.md](CONTRIBUTING.md) for the convention.
+- **Security disclosures are private.** See [SECURITY.md](SECURITY.md) — do
+  not file public issues for vulnerabilities.
+
+If you want a polished, stable, support-contracted agent framework, this
+isn't it yet. If you want to see how one operator runs ten products with AI
+at the wheel and learn the discipline they enforce — and contribute back —
+you're in the right place.
 
 ---
 
@@ -406,50 +407,51 @@ explicitly by name: "apply the `hackathon-spinup` skill to this project."
 
 ## MCP catalog
 
-Walter-OS manages two MCP configuration profiles. The `install.sh` script
-writes both to `~/.claude/`.
+Walter-OS manages MCP configuration profiles via `install.sh` (writes to
+`~/.claude/`). The canonical registry is [`mcp/servers.json`](mcp/servers.json)
+— 22 servers as of v0.5.1. The default-vs-high-risk profile separation
+is **in flight**: today every server in the JSON ships in the default
+profile; the `risk_class` annotations are being filled in across the
+2026-Q2 OSS Trust epic so the next minor release can ship a true
+default-only profile + a manual high-risk profile.
 
-### Default profile (29 MCPs, auto-loaded)
+### Default profile (22 servers, auto-loaded)
 
-Low-blast-radius, read-mostly servers. Loaded in every Claude Code session.
+Loaded in every Claude Code session.
 
 | Category | MCPs |
 |---|---|
 | **Dev tools** | `github`, `forgejo`, `sentry`, `playwright`, `maestro` |
 | **Project management** | `linear`, `plane` |
-| **Storage** | `filesystem`, `supabase`, `postgres` |
-| **Communication** | `slack`, `gmail`, `telegram` |
-| **Productivity** | `google_calendar`, `google_drive`, `notion`, `obsidian` |
+| **Storage** | `filesystem`, `supabase` |
+| **Communication** | `slack`, `gmail` |
+| **Productivity** | `google_calendar`, `google_drive`, `notion` |
 | **AI / infra** | `sequential_thinking`, `memory`, `brave_search` |
 | **Design** | `penpot` |
 | **Observability** | `grafana`, `elevenlabs` |
+| **Risk-class flagged (already in JSON, planned for manual profile)** | `bitwarden`, `cloudflare`, `stripe` |
 
-### Manual profile (6 MCPs, opt-in only)
+### Manual profile (planned — not yet in `mcp/servers.json`)
 
-Destructive / money-spending / lateral-movement-risk. Not loaded by default.
-Switch profiles before destructive provisioning work.
+Destructive / money-spending / lateral-movement-risk servers an operator
+opts in to per-session. Today these live OUTSIDE the canonical JSON;
+operators who want them install via their personal overlay's MCP config.
+The planned set: `hetzner` (VM provisioning), `vercel` (production
+deploys), `railway` (service lifecycle), plus the JSON-flagged
+`bitwarden` / `cloudflare` / `stripe` once profile separation lands.
 
-| MCP | Why high-risk |
-|---|---|
-| `hetzner` | Can provision and destroy VMs; money-spending |
-| `cloudflare` | Can modify DNS and firewall rules |
-| `vercel` | Can deploy to production |
-| `stripe` | Money-spending |
-| `railway` | Can provision and destroy services |
-| `bitwarden` | Full credential vault access |
+When the profile separation ships, the switch sequence will be:
 
 To switch to the manual profile:
 
 ```bash
-mv ~/.claude/settings.json ~/.claude/settings.default.json
-mv ~/.claude/settings.high-risk.json ~/.claude/settings.json
-# ... do high-risk work ...
-mv ~/.claude/settings.json ~/.claude/settings.high-risk.json
-mv ~/.claude/settings.default.json ~/.claude/settings.json
+walter-os profile high-risk         # swap to manual MCP profile
+# ... do high-risk work (provisioning, money-spending, prod deploys) ...
+walter-os profile default           # swap back
 ```
 
-Or: `walter-os profile high-risk` / `walter-os profile default` if the CLI
-alias is installed.
+(The underlying mechanism is a settings.json swap — `walter-os help
+profile` documents the manual `mv` form.)
 
 ---
 
@@ -459,40 +461,62 @@ alias is installed.
 walter-os/
 ├── AGENTS.md                    # Global agent contract (loaded by all tools)
 ├── CHANGELOG.md                 # Semver changelog
+├── VERSION                      # Single-source semver (0.5.1)
+├── LICENSE                      # AGPL-3.0-or-later (canonical text)
+├── LICENSE-APACHE               # Apache-2.0 (canonical text — default tree)
+├── NOTICE                       # Operator attribution + dual-license map
+├── COMMERCIAL.md                # Entry point for commercial-license requests
 ├── agents/                      # Walter Council agent definitions
 ├── apps/
-│   └── control-tower/           # Next.js Council UI (must be docker build'd)
-├── bin/                         # Executable scripts (walter-os CLI)
-├── commands/                    # Slash commands (/brainstorm, /write-plan, etc.)
+│   └── control-tower/           # Next.js 16 Council UI (docker build'd)
+├── bin/                         # walter-os CLI + sibling walter CLI
+├── commands/                    # Slash commands (/brainstorm, /write-plan, /execute-plan)
 ├── contexts/
-│   ├── work/AGENTS.md           # Work context template
-│   ├── projects-personal/AGENTS.md  # Personal dev context template
-│   ├── personal/AGENTS.md       # Life context template
-│   └── hackathons/AGENTS.md     # Hackathon context template (operator-contexts PR)
+│   ├── work/AGENTS.md                   # Work context template
+│   ├── projects-personal/AGENTS.md      # Personal dev context template
+│   ├── personal/AGENTS.md               # Life context template
+│   ├── hackathons/AGENTS.md             # Hackathons (WALTER_CONTEXT=hackathons)
+│   └── _examples/                       # Reference operator overlays (incl.
+│                                        # egress-allowlist.example.txt)
 ├── docs/
-│   ├── decisions/               # Architecture Decision Records (ADRs)
-│   ├── operational/             # Runbooks, checklists, audits
+│   ├── decisions/               # ADRs (numbered NNNN-<slug>.md)
+│   ├── operational/             # Runbooks, audits, operator guides
 │   └── specs/                   # Feature specs + implementation plans
 ├── external/
-│   └── marchetto-agent-skills/  # Git submodule — additional skills
-├── hooks/                       # Shell hooks (pre-commit, branch-flow-guard, etc.)
-├── install.sh                   # Symlinks skills/agents/commands/hooks to ~/.claude
+│   ├── marchetto-agent-skills/  # Submodule — additional skills (SHA-pinned)
+│   └── vercel-agent-skills/     # Submodule — additional skills (SHA-pinned)
+├── hooks/                       # PreToolUse chain: bash-denylist, approval-gate,
+│                                # network-gate, branch-flow-guard, pre-commit-tests
+├── install.sh                   # Symlinks + writes ~/.claude/settings.json hook chain;
+│                                # --upgrade / --uninstall / --cursor-rules /
+│                                # --antigravity-rules / --check / --dry-run
 ├── mcp/
-│   └── servers.json             # Canonical MCP server registry with metadata
-├── scripts/                     # VM bootstrap and maintenance scripts
+│   └── servers.json             # Canonical MCP registry (22 servers as of v0.5.1)
+├── scripts/                     # Bootstrap + maintenance scripts;
+│   └── walter/lib/              # Shell libs sourced by hooks (env-loader,
+│                                # egress-loader, version-compare, …)
 ├── setup/
-│   └── vm/
-│       ├── cloudflare/          # Cloudflare Tunnel setup scripts
-│       ├── services/            # Per-service compose + config files
-│       └── bootstrap-vm.sh     # Full VM provisioning entrypoint
-├── skills/                      # Walter-OS native skill library
-├── tests/                       # Test suites (bats, shell, wiki lint)
-│   └── oss/                     # OSS-specific tests (depersonalization, structure)
+│   ├── walter-host/             # Self-hosted service stack (Cloudflare Tunnel,
+│   │                            # per-service compose files, Caddy, …)
+│   ├── agent-install/           # Tier I-IV install playbooks for agent-led setup
+│   └── <per-service>/           # caddy/, grafana/, headscale/, plane/, postgres/,
+│                                # prometheus/, walter-bridge/, … (operator overlays
+│                                # for the homelab stack)
+├── skills/                      # Walter-OS native skill library (~85 skills)
+├── tests/                       # bats suites
+│   ├── audit/                   # Supply-chain audit tests
+│   ├── cli/                     # walter-os subcommand tests
+│   ├── hooks/                   # PreToolUse hook tests (incl. network-gate)
+│   ├── install/                 # install.sh flow tests
+│   ├── oss/                     # OSS-specific (depersonalization, structure,
+│   │                            # license-files, conformance to v1.0 charter)
+│   └── walter/                  # scripts/walter/lib/* tests
 └── wiki/                        # Internal wiki (frontmatter-validated)
 ```
 
 The `install.sh` script symlinks `skills/`, `agents/`, `commands/`, and
-`hooks/` into `~/.claude/` and `~/.codex/`. Run it on every machine where
+`hooks/` into `~/.claude/` and `~/.codex/`, and registers the PreToolUse
+hook chain in `~/.claude/settings.json`. Run it on every machine where
 you use Claude Code or Codex CLI.
 
 ---
@@ -557,6 +581,23 @@ Closes <PROJ-NNN>
 ```
 
 Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `security`.
+
+### Security floor (PreToolUse chain)
+
+Every Bash command an agent issues passes through five hooks in order:
+
+| Hook | Question it answers |
+|---|---|
+| `bash-denylist.sh`    | Is this an RCE pattern (`curl X \| bash`, `eval $VAR`, `bash -c "$(…)"`, `rm -rf /`)? |
+| `approval-gate.sh`    | Does this destructive op need operator confirmation under the trust-tier matrix? |
+| `network-gate.sh`     | Is the target host in `~/.config/walter-os/egress-allowlist.txt`? (Default-deny.) |
+| `branch-flow-guard.sh`| Does this push violate the configured branch flow (`single-tier` vs `three-stage`)? |
+| `pre-commit-tests.sh` | Do tests + lint + typecheck still pass before the commit? |
+
+All five must allow before a command runs. Each hook is fail-CLOSED on
+parse errors, missing dependencies, or unexpected input — a partial
+install never leaves the gate open. Operator guide:
+[`docs/operational/network-egress.md`](docs/operational/network-egress.md).
 
 ---
 
@@ -1738,14 +1779,14 @@ reproducibility.
 
 ## Known limitations and alpha status
 
-Walter-OS is **alpha software** (v0.4.5-alpha, latest tested). Expect breaking changes between
+Walter-OS is **alpha software** (v0.5.1-alpha, latest tested). Expect breaking changes between
 minor versions. The following limitations are known and tracked:
 
 - **Single-VM only**: no horizontal scaling, no Kubernetes support. The compose
   stack is designed for a single node. Multi-VM deployments require manual
   configuration work not covered by this repo.
 - **No mobile management UI**: Control Tower is a desktop browser application.
-  Mobile access to the Walter Council is not supported in v0.4.
+  Mobile access to the Walter Council is not supported in v0.5.
 - **Manual service updates**: `docker compose pull` only updates services with
   `latest` or non-pinned tags. Pinned services (the majority) require manual
   tag bumps in the compose files.
