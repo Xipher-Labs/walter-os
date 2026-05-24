@@ -296,8 +296,17 @@ Either:
 ### "How do I turn the hook off entirely for a session?"
 
 The hook is registered in `~/.claude/settings.json` PreToolUse Bash
-chain. To disable temporarily, use `walter-os disable-hook
-network-gate` (re-enable with `walter-os enable-hook network-gate`).
+chain. Today the only supported way to disable it is to edit that file
+directly and remove (or comment out) the entry pointing at
+`hooks/network-gate.sh`, then restart Claude Code. The
+`walter-os enable-hook` / `disable-hook` CLI subcommands are
+intentionally stubs in v0.5.x (they're scheduled for the Walter Council
+Phase 2 surface that lets the operator toggle individual hooks without
+hand-editing JSON).
+
+For one-off bypasses, prefer the two-factor escape (`WALTER_EGRESS_
+ALLOW_OVERRIDE=1` + `--allow-egress-outbound`) over disabling the hook
+entirely — that leaves the rest of the surface protected.
 
 We do **not** recommend disabling the hook as a long-term posture.
 The whole point of default-deny is that you have to think about every

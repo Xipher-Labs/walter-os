@@ -2244,8 +2244,20 @@ prompt_egress_import() {
   say "  plus llm./secrets. under \${WALTER_DOMAIN}."
   say ""
   printf "  Import the bundled allowlist now? [Y/n] "
-  local answer
-  read -r answer
+  local answer=""
+  local read_rc=0
+  # Capture read's exit code WITHOUT aborting `set -e`: a failed read
+  # (EOF / Ctrl-D / closed stdin) returns non-zero. On EOF we treat the
+  # situation as "no answer; skip import + print manual hint" rather
+  # than the [Y/n] default-Yes branch, since EOF usually means the
+  # install was interrupted unexpectedly. Pressing ENTER (empty line,
+  # read_rc=0) still imports per the [Y/n] convention. Copilot R4.
+  read -r answer || read_rc=$?
+  if [[ "$read_rc" -ne 0 ]]; then
+    warn "  No answer (EOF) — skipping import. To opt in later:"
+    warn "    walter-os egress import \"${example}\""
+    return 0
+  fi
   case "$answer" in
     n|N|no|NO)
       warn "  Skipped — every outbound call from the agent is BLOCKED until"

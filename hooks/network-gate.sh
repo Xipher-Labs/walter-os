@@ -225,10 +225,12 @@ _host_from_userhostpath() {
 # almost always use forward-slash paths after the colon (`host:/tmp/`
 # absolute, `host:foo` relative). We accept BOTH forms — relative
 # (`host:foo`) AND absolute (`host:/path`) — and require the host name
-# to contain at least one `.` OR be at least 4 chars long. That
+# to contain at least one `.` OR be at least 4 characters long. That
 # heuristic rules out single-letter drive paths (`C:\foo`, `D:/`) while
 # admitting realistic short hostnames like `walter-vm.tail.example` or
-# `nas`.
+# `node` / `nas1`. (Sub-4-character bare hostnames like `nas` need the
+# operator to pass the full `user@nas:` form so `_host_from_userhostpath`
+# matches instead, OR to use the FQDN form which contains a `.`.)
 #
 # R2 (Copilot) fix: previous regex required non-`/` after `:`, so
 # `scp file host:/tmp/` legitimately formatted absolute paths failed
