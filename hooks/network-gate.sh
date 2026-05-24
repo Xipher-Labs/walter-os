@@ -155,22 +155,69 @@ _emit_allow_with_warn() {
 # Using `sed` to insert NEWLINE markers + reading line by line is the
 # portable way to do this in bash 3.2.
 _split_segments() {
-  # Order matters: handle 2-char operators (`&&`, `||`) BEFORE the
-  # single-char ones (`|`, `&`) so we don't split `&&` into two `&`
-  # tokens (which would then split the right-hand command at `&`).
+  # Quote-aware segment split. Walks the command character by character
+  # tracking single-quote / double-quote / backtick state, and emits a
+  # segment break only when a shell separator (`;`, `&&`, `||`, `|`,
+  # `&`) appears OUTSIDE any quoted region.
   #
-  # Copilot R3 fix: previously the `&` (background) split required
-  # whitespace on both sides (`[[:space:]]&[[:space:]]`), so
-  # `true&curl https://evil.example` (no space before `&`) was
-  # tokenized as one segment with CLI `true&curl` (unknown) → fell
-  # through to ALLOW, bypassing the gate. Now we split on a single
-  # `&` after `&&` has been consumed.
-  printf '%s\n' "$1" \
-    | sed -E -e 's/&&/\n/g' \
-             -e 's/\|\|/\n/g' \
-             -e 's/;/\n/g' \
-             -e 's/\|/\n/g' \
-             -e 's/&/\n/g'
+  # Codex R2 fix C2: the previous sed-based splitter ran BEFORE any
+  # tokenization, so it split quoted URLs with query strings mid-URL
+  # (`curl 'https://api.github.com/x?q=a&page=1'` became two segments,
+  # the second `page=1'` and the first missing the closing `'`). With
+  # quote awareness, the `&` inside the URL stays part of the curl
+  # segment.
+  #
+  # Earlier Copilot R3 fix (the `&` bypass — `true&curl evil.example`):
+  # still covered, because `&` outside any quote IS a real separator.
+  #
+  # Bash 3-compatible (substring + `case` + integer arithmetic only).
+  local cmd="$1"
+  local n=${#cmd} i=0
+  local in_sq=0 in_dq=0 in_bt=0 esc=0
+  local seg=""
+  local c c2
+  while [[ $i -lt $n ]]; do
+    c="${cmd:$i:1}"
+    c2="${cmd:$i:2}"
+    if [[ "$esc" -eq 1 ]]; then
+      # Previous char was a backslash inside a "" — this char is
+      # escaped, pass through unconditionally.
+      seg+="$c"
+      esc=0
+      i=$((i + 1))
+      continue
+    fi
+    if [[ "$in_sq" -eq 0 && "$in_dq" -eq 0 && "$in_bt" -eq 0 ]]; then
+      # Outside any quoted region — operators are real here.
+      case "$c2" in
+        "&&"|"||")
+          printf '%s\n' "$seg"; seg=""; i=$((i + 2)); continue ;;
+      esac
+      case "$c" in
+        ";"|"|"|"&")
+          printf '%s\n' "$seg"; seg=""; i=$((i + 1)); continue ;;
+        "'") in_sq=1 ;;
+        '"') in_dq=1 ;;
+        '`') in_bt=1 ;;
+      esac
+    elif [[ "$in_dq" -eq 1 ]]; then
+      case "$c" in
+        '"') in_dq=0 ;;
+        '\\') esc=1 ;;
+      esac
+    elif [[ "$in_sq" -eq 1 ]]; then
+      # Single-quoted strings have NO escapes (per POSIX).
+      [[ "$c" == "'" ]] && in_sq=0
+    elif [[ "$in_bt" -eq 1 ]]; then
+      [[ "$c" == '`' ]] && in_bt=0
+    fi
+    seg+="$c"
+    i=$((i + 1))
+  done
+  # Tail segment (no trailing operator).
+  if [[ -n "$seg" ]]; then
+    printf '%s\n' "$seg"
+  fi
 }
 
 # Return the first non-flag positional argument from a tokenized arg list.
@@ -621,10 +668,18 @@ _inspect_segment() {
       # An OPERATOR who explicitly passes `--index-url` / `--registry` /
       # equivalent can extract a parseable host — we honour that. The
       # absence of any URL token in the command line is the trigger to
-      # block.
-      local t host found=0
+      # block. Codex R2 finding C1: previously we only ran
+      # `_host_from_url` against each TOKEN, but `--registry=URL` /
+      # `--index-url=URL` puts the URL inside the token (after `=`),
+      # so the regex (anchored on `^scheme://`) didn't match. Now we
+      # peel the `--<flag>=` prefix before extraction.
+      local t host found=0 url_candidate
       for t in "${tokens[@]:1}"; do
-        if host="$(_host_from_url "$t")" && [[ -n "$host" ]]; then
+        url_candidate="$t"
+        case "$t" in
+          --*=*) url_candidate="${t#*=}" ;;
+        esac
+        if host="$(_host_from_url "$url_candidate")" && [[ -n "$host" ]]; then
           found=1
           if ! walter_egress_host_allowed "$host"; then
             echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via '$cli'). Add via: walter-os egress add '$host'"

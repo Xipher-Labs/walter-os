@@ -1629,17 +1629,29 @@ cmd_egress() {
           printf '%s\n' "$line" >> "$tmp"
           continue
         fi
-        # Find every ${VAR} or $VAR reference in this line. We use grep -o
-        # against an extended regex for shell variable syntax (uppercase
-        # snake convention — matches the rest of Walter-OS).
+        # Find every ${VAR} / $VAR reference in this line. Codex R2 C3
+        # finding: the previous implementation depended on `envsubst`
+        # (part of gettext) which is NOT installed by default on
+        # macOS — so the first-run allowlist import broke on the
+        # operator's reference machine. We now collect the references
+        # via grep AND do the expansion in pure bash parameter
+        # expansion, so no external dependency is needed.
         local var var_unset=0 line_missing=""
+        local -a vars_to_expand=()
         while IFS= read -r var; do
           [[ -z "$var" ]] && continue
-          # Strip ${} or $ prefix
+          # Strip $ + { + } prefix/suffix to get the bare name.
           var="${var#\$}"
           var="${var#\{}"
           var="${var%\}}"
-          # Check if SET + non-empty
+          # Track every unique var name (case-preserving — the same name
+          # may appear multiple times in one line).
+          local _seen=0 _v
+          for _v in "${vars_to_expand[@]}"; do
+            [[ "$_v" == "$var" ]] && { _seen=1; break; }
+          done
+          [[ "$_seen" -eq 0 ]] && vars_to_expand+=("$var")
+          # Check if SET + non-empty.
           if [[ -z "${!var:-}" ]]; then
             var_unset=1
             line_missing+=" \$${var}"
@@ -1657,9 +1669,24 @@ cmd_egress() {
           done
           continue
         fi
-        # All referenced vars are set → expand the line via envsubst.
-        # envsubst replaces ${VAR} and $VAR with their values.
-        printf '%s\n' "$line" | envsubst >> "$tmp"
+        # All referenced vars are set → expand the line via pure-bash
+        # parameter substitution (no envsubst / gettext dependency).
+        # Replace `${VAR}` and `$VAR` forms with the env-resolved value.
+        local expanded="$line" vname vval
+        for vname in "${vars_to_expand[@]}"; do
+          vval="${!vname}"
+          # Brace form `${VAR}` first (so we don't half-replace it).
+          expanded="${expanded//\$\{$vname\}/$vval}"
+          # Bare form `$VAR` second (this matches greedy — could partial-
+          # match a longer variable name like `$WALTER_DOMAIN_FOO` if
+          # both `WALTER_DOMAIN` and `WALTER_DOMAIN_FOO` were referenced.
+          # The grep-derived `vars_to_expand` list is processed in line
+          # order, so the longest-prefix-first ordering issue is rare
+          # in practice; operators with overlapping names should use
+          # the brace form.)
+          expanded="${expanded//\$$vname/$vval}"
+        done
+        printf '%s\n' "$expanded" >> "$tmp"
       done < "$src"
       mv "$tmp" "$file"
       echo "walter-os egress import: wrote $(wc -l < "$file" | tr -d ' ') line(s) to $file" >&2

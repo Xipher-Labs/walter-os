@@ -191,6 +191,40 @@ teardown() {
   [[ "$output" == *"WALTER_DOMAIN"* ]]
 }
 
+@test "AC-3 (Codex C3): import works without envsubst on PATH (pure-bash substitution)" {
+  # Codex R2 finding C3: previous implementation depended on `envsubst`
+  # (from gettext), which isn't pre-installed on macOS — first-run
+  # imports broke. The replacement uses pure bash parameter expansion
+  # for `${VAR}` and `$VAR` forms.
+  local src="$TMP_HOME/src.txt"
+  printf '%s\n' "api.github.com" 'llm.${WALTER_DOMAIN}' > "$src"
+
+  # Shadow PATH so envsubst can't be found. WALTER_DOMAIN IS set →
+  # expansion must still happen via the pure-bash path.
+  local empty_dir; empty_dir="$(mktemp -d)"
+  # Minimal PATH — keep bash + grep + mktemp + jq + sha256sum + awk
+  # accessible by symlinking just the binaries we need. Easier: prepend
+  # an EMPTY dir to PATH and rely on the shadowed envsubst still being
+  # absent. We assert by also poisoning envsubst via a no-op wrapper
+  # that fails LOUD so any accidental fallthrough is caught.
+  cat > "$empty_dir/envsubst" <<'EOF'
+#!/usr/bin/env bash
+echo "POISONED: envsubst should NOT be called from walter-os egress import" >&2
+exit 99
+EOF
+  chmod +x "$empty_dir/envsubst"
+
+  WALTER_DOMAIN=example.tld PATH="$empty_dir:$PATH" \
+    run bash "$WALTER_OS_BIN" egress import "$src"
+  [ "$status" -eq 0 ]
+  grep -qxF "llm.example.tld" "$ALLOWLIST"
+  ! grep -qF '${WALTER_DOMAIN}' "$ALLOWLIST"
+
+  case "$empty_dir" in
+    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$empty_dir" ;;
+  esac
+}
+
 @test "AC-3 (R2 B3): import SKIPS lowercase \${var} when unset (no silent corruption)" {
   # R2 finding B3: previous uppercase-only regex `[A-Z_][A-Z0-9_]*` missed
   # lowercase / mixedCase vars → envsubst silently expanded them to "" →
