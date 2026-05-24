@@ -291,14 +291,27 @@ _inspect_segment() {
   seg="${seg#"${seg%%[![:space:]]*}"}"
   [[ -z "$seg" ]] && { echo "ALLOW"; return 0; }
 
-  # Tokenize. read -ra splits on $IFS (default whitespace) and respects
-  # backslash escapes. We don't try to honour shell quoting here — the
-  # parser is intentionally pessimistic: a quoted URL is treated like an
-  # unquoted one, which means we MAY parse hosts out of strings inside
-  # quotes. For an ALLOWLIST, false-positive host detection is safer
-  # than false-negative (an unparsed host means we silently allow).
-  local -a tokens
-  read -ra tokens <<< "$seg"
+  # Tokenize. `read -ra` splits on $IFS (default whitespace) and respects
+  # backslash escapes but does NOT honour shell quoting — so
+  # `curl "https://api.github.com"` yields the token
+  # `"https://api.github.com"` (with quotes). We strip ONE surrounding
+  # layer of `'…'` / `"…"` from each token below so URL extraction sees
+  # the bare URL. Real-world quoted invocations (especially in CI
+  # scripts) were previously fail-CLOSED with no extractable host —
+  # Copilot R5 finding.
+  local -a tokens raw_tokens
+  read -ra raw_tokens <<< "$seg"
+  local _t
+  tokens=()
+  for _t in "${raw_tokens[@]}"; do
+    # Strip one layer of matching outer quotes.
+    if [[ ${#_t} -ge 2 && "${_t:0:1}" == '"' && "${_t: -1}" == '"' ]]; then
+      _t="${_t:1:${#_t}-2}"
+    elif [[ ${#_t} -ge 2 && "${_t:0:1}" == "'" && "${_t: -1}" == "'" ]]; then
+      _t="${_t:1:${#_t}-2}"
+    fi
+    tokens+=("$_t")
+  done
   local cli="${tokens[0]:-}"
 
   # Strip leading command wrappers + their flags / value-pairs / VAR=val

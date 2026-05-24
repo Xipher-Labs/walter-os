@@ -108,7 +108,13 @@ check_versions() {
 # ---------- 1. Config drift ----------
 
 check_config_drift() {
-  for cfg in "${CLAUDE_HOME}/settings.json" "${CODEX_HOME}/config.toml"; do
+  # `${WALTER_CONFIG}/egress-allowlist.txt` is included here so a tamper
+  # of the operator's allowlist (silent add of `attacker.example`, silent
+  # `*` line, etc.) is reported on the next audit run. Per Copilot R5
+  # the egress-loader's threat model assumed this baseline existed —
+  # this is where it actually does.
+  local egress_allowlist="${WALTER_CONFIG:-${HOME}/.config/walter-os}/egress-allowlist.txt"
+  for cfg in "${CLAUDE_HOME}/settings.json" "${CODEX_HOME}/config.toml" "$egress_allowlist"; do
     [[ -f "$cfg" ]] || continue
     local name; name="$(basename "$cfg")"
     local baseline="${BASELINES_DIR}/${name}.sha256"
