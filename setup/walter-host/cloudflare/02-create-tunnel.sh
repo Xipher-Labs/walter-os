@@ -146,6 +146,18 @@ mkdir -p /tmp/walter-cf
 # Caddy then dispatches via the Host header to the correct container
 # (see setup/caddy/Caddyfile.template). All routing decisions live in
 # Caddy — cloudflared only does TLS termination and host-based fan-in.
+#
+# Per-service overrides:
+#   Some upstream stacks ship their own Caddy/nginx that hard-codes a
+#   `Host: localhost:<port>` matcher (PostHog is the canonical case).
+#   Forwarding the public hostname unchanged makes that inner proxy
+#   miss its only site block and return an empty 200. See
+#   docs/operational/known-issues.md → "PostHog blank page".
+#   The associative array below carries the YAML `originRequest:`
+#   override block to emit per subdomain when present.
+declare -A INGRESS_OVERRIDES=(
+  [posthog]="  originRequest:\n    httpHostHeader: localhost:8000"
+)
 {
   printf 'tunnel: %s\n' "$TUNNEL_ID"
   printf 'credentials-file: /etc/cloudflared/credentials.json\n\n'
@@ -153,6 +165,9 @@ mkdir -p /tmp/walter-cf
   for sub in "${SUBDOMAINS[@]}"; do
     printf '  - hostname: %s.%s\n' "$sub" "$DOMAIN"
     printf '    service: http://127.0.0.1:80\n'
+    if [[ -n "${INGRESS_OVERRIDES[$sub]:-}" ]]; then
+      printf '%b\n' "${INGRESS_OVERRIDES[$sub]}"
+    fi
   done
   printf '  - service: http_status:404\n'
 } > /tmp/walter-cf/config.yml
