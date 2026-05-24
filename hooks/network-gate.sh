@@ -684,6 +684,51 @@ _inspect_segment() {
       local _ci=1
       while [[ $_ci -lt ${#tokens[@]} ]]; do
         t="${tokens[$_ci]}"
+        # Codex R8 finding CR8-A: curl proxy flags route the connection
+        # through an arbitrary proxy host BEFORE reaching the URL host,
+        # so an allowlisted URL via an unallowlisted proxy still
+        # exfiltrates. Validate every proxy URL as its own host.
+        # Covers: --proxy <url>, --proxy=<url>, -x <url>,
+        # --preproxy <url>, --preproxy=<url>, --socks4 <url>,
+        # --socks5 <url>, --socks5-hostname <url>, --socks4a <url>,
+        # --proxy-anyauth/-basic/-digest/-negotiate/-ntlm (no value),
+        # plus --proxytunnel (no value).
+        case "$t" in
+          --proxy|--preproxy|-x|--socks4|--socks5|--socks4a|--socks5-hostname)
+            local _pval="${tokens[$((_ci + 1))]:-}"
+            # Proxy URL may or may not include a scheme; normalize.
+            local _phost
+            if [[ "$_pval" == *://* ]]; then
+              _phost="$(_host_from_url "$_pval")"
+            else
+              # Bare `host:port` form (curl --proxy host:8080)
+              _phost="${_pval%%:*}"
+            fi
+            if [[ -n "$_phost" ]]; then
+              found=1
+              if ! walter_egress_host_allowed "$_phost"; then
+                echo "BLOCK: network-gate: '$_phost' (curl $t proxy host) not in egress allowlist. Add via: walter-os egress add '$_phost'"
+                return 0
+              fi
+            fi
+            _ci=$((_ci + 2)); continue ;;
+          --proxy=*|--preproxy=*|-x=*|--socks4=*|--socks5=*|--socks4a=*|--socks5-hostname=*)
+            local _pval="${t#*=}"
+            local _phost
+            if [[ "$_pval" == *://* ]]; then
+              _phost="$(_host_from_url "$_pval")"
+            else
+              _phost="${_pval%%:*}"
+            fi
+            if [[ -n "$_phost" ]]; then
+              found=1
+              if ! walter_egress_host_allowed "$_phost"; then
+                echo "BLOCK: network-gate: '$_phost' (curl ${t%%=*} proxy host) not in egress allowlist. Add via: walter-os egress add '$_phost'"
+                return 0
+              fi
+            fi
+            _ci=$((_ci + 1)); continue ;;
+        esac
         # Spaced or `=` form of --connect-to / --resolve.
         case "$t" in
           --connect-to|--resolve)
@@ -879,6 +924,114 @@ _inspect_segment() {
           fi
           echo "ALLOW"
           return 0
+          ;;
+        remote)
+          # `git remote` has both local + network sub-subcommands.
+          # Codex R8 CR8-B: previously this fell to ALLOW because the
+          # outer Copilot R2 fix removed `remote` from the network
+          # list (to let `git remote -v` through). But
+          # `git remote update <name>` / `git remote show <name>` /
+          # `git remote prune <name>` DO open the network and need
+          # gating.
+          local _rsub="${tokens[$((_gi + 1))]:-}"
+          case "$_rsub" in
+            update|show|prune|set-head)
+              # Network sub-subcommand. The remote name lives at
+              # tokens[$((_gi+3))]; we don't know the URL from the
+              # command line (it's in .git/config). Fail-CLOSED on
+              # implicit host.
+              echo "BLOCK: network-gate: 'git remote $_rsub' opens a network connection to the configured remote (host unknown to the parser). Use the two-factor bypass if intentional: WALTER_EGRESS_ALLOW_OVERRIDE=1 + --allow-egress-outbound."
+              return 0
+              ;;
+            add)
+              # `git remote add <name> <url>` — the add itself is
+              # local (edits .git/config) but the URL is right there.
+              # Be conservative: parse the URL and require it to be
+              # allowlisted. That way `git remote add evil
+              # https://evil.example/repo` is caught at the add
+              # step rather than later at fetch/update.
+              local _t host found=0
+              for _t in "${tokens[@]:$((_gi + 1))}"; do
+                if host="$(_host_from_url "$_t")" && [[ -n "$host" ]]; then
+                  found=1
+                elif host="$(_host_from_userhostpath "$_t")" && [[ -n "$host" ]]; then
+                  found=1
+                else
+                  continue
+                fi
+                if ! walter_egress_host_allowed "$host"; then
+                  echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git remote add'). Add via: walter-os egress add '$host'"
+                  return 0
+                fi
+              done
+              echo "ALLOW"
+              return 0
+              ;;
+            set-url)
+              # Same as add — extract URL + validate.
+              local _t host
+              for _t in "${tokens[@]:$((_gi + 1))}"; do
+                if host="$(_host_from_url "$_t")" && [[ -n "$host" ]] && ! walter_egress_host_allowed "$host"; then
+                  echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git remote set-url'). Add via: walter-os egress add '$host'"
+                  return 0
+                fi
+              done
+              echo "ALLOW"
+              return 0
+              ;;
+            *)
+              # `git remote -v` / `git remote rename` / `git remote rm`
+              # / `git remote remove` / `git remote get-url` /
+              # `git remote set-branches` — all local.
+              echo "ALLOW"
+              return 0
+              ;;
+          esac
+          ;;
+        submodule)
+          # `git submodule` is similar — `status`/`init`/`deinit`/`sync`/
+          # `foreach` are local; `add`/`update`/`update --remote` are
+          # network. Codex R8 CR8-B.
+          local _ssub="${tokens[$((_gi + 1))]:-}"
+          case "$_ssub" in
+            add)
+              # `git submodule add <url> [<path>]` — extract + validate.
+              local _t host
+              for _t in "${tokens[@]:$((_gi + 2))}"; do
+                if host="$(_host_from_url "$_t")" && [[ -n "$host" ]]; then
+                  if ! walter_egress_host_allowed "$host"; then
+                    echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git submodule add'). Add via: walter-os egress add '$host'"
+                    return 0
+                  fi
+                elif host="$(_host_from_userhostpath "$_t")" && [[ -n "$host" ]]; then
+                  if ! walter_egress_host_allowed "$host"; then
+                    echo "BLOCK: network-gate: '$host' not in egress allowlist (matched via 'git submodule add'). Add via: walter-os egress add '$host'"
+                    return 0
+                  fi
+                fi
+              done
+              echo "ALLOW"
+              return 0
+              ;;
+            update)
+              # `git submodule update [--remote] [--init]` opens the
+              # network when `--remote` is passed OR when init clones
+              # un-cloned submodules. Conservative fail-CLOSED.
+              echo "BLOCK: network-gate: 'git submodule update' opens a network connection (the remote URL lives in .gitmodules; host unknown to the parser). Use the two-factor bypass if intentional."
+              return 0
+              ;;
+            sync)
+              # `git submodule sync` resets the URL config from
+              # .gitmodules — no network.
+              echo "ALLOW"
+              return 0
+              ;;
+            *)
+              # status / init / deinit / foreach / nothing — local.
+              echo "ALLOW"
+              return 0
+              ;;
+          esac
           ;;
         *)
           # Local-only git operation (status, log, diff, add, commit,

