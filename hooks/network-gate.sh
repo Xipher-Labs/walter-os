@@ -122,9 +122,12 @@ _two_factor_bypass_active() {
 # commands like `cd foo && curl X` still need inspecting.
 #
 # `git` is a network CLI only for a known subcommand allowlist
-# (clone/fetch/pull/push/ls-remote/submodule/archive/remote/cherry); all
-# other subcommands (status, log, diff, add, commit, rev-parse, config,
-# ...) are LOCAL and pass through.
+# (clone/fetch/pull/push/ls-remote/fetch-pack/send-pack/http-fetch/
+# http-push/imap-send/upload-pack/upload-archive/receive-pack/bundle/
+# send-email/lfs/svn/annex/p4/cvsimport/cvsexportcommit + `archive`
+# only when --remote= is present). All other subcommands — including
+# status/log/diff/add/commit/rev-parse/config/branch/cherry/remote/
+# submodule/archive (no --remote=) — are LOCAL and pass through.
 
 # Output helper.
 _emit_allow() {
@@ -147,8 +150,22 @@ _emit_allow_with_warn() {
 # Using `sed` to insert NEWLINE markers + reading line by line is the
 # portable way to do this in bash 3.2.
 _split_segments() {
+  # Order matters: handle 2-char operators (`&&`, `||`) BEFORE the
+  # single-char ones (`|`, `&`) so we don't split `&&` into two `&`
+  # tokens (which would then split the right-hand command at `&`).
+  #
+  # Copilot R3 fix: previously the `&` (background) split required
+  # whitespace on both sides (`[[:space:]]&[[:space:]]`), so
+  # `true&curl https://evil.example` (no space before `&`) was
+  # tokenized as one segment with CLI `true&curl` (unknown) → fell
+  # through to ALLOW, bypassing the gate. Now we split on a single
+  # `&` after `&&` has been consumed.
   printf '%s\n' "$1" \
-    | sed -E -e 's/&&/\n/g' -e 's/\|\|/\n/g' -e 's/;/\n/g' -e 's/\|/\n/g' -e 's/[[:space:]]&[[:space:]]/\n/g'
+    | sed -E -e 's/&&/\n/g' \
+             -e 's/\|\|/\n/g' \
+             -e 's/;/\n/g' \
+             -e 's/\|/\n/g' \
+             -e 's/&/\n/g'
 }
 
 # Return the first non-flag positional argument from a tokenized arg list.

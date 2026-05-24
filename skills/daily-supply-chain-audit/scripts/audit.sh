@@ -910,23 +910,30 @@ check_egress_allowlist() {
       \**|*\**) continue ;;       # wildcard
       \[*\]) continue ;;          # IPv6 literal
     esac
-    local first_ip=""
+    # Resolve ALL addresses, not just the first. Copilot R3 finding: a
+    # host whose first A/AAAA record is public but whose second is
+    # 10.x.x.x would otherwise miss the rebinding-risk check.
+    local all_ips=""
     case "$resolver" in
       getent)
-        first_ip="$(getent ahosts "$entry" 2>/dev/null | awk 'NR==1 {print $1}')" ;;
+        all_ips="$(getent ahosts "$entry" 2>/dev/null | awk '{print $1}')" ;;
       dscacheutil)
-        first_ip="$(dscacheutil -q host -a name "$entry" 2>/dev/null | awk '/^ip_address:/ {print $2; exit}')" ;;
+        all_ips="$(dscacheutil -q host -a name "$entry" 2>/dev/null | awk '/^ip(v6)?_address:/ {print $2}')" ;;
       dig)
-        first_ip="$(dig +short +time=2 +tries=1 "$entry" 2>/dev/null | awk 'NR==1')" ;;
+        all_ips="$(dig +short +time=2 +tries=1 "$entry" A "$entry" AAAA 2>/dev/null | awk '/^[0-9a-fA-F.:]+$/')" ;;
     esac
-    [[ -z "$first_ip" ]] && continue
-    # Private / loopback / link-local IPv4 ranges. IPv6 ULA + loopback
-    # are covered too (fc00::/7, ::1, fe80::/10).
-    case "$first_ip" in
-      10.*|127.*|169.254.*|192.168.*) private_hits+="$entry → $first_ip; " ;;
-      172.1[6-9].*|172.2[0-9].*|172.3[01].*) private_hits+="$entry → $first_ip; " ;;
-      ::1|fc??:*|fd??:*|fe8?:*|fe9?:*|fea?:*|feb?:*) private_hits+="$entry → $first_ip; " ;;
-    esac
+    [[ -z "$all_ips" ]] && continue
+    # Private / loopback / link-local IPv4 ranges + IPv6 ULA/loopback/
+    # link-local (fc00::/7, fd00::/8, ::1, fe80::/10).
+    local ip
+    while IFS= read -r ip; do
+      [[ -z "$ip" ]] && continue
+      case "$ip" in
+        10.*|127.*|169.254.*|192.168.*) private_hits+="$entry → $ip; " ;;
+        172.1[6-9].*|172.2[0-9].*|172.3[01].*) private_hits+="$entry → $ip; " ;;
+        ::1|fc??:*|fd??:*|fe8?:*|fe9?:*|fea?:*|feb?:*) private_hits+="$entry → $ip; " ;;
+      esac
+    done <<< "$all_ips"
   done < "$allowlist"
 
   if [[ -n "$private_hits" ]]; then

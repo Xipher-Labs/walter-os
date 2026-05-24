@@ -37,10 +37,10 @@
 # Companion helper:
 #   walter_egress_allowlist_path  — prints the resolved allowlist path
 
-# Resolve the on-disk allowlist path. Honours $WALTER_CONFIG; falls back to
-# ${XDG_CONFIG_HOME:-$HOME/.config}/walter-os. Operator-overridable via env
-# so tests and the install.sh first-run prompt can point at an alternate
-# location.
+# Resolve the on-disk allowlist path. Honours $WALTER_CONFIG; falls back
+# to ~/.config/walter-os (matches install.sh + the rest of the codebase).
+# Operator-overridable via env so tests and the install.sh first-run
+# prompt can point at an alternate location.
 walter_egress_allowlist_path() {
   # Resolve from $WALTER_CONFIG, falling back to the repo-standard
   # ~/.config/walter-os (matches install.sh + the rest of the codebase).
