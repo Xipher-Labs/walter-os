@@ -42,3 +42,33 @@ datasources:
       timescaledb: false
     editable: false
     isDefault: false
+
+  # Operator-specific external Postgres datasources.
+  # These reach OUTSIDE walter-vm (e.g. Supabase, RDS, hosted Postgres) and
+  # are gated by the corresponding `*_PG_*` env vars resolved by the
+  # observability-secrets sidecar (Infisical /observability path). The
+  # datasource block is harmless when the env vars are unset — Grafana
+  # marks it unavailable instead of breaking the rest of the provisioning.
+  #
+  # Licitar (licit.ar) — Supabase Postgres via session pooler (IPv4-friendly).
+  # Role: grafana_readonly (SELECT-only on public schema). Used by
+  # operator-specific dashboards living in the Licitar repo
+  # (dashboards/grafana/*.json) and config-personal.
+  - name: Licitar (Supabase, read-only)
+    type: grafana-postgresql-datasource
+    uid: licitar-supabase-ro
+    access: proxy
+    url: ${LICITAR_PG_HOST}:${LICITAR_PG_PORT}
+    database: ${LICITAR_PG_DATABASE}
+    user: ${LICITAR_PG_USER}
+    secureJsonData:
+      password: ${LICITAR_PG_PASSWORD}
+    jsonData:
+      sslmode: ${LICITAR_PG_SSLMODE}
+      maxOpenConns: 4
+      maxIdleConns: 1
+      connMaxLifetime: 14400
+      postgresVersion: 1700
+      timescaledb: false
+    editable: false
+    isDefault: false
