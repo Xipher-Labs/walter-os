@@ -92,7 +92,7 @@ matter more than the positive ones.
   writing a CI pipeline.
 - **NOT for you if**: you want a no-configuration experience; you need
   enterprise SSO / RBAC / audit trails; you're not comfortable with Docker
-  + DNS + Linux sysadmin basics.
+  and DNS + Linux sysadmin basics.
 - **Pick**: Mode 1 (Lite) or Mode 2 (client install).
 
 #### 🚀 Founder — pre-PMF, needs GTM tooling without a DevOps hire
@@ -366,7 +366,7 @@ What is left alone:
 
 **Non-TTY default is SAFE**: in headless contexts (CI / pipe / scripted), the uninstall skips restore + emits the manual `mv` command instead of silently deleting operator backups. Pass `--restore-backups` explicitly to force restore in non-interactive runs.
 
-Spec: [`docs/specs/install-uninstall-restore-backups.md`](docs/specs/install-uninstall-restore-backups.md). Closing PR: [#191](https://github.com/Xipher-Labs/walter-os/issues/191).
+Tracking issue: [#191](https://github.com/Xipher-Labs/walter-os/issues/191).
 
 ---
 
@@ -471,7 +471,7 @@ Dual-licensed by directory tree:
 
 Files carry SPDX headers (`# SPDX-License-Identifier: Apache-2.0` or `# SPDX-License-Identifier: AGPL-3.0-or-later` for the AGPL subtree). Canonical texts: [`LICENSE`](LICENSE), [`LICENSE-APACHE`](LICENSE-APACHE), [`setup/walter-host/LICENSE`](setup/walter-host/LICENSE).
 
-Commercial licenses (OEM/embedding, closed-source modifications of the host stack as a service, trademark grants): `licensing@xipherlabs.xyz` or [COMMERCIAL.md](COMMERCIAL.md). The legal entity is being constituted per [ADR-0022](docs/decisions/0022-legal-entity-formation.md); the founding operator is the sole copyright holder of record in the interim.
+Commercial licenses (OEM/embedding, closed-source modifications of the host stack as a service, trademark grants): `licensing@xipherlabs.xyz` or [COMMERCIAL.md](COMMERCIAL.md). The legal entity is being constituted per [ADR-0022](docs/decisions/0022-xipher-labs-legal-entity.md); the founding operator is the sole copyright holder of record in the interim.
 
 ---
 

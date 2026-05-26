@@ -2204,7 +2204,8 @@ setup_git_hooks() {
 # llm./secrets. under ${WALTER_DOMAIN}).
 #
 # This prompt:
-#   - Only fires on first install (allowlist file absent).
+#   - Only fires when the allowlist file is absent (first install, or an
+#     upgrade/recovery run where the operator has not imported one yet).
 #   - Only fires when STDIN + STDOUT are both a TTY.
 #   - Skipped under DRY_RUN, CHECK_ONLY, UNINSTALL.
 #   - Always prints a hint on how to import later (`walter-os egress import …`).
