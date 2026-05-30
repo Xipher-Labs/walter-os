@@ -26,6 +26,7 @@ FROM nousresearch/hermes-agent:${BASE_VERSION}
 
 ARG BASE_VERSION
 ARG FASTER_WHISPER_VERSION=1.2.1
+ENV HF_HOME=/opt/data/.cache/huggingface
 
 # Layer 1: install faster-whisper into Hermes' venv.
 # Upstream uses uv as the package manager; we reuse it for consistency.

@@ -73,9 +73,15 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
     grep -q '^ARG FASTER_WHISPER_VERSION=[0-9]' "$SERVICE_DIR/Dockerfile"
 }
 
+@test "Dockerfile persists Hugging Face cache under hermes_data volume" {
+    grep -q '^ENV HF_HOME=/opt/data/.cache/huggingface$' "$SERVICE_DIR/Dockerfile"
+}
+
 @test "compose.yml uses one Hermes base version variable for image and build arg" {
-    grep -q 'image: walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION:-v2026.5.7}-stt' "$SERVICE_DIR/compose.yml"
-    grep -q 'BASE_VERSION: ${HERMES_AGENT_BASE_VERSION:-v2026.5.7}' "$SERVICE_DIR/compose.yml"
+    expected_version="$(sed -n 's/^HERMES_AGENT_BASE_VERSION=//p' "$SERVICE_DIR/.env.template")"
+    [ -n "$expected_version" ]
+    grep -q "image: walter-os/hermes-agent:\${HERMES_AGENT_BASE_VERSION:-${expected_version}}-stt" "$SERVICE_DIR/compose.yml"
+    grep -q "BASE_VERSION: \${HERMES_AGENT_BASE_VERSION:-${expected_version}}" "$SERVICE_DIR/compose.yml"
 }
 
 @test "services inventory documents the Walter Hermes STT image" {
