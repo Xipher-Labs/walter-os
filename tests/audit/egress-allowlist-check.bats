@@ -34,7 +34,8 @@ teardown() {
 # $FINDINGS_LOG, then call check_egress_allowlist.
 _run_check() {
   local out
-  out="$(bash -c "
+  local bash_bin="${BASH:-bash}"
+  out="$("$bash_bin" -c "
     # Minimal stubs so audit.sh's globals are happy.
     SEVERITY=0; INFO_COUNT=0; HIGH_COUNT=0; CRIT_COUNT=0; FINDINGS=()
     finding() {
@@ -116,4 +117,29 @@ EOF
   [[ "$output" != *"egress-allowlist-private-ip"* ]]
   # And the file isn't reported as empty (one valid entry present).
   [[ "$output" != *"egress-allowlist-empty"* ]]
+}
+
+@test "AC-5 (Copilot R7): dig fallback queries A and AAAA separately" {
+  cat > "$ALLOWLIST" <<'EOF'
+dual.example
+EOF
+
+  mkdir -p "$TMP_HOME/bin"
+  ln -s "$(command -v awk)" "$TMP_HOME/bin/awk"
+  export DIG_LOG="$TMP_HOME/dig.log"
+  cat > "$TMP_HOME/bin/dig" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$DIG_LOG"
+case "$*" in
+  *" A") printf '203.0.113.10\n' ;;
+  *" AAAA") printf 'fd00::123\n' ;;
+esac
+EOF
+  chmod +x "$TMP_HOME/bin/dig"
+
+  PATH="$TMP_HOME/bin" run _run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"finding|high|egress-allowlist-private-ip|"* ]]
+  grep -qx '+short +time=2 +tries=1 dual.example A' "$DIG_LOG"
+  grep -qx '+short +time=2 +tries=1 dual.example AAAA' "$DIG_LOG"
 }

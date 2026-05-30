@@ -935,7 +935,12 @@ check_egress_allowlist() {
       dscacheutil)
         all_ips="$(dscacheutil -q host -a name "$entry" 2>/dev/null | awk '/^ip(v6)?_address:/ {print $2}')" ;;
       dig)
-        all_ips="$(dig +short +time=2 +tries=1 "$entry" A "$entry" AAAA 2>/dev/null | awk '/^[0-9a-fA-F.:]+$/')" ;;
+        all_ips="$(
+          {
+            dig +short +time=2 +tries=1 "$entry" A
+            dig +short +time=2 +tries=1 "$entry" AAAA
+          } 2>/dev/null | awk '/^[0-9a-fA-F.:]+$/'
+        )" ;;
     esac
     [[ -z "$all_ips" ]] && continue
     # Private / loopback / link-local IPv4 ranges + IPv6 ULA/loopback/
