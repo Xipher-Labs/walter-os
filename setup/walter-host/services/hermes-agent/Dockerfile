@@ -7,11 +7,11 @@
 #
 # What this image deliberately does NOT do:
 #   - Pre-cache the Whisper model. faster-whisper auto-downloads it on first
-#     use to `$HOME/.cache/huggingface/hub/` which inside the container resolves
-#     to `/opt/data/.cache/...`. Since `/opt/data` is the `hermes_data` volume
-#     mount at runtime, the model persists across `docker compose up --force-
-#     recreate` and image upgrades. Baking it would bloat the image by ~150 MB
-#     and the volume mount would shadow it at runtime anyway.
+#     use under `$HF_HOME/hub`; this Dockerfile sets `HF_HOME` inside
+#     `/opt/data`, the `hermes_data` volume mount, so the model persists across
+#     `docker compose up --force-recreate` and image upgrades. Baking it would
+#     bloat the image by ~150 MB and the volume mount would shadow it at runtime
+#     anyway.
 #
 # Build:
 #   docker compose --profile hermes-agent build           # via the compose block

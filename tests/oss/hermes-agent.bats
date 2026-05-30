@@ -80,6 +80,7 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
 @test "compose.yml uses one Hermes base version variable for image and build arg" {
     expected_version="$(sed -n 's/^HERMES_AGENT_BASE_VERSION=//p' "$SERVICE_DIR/.env.template")"
     [ -n "$expected_version" ]
+    grep -q "^ARG BASE_VERSION=${expected_version}$" "$SERVICE_DIR/Dockerfile"
     grep -q "image: walter-os/hermes-agent:\${HERMES_AGENT_BASE_VERSION:-${expected_version}}-stt" "$SERVICE_DIR/compose.yml"
     grep -q "BASE_VERSION: \${HERMES_AGENT_BASE_VERSION:-${expected_version}}" "$SERVICE_DIR/compose.yml"
 }
