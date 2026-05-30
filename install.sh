@@ -209,7 +209,7 @@ check_requirements() {
   # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
-  check_required_tool yq "brew install yq  # or: sudo snap install yq"
+  check_required_tool yq "brew install yq  # or: sudo snap install yq (Mike Farah version required; apt's kislyuk/yq won't work)"
   # Codex R3 #125: --check (which calls check_requirements) was passing on
   # any `yq` on PATH, including apt's kislyuk/yq which is the wrong tool.
   # Add the flavor check inline so --check reports the same wrong-flavor
@@ -233,7 +233,7 @@ check_requirements() {
   check_optional_tool rg "brew install ripgrep  # or: sudo apt-get install -y ripgrep"
   check_optional_tool bats "brew install bats-core  # or: sudo apt-get install -y bats"
   check_optional_tool shellcheck "brew install shellcheck  # or: sudo apt-get install -y shellcheck"
-  check_optional_tool gitleaks "brew install gitleaks"
+  check_optional_tool gitleaks "brew install gitleaks  # or: sudo apt-get install -y gitleaks"
   check_optional_tool node "Use mise: mise install node@22"
   check_optional_tool pnpm "Use mise: mise install pnpm@9"
   check_optional_tool python3 "brew install python  # or: sudo apt-get install -y python3"
