@@ -159,22 +159,23 @@ NOT trigger the bypass. A quoted argument that merely contains the flag
 (`curl 'arg --allow-egress-outbound moreargs' https://evil.example`)
 does not trigger it either.
 
-Residual risk: when tokenisation fails (for example, unmatched quotes),
-the hook falls back to the stricter whitespace-bracketed match. The
-env-var gate (`WALTER_EGRESS_ALLOW_OVERRIDE=1`) remains the operator
-acknowledgement signal required for any bypass to fire.
+When tokenisation fails (for example, unmatched quotes), the bypass does
+not activate. This is intentional: the override is only honored when the
+flag is parseable as a standalone token. The env-var gate
+(`WALTER_EGRESS_ALLOW_OVERRIDE=1`) remains the operator acknowledgement
+signal required for any bypass to fire.
 
 ## What the hook actually inspects
 
-The hook is INVOKED on every `Bash` tool call. It splits the command
-into segments by shell separators (`;`, `&&`, `||`, `|`, `&`) and
-inspects each one.
+The hook is INVOKED on every `Bash` tool call. It splits the command in
+a quote-aware way by shell separators (`;`, `&&`, `||`, `|`, `&`) and
+inspects each segment.
 
 | CLI | Host extraction | Notes |
 |---|---|---|
 | `curl`, `wget` | URL host token | Fail-CLOSED if no URL token present |
 | `git clone\|fetch\|pull\|push\|ls-remote\|fetch-pack\|send-pack\|bundle\|send-email\|http-fetch\|http-push\|imap-send\|upload-pack\|upload-archive\|receive-pack\|lfs\|svn\|annex\|p4` | URL host or `user@host:` | Local subcommands (`status`/`log`/`diff`/`branch`/`cherry`/`remote`/`submodule`/…) pass through |
-| `git archive` | URL host only when `--remote=URL` is passed | Local archive form passes through |
+| `git archive` | URL host only when `--remote=URL` or `--remote URL` is passed | Local archive form passes through |
 | `gh` | `${GH_HOST:-github.com}` | Implicit host |
 | `ssh` | First non-flag positional, with awareness of value-taking flags (`-i`, `-p`, `-o`, …) | `user@host` form supported |
 | `scp`, `rsync` | `user@host:path`, `host:/abs/path`, `host:relative/path`, or `rsync://host/...` | Drive-letter-style local paths (`C:\foo`) are NOT treated as hosts |
@@ -182,13 +183,16 @@ inspects each one.
 | `pip`, `pip3`, `npm`, `pnpm`, `yarn`, `uv`, `uvx`, `cargo`, `brew`, `gem`, `go` | Explicit URL token on network-touching subcommands | Local subcommands (`npm test`, `cargo build`, `go test`, `brew list`, …) pass through; network subcommands without an explicit host fail-CLOSED |
 
 Local-only Git operations (`status`, `log`, `diff`, `add`, `commit`,
-`branch`, `cherry`, `rev-parse`, `config`, `remote -v`, `submodule status`,
-`archive` without `--remote=`, …) pass through. You can still run
-`git status` inside a tight allowlist. The few network-touching forms
-of `git remote` (`update`, `show`, `prune`) and
-`git submodule update --remote` are deliberately treated as LOCAL by
-this parser — they're rare in agent workflows. If you need the gate to
-cover them, use the two-factor bypass.
+`branch`, `cherry`, `rev-parse`, `config`, `remote -v`,
+`remote rm/remove/rename/get-url/set-branches`, `submodule status/init/sync`,
+`archive` without `--remote`, …) pass through. You can still run
+`git status` inside a tight allowlist.
+
+Network-touching Git subcommands fail CLOSED when the host is implicit in
+local Git config (`git remote update/show/prune`, `git submodule update`),
+and validate explicit URLs when the command line includes one
+(`git remote add/set-url`, `git submodule add`, `git archive --remote=URL`
+or `git archive --remote URL`).
 
 ## When pip / npm / cargo block you
 

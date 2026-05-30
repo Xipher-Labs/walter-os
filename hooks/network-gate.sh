@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The parser below intentionally compares literal shell metacharacters and
+# keywords (`$(`, `\`, `esac`) as data, not syntax.
+# shellcheck disable=SC1003,SC2016,SC1010
 # hooks/network-gate.sh
 # PreToolUse hook — default-deny egress gate. Composes with
 # `bash-denylist.sh` (RCE patterns) and `approval-gate.sh` (destructive
@@ -95,9 +98,10 @@ fi
 # `--allow-egress-outbound` inside a single-quoted string literal
 # (`curl 'a b --allow-egress-outbound c d'`) is part of a larger token
 # (`a b --allow-egress-outbound c d`) and does NOT trigger the bypass.
-# Falls back to the previous whitespace-bracketed regex if xargs fails
-# (e.g. unmatched quote in the command — also fail-safe in the deny
-# direction since the regex is stricter than substring match).
+# If tokenization fails (e.g. unmatched quote in the command), the bypass
+# does NOT activate. This keeps the override strictly token-aware instead
+# of reintroducing a regex path where attacker-controlled data could look
+# like a standalone flag.
 _has_bypass_flag() {
   local _tokfile
   _tokfile="$(mktemp 2>/dev/null)"
@@ -108,11 +112,7 @@ _has_bypass_flag() {
     return "$_hit"
   fi
   rm -f "$_tokfile" 2>/dev/null
-  # xargs failed (unmatched quote etc.) — fall back to the previous
-  # whitespace-bracketed regex (still stricter than substring match).
-  # `printf '%s\n'` over `echo` so leading `-n`/`-e` isn't treated as
-  # echo options.
-  printf '%s\n' "$1" | grep -qE -- '(^|[[:space:]])--allow-egress-outbound([[:space:]]|$)'
+  return 1
 }
 
 _two_factor_bypass_active() {
@@ -130,7 +130,7 @@ _two_factor_bypass_active() {
 # (clone/fetch/pull/push/ls-remote/fetch-pack/send-pack/http-fetch/
 # http-push/imap-send/upload-pack/upload-archive/receive-pack/bundle/
 # send-email/lfs/svn/annex/p4/cvsimport/cvsexportcommit + `archive`
-# only when --remote= is present). All other subcommands — including
+# only when `--remote=URL` or `--remote URL` is present). All other subcommands — including
 # status/log/diff/add/commit/rev-parse/config/branch/cherry/remote/
 # submodule/archive (no --remote=) — are LOCAL and pass through.
 
