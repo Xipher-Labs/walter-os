@@ -162,7 +162,7 @@ teardown() {
   ! grep -qxF "preexisting.example" "$ALLOWLIST"
 }
 
-@test "AC-3: egress import expands \${VAR} via envsubst when var is set" {
+@test "AC-3: egress import expands \${VAR} with pure Bash when var is set" {
   local src="$TMP_HOME/src.txt"
   printf '%s\n' 'llm.${WALTER_DOMAIN}' > "$src"
 

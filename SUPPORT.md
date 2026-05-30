@@ -86,5 +86,6 @@ data loss, install regressions on a reference platform) get priority.
 Feature requests go on the [OSS Trust roadmap](docs/specs/oss-trust-roadmap.md)
 backlog and are considered at quarterly review.
 
-If you need guaranteed response times or hands-on help, see
-[COMMERCIAL.md](COMMERCIAL.md) for commercial-support options.
+Walter-OS does not currently offer guaranteed response times or paid
+hands-on support. [COMMERCIAL.md](COMMERCIAL.md) covers commercial
+licensing only.

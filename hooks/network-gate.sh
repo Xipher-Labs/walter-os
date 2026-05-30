@@ -1143,9 +1143,9 @@ _inspect_segment() {
       return 0
       ;;
     scp|rsync)
-      # Look for the first token that contains `user@host:` OR `host:`
-      # (with `:` followed by a non-`/`, to distinguish from
-      # Windows-style or local paths).
+      # Look for the first token that contains `user@host:` OR `host:`.
+      # Absolute remote paths (`host:/abs/path`) are supported; Windows-
+      # drive-looking local paths are rejected before host extraction.
       local t host found=0
       for t in "${tokens[@]:1}"; do
         if host="$(_host_from_userhostpath "$t")" && [[ -n "$host" ]]; then

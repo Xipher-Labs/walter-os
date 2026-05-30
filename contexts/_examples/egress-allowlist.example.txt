@@ -50,8 +50,8 @@ api.openrouter.ai
 
 # ---------------------------------------------------------------------------
 # Walter-OS infrastructure — your own services under ${WALTER_DOMAIN}.
-# `walter-os egress import` runs envsubst at import time. If
-# WALTER_DOMAIN is unset, these two lines are skipped with a WARN.
+# `walter-os egress import` expands ${VAR} placeholders with pure Bash.
+# If WALTER_DOMAIN is unset, these two lines are skipped with a WARN.
 # ---------------------------------------------------------------------------
 llm.${WALTER_DOMAIN}
 secrets.${WALTER_DOMAIN}

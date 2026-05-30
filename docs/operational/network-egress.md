@@ -1,6 +1,6 @@
 # Network egress allowlist — operator guide
 
-> **Status**: available starting v0.5.1 (unreleased — `[Unreleased]` in CHANGELOG) via OSS Trust epic A-2 (#122).
+> **Status**: available starting v0.5.1; see `CHANGELOG.md` section `[0.5.1]`.
 > **Spec**: [`docs/specs/network-egress-allowlist.md`](../specs/network-egress-allowlist.md).
 
 Walter-OS ships a **default-deny** network egress gate. Without explicit
@@ -85,11 +85,12 @@ walter-os egress import \
   "${WALTER_OS_HOME}/contexts/_examples/egress-allowlist.example.txt"
 ```
 
-The import command runs `envsubst` over the file. Lines that reference
-unset `${VAR}` are **skipped with a WARN on stderr** — they're not
-silently expanded to empty strings (which would produce bogus hosts
-like `llm.` / `secrets.`). Set the variable and re-import to pick them
-up.
+The import command expands `${VAR}` placeholders with a pure-Bash
+substitution path, so no external `envsubst`/gettext dependency is
+required. Lines that reference unset `${VAR}` are **skipped with a WARN
+on stderr** — they're not silently expanded to empty strings (which
+would produce bogus hosts like `llm.` / `secrets.`). Set the variable
+and re-import to pick them up.
 
 ### Add a one-off host
 
