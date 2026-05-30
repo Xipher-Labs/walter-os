@@ -146,16 +146,38 @@ mkdir -p /tmp/walter-cf
 # Caddy then dispatches via the Host header to the correct container
 # (see setup/caddy/Caddyfile.template). All routing decisions live in
 # Caddy — cloudflared only does TLS termination and host-based fan-in.
+#
+# Per-service overrides:
+#   PostHog ships its own proxy on host port 8100. Its inner Caddy matches
+#   `Host: localhost:8000`, so the tunnel must bypass the central Caddy for
+#   this one service and rewrite the Host header. Keep the rest of the stack
+#   routed through central Caddy on host port 80.
+ingress_service_for() {
+  case "$1" in
+    posthog) printf 'http://127.0.0.1:8100' ;;
+    *) printf 'http://127.0.0.1:80' ;;
+  esac
+}
+
+ingress_origin_request_for() {
+  case "$1" in
+    posthog) printf '    originRequest:\n      httpHostHeader: localhost:8000\n' ;;
+  esac
+}
+
 {
   printf 'tunnel: %s\n' "$TUNNEL_ID"
   printf 'credentials-file: /etc/cloudflared/credentials.json\n\n'
   printf 'ingress:\n'
   for sub in "${SUBDOMAINS[@]}"; do
+    service_url="$(ingress_service_for "$sub")"
     printf '  - hostname: %s.%s\n' "$sub" "$DOMAIN"
-    printf '    service: http://127.0.0.1:80\n'
+    printf '    service: %s\n' "$service_url"
+    ingress_origin_request_for "$sub"
   done
   printf '  - service: http_status:404\n'
 } > /tmp/walter-cf/config.yml
+unset service_url
 
 echo "Config saved to /tmp/walter-cf/config.yml"
 echo "TUNNEL_ID=$TUNNEL_ID" > /tmp/walter-cf/.env

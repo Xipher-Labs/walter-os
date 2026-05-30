@@ -23,6 +23,53 @@ cloudflared route to `hs.${WALTER_DOMAIN}` doesn't rewrite paths.
 redirects `/` → `/admin/`. Or change cloudflared to use `originRequest`
 with a path rewrite.
 
+## PostHog blank page when reached via tunnel (Caddy host-header mismatch)
+
+PostHog ships its own `posthog-proxy-1` Caddy that fronts all
+PostHog sub-services (`web`, `capture`, `flags`, `surveys`, `livestream`,
+etc.) under a single `Host: localhost:8000` site block (the Caddyfile
+literally starts with `http://localhost:8000 { … }`). When cloudflared
+forwards a request from the public tunnel, it carries
+`Host: posthog.${WALTER_DOMAIN}` — Caddy finds no matching site, falls
+through to its default handler, and replies `HTTP 200` with an empty
+body and **no `Content-Type` header**. Browsers receive what looks like
+plain text → render nothing → blank screen.
+
+The PostHog Django backend itself (`posthog-web-1`) is fine — the bug
+is purely in the cloudflared → Caddy boundary.
+
+**Fix on the VM** (already applied in `/etc/cloudflared/config.yml`,
+rotated 2026-05-24): rewrite the host header at the cloudflared
+ingress so the inner Caddy matches its own site block.
+
+```yaml
+- hostname: posthog.${WALTER_DOMAIN}
+  service: http://127.0.0.1:8100
+  originRequest:
+    httpHostHeader: localhost:8000   # match posthog-proxy-1's Caddyfile
+```
+
+**Verification**:
+
+```bash
+TOK=$(cloudflared access token --app https://posthog.${WALTER_DOMAIN}/)
+curl -sS -i -H "cf-access-token: $TOK" "https://posthog.${WALTER_DOMAIN}/" | head -5
+# Expect: HTTP/2 302 + location: /login + content-type: text/html
+# (NOT: HTTP/2 200 + content-length: 0)
+```
+
+**Re-provisioning note**: `setup/walter-host/cloudflare/02-create-tunnel.sh`
+now emits this PostHog-specific `service: http://127.0.0.1:8100` entry and
+the `originRequest.httpHostHeader` rewrite automatically. The rest of the
+stack still routes through the walter-os central Caddy on `127.0.0.1:80`.
+
+**Same trap, other stacks**: any upstream stack that ships a self-
+hosted Caddy/nginx with a hard-coded `Host: localhost` matcher will
+hit the same blank-screen failure when fronted by cloudflared. Notable
+candidates to audit: Plane (`plane-proxy`), PostHog (this case),
+Postiz if it grows a proxy, Penpot, Synapse. Test before declaring a
+service "exposed".
+
 ## OpenAI / Google / Claude subscription proxies
 
 Pending implementation. Notes:
