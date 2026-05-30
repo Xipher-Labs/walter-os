@@ -33,6 +33,45 @@ RENOVATE_DIR="$REPO_ROOT/setup/walter-host/services/renovate"
   grep -q "allowScripts: false" "$RENOVATE_DIR/config.js"
 }
 
+@test "renovate config requires restrictive autodiscover constraint" {
+  run env RENOVATE_TOKEN=dummy RENOVATE_AUTODISCOVER=true node -e "require('$RENOVATE_DIR/config.js')"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"RENOVATE_AUTODISCOVER_FILTER"* ]]
+}
+
+@test "renovate run wrapper reads non-secret .env settings" {
+  tmpdir="$(mktemp -d)"
+  cp -R "$RENOVATE_DIR/." "$tmpdir/"
+  mkdir -p "$tmpdir/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmpdir/bin/docker"
+  chmod +x "$tmpdir/bin/docker"
+  cat > "$tmpdir/.env" <<'ENV'
+RENOVATE_REPOSITORIES=your-org/example
+ENV
+
+  run env RENOVATE_TOKEN=dummy PATH="$tmpdir/bin:/usr/bin:/bin" bash -c "cd '$tmpdir'; ./run.sh dry-run" 2>&1
+
+  rm -rf "$tmpdir"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"set RENOVATE_REPOSITORIES"* ]]
+}
+
+@test "renovate run wrapper rejects RENOVATE_TOKEN in .env" {
+  tmpdir="$(mktemp -d)"
+  cp -R "$RENOVATE_DIR/." "$tmpdir/"
+  cat > "$tmpdir/.env" <<'ENV'
+RENOVATE_TOKEN=do-not-store-here
+RENOVATE_REPOSITORIES=your-org/example
+ENV
+
+  run bash -c "cd '$tmpdir'; ./run.sh dry-run" 2>&1
+
+  rm -rf "$tmpdir"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"refuse to load RENOVATE_TOKEN"* ]]
+}
+
 @test "renovate docs cover GitHub, Forgejo, dry-run, onboarding, and security" {
   grep -qi "GitHub mode" "$RENOVATE_DIR/README.md"
   grep -qi "Forgejo mode" "$RENOVATE_DIR/README.md"

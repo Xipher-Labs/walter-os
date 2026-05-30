@@ -12,10 +12,18 @@ function csvEnv(name) {
 
 const repositories = csvEnv('RENOVATE_REPOSITORIES');
 const autodiscover = process.env.RENOVATE_AUTODISCOVER === 'true';
+const autodiscoverFilter = csvEnv('RENOVATE_AUTODISCOVER_FILTER');
+const autodiscoverNamespaces = csvEnv('RENOVATE_AUTODISCOVER_NAMESPACES');
 
 if (!autodiscover && !repositories) {
   throw new Error(
     'Set RENOVATE_REPOSITORIES, or set RENOVATE_AUTODISCOVER=true with a restrictive filter.'
+  );
+}
+
+if (autodiscover && !autodiscoverFilter && !autodiscoverNamespaces) {
+  throw new Error(
+    'RENOVATE_AUTODISCOVER=true requires RENOVATE_AUTODISCOVER_FILTER or RENOVATE_AUTODISCOVER_NAMESPACES.'
   );
 }
 
@@ -25,8 +33,8 @@ module.exports = {
   token: process.env.RENOVATE_TOKEN,
   repositories,
   autodiscover,
-  autodiscoverFilter: csvEnv('RENOVATE_AUTODISCOVER_FILTER'),
-  autodiscoverNamespaces: csvEnv('RENOVATE_AUTODISCOVER_NAMESPACES'),
+  autodiscoverFilter,
+  autodiscoverNamespaces,
 
   onboarding: true,
   onboardingBranch: 'renovate/configure',
