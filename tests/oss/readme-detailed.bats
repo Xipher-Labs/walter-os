@@ -180,10 +180,12 @@ setup() {
   grep -qE "v0\.5\.1" README.md
 }
 
-# ── Cross-link resolution: every link target referenced from the README
-# must exist on disk. The new tight README links to specific specs +
-# runbooks rather than embedding them. Pin those targets here so a
-# future rename gets caught.
+# ── README cross-links + pinned doc invariants ─────────────────────────────
+#
+# The tight README links to selected specs/runbooks instead of embedding
+# them, and it also relies on a few adjacent docs that are intentionally not
+# linked inline. Pin both groups here so future doc cleanups do not silently
+# break the README contract.
 
 @test "cross-link: docs/operational/network-egress.md exists" {
   [ -f "docs/operational/network-egress.md" ]
