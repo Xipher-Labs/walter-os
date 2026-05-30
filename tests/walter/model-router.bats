@@ -53,6 +53,29 @@ setup() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: PHI rejects remote ollama-looking URLs" {
+  run env WALTER_MODEL_PHI='https://evil.example/ollama-proxy' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: PHI rejects localhost-looking DNS names" {
+  run env WALTER_MODEL_PHI='localhost.com:443' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: PHI accepts explicit loopback aliases" {
+  run env WALTER_MODEL_PHI='127.0.0.1:11434' bash -c "source '$ROUTER'; walter_model_for phi"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "127.0.0.1:11434" ]
+}
+
 @test "model-router: invalid model values are rejected" {
   run env WALTER_MODEL_DEFAULT='claude; rm -rf /' bash -c "source '$ROUTER'; walter_model_for default" 2>&1
 

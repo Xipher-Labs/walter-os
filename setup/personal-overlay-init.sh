@@ -131,7 +131,7 @@ ensure_model_preferences() {
   local key default value wrote_header=0
 
   for key in "${keys[@]}"; do
-    if [[ -f "$env_file" ]] && grep -qE "^${key}=" "$env_file"; then
+    if [[ -f "$env_file" ]] && grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}=" "$env_file"; then
       skip "$key"
       continue
     fi

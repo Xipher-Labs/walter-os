@@ -56,7 +56,17 @@ walter_model_value_valid() {
 
 _walter_model_is_local() {
   local value="${1:-}"
-  [[ "$value" == local* || "$value" == ollama* || "$value" == */ollama* || "$value" == localhost* ]]
+  case "$value" in
+    local|local-*|local/*|ollama|ollama/*|ollama:*)
+      return 0
+      ;;
+    localhost:[0-9]*|127.0.0.1:[0-9]*|'[::1]:'[0-9]*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 walter_model_phi_lock() {
