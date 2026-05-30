@@ -58,16 +58,10 @@ curl -sS -i -H "cf-access-token: $TOK" "https://posthog.${WALTER_DOMAIN}/" | hea
 # (NOT: HTTP/2 200 + content-length: 0)
 ```
 
-**Pitfall when re-provisioning**: `setup/walter-host/cloudflare/02-create-tunnel.sh`
-generates ingress entries from the `SUBDOMAINS` array assuming every
-service is fronted by the walter-os central Caddy on `127.0.0.1:80`.
-PostHog escapes that pattern because it brings its own proxy. Either
-keep this override applied after every cloudflared config refresh OR
-add a `service: http://127.0.0.1:80` route to the walter-os central
-Caddy that does the same `header_up Host localhost:8000` rewrite — the
-latter is cleaner and removes the special case from cloudflared, but
-requires the walter-os Caddy container to be on `posthog_default`
-network (or use the host port 8100 as we do today).
+**Re-provisioning note**: `setup/walter-host/cloudflare/02-create-tunnel.sh`
+now emits this PostHog-specific `service: http://127.0.0.1:8100` entry and
+the `originRequest.httpHostHeader` rewrite automatically. The rest of the
+stack still routes through the walter-os central Caddy on `127.0.0.1:80`.
 
 **Same trap, other stacks**: any upstream stack that ships a self-
 hosted Caddy/nginx with a hard-coded `Host: localhost` matcher will

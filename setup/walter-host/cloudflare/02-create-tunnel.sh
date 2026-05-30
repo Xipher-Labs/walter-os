@@ -148,26 +148,32 @@ mkdir -p /tmp/walter-cf
 # Caddy — cloudflared only does TLS termination and host-based fan-in.
 #
 # Per-service overrides:
-#   Some upstream stacks ship their own Caddy/nginx that hard-codes a
-#   `Host: localhost:<port>` matcher (PostHog is the canonical case).
-#   Forwarding the public hostname unchanged makes that inner proxy
-#   miss its only site block and return an empty 200. See
-#   docs/operational/known-issues.md → "PostHog blank page".
-#   The associative array below carries the YAML `originRequest:`
-#   override block to emit per subdomain when present.
-declare -A INGRESS_OVERRIDES=(
-  [posthog]="  originRequest:\n    httpHostHeader: localhost:8000"
-)
+#   PostHog ships its own proxy on host port 8100. Its inner Caddy matches
+#   `Host: localhost:8000`, so the tunnel must bypass the central Caddy for
+#   this one service and rewrite the Host header. Keep the rest of the stack
+#   routed through central Caddy on host port 80.
+ingress_service_for() {
+  case "$1" in
+    posthog) printf 'http://127.0.0.1:8100' ;;
+    *) printf 'http://127.0.0.1:80' ;;
+  esac
+}
+
+ingress_origin_request_for() {
+  case "$1" in
+    posthog) printf '    originRequest:\n      httpHostHeader: localhost:8000\n' ;;
+  esac
+}
+
 {
   printf 'tunnel: %s\n' "$TUNNEL_ID"
   printf 'credentials-file: /etc/cloudflared/credentials.json\n\n'
   printf 'ingress:\n'
   for sub in "${SUBDOMAINS[@]}"; do
+    service_url="$(ingress_service_for "$sub")"
     printf '  - hostname: %s.%s\n' "$sub" "$DOMAIN"
-    printf '    service: http://127.0.0.1:80\n'
-    if [[ -n "${INGRESS_OVERRIDES[$sub]:-}" ]]; then
-      printf '%b\n' "${INGRESS_OVERRIDES[$sub]}"
-    fi
+    printf '    service: %s\n' "$service_url"
+    ingress_origin_request_for "$sub"
   done
   printf '  - service: http_status:404\n'
 } > /tmp/walter-cf/config.yml

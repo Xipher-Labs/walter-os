@@ -103,29 +103,43 @@ _for_loop_subdomains() {
 }
 
 # ---------------------------------------------------------------------------
-# AC-2: every ingress entry routes to Caddy (port 80), NOT individual ports
+# AC-2: ingress entries route to Caddy, except documented service overrides
 # ---------------------------------------------------------------------------
 
-@test "AC-2: no ingress entry routes directly to per-service host ports" {
+@test "AC-2: no ingress entry routes directly to undocumented per-service host ports" {
   [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
 
   # Per-service ports that the old broken config referenced (8222 / 4000 /
   # 8090 / 3000 / 3001 / 3010 / 8800) are no longer the dispatch target —
   # Caddy at port 80 is. Allow port 80 and 443 in the script (Caddy's
-  # ports); flag any other 127.0.0.1:<port> reference anywhere in the
-  # script's non-comment lines.
+  # ports) plus the documented PostHog proxy override on port 8100; flag
+  # any other 127.0.0.1:<port> reference anywhere in non-comment lines.
   #
   # Use `|| true` after each pipe so an empty-result grep doesn't propagate
   # exit 1 (which bats would treat as a test failure on the assignment).
   local bad
   bad=$( { grep -nE "http://127\\.0\\.0\\.1:[0-9]+" "$TUNNEL_SCRIPT" || true; } \
-    | { grep -vE 'http://127\.0\.0\.1:(80|443)([^0-9]|$)' || true; } \
+    | { grep -vE 'http://127\.0\.0\.1:(80|443|8100)([^0-9]|$)' || true; } \
     | { grep -vE ':\s*#' || true; } )
 
   if [[ -n "$bad" ]]; then
     printf 'Ingress entries bypassing Caddy (should route to :80):\n%s\n' "$bad"
     return 1
   fi
+}
+
+@test "AC-2b: PostHog override targets its proxy and rewrites Host header" {
+  [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
+
+  grep -q "posthog) printf 'http://127.0.0.1:8100'" "$TUNNEL_SCRIPT"
+  grep -q "httpHostHeader: localhost:8000" "$TUNNEL_SCRIPT"
+  grep -q "printf '    originRequest:\\\\n      httpHostHeader: localhost:8000\\\\n'" "$TUNNEL_SCRIPT"
+}
+
+@test "AC-2c: tunnel script stays compatible with macOS bash 3.2" {
+  [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
+
+  ! grep -q 'declare -A' "$TUNNEL_SCRIPT"
 }
 
 # ---------------------------------------------------------------------------
