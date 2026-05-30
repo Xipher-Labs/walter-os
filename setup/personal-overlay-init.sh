@@ -104,6 +104,63 @@ create_file() {
   ok "Created $label"
 }
 
+model_pref_default() {
+  case "$1" in
+    WALTER_MODEL_BACKEND_REVIEW) echo "codex" ;;
+    WALTER_MODEL_FRONTEND) echo "claude" ;;
+    WALTER_MODEL_LONGFORM) echo "claude" ;;
+    WALTER_MODEL_QUICK_REFACTOR) echo "codex" ;;
+    WALTER_MODEL_PHI) echo "local-ollama" ;;
+    WALTER_MODEL_BRAINSTORM) echo "claude,codex" ;;
+    WALTER_MODEL_DEFAULT) echo "claude" ;;
+    *) echo "" ;;
+  esac
+}
+
+ensure_model_preferences() {
+  local env_file="$OVERLAY_DIR/personal.env"
+  local keys=(
+    WALTER_MODEL_BACKEND_REVIEW
+    WALTER_MODEL_FRONTEND
+    WALTER_MODEL_LONGFORM
+    WALTER_MODEL_QUICK_REFACTOR
+    WALTER_MODEL_PHI
+    WALTER_MODEL_BRAINSTORM
+    WALTER_MODEL_DEFAULT
+  )
+  local key default value wrote_header=0
+
+  for key in "${keys[@]}"; do
+    if [[ -f "$env_file" ]] && grep -qE "^${key}=" "$env_file"; then
+      skip "$key"
+      continue
+    fi
+
+    default="$(model_pref_default "$key")"
+    value="$default"
+    if [[ $DRY_RUN -eq 0 && -t 0 ]]; then
+      printf "%s [%s]: " "$key" "$default" >&2
+      IFS= read -r value
+      value="${value:-$default}"
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+      dry "would add $key=$default to $env_file"
+      continue
+    fi
+
+    if [[ "$wrote_header" -eq 0 ]]; then
+      {
+        printf "\n# === MODEL ROUTING ===\n"
+        printf "# LiteLLM-style aliases. PHI must remain local.\n"
+      } >> "$env_file"
+      wrote_header=1
+    fi
+    printf "%s=%s\n" "$key" "$value" >> "$env_file"
+    ok "Added $key=$value"
+  done
+}
+
 # ---- mutual exclusion guard ----
 
 if [[ $FROM_SKELETON -eq 1 && -n "$GIT_CLONE_URL" ]]; then
@@ -261,6 +318,8 @@ if [[ ! -f "$OVERLAY_DIR/personal.env" ]]; then
 else
   skip "personal.env (operator-specific config)"
 fi
+
+ensure_model_preferences
 
 # Skills directory (empty, for operator-specific skills)
 if [[ $DRY_RUN -eq 0 ]]; then

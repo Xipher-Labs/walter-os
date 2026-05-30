@@ -18,6 +18,19 @@ mobile-first), not stylistic preferences. Reviews catch the bugs that
 matter to real users — slow pages, broken keyboard nav, layouts that
 shift while loading.
 
+## Model Routing
+
+Use the operator's frontend preference when a model needs to critique or rewrite
+UI, UX, visual hierarchy, accessibility copy, or interaction details:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+frontend_model="$(walter_model_for frontend)"
+```
+
+Default preference is Claude. The operator may point the alias at another
+LiteLLM route in `~/.config/walter-os/overlay/personal.env`.
+
 This skill auto-triggers on frontend-touching diffs. For a build-from-zero
 landing page, use `landing-page-fast` (which includes these rules but
 provides scaffolding).

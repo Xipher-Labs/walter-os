@@ -69,6 +69,7 @@ flowchart TD
 |---|---|
 | Consistent agent behaviour across Claude / Codex / Cursor / Antigravity | One `AGENTS.md` cascade (global → context → repo), one skills library, one MCP profile |
 | Defense against prompt-injection exfil | Default-deny network egress allowlist + bash-denylist + approval-gate hooks |
+| Model choice by task strength | `WALTER_MODEL_*` routing preferences for Codex, Claude, Gemini aliases, and local Ollama |
 | A reusable rigor + branch + review discipline | TDD-by-default, configurable branch flow, 3-round Copilot + Codex + reviewer-subagent loop |
 | A homelab / self-hosted backend (optional) | 25+ services: Plane, Forgejo, Grafana, n8n, Infisical, LiteLLM, Caddy, Cloudflared, Headscale, … |
 | A clear v1.0 stability promise | Four layers frozen at v1.0 with a deprecation policy + an executable conformance suite |

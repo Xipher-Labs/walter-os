@@ -167,6 +167,26 @@ ENV
   [[ "$output" == *"VAR=hello"* ]]
 }
 
+@test "P1-09: WALTER_MODEL_* routing keys are allowlisted" {
+  cat > "$TMP_CFG/env" <<'ENV'
+WALTER_MODEL_BACKEND_REVIEW=codex
+WALTER_MODEL_FRONTEND=claude
+WALTER_MODEL_LONGFORM=claude
+WALTER_MODEL_QUICK_REFACTOR=codex
+WALTER_MODEL_PHI=local-ollama
+WALTER_MODEL_BRAINSTORM=claude,codex
+WALTER_MODEL_DEFAULT=claude
+WALTER_MODEL_OVERRIDE=gemini
+WALTER_PHI_MODE=1
+ENV
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; printf '%s|%s|%s|%s' \"\$WALTER_MODEL_BACKEND_REVIEW\" \"\$WALTER_MODEL_BRAINSTORM\" \"\$WALTER_MODEL_OVERRIDE\" \"\$WALTER_PHI_MODE\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"codex|claude,codex|gemini|1"* ]]
+  [[ "$output" != *"not in the env allowlist"* ]]
+}
+
 @test "P1-09: missing env file is a no-op (not an error)" {
   # No env file created.
   run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; echo done"

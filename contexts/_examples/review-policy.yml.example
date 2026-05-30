@@ -1,0 +1,30 @@
+# Walter-OS review policy example.
+# Copy to your private overlay if you want explicit multi-model review routing:
+# ~/.config/walter-os/overlay/review-policy.yml
+
+review:
+  required_rounds:
+    - name: copilot
+      provider: github-copilot
+      purpose: first-pass pull request review
+    - name: codex-cross-review
+      model_domain: backend_review
+      purpose: security, backend, infrastructure, and edge-case review
+
+  optional_rounds:
+    - name: claude-design
+      model_domain: frontend
+      when:
+        - ui
+        - ux
+        - accessibility
+    - name: gemini-research
+      model_alias: gemini
+      when:
+        - research
+        - image-generation
+        - external-source-synthesis
+
+  phi:
+    model_domain: phi
+    external_apis_allowed: false

@@ -20,6 +20,11 @@ setup() {
   grep -q "model_alias" "$LIB"
 }
 
+@test "llm.sh metadata includes domain field" {
+  grep -q "domain" "$LIB"
+  grep -q "WALTER_MODEL_DOMAIN" "$LIB"
+}
+
 @test "llm.sh metadata includes agent_id field (not just agent)" {
   grep -q "agent_id" "$LIB"
 }

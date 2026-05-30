@@ -21,6 +21,18 @@ Brand-voice-aware content drafting skill. Five output modes, each with its
 own structural guide. Reads a voice file when available; falls back to
 generic professional SaaS voice.
 
+## Model Routing
+
+Use the long-form route for model selection:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+writing_model="$(walter_model_for longform)"
+```
+
+Default preference is Claude for voice, narrative structure, and nuanced prose.
+Operators can override the alias in `~/.config/walter-os/overlay/personal.env`.
+
 ## When to use this skill
 
 - Any structured content production: operator says "write a post about X."

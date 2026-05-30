@@ -17,7 +17,7 @@
 #
 # Subcommands:
 #   audit                       Run supply-chain audit now (foreground)
-#   status                      Show audit + spend status
+#   status [--models]           Show audit + spend status, or model routing
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
@@ -143,6 +143,11 @@ cmd_audit() {
 }
 
 cmd_status() {
+  if [[ "${1:-}" == "--models" ]]; then
+    cmd_status_models
+    return $?
+  fi
+
   echo "Walter-OS status — ${TODAY}"
   echo
   echo "Repo: $WALTER_OS_HOME"
@@ -215,6 +220,45 @@ cmd_status() {
     echo "  tokens_total:     ${tokens_total:-0}"
     echo "  agents_working:   ${agents_working:-0}"
   fi
+}
+
+cmd_status_models() {
+  local router="${WALTER_OS_HOME}/scripts/walter/lib/model-router.sh"
+  if [[ ! -f "$router" ]]; then
+    echo "walter-os status --models: missing router at $router" >&2
+    return 3
+  fi
+
+  # shellcheck source=/dev/null
+  source "$router"
+
+  echo "Model routing — ${TODAY}"
+  echo
+  echo "Effective routing:"
+  walter_models_print_effective
+
+  local metrics_file="${WALTER_METRICS_FILE:-/var/lib/walter-council/metrics.prom}"
+  if [[ -f "$metrics_file" ]]; then
+    echo
+    echo "Council tokens by model:"
+    awk '
+      /^walter_council_tokens_total\{/ {
+        model = "unknown"
+        if (match($0, /model="[^"]+"/)) {
+          model = substr($0, RSTART + 7, RLENGTH - 8)
+        }
+        totals[model] += $NF
+      }
+      END {
+        for (model in totals) {
+          printf "  %-20s %d\n", model ":", totals[model]
+        }
+      }
+    ' "$metrics_file" | sort
+  fi
+
+  echo
+  echo "Set WALTER_MODEL_* values in ~/.config/walter-os/overlay/personal.env."
 }
 
 # ---------- ack ----------
