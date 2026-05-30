@@ -89,6 +89,11 @@ fi
 
 # ---------- bypass detection ----------
 
+_mktemp_file() {
+  mktemp -t walter-network-gate.XXXXXX 2>/dev/null \
+    || mktemp "${TMPDIR:-/tmp}/walter-network-gate.XXXXXX" 2>/dev/null
+}
+
 # Spec D-6: BOTH env + flag must be present.
 #
 # R6 refinement (token-aware): the flag must be a REAL shell-quoted
@@ -104,7 +109,7 @@ fi
 # like a standalone flag.
 _has_bypass_flag() {
   local _tokfile
-  _tokfile="$(mktemp 2>/dev/null)"
+  _tokfile="$(_mktemp_file)"
   if [[ -n "$_tokfile" ]] && printf '%s' "$1" | xargs -n1 > "$_tokfile" 2>/dev/null; then
     local _hit=1
     grep -qxF -- '--allow-egress-outbound' "$_tokfile" && _hit=0
@@ -611,7 +616,7 @@ _inspect_segment() {
       # became multiple tokens (`'curl`, `https://...exfil'`). xargs
       # respects POSIX quoting and emits real argv-style tokens.
       local _shell_tokfile
-      _shell_tokfile="$(mktemp 2>/dev/null)"
+      _shell_tokfile="$(_mktemp_file)"
       if [[ -n "$_shell_tokfile" ]] \
          && printf '%s' "$seg" | xargs -n1 > "$_shell_tokfile" 2>/dev/null; then
         # Skip the shell binary name (token 1), walk flags until -c.
