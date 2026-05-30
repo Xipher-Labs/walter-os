@@ -1,0 +1,37 @@
+# Optional Renovate self-hosted runner.
+#
+# Disabled by default. Run with:
+#   walter_secrets_load
+#   docker compose --profile renovate run --rm renovate
+#
+# The bot token must come from the approved Walter-OS secrets flow; do not
+# write it to this directory's .env file.
+
+services:
+  renovate:
+    profiles: [renovate]
+    image: renovate/renovate:43.195.4
+    container_name: walter-renovate
+    restart: "no"
+    environment:
+      - RENOVATE_CONFIG_FILE=/usr/src/app/config.js
+      - RENOVATE_TOKEN=${RENOVATE_TOKEN:?required - load through walter_secrets_load or walter-run}
+      - RENOVATE_PLATFORM=${RENOVATE_PLATFORM:-github}
+      - RENOVATE_ENDPOINT=${RENOVATE_ENDPOINT:-}
+      - RENOVATE_REPOSITORIES=${RENOVATE_REPOSITORIES:-}
+      - RENOVATE_AUTODISCOVER=${RENOVATE_AUTODISCOVER:-false}
+      - RENOVATE_AUTODISCOVER_FILTER=${RENOVATE_AUTODISCOVER_FILTER:-}
+      - RENOVATE_AUTODISCOVER_NAMESPACES=${RENOVATE_AUTODISCOVER_NAMESPACES:-}
+      - RENOVATE_DRY_RUN=${RENOVATE_DRY_RUN:-}
+      - LOG_LEVEL=${RENOVATE_LOG_LEVEL:-info}
+      - TZ=${WALTER_TIMEZONE:-UTC}
+    volumes:
+      - ./config.js:/usr/src/app/config.js:ro
+      - renovate_cache:/tmp/renovate/cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  renovate_cache:
