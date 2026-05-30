@@ -177,6 +177,7 @@ ingress_origin_request_for() {
   done
   printf '  - service: http_status:404\n'
 } > /tmp/walter-cf/config.yml
+unset service_url
 
 echo "Config saved to /tmp/walter-cf/config.yml"
 echo "TUNNEL_ID=$TUNNEL_ID" > /tmp/walter-cf/.env
