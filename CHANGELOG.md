@@ -69,7 +69,91 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-Target release: **v0.5.1+** — Walter-VM ops hardening wave (issues #174-#181 filed 2026-05-22 from operator triage). Plus the OSS Trust A–E implementation tasks (per the v0.4.3 specs in `docs/specs/`), severity-gate runtime implementation (Phase A-F tree from `docs/specs/pr-review-severity-gate.plan.md`), and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
+Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isolation, A-4 capability tokens, A-5 read-only mounts), severity-gate runtime implementation (Phase A-F tree from `docs/specs/pr-review-severity-gate.plan.md`), and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
+
+---
+
+## [0.5.1] — 2026-05-23
+
+**Default-deny security floor + Antigravity adapter + uninstall + Walter-VM ops hardening.**
+
+Twelve merged PRs (#183, #187, #188, #189, #192, #193, #194, #198, #199, #200, #201, plus this release PR) since v0.5.0 land the OSS Trust epic A-2 (default-deny network egress allowlist), the Antigravity adapter (mirror of the Cursor adapter), the `install.sh --uninstall` flow with operator-pristine backup restore, the Control Tower HA-status fixes (Plane probe, LiteLLM tile), the postiz pin pre-Temporal, the cloudflared tunnel routing fix, the Council toggle (CT now bundles the walter-os CLI), the IFS-handling fix for the review loop, and the CLA gate SHA pin. The headline change is the network-gate hook: every agent-issued Bash command's outbound network calls are now blocked unless the target host is in the operator's allowlist.
+
+### Added (default-deny security floor)
+
+- **`#122` OSS Trust A-2 — default-deny network egress allowlist.** Walter-OS
+  ships with `hooks/network-gate.sh`, a PreToolUse hook that inspects every
+  agent-issued Bash command for outbound network calls (curl, wget, git,
+  gh, ssh, scp, rsync, nc, pip, npm, uvx, cargo, brew, gem, go, plus git
+  extensions lfs/svn/annex/p4) and blocks any target host that isn't in
+  the operator's `~/.config/walter-os/egress-allowlist.txt`. The new
+  `walter-os egress {add,remove,list,test,import}` CLI manages the file,
+  `contexts/_examples/egress-allowlist.example.txt` ships a recommended
+  bootstrap set, and `install.sh` offers a one-time prompt to import it.
+  Composes with `bash-denylist.sh` (WHAT — RCE patterns) and
+  `approval-gate.sh` (WHAT — destructive ops) — network-gate is the
+  WHERE layer. Token-aware two-factor bypass via
+  `WALTER_EGRESS_ALLOW_OVERRIDE=1` + the `--allow-egress-outbound`
+  CLI token. Closes the spec's threat-model row on prompt-injection
+  exfil. Full operator docs at `docs/operational/network-egress.md`.
+  Spec: `docs/specs/network-egress-allowlist.md`. 123 bats.
+
+### Added (operator-facing)
+
+- **`#190` Antigravity adapter** — `install.sh --antigravity-rules`
+  generates a project-local `<repo>/.agent/rules/walter-os.md` derived
+  from `AGENTS.md`, with a `<!-- agents-md-sha256: … -->` trailer so
+  `walter-os doctor --antigravity` can detect stale adapters. Mirrors
+  the Cursor adapter shipped in v0.5.0. Warns (does not fail) on
+  `GEMINI.md` precedence collisions. Spec:
+  `docs/specs/antigravity-adapter.md`.
+- **`#191` `install.sh --uninstall` + `walter-os uninstall` CLI** —
+  symlinks are removed and the OLDEST `.pre-walter-os.<ts>` backup is
+  restored (the operator's pristine pre-Walter-OS file). Backup naming
+  switched from opaque unix-timestamp to ISO-8601-UTC + unix
+  (`*.pre-walter-os.2026-05-23T01-00-00Z.1717000000`). `link_safe`
+  skips creating a redundant backup when the existing dest is already
+  a Walter-OS symlink (no more rolling `.pre-walter-os.<n>`
+  accumulation across upgrade runs). Non-TTY default is SAFE
+  (skip-restore + emit the manual `mv` command rather than silently
+  delete the operator's backup). Spec: see Gap 1-4 in
+  `tests/install/uninstall-restore.bats`.
+
+### Fixed (Walter-VM ops triage)
+
+- **`#188` (PR #194) Cloudflared tunnel — route ALL Caddy subdomains
+  via Caddy.** Single source-of-truth `SUBDOMAINS` array in
+  `setup/walter-host/cloudflare/02-create-tunnel.sh` (22 entries from
+  `Caddyfile.template`); for-loop iterates the array for both CNAME
+  creation and ingress emission so a new subdomain only needs the
+  array bumped.
+- **`#176` (PR #194) Council toggle — bundle walter-os CLI in
+  Control Tower image.** The CT container's `apk add bash jq` +
+  `COPY bin/walter-os /usr/local/bin/walter-os` lets the `mode
+  consensus {on|off|status}` subcommand actually run when invoked
+  from the Council toggle UI.
+- **`#195` (PR #198) CT HA-status — Plane probe uses
+  `/api/instances/`.** `/api/health` returns 404 on current Plane
+  builds; `/api/instances/` returns 200. Plane tile no longer false-
+  reports RED.
+- **`#172` (PR #199) postiz — pin to v2.20.2 pre-Temporal.** Upstream
+  v2.21.7 introduced a Temporal + Postgres visibility-store
+  search-attribute limit that wedges the worker. Pin until upstream
+  ships a fix.
+- **`#183` Control Tower LiteLLM tile — auth gap.** False
+  "unreachable" was actually a Cloudflare Access auth gap; CT now
+  passes the service token correctly when probing.
+- **`#189` walter-review-loop — pin rounds-completed JSON contract.**
+  The shared review-loop composite Action now emits a stable
+  `rounds-completed` JSON envelope so callers can parse without
+  scraping logs.
+- **`#186` (PR #193) review-loop — Codex mount step + explicit
+  github-token.** Cross-review job now mounts Codex CLI auth + sets
+  `GH_TOKEN` explicitly so `gh pr edit` works in the reusable
+  workflow under composite-action invocation.
+- **`#187` (PR #192) cla.yml — pin contributor-assistant by SHA.**
+  Floating `@v1` tag replaced with a frozen SHA so CLA-gate behavior
+  doesn't shift between PRs.
 
 ---
 

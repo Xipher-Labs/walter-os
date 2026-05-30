@@ -30,6 +30,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		tests/lint-frontmatter.sh \
 		hooks/approval-gate.sh \
 		hooks/bash-denylist.sh \
+		hooks/network-gate.sh \
 		hooks/branch-flow-guard.sh \
 		hooks/daily-audit-gate.sh \
 		hooks/pre-commit-tests.sh \

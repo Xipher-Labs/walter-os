@@ -993,9 +993,14 @@ merge_claude_hooks() {
   #   2. approval-gate.sh  → TIER-based approval matrix (P1-05/P1-06).
   #      Decides whether destructive ops / pushes / PRs need operator
   #      confirmation. Consults ~/.config/walter-os/agent-approvals.yml.
-  #   3. branch-flow-guard.sh → blocks pushes that violate the
+  #   3. network-gate.sh   → default-deny network egress (#122 OSS Trust
+  #      A-2). Blocks any outbound network call whose host isn't in the
+  #      operator's egress-allowlist.txt. Composes with approval-gate
+  #      (WHAT vs WHERE). Last of the gates because it's the only one
+  #      that needs the loader to source + per-call host extraction.
+  #   4. branch-flow-guard.sh → blocks pushes that violate the
   #      configured branch flow (single-tier vs three-stage).
-  #   4. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
+  #   5. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
   #
   # bash-denylist + approval-gate were ABSENT from this template at
   # one point (Codex R2 MEDIUM M2 caught the regression). The bats
@@ -1017,6 +1022,7 @@ merge_claude_hooks() {
         hooks: [
           { type: "command", command: ($repo + "/hooks/bash-denylist.sh"),    _walter_os: true },
           { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/network-gate.sh"),     _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
         ]
@@ -2185,6 +2191,100 @@ setup_git_hooks() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Egress allowlist first-run prompt (#122 OSS Trust A-2 / AC-5)
+# ---------------------------------------------------------------------------
+#
+# Walter-OS ships a default-deny network egress gate
+# (hooks/network-gate.sh — registered by merge_claude_settings above).
+# Without an allowlist, EVERY outbound network call from the agent is
+# blocked. The bundled example at
+# contexts/_examples/egress-allowlist.example.txt is the recommended
+# starting set (GitHub, npm/pypi, the supported LLM APIs, NTP, plus
+# llm./secrets. under ${WALTER_DOMAIN}).
+#
+# This prompt:
+#   - Only fires when the allowlist file is absent (first install, or an
+#     upgrade/recovery run where the operator has not imported one yet).
+#   - Only fires when STDIN + STDOUT are both a TTY.
+#   - Skipped under DRY_RUN, CHECK_ONLY, UNINSTALL.
+#   - Always prints a hint on how to import later (`walter-os egress import …`).
+#
+# Spec: docs/specs/network-egress-allowlist.md
+prompt_egress_import() {
+  local cfg="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+  local allowlist="$cfg/egress-allowlist.txt"
+  local example="$REPO_ROOT/contexts/_examples/egress-allowlist.example.txt"
+
+  step "Egress allowlist (#122 OSS Trust A-2)"
+
+  if [[ ! -f "$example" ]]; then
+    warn "  Bundled allowlist example missing at $example — skipping prompt."
+    return 0
+  fi
+
+  if [[ -f "$allowlist" ]]; then
+    say "  Allowlist already at $allowlist — leaving as is."
+    say "  Edit directly OR use: walter-os egress {add,remove,list,import}"
+    return 0
+  fi
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would offer to import $example → $allowlist"
+    return 0
+  fi
+
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    warn "  No TTY — skipping import prompt. To opt in later:"
+    warn "    walter-os egress import \"${example}\""
+    return 0
+  fi
+
+  say "  Walter-OS ships a DEFAULT-DENY network egress gate. The bundled"
+  say "  allowlist covers GitHub, npm/pypi, the supported LLM APIs, NTP,"
+  say "  plus llm./secrets. under \${WALTER_DOMAIN}."
+  say ""
+  printf "  Import the bundled allowlist now? [Y/n] "
+  local answer=""
+  local read_rc=0
+  # Capture read's exit code WITHOUT aborting `set -e`: a failed read
+  # (EOF / Ctrl-D / closed stdin) returns non-zero. On EOF we treat the
+  # situation as "no answer; skip import + print manual hint" rather
+  # than the [Y/n] default-Yes branch, since EOF usually means the
+  # install was interrupted unexpectedly. Pressing ENTER (empty line,
+  # read_rc=0) still imports per the [Y/n] convention. Copilot R4.
+  read -r answer || read_rc=$?
+  if [[ "$read_rc" -ne 0 ]]; then
+    warn "  No answer (EOF) — skipping import. To opt in later:"
+    warn "    walter-os egress import \"${example}\""
+    return 0
+  fi
+  case "$answer" in
+    n|N|no|NO)
+      warn "  Skipped — every outbound call from the agent is BLOCKED until"
+      warn "  you import an allowlist. To opt in later:"
+      warn "    walter-os egress import \"${example}\""
+      return 0
+      ;;
+    *)
+      mkdir -p "$cfg"
+      local walter_os_bin="${REPO_ROOT}/bin/walter-os"
+      if [[ ! -x "$walter_os_bin" ]]; then
+        err "  walter-os CLI not found at $walter_os_bin — cannot import. Re-run after install completes."
+        return 1
+      fi
+      # NOT `cmd && ok || warn` — that would also fire `warn` if `ok`
+      # returns non-zero (shellcheck SC2015). Explicit if/else.
+      if WALTER_OS_HOME="$REPO_ROOT" WALTER_CONFIG="$cfg" \
+          "$walter_os_bin" egress import "$example"; then
+        ok "  Imported $(wc -l < "$allowlist" | tr -d ' ') line(s) into $allowlist"
+      else
+        warn "  Import failed — review stderr above. Retry with: walter-os egress import \"$example\""
+      fi
+      ;;
+  esac
+}
+
 run_step_0() {
   check_preflight
   ensure_dirs
@@ -2201,6 +2301,7 @@ run_step_0() {
   sync_work_profiles
   install_daily_audit
   setup_git_hooks
+  prompt_egress_import
 }
 
 # ==========================================================================

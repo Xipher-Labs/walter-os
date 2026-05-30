@@ -62,6 +62,9 @@
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
+#   egress {add|remove|list|test|import}
+#                               Manage network egress allowlist (#122 A-2)
+#                               See docs/operational/network-egress.md
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
 #   help                        Show this help
@@ -1471,6 +1474,238 @@ cmd_uninstall() {
   exec bash "$install_sh" --uninstall "$@"
 }
 
+# ---------- egress (#122 A-2: network egress allowlist) ----------
+#
+# Manages the operator's egress allowlist file consumed by the
+# `hooks/network-gate.sh` PreToolUse hook + the egress-loader lib.
+# Spec: docs/specs/network-egress-allowlist.md
+#
+# Subcommands:
+#   egress add <host>      idempotent append to allowlist
+#   egress remove <host>   idempotent remove (missing entry is no-op)
+#   egress list            cat the allowlist (with hint if empty/missing)
+#   egress test <host>     query loader; exit 0 on allow / 1 on deny
+#   egress import <path>   overwrite allowlist with envsubst of <path>
+#                          (lines referencing unset ${VAR} are skipped
+#                           with WARN on stderr).
+
+_egress_allowlist_path() {
+  # Delegate to the loader's resolver when sourceable so both halves
+  # (`add`/`remove`/`list`/`import` here + `test` via sourced loader)
+  # see the same on-disk file. Falls back to the same default literal
+  # if the loader isn't reachable (e.g. walter-os symlinked outside
+  # its repo). Copilot R2 NIT.
+  local loader="${WALTER_OS_HOME}/scripts/walter/lib/egress-loader.sh"
+  if [[ -f "$loader" ]]; then
+    # shellcheck disable=SC1090
+    ( source "$loader" && walter_egress_allowlist_path )
+    return
+  fi
+  echo "${WALTER_CONFIG:-${HOME}/.config/walter-os}/egress-allowlist.txt"
+}
+
+_egress_print_usage() {
+  cat >&2 <<'USAGE'
+Usage: walter-os egress <subcommand> [args]
+
+  add <host>      Append host to the allowlist (idempotent)
+  remove <host>   Remove host from the allowlist (idempotent)
+  list            Print the current allowlist
+  test <host>     Probe the loader; exit 0 if allowed, 1 if denied
+  import <path>   Overwrite the allowlist from <path> (with envsubst)
+
+  Spec: docs/specs/network-egress-allowlist.md
+USAGE
+}
+
+# Validate a host argument. Accepts apex domains (`foo.com`),
+# subdomains, per-spec wildcards (`*.foo.com`, `*.*.foo.com`), and IPv6
+# bracketed literals (`[::1]`, `[fd00::1]`).
+# Rejects empty strings + anything with whitespace or shell metachars.
+_egress_validate_host() {
+  local host="$1"
+  if [[ -z "$host" ]]; then
+    echo "walter-os egress: host argument is required" >&2
+    return 2
+  fi
+  # Two valid shapes (covering DNS hostnames, wildcards, and IPv6
+  # bracketed literals). Split the check to dodge POSIX character-class
+  # escaping for `[` and `]`, which differs subtly across regex engines.
+  #   1. DNS hostname or wildcard: `[A-Za-z0-9._*-]+`
+  #   2. IPv6 bracketed literal:   `\[[0-9a-fA-F:]+\]`  (R2 W1)
+  if [[ "$host" =~ ^[A-Za-z0-9._*-]+$ ]]; then
+    return 0
+  fi
+  if [[ "$host" =~ ^\[[0-9a-fA-F:]+\]$ ]]; then
+    return 0
+  fi
+  echo "walter-os egress: invalid host '$host' — must be a DNS hostname (with optional '*' label) or an IPv6 bracketed literal like '[::1]'" >&2
+  return 2
+}
+
+cmd_egress() {
+  if [[ $# -lt 1 ]]; then
+    _egress_print_usage
+    return 2
+  fi
+  local sub="$1"; shift
+  local file
+  file="$(_egress_allowlist_path)"
+
+  case "$sub" in
+    add)
+      local host="${1:-}"
+      _egress_validate_host "$host" || return $?
+      mkdir -p "$(dirname "$file")"
+      [[ -f "$file" ]] || : > "$file"
+      if grep -qxF -- "$host" "$file"; then
+        echo "walter-os egress: '$host' already in allowlist (idempotent)" >&2
+      else
+        printf '%s\n' "$host" >> "$file"
+        echo "walter-os egress: added '$host'" >&2
+      fi
+      ;;
+    remove|rm)
+      local host="${1:-}"
+      _egress_validate_host "$host" || return $?
+      if [[ ! -f "$file" ]]; then
+        echo "walter-os egress: no allowlist at $file (nothing to remove)" >&2
+        return 0
+      fi
+      if grep -qxF -- "$host" "$file"; then
+        local tmp; tmp="$(mktemp)"
+        grep -vxF -- "$host" "$file" > "$tmp" || true
+        mv "$tmp" "$file"
+        echo "walter-os egress: removed '$host'" >&2
+      else
+        echo "walter-os egress: '$host' not in allowlist (idempotent)" >&2
+      fi
+      ;;
+    list|ls)
+      if [[ ! -s "$file" ]]; then
+        echo "# walter-os egress: allowlist at $file is empty or missing." >&2
+        echo "# Hint: walter-os egress import \"\${WALTER_OS_HOME}/contexts/_examples/egress-allowlist.example.txt\"" >&2
+        echo "#  or:  walter-os egress add <host>" >&2
+        return 0
+      fi
+      cat "$file"
+      ;;
+    test)
+      local host="${1:-}"
+      _egress_validate_host "$host" || return $?
+      # Source loader fresh per invocation so each test sees the current
+      # on-disk allowlist (no caching).
+      # shellcheck disable=SC1090
+      source "${WALTER_OS_HOME}/scripts/walter/lib/egress-loader.sh"
+      if walter_egress_host_allowed "$host"; then
+        echo "allowed: $host"
+        return 0
+      else
+        echo "denied: $host"
+        return 1
+      fi
+      ;;
+    import)
+      local src="${1:-}"
+      if [[ -z "$src" ]]; then
+        echo "walter-os egress import: source path required" >&2
+        return 2
+      fi
+      if [[ ! -f "$src" ]]; then
+        echo "walter-os egress import: source not found: $src" >&2
+        return 2
+      fi
+      mkdir -p "$(dirname "$file")"
+      local tmp; tmp="$(mktemp)"
+      local line line_no=0 skipped_lines="" missing_vars=""
+      # Per spec AC-4: lines that reference an unset ${VAR} are SKIPPED
+      # with a WARN on stderr (not silently expanded to empty, which
+      # would create bogus hosts like `llm.` / `secrets.`).
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        line_no=$((line_no + 1))
+        # Comments + blanks pass through unchanged.
+        local stripped="${line#"${line%%[![:space:]]*}"}"
+        if [[ -z "$stripped" || "${stripped:0:1}" == "#" ]]; then
+          printf '%s\n' "$line" >> "$tmp"
+          continue
+        fi
+        # Find every ${VAR} / $VAR reference in this line. Codex R2 C3
+        # finding: the previous implementation depended on `envsubst`
+        # (part of gettext) which is NOT installed by default on
+        # macOS — so the first-run allowlist import broke on the
+        # operator's reference machine. We now collect the references
+        # via grep AND do the expansion in pure bash parameter
+        # expansion, so no external dependency is needed.
+        local var var_unset=0 line_missing=""
+        local -a vars_to_expand=()
+        while IFS= read -r var; do
+          [[ -z "$var" ]] && continue
+          # Strip $ + { + } prefix/suffix to get the bare name.
+          var="${var#\$}"
+          var="${var#\{}"
+          var="${var%\}}"
+          # Track every unique var name (case-preserving — the same name
+          # may appear multiple times in one line).
+          local _seen=0 _v
+          for _v in "${vars_to_expand[@]}"; do
+            [[ "$_v" == "$var" ]] && { _seen=1; break; }
+          done
+          [[ "$_seen" -eq 0 ]] && vars_to_expand+=("$var")
+          # Check if SET + non-empty.
+          if [[ -z "${!var:-}" ]]; then
+            var_unset=1
+            line_missing+=" \$${var}"
+          fi
+        done < <(printf '%s\n' "$line" | grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*\}?' || true)
+        if [[ "$var_unset" -eq 1 ]]; then
+          echo "walter-os egress import: WARN line $line_no skipped (unset:${line_missing}): $line" >&2
+          skipped_lines+="$line"$'\n'
+          for v in $line_missing; do
+            v="${v#\$}"
+            case " $missing_vars " in
+              *" $v "*) ;;
+              *) missing_vars+="$v " ;;
+            esac
+          done
+          continue
+        fi
+        # All referenced vars are set → expand the line via pure-bash
+        # parameter substitution (no envsubst / gettext dependency).
+        # Replace `${VAR}` and `$VAR` forms with the env-resolved value.
+        local expanded="$line" vname vval
+        for vname in "${vars_to_expand[@]}"; do
+          vval="${!vname}"
+          # Brace form `${VAR}` first (so we don't half-replace it).
+          expanded="${expanded//\$\{$vname\}/$vval}"
+          # Bare form `$VAR` second (this matches greedy — could partial-
+          # match a longer variable name like `$WALTER_DOMAIN_FOO` if
+          # both `WALTER_DOMAIN` and `WALTER_DOMAIN_FOO` were referenced.
+          # The grep-derived `vars_to_expand` list is processed in line
+          # order, so the longest-prefix-first ordering issue is rare
+          # in practice; operators with overlapping names should use
+          # the brace form.)
+          expanded="${expanded//\$$vname/$vval}"
+        done
+        printf '%s\n' "$expanded" >> "$tmp"
+      done < "$src"
+      mv "$tmp" "$file"
+      echo "walter-os egress import: wrote $(wc -l < "$file" | tr -d ' ') line(s) to $file" >&2
+      if [[ -n "$missing_vars" ]]; then
+        echo "walter-os egress import: NOTE — skipped lines referencing unset vars: $missing_vars" >&2
+      fi
+      ;;
+    -h|--help|help)
+      _egress_print_usage
+      return 0
+      ;;
+    *)
+      echo "walter-os egress: unknown subcommand: $sub" >&2
+      _egress_print_usage
+      return 2
+      ;;
+  esac
+}
+
 cmd_doctor() {
   # Parse optional --tier N flag. Without it, every check runs (legacy
   # contract preserved). With it, only checks tagged ≤ N run — useful
@@ -1728,7 +1963,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay)
+    sync|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -1765,6 +2000,7 @@ case "$cmd" in
   new)                cmd_new "$@" ;;
   bridge)             exec "${WALTER_OS_HOME}/scripts/walter/subcommands/bridge.sh" "$@" ;;
   overlay)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/overlay.sh" "$@" ;;
+  egress)             cmd_egress "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
