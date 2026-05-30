@@ -535,10 +535,6 @@ _inspect_segment() {
         break ;;
     esac
   done
-  if [[ ${#tokens[@]} -eq 0 ]]; then
-    echo "ALLOW"
-    return 0
-  fi
   # Segment was pure assignments → no CLI here → ALLOW (any
   # substitution-smuggled CLI was inspected separately).
   if [[ ${#tokens[@]} -eq 0 ]]; then
