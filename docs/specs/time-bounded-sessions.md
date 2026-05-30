@@ -1,6 +1,6 @@
 # Time-bounded sessions (OSS Trust A-4) — spec
 
-**Status**: ready for `/write-plan` after operator approval
+**Status**: Partially implemented (AC-1 foundation in progress)
 **Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-4 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
 **Target release**: v0.5.0
 **Depends on**: env-allowlist parser (P1-09 — in PR #69, also not yet on `main`) for the new env vars.
@@ -90,8 +90,8 @@ A-2 / capability-tokens).
     explicit. These exist so `walter-os session list` (AC-6) can
     display the limits that WERE in effect when the session started,
     even if the env vars have been changed since.
-- [ ] `scripts/walter/lib/session-state.sh` exposes `walter_session_get`, `walter_session_touch`, `walter_session_end`.
-- [ ] `bats` coverage in `tests/walter/session-state.bats`:
+- [x] `scripts/walter/lib/session-state.sh` exposes `walter_session_get`, `walter_session_touch`, `walter_session_end`.
+- [x] `bats` coverage in `tests/walter/session-state.bats`:
   - First invocation creates the state file with current ts
   - Subsequent invocations within idle window update `last_activity_at`
   - Invocation after `max_idle_min` gap creates a NEW session

@@ -1,0 +1,97 @@
+#!/usr/bin/env bats
+# Foundation tests for #122 time-bounded session state.
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  LIB="$REPO_ROOT/scripts/walter/lib/session-state.sh"
+  TMP_HOME="$(mktemp -d)"
+  export HOME="$TMP_HOME"
+  export WALTER_CONFIG="$TMP_HOME/.config/walter-os"
+  export WALTER_SESSION_REPO="$TMP_HOME/work/repo"
+  export WALTER_SESSION_MAX_HOURS=8
+  export WALTER_SESSION_MAX_IDLE_MIN=60
+  mkdir -p "$WALTER_CONFIG" "$WALTER_SESSION_REPO"
+}
+
+teardown() {
+  case "$TMP_HOME" in
+    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
+  esac
+}
+
+@test "session touch creates state file with current timestamps" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"started"'* ]]
+
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  [ -f "$state_file" ]
+  jq -e '.session_id and .started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:00:00Z"' "$state_file"
+}
+
+@test "session touch within idle window updates last_activity_at" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+
+  export WALTER_SESSION_NOW_EPOCH=1767227400
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"active"'* ]]
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  jq -e '.started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:30:00Z"' "$state_file"
+}
+
+@test "session touch after idle window starts a new session" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  first_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
+
+  export WALTER_SESSION_NOW_EPOCH=1767231001
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"started"'* ]]
+  second_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
+  [ "$first_id" != "$second_id" ]
+}
+
+@test "session touch after max hours reports max-hours expiry" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+
+  export WALTER_SESSION_NOW_EPOCH=1767254401
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 10 ]
+  [[ "$output" == *'"status":"expired"'* ]]
+  [[ "$output" == *'"trigger":"max-hours"'* ]]
+}
+
+@test "PHI mode caps effective limits" {
+  export WALTER_PHI_MODE=1
+  export WALTER_SESSION_MAX_HOURS=12
+  export WALTER_SESSION_MAX_IDLE_MIN=90
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  jq -e '.max_hours_at_start == 4 and .max_idle_min_at_start == 30' "$state_file"
+}
+
+@test "session end removes state file" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  [ -f "$state_file" ]
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ ! -f "$state_file" ]
+}
