@@ -3,14 +3,16 @@
 Self-hostable agentic framework by Nous Research (MIT licensed).
 Alternative to OpenClaw with 20+ platform integrations and an optional skill-learning loop.
 
-Image: `walter-os/hermes-agent:v2026.5.7-stt` (built locally from `Dockerfile`,
-extends `nousresearch/hermes-agent:v2026.5.7` with `faster-whisper` for local
-privacy-preserving STT — see `Dockerfile` header for the rationale).
+Image: `walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION}-stt` (defaults to
+`walter-os/hermes-agent:v2026.5.7-stt`, built locally from `Dockerfile`, and
+extends `nousresearch/hermes-agent:${HERMES_AGENT_BASE_VERSION}` with pinned
+`faster-whisper` for local privacy-preserving STT — see `Dockerfile` header for
+the rationale).
 Dashboard: `https://hermes.${WALTER_DOMAIN}`
 API: `http://localhost:8642` (OpenAI-compatible, local-only)
 
 **Upgrading the upstream Hermes version:**
-1. Bump `BASE_VERSION` in `compose.yml` (also in the image tag suffix).
+1. Bump `HERMES_AGENT_BASE_VERSION` in `.env`.
 2. `docker compose --profile hermes-agent build --no-cache` to rebuild.
 3. `docker compose --profile hermes-agent up -d --force-recreate`.
 

@@ -26,6 +26,10 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
     grep -q "LLM backend" "$SERVICE_DIR/.env.template"
 }
 
+@test ".env.template declares the Hermes base image version" {
+    grep -q '^HERMES_AGENT_BASE_VERSION=v[0-9]' "$SERVICE_DIR/.env.template"
+}
+
 @test ".env.template has LITELLM_HERMES_KEY" {
     grep -q "LITELLM_HERMES_KEY" "$SERVICE_DIR/.env.template"
 }
@@ -54,4 +58,26 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
     CADDY="$REPO_ROOT/setup/walter-host/caddy/Caddyfile.template"
     [ -f "$CADDY" ]
     grep -q 'hermes\.' "$CADDY"
+}
+
+@test "Dockerfile re-declares BASE_VERSION after FROM for labels" {
+    awk '
+        /^FROM / { after_from=1; next }
+        after_from && /^ARG BASE_VERSION$/ { found=1 }
+        END { exit(found ? 0 : 1) }
+    ' "$SERVICE_DIR/Dockerfile"
+}
+
+@test "Dockerfile pins faster-whisper version" {
+    grep -q 'faster-whisper==${FASTER_WHISPER_VERSION}' "$SERVICE_DIR/Dockerfile"
+    grep -q '^ARG FASTER_WHISPER_VERSION=[0-9]' "$SERVICE_DIR/Dockerfile"
+}
+
+@test "compose.yml uses one Hermes base version variable for image and build arg" {
+    grep -q 'image: walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION:-v2026.5.7}-stt' "$SERVICE_DIR/compose.yml"
+    grep -q 'BASE_VERSION: ${HERMES_AGENT_BASE_VERSION:-v2026.5.7}' "$SERVICE_DIR/compose.yml"
+}
+
+@test "services inventory documents the Walter Hermes STT image" {
+    grep -q 'walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION}-stt' "$REPO_ROOT/setup/SERVICES-INVENTORY.md"
 }

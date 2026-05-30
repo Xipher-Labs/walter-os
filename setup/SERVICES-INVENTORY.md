@@ -458,7 +458,7 @@ Layer 7 — meta:
 
 | Field | Value |
 |---|---|
-| Image | `nousresearch/hermes-agent:v2026.5.7` |
+| Image | `walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION}-stt` (local flavor of `nousresearch/hermes-agent:${HERMES_AGENT_BASE_VERSION}`) |
 | Subdomain | `hermes.${WALTER_DOMAIN}` |
 | Profile | `hermes-agent` |
 | Port (API) | 127.0.0.1:8642 → hermes.${WALTER_DOMAIN} via Caddy (dashboard: 9119) |

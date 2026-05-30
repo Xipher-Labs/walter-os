@@ -24,6 +24,9 @@
 ARG BASE_VERSION=v2026.5.7
 FROM nousresearch/hermes-agent:${BASE_VERSION}
 
+ARG BASE_VERSION
+ARG FASTER_WHISPER_VERSION=1.2.1
+
 # Layer 1: install faster-whisper into Hermes' venv.
 # Upstream uses uv as the package manager; we reuse it for consistency.
 # --python pinpoints the target venv interpreter; --no-cache-dir keeps the
@@ -32,7 +35,7 @@ USER root
 RUN uv pip install \
       --python /opt/hermes/.venv/bin/python \
       --no-cache-dir \
-      faster-whisper
+      "faster-whisper==${FASTER_WHISPER_VERSION}"
 
 # Sanity check at build time so a broken release of faster-whisper fails the
 # build instead of breaking the running container at first voice message.
@@ -48,4 +51,5 @@ LABEL org.opencontainers.image.title="walter-os/hermes-agent" \
       org.opencontainers.image.source="https://github.com/Xipher-Labs/walter-os" \
       org.opencontainers.image.licenses="MIT" \
       walter-os.flavor="stt" \
+      walter-os.faster-whisper="${FASTER_WHISPER_VERSION}" \
       walter-os.upstream="nousresearch/hermes-agent:${BASE_VERSION}"
