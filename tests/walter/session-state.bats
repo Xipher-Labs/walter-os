@@ -25,6 +25,13 @@ _mode() {
   stat -f "%Lp" "$1" 2>/dev/null || stat -c "%a" "$1"
 }
 
+_openssl_or_skip() {
+  local openssl_bin
+  openssl_bin="$(bash -c "source '$LIB'; _walter_session_openssl")" \
+    || skip "ED25519-capable openssl required"
+  printf '%s' "$openssl_bin"
+}
+
 @test "session touch creates state file with current timestamps" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
@@ -39,7 +46,7 @@ _mode() {
 }
 
 @test "session touch creates capability signing key material" {
-  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  openssl_bin="$(_openssl_or_skip)"
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
   run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
@@ -55,11 +62,11 @@ _mode() {
   [ -d "$caps_dir" ]
   [ "$(_mode "$private_key")" = "600" ]
   [ "$(_mode "$caps_dir")" = "700" ]
-  openssl pkey -in "$private_key" -pubout 2>/dev/null | cmp -s - "$public_key"
+  "$openssl_bin" pkey -in "$private_key" -pubout 2>/dev/null | cmp -s - "$public_key"
 }
 
 @test "concurrent session starts leave one key and caps directory" {
-  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  _openssl_or_skip >/dev/null
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null &
@@ -77,7 +84,7 @@ _mode() {
 }
 
 @test "session start reclaims a stale lock with a dead pid" {
-  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  _openssl_or_skip >/dev/null
   export WALTER_SESSION_NOW_EPOCH=1767225600
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
   lock_dir="${state_file}.lock"
@@ -132,7 +139,7 @@ _mode() {
 }
 
 @test "session start removes orphan material from stale startup lock" {
-  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  _openssl_or_skip >/dev/null
   export WALTER_SESSION_NOW_EPOCH=1767225600
   export WALTER_SESSION_LOCK_STALE_SEC=30
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
