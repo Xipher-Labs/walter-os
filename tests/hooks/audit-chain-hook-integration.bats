@@ -8,7 +8,9 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   TMP_HOME="$(mktemp -d)"
   TMP_CFG="$TMP_HOME/.config/walter-os"
+  TEST_REPO="$TMP_HOME/repo"
   mkdir -p "$TMP_CFG"
+  mkdir -p "$TEST_REPO"
 
   export HOME="$TMP_HOME"
   export WALTER_CONFIG="$TMP_CFG"
@@ -19,6 +21,13 @@ setup() {
   export WALTER_AGENT_NAME="test-agent"
   unset PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT
   unset WALTER_DENYLIST_BYPASS WALTER_EGRESS_ALLOW_OVERRIDE
+  unset WALTER_BRANCH_FLOW WALTER_PRECOMMIT_FULL
+
+  git -C "$TEST_REPO" init -q -b feature/test
+  git -C "$TEST_REPO" config user.email "test@test.com"
+  git -C "$TEST_REPO" config user.name "Test"
+  git -C "$TEST_REPO" commit --allow-empty -q -m "init"
+  git -C "$TEST_REPO" remote add origin https://github.com/example/test.git
 
   cat > "$WALTER_CONFIG/trust-tiers.yml" <<'TIERS'
 agents:
@@ -77,6 +86,14 @@ _network_gate_tool() {
   local tool="$1"
   jq -n --arg tool "$tool" '{"tool_name":$tool,"tool_input":{}}' \
     | "$REPO_ROOT/hooks/network-gate.sh"
+}
+
+_branch_flow_guard() {
+  (cd "$TEST_REPO" && _hook_event Bash "$1" | "$REPO_ROOT/hooks/branch-flow-guard.sh")
+}
+
+_pre_commit_tests() {
+  (cd "$TEST_REPO" && _hook_event Bash "$1" | "$REPO_ROOT/hooks/pre-commit-tests.sh")
 }
 
 _rows() {
@@ -178,4 +195,51 @@ SH
   echo "$output" | jq -e '.decision == "block"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "network-gate" and .decision == "block"' "$(_chain_path)"
+}
+
+@test "branch-flow-guard allow appends exactly one audit row" {
+  run _branch_flow_guard "git push origin feature/test"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "branch-flow-guard" and .decision == "allow"' "$(_chain_path)"
+}
+
+@test "branch-flow-guard block appends exactly one audit row" {
+  run _branch_flow_guard "git push origin main"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "branch-flow-guard" and .decision == "block"' "$(_chain_path)"
+}
+
+@test "pre-commit-tests allow appends exactly one audit row" {
+  run _pre_commit_tests "git commit -m test"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "pre-commit-tests" and .decision == "allow"' "$(_chain_path)"
+}
+
+@test "pre-commit-tests block appends exactly one audit row" {
+  cat > "$TEST_REPO/package.json" <<'JSON'
+{"scripts":{"lint":"exit 1"}}
+JSON
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/pnpm" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$TMP_HOME/mock-bin/pnpm"
+  export PATH="$TMP_HOME/mock-bin:$PATH"
+
+  run _pre_commit_tests "git commit -m test"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "pre-commit-tests" and .decision == "block"' "$(_chain_path)"
 }
