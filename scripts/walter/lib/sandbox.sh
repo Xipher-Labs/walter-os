@@ -67,15 +67,28 @@ _walter_sandbox_path_mode() {
   fi
 }
 
+_walter_sandbox_current_uid() {
+  local uid
+  uid="$(id -u 2>/dev/null)" || {
+    echo "walter-sandbox: failed to determine current uid" >&2
+    return 1
+  }
+  if [[ -z "$uid" ]]; then
+    echo "walter-sandbox: failed to determine current uid" >&2
+    return 1
+  fi
+  printf '%s\n' "$uid"
+}
+
 _walter_sandbox_validate_owned_dir() {
   local path="$1" owner uid mode
   if [[ -L "$path" || ! -d "$path" ]]; then
     echo "walter-sandbox: unsafe runtime path: $path" >&2
     return 1
   fi
-  uid="$(id -u 2>/dev/null || true)"
+  uid="$(_walter_sandbox_current_uid)" || return 1
   owner="$(_walter_sandbox_path_uid "$path")" || return 1
-  if [[ -n "$uid" && "$owner" != "$uid" ]]; then
+  if [[ "$owner" != "$uid" ]]; then
     echo "walter-sandbox: runtime path not owned by current user: $path" >&2
     return 1
   fi
@@ -88,7 +101,7 @@ _walter_sandbox_validate_owned_dir() {
 
 walter_sandbox_runtime_dir() {
   local base dir uid
-  uid="$(id -u 2>/dev/null || printf '%s' "unknown")"
+  uid="$(_walter_sandbox_current_uid)" || return 1
   base="${WALTER_RUNTIME_DIR:-${TMPDIR:-/tmp}/walter-os-${uid}}"
   if [[ -L "$base" ]]; then
     echo "walter-sandbox: unsafe runtime path: $base" >&2
@@ -142,11 +155,23 @@ _walter_sandbox_firejail_path_escape() {
   printf '%s' "$path"
 }
 
+_walter_sandbox_quoted_path_escape() {
+  local path="$1"
+  path="${path//\\/\\\\}"
+  path="${path//\"/\\\"}"
+  printf '%s' "$path"
+}
+
 _walter_sandbox_profile_escape() {
   local provider="$1" value="$2"
-  if [[ "$provider" == "firejail" ]]; then
-    value="$(_walter_sandbox_firejail_path_escape "$value")" || return 1
-  fi
+  case "$provider" in
+    firejail)
+      value="$(_walter_sandbox_firejail_path_escape "$value")" || return 1
+      ;;
+    nsjail|sandbox-exec)
+      value="$(_walter_sandbox_quoted_path_escape "$value")" || return 1
+      ;;
+  esac
   _walter_sandbox_sed_escape "$value"
 }
 
@@ -251,7 +276,11 @@ walter_sandbox_materialize_profile() {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
-  chmod 600 "$tmp_dest" 2>/dev/null || true
+  chmod 600 "$tmp_dest" 2>/dev/null || {
+    echo "walter-sandbox: failed to chmod generated profile: $tmp_dest" >&2
+    _walter_sandbox_cleanup_materialized "$dest"
+    return 1
+  }
   mv "$tmp_dest" "$dest" || {
     _walter_sandbox_cleanup_materialized "$dest"
     return 1

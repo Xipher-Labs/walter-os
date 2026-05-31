@@ -59,6 +59,35 @@ _mode() {
   [ "$output" = 'path\\name\&\/x' ]
 }
 
+@test "AC-2: nsjail placeholder escaping preserves literal quotes and backslashes" {
+  overlay_dir="$WALTER_CONFIG/overlay/sandbox-profiles"
+  mkdir -p "$overlay_dir"
+  printf 'mount { src: "@WALTER_OS_HOME@" dst: "@WALTER_OS_HOME@" }\n' > "$overlay_dir/quote-test.nsjail.conf"
+  quoted_root="$TMP_HOME/path\"with\\chars"
+  mkdir -p "$quoted_root"
+
+  run bash -c "source '$SANDBOX_LIB'; WALTER_OS_HOME='$quoted_root' walter_sandbox_materialize_profile quote-test nsjail"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -Fq 'src: "'"$TMP_HOME"'/path\"with\\chars"' "$profile"
+  grep -Fq 'dst: "'"$TMP_HOME"'/path\"with\\chars"' "$profile"
+}
+
+@test "AC-2: sandbox-exec placeholder escaping preserves literal quotes and backslashes" {
+  overlay_dir="$WALTER_CONFIG/overlay/sandbox-profiles"
+  mkdir -p "$overlay_dir"
+  printf '(allow file-read* (subpath "@WALTER_OS_HOME@"))\n' > "$overlay_dir/quote-test.sb"
+  quoted_root="$TMP_HOME/path\"with\\chars"
+  mkdir -p "$quoted_root"
+
+  run bash -c "source '$SANDBOX_LIB'; WALTER_OS_HOME='$quoted_root' walter_sandbox_materialize_profile quote-test sandbox-exec"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -Fq '(subpath "'"$TMP_HOME"'/path\"with\\chars")' "$profile"
+}
+
 @test "AC-2: sed replacement escaping rejects newlines" {
   run bash -c "source '$SANDBOX_LIB'; _walter_sandbox_sed_escape \$'bad\npath'"
 
@@ -147,6 +176,16 @@ _mode() {
   [ "$output" = "" ]
 }
 
+@test "AC-2: sandbox materialization fails closed when generated profile chmod fails" {
+  run bash -c "source '$SANDBOX_LIB'; chmod() { if [[ \"\$1\" == 600 ]]; then return 1; fi; command chmod \"\$@\"; }; walter_sandbox_materialize_profile walter-hook-default nsjail"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to chmod generated profile"* ]]
+  run find "$WALTER_RUNTIME_DIR/sandbox" -maxdepth 1 -name 'walter-hook-default.nsjail.*' -print
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
 @test "AC-2: repo root helper does not change caller cwd" {
   mkdir -p "$TMP_HOME/outside"
 
@@ -172,6 +211,13 @@ _mode() {
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"runtime path is group/other-writable"* ]]
+}
+
+@test "AC-2: runtime dir fails closed when current uid cannot be read" {
+  run bash -c "source '$SANDBOX_LIB'; id() { return 1; }; walter_sandbox_runtime_dir"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to determine current uid"* ]]
 }
 
 @test "AC-2: runtime dir rejects symlink roots" {
