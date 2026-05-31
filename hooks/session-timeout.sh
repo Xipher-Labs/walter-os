@@ -52,6 +52,20 @@ _allow() {
   exit 0
 }
 
+_sanitize_hook_detail() {
+  local detail="$1"
+  detail="${detail//$'\r'/ }"
+  detail="${detail//$'\n'/; }"
+  if [[ -n "${HOME:-}" ]]; then
+    detail="${detail//${HOME}/~}"
+  fi
+  if [[ -n "${WALTER_CONFIG:-}" ]]; then
+    detail="${detail//${WALTER_CONFIG}/~/.config/walter-os}"
+  fi
+  detail="${detail//${WALTER_OS_HOME:-$REPO_ROOT}/<walter-os>}"
+  printf '%.300s' "$detail"
+}
+
 if ! command -v jq >/dev/null 2>&1; then
   _block_fixed_no_jq
 fi
@@ -102,9 +116,15 @@ if [[ "$_status" -eq 0 ]]; then
     fi
     # shellcheck source=/dev/null
     source "$_skill_cap_loader"
-    if ! walter_skill_caps_mint_defaults "$_repo_path" >/dev/null 2>&1; then
+    _mint_error=""
+    if ! _mint_error="$(walter_skill_caps_mint_defaults "$_repo_path" 2>&1 >/dev/null)"; then
       walter_session_end "$_repo_path" >/dev/null 2>&1 || true
-      _block "Walter-OS session timeout: default skill capability minting failed - failing closed for safety."
+      _mint_error="$(_sanitize_hook_detail "$_mint_error")"
+      _mint_reason="Walter-OS session timeout: default skill capability minting failed - failing closed for safety."
+      if [[ -n "$_mint_error" ]]; then
+        _mint_reason="${_mint_reason} Detail: ${_mint_error}"
+      fi
+      _block "$_mint_reason"
     fi
   fi
   _allow

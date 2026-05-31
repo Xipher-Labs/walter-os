@@ -78,6 +78,100 @@ YAML
   [[ "$output" == *"invalid capability entry"* ]]
 }
 
+@test "skill cap loader rejects non-object enabled skill entries" {
+  _write_config <<'YAML'
+skills:
+  bad-skill: "not a mapping"
+YAML
+
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid capability entry for skill: bad-skill"* ]]
+}
+
+@test "skill cap loader rejects invalid enabled flag types" {
+  _write_config <<'YAML'
+skills:
+  bad-skill:
+    enabled: "false"
+    tool: Bash
+    scope:
+      patterns: ["^nuclei"]
+    duration: 4h
+YAML
+
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid capability entry for skill: bad-skill"* ]]
+}
+
+@test "skill cap loader rejects unsupported tools and unusable scopes" {
+  _write_config <<'YAML'
+skills:
+  bad-skill:
+    tool: Read
+    scope:
+      paths: ["docs/**"]
+    duration: 4h
+YAML
+
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid capability entry for skill: bad-skill"* ]]
+
+  _write_config <<'YAML'
+skills:
+  bad-skill:
+    tool: Write
+    scope:
+      patterns: ["^docs"]
+    duration: 4h
+YAML
+
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid capability entry for skill: bad-skill"* ]]
+}
+
+@test "skill cap loader rejects non-string and empty scope entries" {
+  _write_config <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope:
+      patterns: ["^nuclei", ""]
+    duration: 4h
+YAML
+
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid capability entry for skill: bad-skill"* ]]
+
+  _write_config <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope:
+      network:
+        - host: api.example.test
+    duration: 4h
+YAML
+
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid capability entry for skill: bad-skill"* ]]
+}
+
 @test "skill cap loader writes no partial tokens when later entry is invalid" {
   _write_config <<'YAML'
 skills:
@@ -99,6 +193,35 @@ YAML
 
   [ "$status" -ne 0 ]
   [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "skill cap loader cleans temporary token file when final move fails" {
+  _write_config <<'YAML'
+skills:
+  docs-writer:
+    tool: Write
+    scope:
+      paths: ["docs/**"]
+    duration: 4h
+YAML
+
+  fake_bin="$TMP_HOME/fake-bin"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/mv" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$fake_bin/mv"
+
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+
+  run bash -c "PATH='$fake_bin':\$PATH; source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to install capability token"* ]]
+  [ "$(find "$caps_dir" -type f | wc -l | tr -d ' ')" = "0" ]
 }
 
 @test "example Bash default capability patterns are command anchored" {

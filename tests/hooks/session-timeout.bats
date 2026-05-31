@@ -45,6 +45,7 @@ _call_restart_hook() {
 }
 
 @test "UserPromptSubmit hook auto-mints default skill capabilities on fresh session" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
   export WALTER_SESSION_NOW_EPOCH=1767225600
   mkdir -p "$WALTER_CONFIG/overlay"
   cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
@@ -66,6 +67,7 @@ YAML
 }
 
 @test "UserPromptSubmit hook removes fresh session when default skill minting fails" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
   export WALTER_SESSION_NOW_EPOCH=1767225600
   mkdir -p "$WALTER_CONFIG/overlay"
   cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
@@ -89,6 +91,27 @@ YAML
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
   [ ! -f "$state_file" ]
+}
+
+@test "UserPromptSubmit hook surfaces sanitized default skill minting errors" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope: {}
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"default skill capability minting failed"* ]]
+  [[ "$reason" == *"invalid capability entry for skill: bad-skill"* ]]
+  [[ "$reason" != *"$TMP_HOME"* ]]
 }
 
 @test "UserPromptSubmit hook allows active session within limits" {

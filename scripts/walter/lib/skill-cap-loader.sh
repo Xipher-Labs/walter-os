@@ -40,10 +40,25 @@ _walter_skill_cap_write_token() {
   }
 
   token_file="${caps_dir}/cap-${nonce}.paseto"
-  tmp_file="$(mktemp "${token_file}.XXXXXX")"
-  printf '%s\n' "$token" > "$tmp_file"
-  chmod 600 "$tmp_file"
-  mv "$tmp_file" "$token_file"
+  tmp_file="$(mktemp "${token_file}.XXXXXX")" || {
+    echo "walter-skill-caps: failed to create temporary capability token" >&2
+    return 1
+  }
+  if ! printf '%s\n' "$token" > "$tmp_file"; then
+    rm -f "$tmp_file"
+    echo "walter-skill-caps: failed to write temporary capability token" >&2
+    return 1
+  fi
+  if ! chmod 600 "$tmp_file"; then
+    rm -f "$tmp_file"
+    echo "walter-skill-caps: failed to lock down temporary capability token" >&2
+    return 1
+  fi
+  if ! mv "$tmp_file" "$token_file"; then
+    rm -f "$tmp_file"
+    echo "walter-skill-caps: failed to install capability token" >&2
+    return 1
+  fi
 }
 
 _walter_skill_cap_rollback_tokens() {
@@ -62,18 +77,49 @@ _walter_skill_cap_rollback_tokens() {
 _walter_skill_cap_validate_entry() {
   local config_json="$1" skill="$2"
   jq -e --arg skill "$skill" '
+    def string_array:
+      type == "array" and all(.[]; type == "string" and length > 0);
+    def supported_tool:
+      . == "Bash" or . == "Edit" or . == "Write" or . == "MultiEdit" or . == "NotebookEdit";
     .[$skill] as $entry
+    | ($entry.scope // {}) as $scope
+    | ($scope.paths // []) as $paths
+    | ($scope.network // []) as $network
+    | ($scope.patterns // []) as $patterns
     | ($entry | type == "object")
-    and (($entry.tool // "") | type == "string" and length > 0)
+    and ((($entry | has("enabled")) | not) or (($entry.enabled | type) == "boolean"))
+    and (($entry.tool // "") | type == "string" and supported_tool)
     and (($entry.duration // "") | type == "string" and test("^[1-9][0-9]*[smh]$"))
     and (($entry.scope // {}) | type == "object")
-    and (($entry.scope.paths // []) | type == "array")
-    and (($entry.scope.network // []) | type == "array")
-    and (($entry.scope.patterns // []) | type == "array")
-    and (((($entry.scope.paths // []) | length)
-      + (($entry.scope.network // []) | length)
-      + (($entry.scope.patterns // []) | length)) > 0)
+    and ($paths | string_array)
+    and ($network | string_array)
+    and ($patterns | string_array)
+    and (
+      if $entry.tool == "Bash" then
+        (($paths | length) == 0)
+        and ((($network | length) + ($patterns | length)) > 0)
+      else
+        (($paths | length) > 0)
+        and ((($network | length) + ($patterns | length)) == 0)
+      end
+    )
   ' <<< "$config_json" >/dev/null
+}
+
+_walter_skill_cap_entry_enabled() {
+  local config_json="$1" skill="$2"
+  jq -r --arg skill "$skill" '
+    .[$skill] as $entry
+    | if ($entry | type) != "object" then
+        "true"
+      elif (($entry | has("enabled")) | not) then
+        "true"
+      elif (($entry.enabled | type) == "boolean") then
+        ($entry.enabled | tostring)
+      else
+        "invalid"
+      end
+  ' <<< "$config_json"
 }
 
 walter_skill_caps_mint_defaults() {
@@ -108,7 +154,11 @@ walter_skill_caps_mint_defaults() {
 
   while IFS= read -r skill; do
     [[ -n "$skill" ]] || continue
-    enabled="$(jq -r --arg skill "$skill" '.[$skill] | if has("enabled") then .enabled else true end' <<< "$config_json")"
+    enabled="$(_walter_skill_cap_entry_enabled "$config_json" "$skill")"
+    if [[ "$enabled" == "invalid" ]]; then
+      echo "walter-skill-caps: invalid capability entry for skill: $skill" >&2
+      return 1
+    fi
     [[ "$enabled" == "true" ]] || continue
 
     if ! _walter_skill_cap_validate_entry "$config_json" "$skill"; then
@@ -122,7 +172,11 @@ walter_skill_caps_mint_defaults() {
 
   while IFS= read -r skill; do
     [[ -n "$skill" ]] || continue
-    enabled="$(jq -r --arg skill "$skill" '.[$skill] | if has("enabled") then .enabled else true end' <<< "$config_json")"
+    enabled="$(_walter_skill_cap_entry_enabled "$config_json" "$skill")"
+    if [[ "$enabled" == "invalid" ]]; then
+      echo "walter-skill-caps: invalid capability entry for skill: $skill" >&2
+      return 1
+    fi
     [[ "$enabled" == "true" ]] || continue
 
     tool="$(jq -r --arg skill "$skill" '.[$skill].tool' <<< "$config_json")"
