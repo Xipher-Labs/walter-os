@@ -104,9 +104,9 @@ _walter_session_write_new() {
   max_hours="$(_walter_session_effective_max_hours)"
   max_idle="$(_walter_session_effective_idle_min)"
 
-  mkdir -p "$state_dir"
+  mkdir -p "$state_dir" || return 1
   chmod 700 "$state_dir" 2>/dev/null || true
-  tmp_file="$(mktemp "${state_dir}/session.XXXXXX")"
+  tmp_file="$(mktemp "${state_dir}/session.XXXXXX")" || return 1
 
   if ! jq -n \
     --arg session_id "$(_walter_session_uuid)" \
@@ -153,7 +153,10 @@ walter_session_touch() {
   max_idle="$(_walter_session_effective_idle_min)"
 
   if [[ ! -f "$file" ]]; then
-    _walter_session_write_new "$repo" "$file" "$now_epoch"
+    if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+      _walter_session_result "error" "state-write" "$file"
+      return 12
+    fi
     _walter_session_result "started" "" "$file"
     return 0
   fi
@@ -162,7 +165,10 @@ walter_session_touch() {
   started_at="$(jq -r '.started_at // empty' "$file")"
   last_activity_at="$(jq -r '.last_activity_at // empty' "$file")"
   if [[ -z "$started_at" || -z "$last_activity_at" ]]; then
-    _walter_session_write_new "$repo" "$file" "$now_epoch"
+    if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+      _walter_session_result "error" "state-write" "$file"
+      return 12
+    fi
     _walter_session_result "started" "" "$file"
     return 0
   fi
@@ -176,7 +182,10 @@ walter_session_touch() {
   fi
 
   if awk -v now="$now_epoch" -v last="$last_epoch" -v idle="$max_idle" 'BEGIN { exit !((now - last) > (idle * 60)) }'; then
-    _walter_session_write_new "$repo" "$file" "$now_epoch"
+    if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+      _walter_session_result "error" "state-write" "$file"
+      return 12
+    fi
     _walter_session_result "started" "max-idle" "$file"
     return 0
   fi

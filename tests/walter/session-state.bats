@@ -124,6 +124,18 @@ teardown() {
   [[ "$output" == *'"trigger":"clock-rewind"'* ]]
 }
 
+@test "session touch fails closed when state cannot be created" {
+  rm -rf "$WALTER_CONFIG"
+  printf '%s\n' "not a directory" > "$WALTER_CONFIG"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+}
+
 @test "session end removes state file" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
