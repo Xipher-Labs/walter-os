@@ -4,14 +4,13 @@
 # Uniform process-sandbox shim for Walter-OS hook and skill execution.
 
 walter_sandbox_provider() {
-  local os proc_version
+  local os
   os="$(uname -s 2>/dev/null || true)"
   case "$os" in
     Darwin)
       printf '%s\n' "sandbox-exec"
       ;;
     Linux)
-      proc_version="${WALTER_SANDBOX_PROC_VERSION:-/proc/version}"
       if [[ -n "${WALTER_SANDBOX_PROVIDER:-}" ]]; then
         case "$WALTER_SANDBOX_PROVIDER" in
           nsjail|firejail) printf '%s\n' "$WALTER_SANDBOX_PROVIDER" ;;
@@ -22,11 +21,7 @@ walter_sandbox_provider() {
         esac
         return 0
       fi
-      if [[ -f "$proc_version" ]] && grep -qiE 'microsoft|wsl' "$proc_version" 2>/dev/null; then
-        printf '%s\n' "nsjail"
-      else
-        printf '%s\n' "nsjail"
-      fi
+      printf '%s\n' "nsjail"
       ;;
     *)
       echo "walter-sandbox: no supported sandbox provider on ${os:-unknown}; sandbox required by A-3" >&2

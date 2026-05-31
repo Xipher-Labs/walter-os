@@ -23,9 +23,10 @@ teardown() {
 }
 
 _mock_uname() {
-  cat > "$MOCK_BIN/uname" <<EOF
+  export WALTER_MOCK_UNAME="$1"
+  cat > "$MOCK_BIN/uname" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "$1"
+printf '%s\n' "${WALTER_MOCK_UNAME:?}"
 EOF
   chmod +x "$MOCK_BIN/uname"
 }
