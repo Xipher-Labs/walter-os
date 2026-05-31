@@ -114,6 +114,19 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "shell-expanded network command word without capability is blocked" {
+  output="$(_hook_json Bash command 'curl${IFS}https://api.github.com/repos/x/y')"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "shell-expanded network command word with matching capability is allowed" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command 'curl${IFS}https://api.github.com/repos/x/y')"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress with query-only URL matches host capability" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 

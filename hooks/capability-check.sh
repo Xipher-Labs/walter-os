@@ -110,7 +110,7 @@ _cap_extract_hosts() {
 
       host=""
       case "$token" in
-        http://*|https://*)
+        *http://*|*https://*)
           host="${token#*://}"
           ;;
         ssh://*)
@@ -170,6 +170,12 @@ _cap_normalize_cli_token() {
   cli="${cli%)}"
   cli="${cli%\`}"
   printf '%s\n' "$cli"
+}
+
+_cap_token_has_shell_expansion() {
+  local token="$1"
+  # shellcheck disable=SC2016 # Literal shell expansion markers are intended.
+  [[ "$token" == *'${'* || "$token" == *'$('* || "$token" == *'$'* || "$token" == *'`'* || "$token" == *'<('* || "$token" == *'>('* ]]
 }
 
 _cap_emit_split_hosts() {
@@ -428,6 +434,13 @@ _cap_is_network_command() {
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
+    if _cap_token_has_shell_expansion "$token"; then
+      case "$token" in
+        curl*|wget*|gh*|ssh*|scp*|rsync*|ncat*|nc*|telnet*|git*)
+          return 0
+          ;;
+      esac
+    fi
     cli="$(_cap_normalize_cli_token "$token")"
     case "$cli" in
       curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
