@@ -99,37 +99,59 @@ PY
 }
 
 _cap_extract_hosts() {
-  local command="$1" token host
+  local command="$1"
   {
-    printf '%s\n' "$command" | tr '[:space:]' '\n' | while IFS= read -r token; do
-      token="${token#\"}"
-      token="${token%\"}"
-      token="${token#\'}"
-      token="${token%\'}"
-      token="${token%)}"
-
-      host=""
-      case "$token" in
-        *http://*|*https://*)
-          host="${token#*://}"
-          ;;
-        ssh://*)
-          host="${token#ssh://}"
-          ;;
-        git@*:*)
-          host="${token#git@}"
-          host="${host%%:*}"
-          ;;
-      esac
-
-      host="$(_cap_normalize_host "$host")"
-      [[ -n "$host" ]] && printf '%s\n' "$host"
-    done
+    _cap_extract_literal_hosts "$command"
     _cap_extract_gh_host "$command"
     _cap_extract_curl_hosts "$command"
     _cap_extract_positional_network_hosts "$command"
     _cap_extract_shell_c_hosts "$command"
   } | awk 'NF && !seen[$0]++'
+}
+
+_cap_extract_literal_hosts() {
+  local command="$1" tokfile token prev host idx
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    token="${tokens[$idx]}"
+    prev="${tokens[$((idx - 1))]:-}"
+    case "$prev" in
+      --body|-b|--message|-m|--title|--field|-f|--raw-field|-F|--jq|-q)
+        idx=$((idx + 1))
+        continue
+        ;;
+    esac
+    case "$token" in
+      --body=*|-b*|--message=*|-m*|--title=*|--field=*|-f*|--raw-field=*|-F*|--jq=*|-q*)
+        idx=$((idx + 1))
+        continue
+        ;;
+    esac
+
+    host=""
+    case "$token" in
+      *http://*|*https://*) host="${token#*://}" ;;
+      ssh://*) host="${token#ssh://}" ;;
+      git@*:*)
+        host="${token#git@}"
+        host="${host%%:*}"
+        ;;
+    esac
+
+    host="$(_cap_normalize_host "$host")"
+    [[ -n "$host" ]] && printf '%s\n' "$host"
+    idx=$((idx + 1))
+  done
 }
 
 _cap_normalize_host() {
@@ -531,7 +553,10 @@ _cap_is_network_command() {
             -C*|--git-dir=*|--work-tree=*|--namespace=*|-*) j=$((j + 1)); continue ;;
           esac
           case "$sub" in
-            clone|fetch|pull|push|ls-remote) return 0 ;;
+            clone|fetch|pull|push|ls-remote|submodule|send-email) return 0 ;;
+            remote)
+              [[ "${tokens[$((j + 1))]:-}" == "update" ]] && return 0
+              ;;
           esac
           break
         done
@@ -577,8 +602,8 @@ _cap_is_network_command() {
         while [[ "$j" -lt "${#tokens[@]}" ]]; do
           sub="${tokens[$j]}"
           case "$sub" in
-            --prefix|--cwd|-C) j=$((j + 2)); continue ;;
-            --prefix=*|--cwd=*|-*) j=$((j + 1)); continue ;;
+            --prefix|--cwd|-C|--registry|--cache|--userconfig|--globalconfig|--workspace|-w) j=$((j + 2)); continue ;;
+            --prefix=*|--cwd=*|--registry=*|--cache=*|--userconfig=*|--globalconfig=*|--workspace=*|-*) j=$((j + 1)); continue ;;
             install|add|update|upgrade|dlx|exec) return 0 ;;
             test|run|lint|build) break ;;
           esac

@@ -252,6 +252,18 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "git submodule update is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "git submodule update --init --recursive")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "git remote update is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "git remote update")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh api is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "gh api repos/Xipher-Labs/walter-os")"
 
@@ -338,6 +350,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "gh comment body URL is not treated as network destination" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh pr comment 244 --body 'see https://example.com for context'")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "ssh with github.com network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
@@ -410,6 +430,12 @@ _mint() {
 
 @test "npm install behind global flags is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "npm --prefix ui install left-pad")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "npm install behind value-taking global flags is high-tier" {
+  output="$(_hook_json Bash command "npm --registry https://registry.npmjs.org install left-pad")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
