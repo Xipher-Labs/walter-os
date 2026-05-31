@@ -5,7 +5,7 @@
 **Target release**: v1.0
 **Depends on**: existing `release.yml` (SBOM + cosign signing — already in `main`), `docs/security/verification.md` (cosign verification doc).
 
-This is a **combined spec** for two layer-C items: both touch `release.yml`, both need the same set of artifact-naming and toolchain-pinning decisions, and shipping them independently would duplicate the threat-model + verification-doc work. They're sequenced inside the spec: C-1 lands first (cheap, GH Actions does most of the work), C-2 lands second (requires deterministic-build instrumentation).
+This is a **combined spec** for two layer-C items: both touch `release.yml`, both need the same set of artifact-naming and toolchain-pinning decisions, and shipping them independently would duplicate the threat-model + verification-doc work. They're sequenced inside the spec: C-1 lands first (cheap, GH Actions does most of the work), C-2 lands second (requires deterministic-build instrumentation). As of 2026-05-31, use SLSA v1.2 Build Track terminology: Walter-OS is targeting **Build L3**, not the retired generic "SLSA level 3" shorthand.
 
 ## Problem
 
@@ -27,7 +27,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 
 ## Decisions (proposed)
 
-### C-1 — SLSA L3 provenance
+### C-1 — SLSA Build L3 provenance
 
 | # | Decision | Why |
 |---|---|---|
@@ -140,8 +140,9 @@ C-1 first (faster, lower risk, unblocks the "we have SLSA L3" claim for v1.0 mar
 - Parent: OSS Trust roadmap Layer C C-1 + C-2 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); post-merge in-tree: `docs/specs/oss-trust-roadmap.md`.
 - Existing: `.github/workflows/release.yml` (SBOM + cosign already wired)
 - Existing: `docs/security/verification.md` (cosign verification — C-1 extends)
-- SLSA spec: <https://slsa.dev/spec/v1.0/levels>
-- SLSA L3 builder requirements: <https://slsa.dev/spec/v1.0/requirements>
+- SLSA spec: <https://slsa.dev/spec/v1.2/>
+- SLSA Build Track basics: <https://slsa.dev/spec/v1.2/build-track-basics>
+- SLSA Build L3 requirements: <https://slsa.dev/spec/v1.2/build-requirements>
 - `actions/attest-build-provenance`: <https://github.com/actions/attest-build-provenance>
 - `slsa-verifier`: <https://github.com/slsa-framework/slsa-verifier>
 - Reproducible Builds project: <https://reproducible-builds.org/>

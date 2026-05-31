@@ -1,6 +1,6 @@
 # Process isolation sandbox (OSS Trust A-3) — spec
 
-**Status**: ready for `/write-plan` after operator approval of per-OS profile defaults
+**Status**: implementation in progress; see `oss-trust-runtime-implementation.plan.md`
 **Parent**: OSS Trust roadmap Layer A item A-3 — umbrella roadmap is in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83); once merged the in-tree path is `docs/specs/oss-trust-roadmap.md`.
 **Target release**: v0.5.x (after A-1 / A-2 / A-4 land)
 **Depends on** (all in flight — must merge before A-3 implements):

@@ -6,18 +6,21 @@ This plan turns the remaining OSS Trust runtime specs into mergeable, reviewable
 PR slices. The order is dependency-driven: session state is already in the open
 #218/#219 stack, capability tokens consume that session state, sandbox consumes
 capabilities, invisible mounts refine the sandbox, audit integrity consumes the
-session signing keys, telemetry consumes the audit chain, and SLSA is independent
-release hardening.
+session signing keys, telemetry consumes the audit chain, and SLSA Build L3 is
+independent release hardening.
 
 ## Merge Preconditions
 
 1. Merge #218 (`codex/time-bounded-sessions`).
 2. Merge #219 (`codex/session-timeout-hook`).
 3. Merge #241 (`codex/capability-token-foundation`).
-4. Rebase the capability-token stack onto `main` after #218/#219/#241 land.
+4. Merge #243 (`codex/capability-token-cli`).
+5. Merge #244 (`codex/capability-check-hook`).
+6. Merge #245 (`codex/default-skill-capabilities-v2`).
 
-Until then, capability-token implementation PRs should be stacked on
-`codex/capability-token-foundation` so the diff only contains the next layer.
+Until then, runtime-security implementation PRs should be stacked on
+`codex/default-skill-capabilities-v2` so each diff contains only the next
+layer. After the stack lands, rebase the remaining branches onto `main`.
 
 ## Execution Tracks
 
@@ -34,8 +37,8 @@ The six requested runtime tracks map to this implementation order:
    signatures, verifier, daily roots, optional Rekor upload.
 5. **Audit telemetry to Grafana/Loki** — Promtail tail config, Grafana
    dashboard, Loki verification path, opt-out/retention controls.
-6. **SLSA L3 + reproducible builds** — provenance, deterministic artifacts,
-   reproducibility verifier, operator-facing verification docs.
+6. **SLSA Build L3 + reproducible builds** — provenance, deterministic
+   artifacts, reproducibility verifier, operator-facing verification docs.
 
 ## Current Stack State
 
@@ -46,7 +49,9 @@ The six requested runtime tracks map to this implementation order:
   install/runtime OpenSSL checks.
 - #243 is open, mergeable, and completes the PASETO-compatible helper plus
   `walter-os cap` CLI slice stacked on #241.
-- The next slice is **Capability enforcement hook**, stacked on #243.
+- #244 is open, mergeable, and completes high-tier capability enforcement.
+- #245 is open, mergeable, and completes default skill capabilities.
+- The next slice is **Process isolation sandbox AC-1**, stacked on #245.
 
 ## Design Risks To Resolve Before Claiming Completion
 
@@ -107,6 +112,8 @@ The six requested runtime tracks map to this implementation order:
      `skills/daily-supply-chain-audit/scripts/audit.sh`,
      `tests/audit/*cap*`, `docs/operational/capability-tokens.md`.
    - Deliverable: operator-overridable auto-caps and daily audit state checks.
+   - Current status: default skill capabilities are implemented in #245; daily
+     audit cap-state checks remain pending as a later capability cleanup PR.
 
 ### Process Isolation Sandbox
 
@@ -116,6 +123,8 @@ The six requested runtime tracks map to this implementation order:
    - Deliverable: `walter_sandbox_provider`, `walter_sandbox_check`, and
      `walter_sandbox_run` for macOS `sandbox-exec`, Linux/WSL `nsjail`, and
      optional Linux `firejail`.
+   - Scope boundary: this PR may ship profile scaffolds, but AC-2/AC-3 are the
+     first PRs that claim actual filesystem/network/signal isolation semantics.
 6. **Default hook and skill profiles**.
    - Files: `setup/sandbox-profiles/*`,
      `tests/walter/sandbox-hook-profile.bats`,
@@ -181,14 +190,16 @@ The six requested runtime tracks map to this implementation order:
     - Deliverable: `verify-chain --from-loki`, `WALTER_AUDIT_LOKI_DISABLE=1`,
       and status visibility.
 
-### SLSA L3 And Reproducible Builds
+### SLSA Build L3 And Reproducible Builds
 
-16. **SLSA provenance**.
+16. **SLSA Build L3 provenance**.
     - Files: `.github/workflows/release.yml`,
       `tests/release/attestation-verify.bats`,
       `docs/security/verification.md`.
-    - Deliverable: pinned `actions/attest-build-provenance`, release assets
-      with in-toto attestations, and release-time attestation verification.
+    - Deliverable: pinned provenance generator, release assets with in-toto
+      attestations, and release-time attestation verification aligned with SLSA
+      v1.2 Build Track L3 requirements: provenance exists, is authentic,
+      is unforgeable by the build, and is produced on a hosted isolated builder.
 17. **Deterministic artifacts**.
     - Files: `.github/workflows/release.yml`,
       `scripts/release/reproduce.sh`,
@@ -197,6 +208,16 @@ The six requested runtime tracks map to this implementation order:
     - Deliverable: deterministic source tarball, SBOM ordering, checksum
       ordering, pinned toolchain smoke checks, and fresh-run reproducibility
       verification.
+
+## Current Standards References
+
+- SLSA v1.2 is the current approved spec. Use the Build Track terminology:
+  Build L1/L2/L3, not the retired generic "SLSA 1/2/3/4" shorthand.
+- Build L3 requires a hosted build platform with stronger provenance integrity
+  and isolation than Build L2. Reproducibility is not itself a SLSA Build L3
+  requirement, but Walter-OS keeps it in the same release-hardening track
+  because it gives downstream operators an independent artifact check.
+- Keep Source Track work separate unless a later issue explicitly adds it.
 
 ## Review Loop For Every PR
 
