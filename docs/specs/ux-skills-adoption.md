@@ -22,8 +22,8 @@
   rules, and a ~347KB / 27-file `reference/` library. Built on Anthropic's
   frontend-design skill.
 - ui-ux-pro-max — `nextlevelbuilder/ui-ux-pro-max-skill`, MIT. A data-driven
-  design corpus: 13 cross-cutting CSVs plus 16 per-stack CSVs, originally
-  fronted by a Python search CLI.
+  design corpus: 11 structured cross-cutting CSVs plus 16 per-stack CSVs,
+  originally fronted by a Python search CLI.
 
 ## Head-to-head
 
@@ -52,10 +52,15 @@
 - impeccable: `b913668ba4d25b95c4a62278d3637837e9d2c6d9` (Apache-2.0).
 - ui-ux-pro-max: `b7e3af80f6e331f6fb456667b82b12cade7c9d35` (MIT).
 - Both recorded in the audit pinning manifest
-  `skills/daily-supply-chain-audit/assets/pinned-refs.toml` (the path
-  `check-pinning.py` reads by default) so drift detection covers them. That
-  manifest did not previously exist on main; it is created here, seeded with
-  these two skills, and validated clean by `check-pinning.py`.
+  `skills/daily-supply-chain-audit/assets/pinned-refs.toml`. This manifest
+  records the vendored upstream SHAs as provenance documentation; it is NOT
+  enforced by `check-pinning.py`. `check-pinning.py` only parses a Claude Code
+  `settings.json` and reports `mcpServers` entries that are not pinned to a
+  version — it never reads `pinned-refs.toml` or any skill. So skills-drift
+  detection is manual today. Skills-aware pin enforcement (teaching the audit
+  to read `pinned-refs.toml` and flag vendored-skill drift) is future work
+  tracked in issue #255. The manifest did not previously exist on main; it is
+  created here, seeded with these two skills.
 
 ## Adaptations on vendoring
 
@@ -71,12 +76,19 @@
   (Apache-2.0 requires preserving NOTICE).
 - ui-ux-pro-max — wrote a NEW Walter-OS-authored `SKILL.md` framing it as a
   passive corpus consulted by grep/Read; did NOT copy upstream's SKILL.md
-  (which hardcodes `python3 search.py`). Vendored 13 top-level CSVs
-  (anti-patterns, charts, colors, components, design-systems, fonts, layouts,
-  patterns, products, spacing, styles, typography, ux-guidelines), excluding
-  the 745KB `google-fonts.csv`; all 16 per-stack CSVs; and `quick-reference.md`.
-  Did NOT vendor any Python (`search.py`/`core.py`/`design_system.py`/
-  `_sync_all.py`) or the CLI. Carried upstream `LICENSE` (MIT).
+  (which hardcodes `python3 search.py`). Vendored 11 structured top-level CSVs
+  (app-interface, charts, colors, icons, landing, products, react-performance,
+  styles, typography, ui-reasoning, ux-guidelines), excluding the 745KB
+  `google-fonts.csv`; all 16 per-stack CSVs; and `quick-reference.md`. Upstream
+  `draft.csv` and `design.csv` were deliberately NOT kept: both are
+  unstructured (no CSV header), upstream excludes `draft.csv` from search, and
+  both contained non-English (Chinese) content — they are not cleanly
+  greppable data and violate the English-only repo rule. Stray Chinese keyword
+  cells in `icons.csv` and `styles.csv` were translated to English, and the
+  `quick-reference.md` activation section was translated to English; a
+  full-tree scan confirms no CJK remains. Did NOT vendor any Python
+  (`search.py`/`core.py`/`design_system.py`/`_sync_all.py`) or the CLI.
+  Carried upstream `LICENSE` (MIT).
 
 ## Security verdict
 
@@ -97,7 +109,7 @@
 - impeccable vendored under `skills/impeccable/` with adapted SKILL.md, the
   27-file reference library, LICENSE, and NOTICE.md.
 - ui-ux-pro-max vendored under `skills/ui-ux-pro-max/` with a new SKILL.md, the
-  13 + 16 CSV corpus (no google-fonts, no Python), quick-reference, and LICENSE.
+  11 + 16 CSV corpus (no google-fonts, no Python), quick-reference, and LICENSE.
 - Both indexed in `skills/INDEX.md` under Product and Design.
 - Both pinned to their upstream SHAs in the audit pinning manifest.
 - Both attributed in the repo-root `NOTICE`.
