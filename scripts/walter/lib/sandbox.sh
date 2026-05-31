@@ -98,7 +98,7 @@ walter_sandbox_materialize_profile() {
     echo "walter-sandbox: usage: walter_sandbox_materialize_profile <profile> <provider>" >&2
     return 2
   }
-  local profile="$1" provider="$2" src suffix runtime_dir dest
+  local profile="$1" provider="$2" src runtime_dir dest tmp_dest
   local repo_root config_dir home_value
   src="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
   if [[ ! -f "$src" ]]; then
@@ -110,9 +110,9 @@ walter_sandbox_materialize_profile() {
     return 0
   fi
 
-  suffix="$(walter_sandbox_profile_suffix "$provider")" || return 1
   runtime_dir="$(walter_sandbox_runtime_dir)" || return 1
-  dest="${runtime_dir}/${profile}.${suffix}"
+  dest="$(mktemp "${runtime_dir}/${profile}.${provider}.XXXXXX")" || return 1
+  tmp_dest="${dest}.tmp"
   repo_root="$(_walter_sandbox_sed_escape "$(walter_sandbox_repo_root)")" || return 1
   config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")"
   home_value="$(_walter_sandbox_sed_escape "${HOME}")"
@@ -120,8 +120,15 @@ walter_sandbox_materialize_profile() {
     -e "s/@WALTER_OS_HOME@/${repo_root}/g" \
     -e "s/@WALTER_CONFIG@/${config_dir}/g" \
     -e "s/@HOME@/${home_value}/g" \
-    "$src" > "$dest" || return 1
-  chmod 600 "$dest" 2>/dev/null || true
+    "$src" > "$tmp_dest" || {
+      rm -f "$dest" "$tmp_dest"
+      return 1
+    }
+  chmod 600 "$tmp_dest" 2>/dev/null || true
+  mv "$tmp_dest" "$dest" || {
+    rm -f "$dest" "$tmp_dest"
+    return 1
+  }
   printf '%s\n' "$dest"
 }
 

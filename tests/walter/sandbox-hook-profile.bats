@@ -69,11 +69,19 @@ teardown() {
   run bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default nsjail"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == "$WALTER_RUNTIME_DIR"/sandbox/walter-hook-default.nsjail.conf ]]
-  grep -q "src: \"$WALTER_OS_HOME\"" "$output"
-  grep -q "src: \"$WALTER_CONFIG\"" "$output"
-  ! grep -q '@WALTER_OS_HOME@' "$output"
-  ! grep -q '@WALTER_CONFIG@' "$output"
+  first_profile="$output"
+  [[ "$first_profile" == "$WALTER_RUNTIME_DIR"/sandbox/walter-hook-default.nsjail.* ]]
+  grep -q "src: \"$WALTER_OS_HOME\"" "$first_profile"
+  grep -q "src: \"$WALTER_CONFIG\"" "$first_profile"
+
+  run grep -q '@WALTER_OS_HOME@' "$first_profile"
+  [ "$status" -ne 0 ]
+  run grep -q '@WALTER_CONFIG@' "$first_profile"
+  [ "$status" -ne 0 ]
+
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default nsjail"
+  [ "$status" -eq 0 ]
+  [ "$output" != "$first_profile" ]
 }
 
 @test "AC-2: sandbox-exec hook profile enforces read/write/network boundaries when available" {
