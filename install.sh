@@ -173,8 +173,34 @@ check_required_tool() {
 }
 
 openssl_supports_ed25519() {
-  command -v openssl >/dev/null 2>&1 || return 1
-  openssl genpkey -algorithm ED25519 >/dev/null 2>&1
+  local openssl_bin="$1"
+  "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1
+}
+
+resolve_openssl_bin() {
+  local candidate resolved
+  for candidate in \
+    "${WALTER_OPENSSL_BIN:-}" \
+    openssl \
+    /opt/homebrew/opt/openssl@3/bin/openssl \
+    /opt/homebrew/bin/openssl \
+    /usr/local/opt/openssl@3/bin/openssl \
+    /usr/local/bin/openssl \
+    /usr/bin/openssl; do
+    [[ -n "$candidate" ]] || continue
+    if [[ "$candidate" == */* ]]; then
+      [[ -x "$candidate" ]] || continue
+      resolved="$candidate"
+    else
+      resolved="$(command -v "$candidate" 2>/dev/null || true)"
+      [[ -n "$resolved" ]] || continue
+    fi
+    if openssl_supports_ed25519 "$resolved"; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  done
+  return 1
 }
 
 check_optional_tool() {
@@ -189,6 +215,7 @@ check_optional_tool() {
 
 check_requirements() {
   step "Requirements check"
+  local _openssl_bin
   _requirement_failures=0
 
   case "$(uname -s)" in
@@ -211,11 +238,12 @@ check_requirements() {
   check_required_tool git "brew install git  # or: sudo apt-get install -y git"
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
-  check_required_tool openssl "brew install openssl  # or: sudo apt-get install -y openssl"
-  if command -v openssl >/dev/null 2>&1 && ! openssl_supports_ed25519; then
-    err "openssl is installed but does not support ED25519 key generation"
-    say "  Detected: $(openssl version 2>&1 | head -1)" >&2
-    say "  Fix: brew install openssl  # or: sudo apt-get install -y openssl" >&2
+  if _openssl_bin="$(resolve_openssl_bin)"; then
+    ok "openssl: ${_openssl_bin}"
+  else
+    err "openssl with ED25519 support missing"
+    say "  Install: brew install openssl  # or: sudo apt-get install -y openssl" >&2
+    say "  Optional override: WALTER_OPENSSL_BIN=/path/to/openssl" >&2
     _requirement_failures=$((_requirement_failures + 1))
   fi
   # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
@@ -502,7 +530,7 @@ check_preflight() {
   #
   # OS-specific install hints: pick brew vs apt/snap based on
   # `uname -s` so the hint matches the operator's machine.
-  local _pkg_hint_jq _pkg_hint_yq _pkg_hint_openssl
+  local _pkg_hint_jq _pkg_hint_yq _pkg_hint_openssl _openssl_bin
   case "$(uname -s)" in
     Darwin)
       _pkg_hint_jq="brew install jq"
@@ -525,12 +553,9 @@ check_preflight() {
     err "jq required. ${_pkg_hint_jq}"
     exit 4
   fi
-  if ! command -v openssl >/dev/null 2>&1; then
-    err "openssl required for session capability keys. ${_pkg_hint_openssl}"
-    exit 4
-  fi
-  if ! openssl_supports_ed25519; then
-    err "openssl found but ED25519 key generation is unavailable. ${_pkg_hint_openssl}"
+  if ! _openssl_bin="$(resolve_openssl_bin)"; then
+    err "openssl with ED25519 key generation is required for session capability keys. ${_pkg_hint_openssl}"
+    err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
     exit 4
   fi
 

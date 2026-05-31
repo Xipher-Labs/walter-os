@@ -58,6 +58,24 @@ _mode() {
   openssl pkey -in "$private_key" -pubout 2>/dev/null | cmp -s - "$public_key"
 }
 
+@test "concurrent session starts leave one key and caps directory" {
+  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null &
+  pid_one=$!
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null &
+  pid_two=$!
+  wait "$pid_one"
+  wait "$pid_two"
+
+  state_dir="$WALTER_CONFIG/state"
+  key_count="$(find "$state_dir" -type f -name 'session-*.key' | wc -l | tr -d ' ')"
+  caps_count="$(find "$state_dir" -type d -name 'caps-*' | wc -l | tr -d ' ')"
+  [ "$key_count" = "1" ]
+  [ "$caps_count" = "1" ]
+}
+
 @test "clock override is ignored outside explicit test mode" {
   unset WALTER_SESSION_TEST_CLOCK
   export WALTER_SESSION_NOW_EPOCH=1767225600

@@ -44,6 +44,37 @@ _walter_session_hash() {
   fi
 }
 
+_walter_session_openssl_supports_ed25519() {
+  local openssl_bin="$1"
+  "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1
+}
+
+_walter_session_openssl() {
+  local candidate resolved
+  for candidate in \
+    "${WALTER_OPENSSL_BIN:-}" \
+    openssl \
+    /opt/homebrew/opt/openssl@3/bin/openssl \
+    /opt/homebrew/bin/openssl \
+    /usr/local/opt/openssl@3/bin/openssl \
+    /usr/local/bin/openssl \
+    /usr/bin/openssl; do
+    [[ -n "$candidate" ]] || continue
+    if [[ "$candidate" == */* ]]; then
+      [[ -x "$candidate" ]] || continue
+      resolved="$candidate"
+    else
+      resolved="$(command -v "$candidate" 2>/dev/null || true)"
+      [[ -n "$resolved" ]] || continue
+    fi
+    if _walter_session_openssl_supports_ed25519 "$resolved"; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
 _walter_session_state_dir() {
   printf '%s/state' "${WALTER_CONFIG:-$HOME/.config/walter-os}"
 }
@@ -131,7 +162,7 @@ _walter_session_revoke_capability_material() {
 
 _walter_session_write_new() {
   local repo="$1" file="$2" now_epoch="$3"
-  local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub
+  local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub openssl_bin
   state_dir="$(dirname "$file")"
   now_iso="$(_walter_session_iso "$now_epoch")"
   max_hours="$(_walter_session_effective_max_hours)"
@@ -146,7 +177,7 @@ _walter_session_write_new() {
   mkdir -p "$caps_dir" || return 1
   chmod 700 "$caps_dir" 2>/dev/null || true
 
-  if ! command -v openssl >/dev/null 2>&1; then
+  if ! openssl_bin="$(_walter_session_openssl)"; then
     rm -r "$caps_dir"
     return 1
   fi
@@ -159,13 +190,13 @@ _walter_session_write_new() {
     rm -r "$caps_dir"
     return 1
   }
-  if ! openssl genpkey -algorithm ED25519 -out "$tmp_key" >/dev/null 2>&1; then
+  if ! "$openssl_bin" genpkey -algorithm ED25519 -out "$tmp_key" >/dev/null 2>&1; then
     rm -f "$tmp_key" "$tmp_pub"
     rm -r "$caps_dir"
     return 1
   fi
   chmod 600 "$tmp_key" 2>/dev/null || true
-  if ! openssl pkey -in "$tmp_key" -pubout -out "$tmp_pub" >/dev/null 2>&1; then
+  if ! "$openssl_bin" pkey -in "$tmp_key" -pubout -out "$tmp_pub" >/dev/null 2>&1; then
     rm -f "$tmp_key" "$tmp_pub"
     rm -r "$caps_dir"
     return 1
@@ -238,12 +269,34 @@ walter_session_touch() {
   max_idle="$(_walter_session_effective_idle_min)"
 
   if [[ ! -f "$file" ]]; then
-    if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+    local lock_dir lock_attempts=0
+    lock_dir="${file}.lock"
+    mkdir -p "$(dirname "$file")" || {
       _walter_session_result "error" "state-write" "$file"
       return 12
+    }
+    if mkdir "$lock_dir" 2>/dev/null; then
+      if [[ ! -f "$file" ]]; then
+        if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+          rmdir "$lock_dir" 2>/dev/null || true
+          _walter_session_result "error" "state-write" "$file"
+          return 12
+        fi
+        rmdir "$lock_dir" 2>/dev/null || true
+        _walter_session_result "started" "" "$file"
+        return 0
+      fi
+      rmdir "$lock_dir" 2>/dev/null || true
+    else
+      while [[ ! -f "$file" && "$lock_attempts" -lt 50 ]]; do
+        sleep 0.1
+        lock_attempts=$((lock_attempts + 1))
+      done
+      if [[ ! -f "$file" ]]; then
+        _walter_session_result "error" "state-write" "$file"
+        return 12
+      fi
     fi
-    _walter_session_result "started" "" "$file"
-    return 0
   fi
 
   local started_at last_activity_at started_epoch last_epoch

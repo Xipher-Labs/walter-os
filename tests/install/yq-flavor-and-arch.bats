@@ -77,10 +77,10 @@ setup() {
 }
 
 @test "openssl is required for session capability keys" {
-  grep -qE 'check_required_tool openssl' "$INSTALL_SH"
-  grep -qE 'openssl required for session capability keys' "$INSTALL_SH"
+  grep -qE 'resolve_openssl_bin' "$INSTALL_SH"
+  grep -qE 'WALTER_OPENSSL_BIN' "$INSTALL_SH"
+  grep -qE 'openssl with ED25519 key generation is required' "$INSTALL_SH"
   grep -qE 'openssl_supports_ed25519' "$INSTALL_SH"
-  grep -qE 'ED25519 key generation is unavailable' "$INSTALL_SH"
   [[ $(grep -cE 'local required_deps=\([^)]*\bopenssl\b' "$INSTALL_SH") -ge 2 ]]
 }
 
