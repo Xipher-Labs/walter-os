@@ -126,6 +126,17 @@ EOF
   [[ "$output" == *"provider missing: nsjail"* ]]
 }
 
+@test "AC-1: bundled profile lookup is stable outside repo" {
+  _mock_uname Linux
+  _mock_provider nsjail
+  mkdir -p "$TMP_HOME/outside"
+
+  run bash -c "unset WALTER_OS_HOME; cd '$TMP_HOME/outside'; source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
 @test "AC-1: sandbox run preserves stdout and exit code through provider" {
   _mock_uname Linux
   _mock_provider nsjail

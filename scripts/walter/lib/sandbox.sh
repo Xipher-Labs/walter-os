@@ -40,7 +40,7 @@ walter_sandbox_profile_path() {
     echo "walter-sandbox: usage: walter_sandbox_profile_path <profile> [provider]" >&2
     return 2
   }
-  local profile="$1" provider="${2:-}" suffix overlay default_dir overlay_dir
+  local profile="$1" provider="${2:-}" suffix overlay default_dir overlay_dir repo_root
   if [[ -z "$provider" ]]; then
     provider="$(walter_sandbox_provider)" || return 1
   fi
@@ -61,7 +61,12 @@ walter_sandbox_profile_path() {
   esac
 
   overlay_dir="${WALTER_CONFIG:-${HOME}/.config/walter-os}/overlay/sandbox-profiles"
-  default_dir="${WALTER_OS_HOME:-$(pwd)}/setup/sandbox-profiles"
+  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
+    repo_root="$WALTER_OS_HOME"
+  else
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)" || return 1
+  fi
+  default_dir="${repo_root}/setup/sandbox-profiles"
   overlay="${overlay_dir}/${profile}.${suffix}"
   if [[ -f "$overlay" ]]; then
     printf '%s\n' "$overlay"
