@@ -104,6 +104,27 @@ _verify_chain() {
   jq -e '.prev_hash == "null" and .input_summary == "after rotation"' "$(_chain_path)"
 }
 
+@test "B-1: append retries if active chain rotates after open" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'before rotation' allow approval-gate ok >/dev/null"
+  mkdir -p "$TMP_HOME/rotating-redactor/scripts"
+  cat > "$TMP_HOME/rotating-redactor/scripts/agent-secret-redactor.sh" <<'SH'
+#!/usr/bin/env bash
+if [[ -n "${CHAIN_PATH:-}" && -f "$CHAIN_PATH" && ! -f "${CHAIN_PATH}.rotated-during-redaction" ]]; then
+  mv "$CHAIN_PATH" "${CHAIN_PATH}.rotated-during-redaction"
+fi
+cat
+SH
+  chmod +x "$TMP_HOME/rotating-redactor/scripts/agent-secret-redactor.sh"
+
+  run bash -c "source '$AUDIT_LIB'; WALTER_OS_HOME='$TMP_HOME/rotating-redactor' CHAIN_PATH='$(_chain_path)' walter_audit_append Bash 'after active rotation' allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+  [ -f "$(_chain_path)" ]
+  [ -f "$(_chain_path).rotated-during-redaction" ]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+  jq -e '.prev_hash == "null" and .input_summary == "after active rotation"' "$(_chain_path)"
+}
+
 @test "B-1: active flock lock blocks competing append until timeout" {
   command -v flock >/dev/null 2>&1 || skip "flock not installed"
   mkdir -p "$WALTER_CONFIG/audit"

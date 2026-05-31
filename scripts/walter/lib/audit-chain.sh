@@ -224,6 +224,30 @@ _walter_audit_release_lock() {
   WALTER_AUDIT_LOCK_KIND=""
 }
 
+_walter_audit_path_identity() {
+  local path="$1" identity=""
+  identity="$(stat -c '%i' "$path" 2>/dev/null || true)"
+  if [[ -n "$identity" ]]; then
+    printf '%s\n' "$identity"
+    return 0
+  fi
+
+  identity="$(stat -f '%i' "$path" 2>/dev/null || true)"
+  if [[ -n "$identity" ]]; then
+    printf '%s\n' "$identity"
+    return 0
+  fi
+
+  return 1
+}
+
+_walter_audit_fd_matches_path() {
+  local fd="$1" path="$2" fd_identity path_identity
+  fd_identity="$(_walter_audit_path_identity "/dev/fd/${fd}")" || return 1
+  path_identity="$(_walter_audit_path_identity "$path")" || return 1
+  [[ "$fd_identity" == "$path_identity" ]]
+}
+
 _walter_audit_verify_chain_file_unlocked() {
   local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex
   if [[ -s "$chain_path" ]]; then
@@ -278,7 +302,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path lock_path previous_line previous_hash row summary timestamp row_date
+  local audit_dir chain_path lock_path previous_line previous_hash retry_count row summary timestamp row_date
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -332,6 +356,18 @@ walter_audit_append() {
       }
   else
     row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+  fi
+
+  if ! _walter_audit_fd_matches_path 9 "$chain_path"; then
+    exec 9>&-
+    _walter_audit_release_lock "$lock_path"
+    retry_count="${WALTER_AUDIT_APPEND_RETRY:-0}"
+    if [[ "$retry_count" -ge 3 ]]; then
+      echo "walter-audit-chain: chain path changed during append: $chain_path" >&2
+      return 1
+    fi
+    WALTER_AUDIT_APPEND_RETRY=$((retry_count + 1)) walter_audit_append "$tool" "$input" "$decision" "$source" "$reason"
+    return "$?"
   fi
 
   printf '%s\n' "$row" >&9 || {
