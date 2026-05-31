@@ -181,7 +181,6 @@ _is_capability_token_mint_payload() {
   local walter_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
   local cap_script_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
   local shell_expansion='([$][A-Za-z_][A-Za-z0-9_]*|[$][0-9]+|[$][@*#?$!-]|[$][{]([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])[}]|[$][(]|`)'
-  local walter_cap_mint_anywhere="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+[^;|&]*[[:space:]]+[$]?mint([[:space:]]|$)"
   local walter_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+[^[:space:];|&]*${shell_expansion}"
   local walter_cap_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[^[:space:];|&]*${shell_expansion}"
   local command_indirect_cap_mint="(^|[[:space:];|&()])${shell_expansion}[[:space:]]+cap[[:space:]]+([^[:space:];|&]*${shell_expansion}|[$]?mint)([[:space:]]|$)"
@@ -195,7 +194,6 @@ _is_capability_token_mint_payload() {
 
   [[ "$normalized" =~ $walter_mint ]] || \
     [[ "$normalized" =~ $cap_script_mint ]] || \
-    [[ "$normalized" =~ $walter_cap_mint_anywhere ]] || \
     [[ "$normalized" =~ $walter_dynamic_subcommand ]] || \
     [[ "$normalized" =~ $walter_cap_dynamic_subcommand ]] || \
     [[ "$normalized" =~ $command_indirect_cap_mint ]] || \

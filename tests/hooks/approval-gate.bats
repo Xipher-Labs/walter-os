@@ -329,6 +329,11 @@ teardown() {
   [[ "$status" -eq 0 ]]
 }
 
+@test "CLI: walter-os non-cap command with mint argument is allowed" {
+  run "$HOOK" check 'walter-os session status mint'
+  [[ "$status" -eq 0 ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
