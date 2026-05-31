@@ -318,7 +318,7 @@ _walter_sandbox_key_scan_depth() {
 
 _walter_sandbox_key_scan() {
   local root="$1" renderer="$2" renderer_arg="${3:-}" max_depth max_entries scan_depth entry_depth entry base
-  local fifo find_stderr find_pid scan_status find_status
+  local fifo find_stderr find_pid scan_status find_status old_umask
   [[ -d "$root" ]] || return 0
   max_depth="$(_walter_sandbox_key_scan_max_depth)" || return 1
   max_entries="$(_walter_sandbox_key_scan_max_entries)" || return 1
@@ -331,8 +331,21 @@ _walter_sandbox_key_scan() {
     rm -f -- "$fifo"
     return 1
   }
-  mkfifo "$fifo" || {
-    rm -f -- "$find_stderr"
+  old_umask="$(umask)" || {
+    rm -f -- "$fifo" "$find_stderr"
+    return 1
+  }
+  umask 077 || {
+    rm -f -- "$fifo" "$find_stderr"
+    return 1
+  }
+  if ! mkfifo "$fifo"; then
+    umask "$old_umask" || true
+    rm -f -- "$fifo" "$find_stderr"
+    return 1
+  fi
+  umask "$old_umask" || {
+    rm -f -- "$fifo" "$find_stderr"
     return 1
   }
   find "$root" -mindepth 1 -maxdepth "$scan_depth" -print0 > "$fifo" 2> "$find_stderr" &

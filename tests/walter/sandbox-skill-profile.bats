@@ -265,6 +265,23 @@ _mode() {
   grep -q 'wait "$find_pid"' "$SANDBOX_LIB"
 }
 
+@test "AC-3: key scan creates traversal FIFO with private umask" {
+  wrapper_dir="$TMP_HOME/bin"
+  umask_file="$TMP_HOME/mkfifo.umask"
+  mkdir -p "$wrapper_dir"
+  cat > "$wrapper_dir/mkfifo" <<EOF
+#!/usr/bin/env bash
+umask > "$umask_file"
+exec "$(command -v mkfifo)" "\$@"
+EOF
+  chmod +x "$wrapper_dir/mkfifo"
+
+  run bash -c "umask 000; cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; PATH='$wrapper_dir':\$PATH walter_sandbox_materialize_profile walter-skill-default nsjail"
+
+  [ "$status" -eq 0 ]
+  grep -q '^0077$' "$umask_file"
+}
+
 @test "AC-3: key scan fails closed on traversal errors" {
   mkdir -p "$PROJECT_DIR/locked"
   printf 'hidden\n' > "$PROJECT_DIR/locked/hidden.key"
