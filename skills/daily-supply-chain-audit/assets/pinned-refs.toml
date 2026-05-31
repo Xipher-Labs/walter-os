@@ -1,8 +1,13 @@
-# Pinning manifest for daily-supply-chain-audit (check-pinning.py).
+# Pinning manifest for vendored third-party skills + MCP servers.
 #
+# PROVENANCE DOCUMENTATION ONLY — NOT YET ENFORCED.
 # Maps every vendored skill and MCP server to its pinned 40-char commit hash.
-# check-pinning.py reads this file (default path) and exits non-zero if any
-# entry is not a 40-char lowercase hex commit hash.
+# As of today, `check-pinning.py` only parses a Claude Code `settings.json` and
+# reports `mcpServers` entries that are not version-pinned; it does NOT read
+# this file and does NOT validate vendored skills. So this manifest records the
+# pinned upstream SHAs for audit/provenance, but skills-drift detection is
+# manual. Teaching the audit to read this file (and exit non-zero on an invalid
+# or drifted ref) is future work tracked in issue #255.
 #
 # When you vendor a new skill or add an MCP server, add its pinned ref here.
 

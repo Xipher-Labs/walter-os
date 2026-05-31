@@ -32,6 +32,13 @@ this corpus with plain `grep` and `Read` over the CSVs — no `python3
 search.py`, no runtime dependency. The data is intentionally CSV so it is
 greppable.
 
+These CSVs are byte-exact upstream copies pinned to the commit below. Some rows
+contain code-example fields with embedded commas and unescaped double quotes
+(e.g. an HTML/JSX snippet), so a strict RFC-4180 CSV parser may reject or
+mis-column them. That is expected: this corpus is meant for line-oriented
+`grep`/`Read` lookup, NOT for parsing as structured CSV. Do not "repair" the
+quoting — it would diverge from the pinned upstream source.
+
 ## The corpus
 
 ### `data/*.csv` — cross-cutting design data (11 files)
