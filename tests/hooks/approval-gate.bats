@@ -241,6 +241,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: braced variable walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'sub=mint; walter-os cap ${sub} Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: braced variable cap.sh subcommand is blocked" {
+  run "$HOOK" check 'sub=mint; scripts/walter/subcommands/cap.sh ${sub} Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]

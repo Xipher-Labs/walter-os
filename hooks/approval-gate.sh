@@ -180,8 +180,9 @@ _is_capability_token_mint_payload() {
   local normalized
   local walter_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
   local cap_script_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
-  local walter_ambiguous='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$][A-Za-z_]'
-  local cap_script_ambiguous='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$][A-Za-z_]'
+  local shell_variable='([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}])'
+  local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_variable}"
+  local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_variable}"
   local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 
   normalized="$(_shellish_normalize_payload "$payload")"
