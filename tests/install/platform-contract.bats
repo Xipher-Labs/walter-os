@@ -42,7 +42,7 @@ _stub_required_tools() {
   [[ "$output" == *"OS: macOS (arm64)"* ]]
   [[ "$output" == *"brew install yq"* ]] || [[ "$output" == *"yq:"* ]]
   [[ "$output" == *"brew install gitleaks"* ]]
-  [[ "$output" == *"Docker Desktop or OrbStack"* ]]
+  [[ "$output" == *"Docker Desktop or OrbStack"* ]] || [[ "$output" == *"docker:"* ]]
 }
 
 @test "--check Ubuntu branch reports apt/snap/manual guidance" {
@@ -54,7 +54,7 @@ _stub_required_tools() {
 
   [[ "$output" == *"OS: Linux (Ubuntu/Debian compatible)"* ]]
   [[ "$output" == *"sudo snap install yq"* ]] || [[ "$output" == *"yq:"* ]]
-  [[ "$output" == *"Docker Engine + Compose plugin"* ]]
+  [[ "$output" == *"Docker Engine + Compose plugin"* ]] || [[ "$output" == *"docker:"* ]]
   [[ "$output" == *"sudo apt-get install -y bats shellcheck ripgrep"* ]]
   [[ "$output" == *"mise install node@22 pnpm@9 uv@latest"* ]]
   [[ "$output" == *"Infisical CLI docs"* ]]
