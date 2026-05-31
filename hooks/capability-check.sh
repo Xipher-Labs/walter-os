@@ -564,6 +564,37 @@ _cap_is_network_command() {
       command_position=1
       continue
     fi
+    if [[ "$cli" == "command" || "$cli" == "builtin" || "$cli" == "exec" || "$cli" == "nohup" ]]; then
+      idx=$((idx + 1))
+      command_position=1
+      continue
+    fi
+    if [[ "$cli" == "sudo" ]]; then
+      j=$((idx + 1))
+      while [[ "$j" -lt "${#tokens[@]}" ]]; do
+        sub="${tokens[$j]}"
+        case "$sub" in
+          -u|-g|-h|-p|-C|-T)
+            j=$((j + 2))
+            continue
+            ;;
+          --user|--group|--host|--prompt|--close-from|--command-timeout)
+            j=$((j + 2))
+            continue
+            ;;
+          --user=*|--group=*|--host=*|--prompt=*|--close-from=*|--command-timeout=*)
+            j=$((j + 1))
+            continue
+            ;;
+          -*) j=$((j + 1)); continue ;;
+          [A-Za-z_][A-Za-z0-9_]*=*) j=$((j + 1)); continue ;;
+        esac
+        break
+      done
+      idx="$j"
+      command_position=1
+      continue
+    fi
     case "$cli" in
       curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
         return 0
