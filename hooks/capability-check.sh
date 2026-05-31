@@ -145,8 +145,12 @@ _cap_extract_positional_network_hosts() {
         while [[ "$j" -lt "${#tokens[@]}" ]]; do
           candidate="${tokens[$j]}"
           case "$candidate" in
+            -p|-i|-l|-o|-F|-J|-W|-w|-P|-S) j=$((j + 2)); continue ;;
             -*) j=$((j + 1)); continue ;;
           esac
+          if [[ "$cli" == "scp" || "$cli" == "rsync" ]]; then
+            [[ "$candidate" == *@* || "$candidate" == *:* ]] || { j=$((j + 1)); continue; }
+          fi
           host="${candidate#*@}"
           host="${host%%:*}"
           host="${host%%/*}"
@@ -266,6 +270,55 @@ _cap_is_mint_command() {
   return 1
 }
 
+_cap_is_gh_pr_approve() {
+  local command="$1" tokfile token cli idx j sub
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    cli="${tokens[$idx]##*/}"
+    if [[ "$cli" != "gh" ]]; then
+      idx=$((idx + 1))
+      continue
+    fi
+
+    j=$((idx + 1))
+    while [[ "$j" -lt "${#tokens[@]}" ]]; do
+      sub="${tokens[$j]}"
+      case "$sub" in
+        --repo|--hostname|-R|-h)
+          j=$((j + 2))
+          continue
+          ;;
+        --repo=*|--hostname=*|-*)
+          j=$((j + 1))
+          continue
+          ;;
+      esac
+      break
+    done
+
+    if [[ "${tokens[$j]:-}" == "pr" && "${tokens[$((j + 1))]:-}" == "review" ]]; then
+      j=$((j + 2))
+      while [[ "$j" -lt "${#tokens[@]}" ]]; do
+        [[ "${tokens[$j]}" == "--approve" ]] && return 0
+        j=$((j + 1))
+      done
+    fi
+
+    idx=$((idx + 1))
+  done
+  return 1
+}
+
 _cap_is_high_tier_path() {
   local target="$1" repo="$2" pattern
   for pattern in "${CAP_HIGH_TIER_PATH_PATTERNS[@]}"; do
@@ -284,7 +337,7 @@ _cap_is_high_tier() {
     Bash)
       _cap_is_mint_command "$target" && return 1
       _cap_is_network_command "$target" && return 0
-      [[ "$target" =~ (^|[[:space:];|&()])gh[[:space:]]+pr[[:space:]]+review.*--approve ]] && return 0
+      _cap_is_gh_pr_approve "$target" && return 0
       [[ "$target" =~ walter-os[[:space:]]+cap[[:space:]]+mint ]] && return 0
       [[ "$target" =~ $sensitive_bash_re ]] && return 0
       return 1
@@ -330,6 +383,11 @@ _cap_host_matches() {
     '*.'*) [[ "$host" == "${pattern#*.}" ]] && return 1; [[ "$host" == *".${pattern#*.}" ]] ;;
     *) [[ "$host" == "$pattern" ]] ;;
   esac
+}
+
+_cap_requires_pattern_scope() {
+  local tool="$1" target="$2"
+  [[ "$tool" == "Bash" ]] && _cap_is_gh_pr_approve "$target"
 }
 
 _cap_claim_covers_host() {
@@ -379,6 +437,7 @@ _cap_claim_matches() {
       done
 
       if [[ -n "$hosts" ]]; then
+        _cap_requires_pattern_scope "$tool" "$target" && return 1
         _cap_claim_covers_hosts "$claims" "$hosts" && return 0
         return 1
       fi

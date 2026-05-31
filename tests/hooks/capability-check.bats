@@ -105,10 +105,42 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "gh pr approve requires pattern capability beyond github.com network" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh pr review 244 --approve")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "gh pr approve with repo flag requires pattern capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh -R Xipher-Labs/walter-os pr review 244 --approve")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "ssh with github.com network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "ssh git@github.com")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "ssh with option argument extracts destination host" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "ssh -p 2222 git@github.com")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "scp skips local path before remote destination" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "scp file.txt git@github.com:/tmp/file.txt")"
 
   echo "$output" | jq -e '.decision == "allow"'
 }
