@@ -1,4 +1,13 @@
-;; Walter-OS hook sandbox profile scaffold.
-;; AC-2 tightens this profile in a follow-up PR.
+;; Walter-OS hook sandbox profile.
+;; Read-only filesystem posture for hooks; network and sensitive reads denied.
 (version 1)
+
 (allow default)
+
+(deny network*)
+(deny file-write*)
+(deny file-read* (subpath "@HOME@/.ssh"))
+(deny file-read* (subpath "@HOME@/.aws"))
+(deny file-read* (subpath "@HOME@/.gnupg"))
+(deny file-read* (regex #".*\\.pem$"))
+(deny file-read* (regex #".*\\.key$"))

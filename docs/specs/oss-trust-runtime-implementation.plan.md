@@ -51,7 +51,11 @@ The six requested runtime tracks map to this implementation order:
   `walter-os cap` CLI slice stacked on #241.
 - #244 is open, mergeable, and completes high-tier capability enforcement.
 - #245 is open, mergeable, and completes default skill capabilities.
-- The next slice is **Process isolation sandbox AC-1**, stacked on #245.
+- #246 is open, mergeable, and completes process-isolation sandbox AC-1:
+  provider detection, profile path resolution, command wrapping, and scaffold
+  profiles.
+- The next slice is **Process isolation sandbox AC-2 hook profile**, stacked on
+  #246.
 
 ## Design Risks To Resolve Before Claiming Completion
 
@@ -123,20 +127,24 @@ The six requested runtime tracks map to this implementation order:
    - Deliverable: `walter_sandbox_provider`, `walter_sandbox_check`, and
      `walter_sandbox_run` for macOS `sandbox-exec`, Linux/WSL `nsjail`, and
      optional Linux `firejail`.
-   - Scope boundary: this PR may ship profile scaffolds, but AC-2/AC-3 are the
-     first PRs that claim actual filesystem/network/signal isolation semantics.
-6. **Default hook and skill profiles**.
+   - Current status: implemented in #246. AC-2/AC-3 are the first PRs that
+     claim actual filesystem/network/signal isolation semantics.
+6. **Default hook profile**.
    - Files: `setup/sandbox-profiles/*`,
-     `tests/walter/sandbox-hook-profile.bats`,
+     `tests/walter/sandbox-hook-profile.bats`.
+   - Deliverable: read-only hook profile, sensitive path deny rules,
+     no-network posture, and process/signal namespace constraints per OS.
+7. **Default skill profile**.
+   - Files: `setup/sandbox-profiles/*`,
      `tests/walter/sandbox-skill-profile.bats`.
-   - Deliverable: read-only hook profile, repo-scoped skill profile, sensitive
-     path deny rules, and signal/network constraints per OS.
-7. **Hook and skill integration**.
+   - Deliverable: repo-scoped skill profile, sensitive path deny rules, and
+     signal/network constraints per OS.
+8. **Hook and skill integration**.
    - Files: `hooks/*.sh`, skill execution entry points, `install.sh`,
      `skills/daily-supply-chain-audit/scripts/audit.sh`.
    - Deliverable: runtime fail-closed sandbox use, install-time warning
      sentinel, provider/profile checksum baselines, and explicit bypass logging.
-8. **Capability-aware dynamic profiles**.
+9. **Capability-aware dynamic profiles**.
    - Files: `scripts/walter/lib/sandbox.sh`,
      `tests/walter/sandbox-cap-integration.bats`.
    - Deliverable: valid cap `scope.paths` tightens the sandbox profile for the

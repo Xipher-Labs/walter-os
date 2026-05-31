@@ -1,3 +1,14 @@
-# Walter-OS hook sandbox profile scaffold.
-# AC-2 tightens this profile in a follow-up PR.
+# Walter-OS hook sandbox profile.
+# Read-only Walter roots, no network, sensitive homes hidden.
 quiet
+nonewprivs
+noroot
+net none
+caps.drop all
+read-only @WALTER_OS_HOME@
+read-only @WALTER_CONFIG@
+blacklist @HOME@/.ssh
+blacklist @HOME@/.aws
+blacklist @HOME@/.gnupg
+blacklist @HOME@/*.pem
+blacklist @HOME@/*.key

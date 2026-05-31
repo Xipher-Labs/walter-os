@@ -30,6 +30,41 @@ walter_sandbox_provider() {
   esac
 }
 
+walter_sandbox_profile_suffix() {
+  local provider="$1"
+  case "$provider" in
+    nsjail) printf '%s\n' "nsjail.conf" ;;
+    firejail) printf '%s\n' "firejail.profile" ;;
+    sandbox-exec) printf '%s\n' "sb" ;;
+    *)
+      echo "walter-sandbox: unsupported provider: $provider" >&2
+      return 1
+      ;;
+  esac
+}
+
+walter_sandbox_repo_root() {
+  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
+    printf '%s\n' "$WALTER_OS_HOME"
+    return 0
+  fi
+  cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd
+}
+
+walter_sandbox_runtime_dir() {
+  local base dir uid
+  uid="$(id -u 2>/dev/null || printf '%s' "unknown")"
+  base="${WALTER_RUNTIME_DIR:-${TMPDIR:-/tmp}/walter-os-${uid}}"
+  dir="${base}/sandbox"
+  mkdir -p "$dir" || return 1
+  chmod 700 "$base" "$dir" 2>/dev/null || true
+  printf '%s\n' "$dir"
+}
+
+_walter_sandbox_sed_escape() {
+  printf '%s' "$1" | sed 's/[\/&]/\\&/g'
+}
+
 walter_sandbox_profile_path() {
   [[ "$#" -ge 1 ]] || {
     echo "walter-sandbox: usage: walter_sandbox_profile_path <profile> [provider]" >&2
@@ -45,22 +80,10 @@ walter_sandbox_profile_path() {
       return 1
       ;;
   esac
-  case "$provider" in
-    nsjail) suffix="nsjail.conf" ;;
-    firejail) suffix="firejail.profile" ;;
-    sandbox-exec) suffix="sb" ;;
-    *)
-      echo "walter-sandbox: unsupported provider: $provider" >&2
-      return 1
-      ;;
-  esac
+  suffix="$(walter_sandbox_profile_suffix "$provider")" || return 1
 
   overlay_dir="${WALTER_CONFIG:-${HOME}/.config/walter-os}/overlay/sandbox-profiles"
-  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
-    repo_root="$WALTER_OS_HOME"
-  else
-    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)" || return 1
-  fi
+  repo_root="$(walter_sandbox_repo_root)" || return 1
   default_dir="${repo_root}/setup/sandbox-profiles"
   overlay="${overlay_dir}/${profile}.${suffix}"
   if [[ -f "$overlay" ]]; then
@@ -68,6 +91,38 @@ walter_sandbox_profile_path() {
     return 0
   fi
   printf '%s\n' "${default_dir}/${profile}.${suffix}"
+}
+
+walter_sandbox_materialize_profile() {
+  [[ "$#" -eq 2 ]] || {
+    echo "walter-sandbox: usage: walter_sandbox_materialize_profile <profile> <provider>" >&2
+    return 2
+  }
+  local profile="$1" provider="$2" src suffix runtime_dir dest
+  local repo_root config_dir home_value
+  src="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
+  if [[ ! -f "$src" ]]; then
+    echo "walter-sandbox: profile missing: $src" >&2
+    return 1
+  fi
+  if ! grep -q '@WALTER_OS_HOME@\|@WALTER_CONFIG@\|@HOME@' "$src"; then
+    printf '%s\n' "$src"
+    return 0
+  fi
+
+  suffix="$(walter_sandbox_profile_suffix "$provider")" || return 1
+  runtime_dir="$(walter_sandbox_runtime_dir)" || return 1
+  dest="${runtime_dir}/${profile}.${suffix}"
+  repo_root="$(_walter_sandbox_sed_escape "$(walter_sandbox_repo_root)")" || return 1
+  config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")"
+  home_value="$(_walter_sandbox_sed_escape "${HOME}")"
+  sed \
+    -e "s/@WALTER_OS_HOME@/${repo_root}/g" \
+    -e "s/@WALTER_CONFIG@/${config_dir}/g" \
+    -e "s/@HOME@/${home_value}/g" \
+    "$src" > "$dest" || return 1
+  chmod 600 "$dest" 2>/dev/null || true
+  printf '%s\n' "$dest"
 }
 
 walter_sandbox_check() {
@@ -94,7 +149,7 @@ walter_sandbox_run() {
 
   provider="$(walter_sandbox_provider)" || return 1
   walter_sandbox_check "$profile" || return 1
-  profile_path="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
+  profile_path="$(walter_sandbox_materialize_profile "$profile" "$provider")" || return 1
 
   case "$provider" in
     sandbox-exec)
