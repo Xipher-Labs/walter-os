@@ -10,6 +10,7 @@ setup() {
   export WALTER_SESSION_REPO="$TMP_HOME/work/repo"
   export WALTER_SESSION_MAX_HOURS=8
   export WALTER_SESSION_MAX_IDLE_MIN=60
+  export WALTER_SESSION_TEST_CLOCK=1
   mkdir -p "$WALTER_CONFIG" "$WALTER_SESSION_REPO"
 }
 
@@ -30,6 +31,17 @@ teardown() {
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
   [ -f "$state_file" ]
   jq -e '.session_id and .started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:00:00Z"' "$state_file"
+}
+
+@test "clock override is ignored outside explicit test mode" {
+  unset WALTER_SESSION_TEST_CLOCK
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  jq -e '.started_at != "2026-01-01T00:00:00Z"' "$state_file"
 }
 
 @test "session touch within idle window updates last_activity_at" {
@@ -122,6 +134,19 @@ teardown() {
   [ "$status" -eq 11 ]
   [[ "$output" == *'"status":"invalid"'* ]]
   [[ "$output" == *'"trigger":"clock-rewind"'* ]]
+}
+
+@test "session touch fails closed on malformed state" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  mkdir -p "$(dirname "$state_file")"
+  printf '{}\n' > "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 11 ]
+  [[ "$output" == *'"status":"invalid"'* ]]
+  [[ "$output" == *'"trigger":"malformed-state"'* ]]
 }
 
 @test "session touch fails closed when state cannot be created" {

@@ -8,7 +8,7 @@
 WALTER_SESSION_STATE_LIB_VERSION=1
 
 _walter_session_now_epoch() {
-  if [[ -n "${WALTER_SESSION_NOW_EPOCH:-}" ]]; then
+  if [[ "${WALTER_SESSION_TEST_CLOCK:-0}" == "1" && -n "${WALTER_SESSION_NOW_EPOCH:-}" ]]; then
     printf '%s' "$WALTER_SESSION_NOW_EPOCH"
   else
     date -u +%s
@@ -165,12 +165,8 @@ walter_session_touch() {
   started_at="$(jq -r '.started_at // empty' "$file")"
   last_activity_at="$(jq -r '.last_activity_at // empty' "$file")"
   if [[ -z "$started_at" || -z "$last_activity_at" ]]; then
-    if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
-      _walter_session_result "error" "state-write" "$file"
-      return 12
-    fi
-    _walter_session_result "started" "" "$file"
-    return 0
+    _walter_session_result "invalid" "malformed-state" "$file"
+    return 11
   fi
 
   started_epoch="$(_walter_session_epoch "$started_at")"
