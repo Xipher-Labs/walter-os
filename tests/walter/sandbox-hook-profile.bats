@@ -15,6 +15,7 @@ setup() {
 }
 
 teardown() {
+  [[ -n "${TMP_HOME:-}" ]] || return 0
   chmod -R u+w "$TMP_HOME" 2>/dev/null || true
   case "$TMP_HOME" in
     "$REPO_ROOT"/.tmp-sandbox-hook.*) rm -rf "$TMP_HOME" ;;
@@ -103,6 +104,14 @@ _mode() {
   [ "$output" != "$first_profile" ]
 }
 
+@test "AC-2: repo root helper does not change caller cwd" {
+  mkdir -p "$TMP_HOME/outside"
+
+  run bash -c "source '$SANDBOX_LIB'; unset WALTER_OS_HOME; cd '$TMP_HOME/outside'; before=\"\$PWD\"; walter_sandbox_repo_root >/dev/null; [[ \"\$PWD\" = \"\$before\" ]]"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "AC-2: runtime dir materialization preserves caller-provided root mode" {
   chmod 755 "$WALTER_RUNTIME_DIR"
 
@@ -111,6 +120,18 @@ _mode() {
   [ "$status" -eq 0 ]
   [ "$(_mode "$WALTER_RUNTIME_DIR")" = "755" ]
   [ "$(_mode "$WALTER_RUNTIME_DIR/sandbox")" = "700" ]
+}
+
+@test "AC-2: runtime dir rejects symlink roots" {
+  target="$TMP_HOME/runtime-target"
+  link="$TMP_HOME/runtime-link"
+  mkdir -p "$target"
+  ln -s "$target" "$link"
+
+  run bash -c "source '$SANDBOX_LIB'; WALTER_RUNTIME_DIR='$link' walter_sandbox_runtime_dir"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unsafe runtime path"* ]]
 }
 
 @test "AC-2: sandbox-exec hook profile enforces read/write/network boundaries when available" {

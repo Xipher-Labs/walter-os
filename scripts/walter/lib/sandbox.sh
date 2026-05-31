@@ -48,15 +48,53 @@ walter_sandbox_repo_root() {
     printf '%s\n' "$WALTER_OS_HOME"
     return 0
   fi
-  cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd
+  (cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+}
+
+_walter_sandbox_path_uid() {
+  if stat -f %u "$1" >/dev/null 2>&1; then
+    stat -f %u "$1"
+  else
+    stat -c %u "$1"
+  fi
+}
+
+_walter_sandbox_validate_owned_dir() {
+  local path="$1" owner uid
+  if [[ -L "$path" || ! -d "$path" ]]; then
+    echo "walter-sandbox: unsafe runtime path: $path" >&2
+    return 1
+  fi
+  uid="$(id -u 2>/dev/null || true)"
+  owner="$(_walter_sandbox_path_uid "$path")" || return 1
+  if [[ -n "$uid" && "$owner" != "$uid" ]]; then
+    echo "walter-sandbox: runtime path not owned by current user: $path" >&2
+    return 1
+  fi
 }
 
 walter_sandbox_runtime_dir() {
   local base dir uid
   uid="$(id -u 2>/dev/null || printf '%s' "unknown")"
   base="${WALTER_RUNTIME_DIR:-${TMPDIR:-/tmp}/walter-os-${uid}}"
+  if [[ -L "$base" ]]; then
+    echo "walter-sandbox: unsafe runtime path: $base" >&2
+    return 1
+  fi
+  if [[ -e "$base" && ! -d "$base" ]]; then
+    echo "walter-sandbox: runtime path is not a directory: $base" >&2
+    return 1
+  fi
+  mkdir -p "$base" || return 1
+  _walter_sandbox_validate_owned_dir "$base" || return 1
+
   dir="${base}/sandbox"
+  if [[ -L "$dir" ]]; then
+    echo "walter-sandbox: unsafe runtime path: $dir" >&2
+    return 1
+  fi
   mkdir -p "$dir" || return 1
+  _walter_sandbox_validate_owned_dir "$dir" || return 1
   if [[ -z "${WALTER_RUNTIME_DIR:-}" ]]; then
     chmod 700 "$base" 2>/dev/null || true
   fi
