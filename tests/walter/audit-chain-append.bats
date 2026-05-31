@@ -74,10 +74,16 @@ _verify_chain() {
 @test "B-1: concurrent appenders serialize with sidecar lock" {
   run bash -c "
     source '$AUDIT_LIB'
+    pids=()
     for i in \$(seq 1 12); do
-      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
+      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=30 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
+      pids+=(\"\$!\")
     done
-    wait
+    status=0
+    for pid in \"\${pids[@]}\"; do
+      wait \"\$pid\" || status=1
+    done
+    exit \"\$status\"
   "
 
   [ "$status" -eq 0 ]

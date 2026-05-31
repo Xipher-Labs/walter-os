@@ -93,7 +93,7 @@ _walter_audit_acquire_lock() {
     fi
     sleep 0.05
   done
-  printf '%s\n' "$$" > "${lock_path}/pid" || {
+  printf '%s\n' "${BASHPID:-$$}" > "${lock_path}/pid" || {
     rmdir "$lock_path" 2>/dev/null || true
     return 1
   }
