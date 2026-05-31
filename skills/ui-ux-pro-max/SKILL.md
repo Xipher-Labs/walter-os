@@ -10,6 +10,16 @@ This skill is a **passive reference corpus**: a body of structured design data
 the agent consults by grep/Read over vendored CSV files. It is not a reviewer,
 not a quality gate, and not a second design opinion. It is lookup data.
 
+## When to use
+
+Consult this corpus when you need concrete design prior art to ground a
+decision: a color palette for a product type ("what palette for a fintech
+app"), a font pairing ("font pairing for healthcare"), a chart type ("chart
+type for time-series"), per-stack UI conventions ("Next.js UI conventions"),
+or landing-page section order. It is lookup data only — for design taste and
+the working method use `impeccable`, and for the WCAG / Core-Web-Vitals gate
+use `frontend-quality`.
+
 ## What this is (and is not)
 
 - **IS**: a queryable corpus of palettes, font pairings, product-to-style

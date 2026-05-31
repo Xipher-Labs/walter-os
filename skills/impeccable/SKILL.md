@@ -10,6 +10,16 @@ World-class design craft for AI agents. This skill makes the difference
 between generic AI output and work that looks like a senior product designer
 made it.
 
+## When to use
+
+Load this skill when building, designing, refining, or reviewing any
+user-facing interface (web, app, or component) and the work should look
+intentional rather than templated. Triggers include "polish the UI", "make it
+pop", "feels generic", "clean it up", "more premium", "looks like AI slop", or
+"fix this design". Covers color, typography, layout, spacing, motion,
+interaction, states, and UI copy. Defer to `frontend-quality` for the WCAG /
+Core-Web-Vitals gate and to `mobile-design-system` for native mobile.
+
 ## Where this sits in the Walter-OS design stack
 
 - **impeccable** (this skill) is the design-CRAFT / anti-AI-slop layer: the
