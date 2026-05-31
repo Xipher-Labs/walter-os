@@ -111,17 +111,16 @@ _verify_chain() {
   [ ! -d "$lock_dir" ]
 }
 
-@test "B-1: old lock is reclaimed even if pid is alive" {
+@test "B-1: old lock with live pid is not reclaimed" {
   lock_dir="$WALTER_CONFIG/audit/.chain.lock"
   mkdir -p "$lock_dir"
   printf '%s\n' "$$" > "$lock_dir/pid"
 
-  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_STALE_LOCK_SECONDS=0 walter_audit_append Bash 'after old lock' allow approval-gate ok"
+  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_STALE_LOCK_SECONDS=0 WALTER_AUDIT_LOCK_WAIT_SECONDS=0 walter_audit_append Bash 'after old lock' allow approval-gate ok"
 
-  [ "$status" -eq 0 ]
-  [ -f "$(_chain_path)" ]
-  jq -e '.input_summary == "after old lock"' "$(_chain_path)"
-  [ ! -d "$lock_dir" ]
+  [ "$status" -ne 0 ]
+  [ ! -f "$(_chain_path)" ]
+  [ -d "$lock_dir" ]
 }
 
 @test "B-1: input summaries are single-line and capped" {
@@ -143,6 +142,23 @@ _verify_chain() {
   [ "$status" -eq 0 ]
   summary="$(jq -r '.input_summary' "$(_chain_path)")"
   [[ "$summary" == *"<REDACTED:bearer>"* ]]
+  [[ "$summary" != *"abcdefghijklmnopqrstuvwxyz1234567890"* ]]
+}
+
+@test "B-1: redactor failures do not log raw input" {
+  mkdir -p "$TMP_HOME/failing-redactor/scripts"
+  cat > "$TMP_HOME/failing-redactor/scripts/agent-secret-redactor.sh" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/failing-redactor/scripts/agent-secret-redactor.sh"
+  secret="Authorization: Bearer abcdefghijklmnopqrstuvwxyz1234567890"
+
+  run bash -c "source '$AUDIT_LIB'; WALTER_OS_HOME='$TMP_HOME/failing-redactor' walter_audit_append Bash '$secret' allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+  summary="$(jq -r '.input_summary' "$(_chain_path)")"
+  [ "$summary" = "<REDACTED:redactor-error>" ]
   [[ "$summary" != *"abcdefghijklmnopqrstuvwxyz1234567890"* ]]
 }
 

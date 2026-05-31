@@ -61,7 +61,7 @@ walter_audit_input_summary() {
     fi
   fi
   if [[ -n "$redactor" ]]; then
-    input="$(printf '%s' "$input" | "$redactor" 2>/dev/null || printf '%s' "$input")"
+    input="$(printf '%s' "$input" | "$redactor" 2>/dev/null)" || input="<REDACTED:redactor-error>"
   fi
   printf '%s' "$input" | tr '\n\r\t' '   ' | cut -c 1-200
 }
@@ -71,17 +71,18 @@ _walter_audit_acquire_lock() {
   start="$(date +%s)"
   while ! mkdir "$lock_path" 2>/dev/null; do
     now="$(date +%s)"
-    lock_mtime="$(stat -f %m "$lock_path" 2>/dev/null || stat -c %Y "$lock_path" 2>/dev/null || printf '%s' "$now")"
-    stale_after="${WALTER_AUDIT_STALE_LOCK_SECONDS:-300}"
-    if [[ $((now - lock_mtime)) -ge "$stale_after" ]]; then
-      rm -rf -- "$lock_path"
-      continue
-    fi
     pid_file="${lock_path}/pid"
     owner_pid=""
     [[ -f "$pid_file" ]] && owner_pid="$(cat "$pid_file" 2>/dev/null || true)"
     if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
       if ! kill -0 "$owner_pid" 2>/dev/null; then
+        rm -rf -- "$lock_path"
+        continue
+      fi
+    else
+      lock_mtime="$(stat -f %m "$lock_path" 2>/dev/null || stat -c %Y "$lock_path" 2>/dev/null || printf '%s' "$now")"
+      stale_after="${WALTER_AUDIT_STALE_LOCK_SECONDS:-300}"
+      if [[ $((now - lock_mtime)) -ge "$stale_after" ]]; then
         rm -rf -- "$lock_path"
         continue
       fi
