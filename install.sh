@@ -1531,6 +1531,11 @@ _install_deps_linux() {
   if ! command -v apt-get >/dev/null 2>&1; then
     warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
     warn "Install manually: ${required_deps[*]}"
+    if ! resolve_openssl_bin >/dev/null 2>&1; then
+      err "openssl with ED25519 support is REQUIRED at runtime and not installed."
+      err "  Install OpenSSL for your distro or launch with WALTER_OPENSSL_BIN=/path/to/openssl."
+      exit 1
+    fi
     # If yq is missing entirely on a non-Debian Linux, surface that
     # explicitly so the operator doesn't think the warn-and-return
     # means everything's OK. Codex R4 #125.

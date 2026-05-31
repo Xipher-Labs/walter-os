@@ -83,6 +83,7 @@ setup() {
   grep -qE 'openssl_supports_ed25519' "$INSTALL_SH"
   grep -qE 'would run: brew install openssl' "$INSTALL_SH"
   grep -qE 'would run: sudo apt-get install -y openssl' "$INSTALL_SH"
+  grep -qE 'openssl with ED25519 support is REQUIRED at runtime' "$INSTALL_SH"
   [[ $(grep -cE 'local required_deps=\([^)]*\bopenssl\b' "$INSTALL_SH") -ge 2 ]]
 }
 
