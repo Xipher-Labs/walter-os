@@ -20,6 +20,9 @@ CAP_HIGH_TIER_PATH_PATTERNS=(
   'AGENTS.md'
   'CLAUDE.md'
   'mcp/servers.json'
+  'scripts/walter/lib/capability-token.sh'
+  'scripts/walter/lib/session-state.sh'
+  'scripts/walter/subcommands/cap.sh'
   'agents/*.md'
   'skills/*/SKILL.md'
   'auth/*'
@@ -556,7 +559,15 @@ _cap_is_network_command() {
         while [[ "$j" -lt "${#tokens[@]}" ]]; do
           sub="${tokens[$j]}"
           case "$sub" in
-            -C|-c|--git-dir|--work-tree) j=$((j + 2)); continue ;;
+            -c)
+              [[ "${tokens[$((j + 1))]:-}" == alias.*='!'* ]] && return 0
+              j=$((j + 2))
+              continue
+              ;;
+            -calias.*='!'*)
+              return 0
+              ;;
+            -C|--git-dir|--work-tree) j=$((j + 2)); continue ;;
             -C*|--git-dir=*|--work-tree=*|--namespace=*|-*) j=$((j + 1)); continue ;;
           esac
           case "$sub" in

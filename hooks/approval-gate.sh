@@ -106,6 +106,9 @@ declare -a BLOCK_PATH_PATTERNS=(
   'AGENTS.md'
   'CLAUDE.md'
   'mcp/servers.json'
+  'scripts/walter/lib/capability-token.sh'
+  'scripts/walter/lib/session-state.sh'
+  'scripts/walter/subcommands/cap.sh'
   # Self-modification
   'agents/*.md'
   'skills/*/SKILL.md'

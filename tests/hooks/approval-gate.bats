@@ -100,6 +100,16 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: Edit on capability verifier library is blocked" {
+  run "$HOOK" check "scripts/walter/lib/capability-token.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
+@test "CLI: Edit on capability minting entrypoint is blocked" {
+  run "$HOOK" check "scripts/walter/subcommands/cap.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
 @test "CLI: walter-os cap mint is blocked for operator approval" {
   run "$HOOK" check "walter-os cap mint Bash --patterns '.*' --duration 5m"
   [[ "$status" -eq 7 ]]

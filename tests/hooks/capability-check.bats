@@ -293,6 +293,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "git shell alias is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "git -c alias.pwn='!curl https://api.github.com/repos/x/y' pwn")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh api is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "gh api repos/Xipher-Labs/walter-os")"
 
@@ -642,6 +648,18 @@ _mint() {
   _mint Write --paths 'docs/**' --duration 30m >/dev/null
 
   output="$(_hook_json Write file_path "hooks/approval-gate.sh")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write capability verifier library without capability is blocked" {
+  output="$(_hook_json Write file_path "scripts/walter/lib/capability-token.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write capability minting entrypoint without capability is blocked" {
+  output="$(_hook_json Write file_path "scripts/walter/subcommands/cap.sh")"
+
   echo "$output" | jq -e '.decision == "block"'
 }
 
