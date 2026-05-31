@@ -265,6 +265,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: partial command-substitution cap.sh mint is blocked" {
+  run "$HOOK" check 'bash scripts/walter/subcommands/cap.sh mi$(printf nt) Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: backtick walter-os cap subcommand is blocked" {
   run "$HOOK" check 'walter-os cap `printf mint` Bash --duration 5m'
   [[ "$status" -eq 7 ]]

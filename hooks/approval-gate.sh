@@ -182,6 +182,7 @@ _is_capability_token_mint_payload() {
   local cap_script_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
   local shell_expansion='([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)'
   local walter_dynamic='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[^;|&]*([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)'
+  local cap_script_dynamic='(^|[[:space:];|&()])[^;|&]*cap[.]sh[^;|&]*([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)'
   local dynamic_mint='(^|[[:space:];|&()])[^;|&]*([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)[^;|&]*[[:space:]]+[$]?mint([[:space:]]|$)'
   local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_expansion}"
   local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_expansion}"
@@ -192,6 +193,7 @@ _is_capability_token_mint_payload() {
   [[ "$normalized" =~ $walter_mint ]] || \
     [[ "$normalized" =~ $cap_script_mint ]] || \
     [[ "$normalized" =~ $walter_dynamic ]] || \
+    [[ "$normalized" =~ $cap_script_dynamic ]] || \
     [[ "$normalized" =~ $dynamic_mint ]] || \
     [[ "$normalized" =~ $walter_ambiguous ]] || \
     [[ "$normalized" =~ $cap_script_ambiguous ]] || \
