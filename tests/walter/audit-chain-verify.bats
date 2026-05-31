@@ -122,6 +122,24 @@ _make_chain() {
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
 }
 
+@test "B-1: append rejects unterminated chain without jq" {
+  _make_chain
+  content="$(cat "$(_chain_path)")"
+  printf '%s' "$content" > "$(_chain_path)"
+  mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
+  cat > "$BATS_TEST_TMPDIR/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$BATS_TEST_TMPDIR/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin:/usr/bin:/bin' walter_audit_append Bash 'after unterminated' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated final row"* ]]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+}
+
 @test "B-1: missing chain returns non-zero" {
   run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
 

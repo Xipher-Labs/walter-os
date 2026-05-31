@@ -354,7 +354,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path lock_path previous_line previous_hash pre_write_size retry_count row summary timestamp row_date
+  local audit_dir chain_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row summary timestamp row_date
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -372,6 +372,13 @@ walter_audit_append() {
   previous_hash="null"
   previous_line="$(tail -n 1 <&9)"
   if [[ -s "$chain_path" ]]; then
+    last_hex="$(tail -c 1 "$chain_path" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+    if [[ "$last_hex" != "0a" ]]; then
+      echo "walter-audit-chain: unterminated final row: $chain_path" >&2
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    fi
     if [[ -z "$previous_line" ]]; then
       echo "walter-audit-chain: blank final row: $chain_path" >&2
       exec 9>&-
