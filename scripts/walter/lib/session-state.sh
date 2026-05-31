@@ -179,6 +179,25 @@ _walter_session_reclaim_stale_lock() {
   rmdir "$lock_dir" 2>/dev/null
 }
 
+_walter_session_has_capability_material() {
+  local file="$1" session_id private_key public_key caps_dir stored_private stored_public stored_caps
+  [[ -f "$file" ]] || return 1
+  session_id="$(jq -r '.session_id // empty' "$file" 2>/dev/null || true)"
+  [[ -n "$session_id" ]] || return 1
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  private_key="$(_walter_session_private_key_file "$session_id")"
+  public_key="$(_walter_session_public_key_file "$session_id")"
+  caps_dir="$(_walter_session_caps_dir "$session_id")"
+  stored_private="$(jq -r '.capability_private_key_path // empty' "$file" 2>/dev/null || true)"
+  stored_public="$(jq -r '.capability_public_key_path // empty' "$file" 2>/dev/null || true)"
+  stored_caps="$(jq -r '.capability_tokens_dir // empty' "$file" 2>/dev/null || true)"
+
+  [[ "$stored_private" == "$private_key" ]] || return 1
+  [[ "$stored_public" == "$public_key" ]] || return 1
+  [[ "$stored_caps" == "$caps_dir" ]] || return 1
+  [[ -f "$private_key" && -f "$public_key" && -d "$caps_dir" ]]
+}
+
 _walter_session_write_new() {
   local repo="$1" file="$2" now_epoch="$3"
   local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub openssl_bin
@@ -376,6 +395,11 @@ walter_session_touch() {
     fi
     _walter_session_result "expired" "$expiry_trigger" "$file"
     return 10
+  fi
+
+  if ! _walter_session_has_capability_material "$file"; then
+    _walter_session_result "invalid" "legacy-session" "$file"
+    return 11
   fi
 
   local tmp_file

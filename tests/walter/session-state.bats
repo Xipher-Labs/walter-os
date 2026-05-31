@@ -232,6 +232,23 @@ _mode() {
   [[ "$output" == *'"trigger":"malformed-state"'* ]]
 }
 
+@test "session touch invalidates active legacy sessions without capability material" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  mkdir -p "$(dirname "$state_file")"
+  jq -n \
+    --arg started_at "2026-01-01T00:00:00Z" \
+    --arg last_activity_at "2026-01-01T00:30:00Z" \
+    '{session_id:"legacy-session", started_at:$started_at, last_activity_at:$last_activity_at}' > "$state_file"
+
+  export WALTER_SESSION_NOW_EPOCH=1767227401
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 11 ]
+  [[ "$output" == *'"status":"invalid"'* ]]
+  [[ "$output" == *'"trigger":"legacy-session"'* ]]
+}
+
 @test "session touch fails closed when state cannot be created" {
   rm -r "$WALTER_CONFIG"
   printf '%s\n' "not a directory" > "$WALTER_CONFIG"
