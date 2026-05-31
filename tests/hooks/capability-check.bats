@@ -203,6 +203,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "compound cap mint plus egress still requires capability" {
+  output="$(_hook_json Bash command "walter-os cap mint Bash --network github.com --duration 30m; curl https://evil.example")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Write with matching path capability is allowed" {
   _mint Write --paths 'docs/**' --duration 30m >/dev/null
 

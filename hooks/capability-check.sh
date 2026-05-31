@@ -260,6 +260,7 @@ _cap_is_network_command() {
 
 _cap_is_mint_command() {
   local command="$1"
+  [[ "$command" =~ [\;\|\&] ]] && return 1
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
   return 1
