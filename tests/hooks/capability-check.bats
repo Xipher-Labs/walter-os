@@ -51,12 +51,32 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "absolute-path curl without capability is blocked" {
+  output="$(_hook_json Bash command "/usr/bin/curl https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "absolute-path curl with matching network capability is allowed" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "/usr/bin/curl https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "git ssh URL with matching network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "git clone ssh://git@github.com/org/repo")"
 
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "absolute-path git fetch is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "/opt/homebrew/bin/git fetch")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "Bash egress requires capability coverage for every destination" {
@@ -114,6 +134,12 @@ _mint() {
 
 @test "low-tier Bash with no capability passes through" {
   output="$(_hook_json Bash command "echo hello")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "walter-os cap mint bootstraps without requiring an existing cap" {
+  output="$(_hook_json Bash command "walter-os cap mint Bash --network api.github.com --duration 30m")"
+
   echo "$output" | jq -e '.decision == "allow"'
 }
 

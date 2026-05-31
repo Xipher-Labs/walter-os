@@ -109,8 +109,15 @@ _cap_extract_hosts() {
 
 _cap_is_network_command() {
   local command="$1"
-  [[ "$command" =~ (^|[[:space:];|&()])(curl|wget)[[:space:]] ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])git[[:space:]]+(clone|fetch|pull|push|ls-remote)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(curl|wget)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?git[[:space:]]+(clone|fetch|pull|push|ls-remote)([[:space:]]|$) ]] && return 0
+  return 1
+}
+
+_cap_is_mint_command() {
+  local command="$1"
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
   return 1
 }
 
@@ -130,6 +137,7 @@ _cap_is_high_tier() {
       [[ -n "$target" ]] && _cap_is_high_tier_path "$target" "$repo"
       ;;
     Bash)
+      _cap_is_mint_command "$target" && return 1
       _cap_is_network_command "$target" && return 0
       [[ "$target" =~ (^|[[:space:];|&()])gh[[:space:]]+pr[[:space:]]+review.*--approve ]] && return 0
       [[ "$target" =~ walter-os[[:space:]]+cap[[:space:]]+mint ]] && return 0
