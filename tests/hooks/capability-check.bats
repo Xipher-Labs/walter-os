@@ -97,6 +97,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "gh api with github.com network capability is allowed" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "npm install is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "npm install left-pad")"
 
@@ -204,6 +212,12 @@ _mint() {
   _mint Write --paths 'docs/**' --duration 30m >/dev/null
 
   output="$(_hook_json Write file_path "hooks/approval-gate.sh")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write dot-relative protected path without capability is blocked" {
+  output="$(_hook_json Write file_path "./install.sh")"
+
   echo "$output" | jq -e '.decision == "block"'
 }
 

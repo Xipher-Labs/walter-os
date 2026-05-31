@@ -78,33 +78,48 @@ _cap_has_bypass_flag() {
 
 _cap_extract_hosts() {
   local command="$1" token host
-  printf '%s\n' "$command" | tr '[:space:]' '\n' | while IFS= read -r token; do
-    token="${token#\"}"
-    token="${token%\"}"
-    token="${token#\'}"
-    token="${token%\'}"
-    token="${token%)}"
+  {
+    printf '%s\n' "$command" | tr '[:space:]' '\n' | while IFS= read -r token; do
+      token="${token#\"}"
+      token="${token%\"}"
+      token="${token#\'}"
+      token="${token%\'}"
+      token="${token%)}"
 
-    host=""
-    case "$token" in
-      http://*|https://*)
-        host="${token#*://}"
-        host="${host%%/*}"
-        ;;
-      ssh://*)
-        host="${token#ssh://}"
-        host="${host%%/*}"
-        ;;
-      git@*:*)
-        host="${token#git@}"
-        host="${host%%:*}"
-        ;;
-    esac
+      host=""
+      case "$token" in
+        http://*|https://*)
+          host="${token#*://}"
+          host="${host%%/*}"
+          ;;
+        ssh://*)
+          host="${token#ssh://}"
+          host="${host%%/*}"
+          ;;
+        git@*:*)
+          host="${token#git@}"
+          host="${host%%:*}"
+          ;;
+      esac
 
-    host="${host#*@}"
-    host="${host%%:*}"
-    [[ -n "$host" ]] && printf '%s\n' "$host"
-  done | awk 'NF && !seen[$0]++'
+      host="${host#*@}"
+      host="${host%%:*}"
+      [[ -n "$host" ]] && printf '%s\n' "$host"
+    done
+    _cap_extract_gh_host "$command"
+  } | awk 'NF && !seen[$0]++'
+}
+
+_cap_extract_gh_host() {
+  local command="$1" host=""
+  if [[ "$command" =~ (^|[[:space:]])--hostname=([^[:space:];|&()]+) ]]; then
+    host="${BASH_REMATCH[2]}"
+  elif [[ "$command" =~ (^|[[:space:]])(--hostname|-h)[[:space:]]+([^[:space:];|&()]+) ]]; then
+    host="${BASH_REMATCH[3]}"
+  elif [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?gh([[:space:]]|$) ]]; then
+    host="${GH_HOST:-github.com}"
+  fi
+  [[ -n "$host" ]] && printf '%s\n' "$host"
 }
 
 _cap_is_network_command() {
@@ -251,11 +266,17 @@ _cap_glob_matches() {
 
 _cap_glob_matches_path() {
   local target="$1" repo="$2" pattern="$3" rel_target
+  while [[ "$target" == ./* ]]; do
+    target="${target#./}"
+  done
   _cap_glob_matches "$target" "$pattern" && return 0
   if [[ -n "$repo" ]]; then
     case "$target" in
       "$repo"/*)
         rel_target="${target#"$repo"/}"
+        while [[ "$rel_target" == ./* ]]; do
+          rel_target="${rel_target#./}"
+        done
         _cap_glob_matches "$rel_target" "$pattern" && return 0
         ;;
     esac
