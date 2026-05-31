@@ -188,6 +188,16 @@ _cap_emit_split_hosts() {
   done
 }
 
+_cap_emit_proxy_command_hosts() {
+  local proxy_command="$1" host
+  while IFS= read -r host; do
+    case "$host" in
+      ''|%*) continue ;;
+    esac
+    printf '%s\n' "$host"
+  done < <(_cap_extract_hosts "$proxy_command")
+}
+
 _cap_extract_gh_host() {
   local command="$1" tokfile token cli idx j candidate host inline_gh_host=""
   local -a tokens=()
@@ -389,12 +399,24 @@ _cap_extract_positional_network_hosts() {
                 [Pp]roxy[Jj]ump=*)
                   _cap_emit_split_hosts "${tokens[$((j + 1))]#*=}"
                   ;;
+                [Pp]roxy[Cc]ommand=*)
+                  _cap_emit_proxy_command_hosts "${tokens[$((j + 1))]#*=}"
+                  ;;
+                [Pp]roxy[Cc]ommand)
+                  _cap_emit_proxy_command_hosts "${tokens[$((j + 2))]:-}"
+                  j=$((j + 1))
+                  ;;
               esac
               j=$((j + 2))
               continue
               ;;
             -o[Pp]roxy[Jj]ump=*)
               _cap_emit_split_hosts "${candidate#*=}"
+              j=$((j + 1))
+              continue
+              ;;
+            -o[Pp]roxy[Cc]ommand=*)
+              _cap_emit_proxy_command_hosts "${candidate#*=}"
               j=$((j + 1))
               continue
               ;;
@@ -483,6 +505,30 @@ _cap_is_network_command() {
             -*) j=$((j + 1)); continue ;;
             pip) j=$((j + 1)); continue ;;
             install|download|sync) return 0 ;;
+          esac
+          break
+        done
+        ;;
+      python|python[0-9]*)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          sub="${tokens[$j]}"
+          case "$sub" in
+            -m)
+              if [[ "${tokens[$((j + 1))]:-}" == "pip" || "${tokens[$((j + 1))]:-}" == "pip3" ]]; then
+                j=$((j + 2))
+                while [[ "$j" -lt "${#tokens[@]}" ]]; do
+                  sub="${tokens[$j]}"
+                  case "$sub" in
+                    -*) j=$((j + 1)); continue ;;
+                    install|download|sync) return 0 ;;
+                  esac
+                  break
+                done
+              fi
+              break
+              ;;
+            -*) j=$((j + 1)); continue ;;
           esac
           break
         done
