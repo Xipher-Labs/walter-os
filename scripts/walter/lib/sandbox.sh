@@ -70,13 +70,30 @@ walter_sandbox_profile_path() {
   printf '%s\n' "${default_dir}/${profile}.${suffix}"
 }
 
-walter_sandbox_check() {
-  local profile="${1:-walter-hook-default}" provider profile_path
-  provider="$(walter_sandbox_provider)" || return 1
-  if ! command -v "$provider" >/dev/null 2>&1; then
+walter_sandbox_provider_path() {
+  [[ "$#" -eq 1 ]] || {
+    echo "walter-sandbox: usage: walter_sandbox_provider_path <provider>" >&2
+    return 2
+  }
+  local provider="$1" provider_path provider_dir provider_base
+  provider_path="$(type -P -- "$provider" 2>/dev/null || true)"
+  if [[ -z "$provider_path" ]]; then
     echo "walter-sandbox: provider missing: $provider" >&2
     return 1
   fi
+  provider_dir="${provider_path%/*}"
+  provider_base="${provider_path##*/}"
+  if [[ "$provider_dir" == "$provider_path" ]]; then
+    provider_dir="."
+  fi
+  provider_dir="$(cd "$provider_dir" && pwd -P)" || return 1
+  printf '%s\n' "${provider_dir}/${provider_base}"
+}
+
+walter_sandbox_check() {
+  local profile="${1:-walter-hook-default}" provider profile_path
+  provider="$(walter_sandbox_provider)" || return 1
+  walter_sandbox_provider_path "$provider" >/dev/null || return 1
   profile_path="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
   if [[ ! -f "$profile_path" ]]; then
     echo "walter-sandbox: profile missing: $profile_path" >&2
@@ -89,22 +106,26 @@ walter_sandbox_run() {
     echo "walter-sandbox: usage: walter_sandbox_run <profile> <cmd...>" >&2
     return 2
   }
-  local profile="$1" provider profile_path
+  local profile="$1" provider provider_path profile_path
   shift
 
   provider="$(walter_sandbox_provider)" || return 1
-  walter_sandbox_check "$profile" || return 1
+  provider_path="$(walter_sandbox_provider_path "$provider")" || return 1
   profile_path="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
+  if [[ ! -f "$profile_path" ]]; then
+    echo "walter-sandbox: profile missing: $profile_path" >&2
+    return 1
+  fi
 
   case "$provider" in
     sandbox-exec)
-      "$provider" -f "$profile_path" -- "$@"
+      "$provider_path" -f "$profile_path" -- "$@"
       ;;
     nsjail)
-      "$provider" --config "$profile_path" -- "$@"
+      "$provider_path" --config "$profile_path" -- "$@"
       ;;
     firejail)
-      "$provider" --profile="$profile_path" -- "$@"
+      "$provider_path" --profile="$profile_path" -- "$@"
       ;;
     *)
       echo "walter-sandbox: unsupported provider: $provider" >&2

@@ -30,7 +30,7 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 
 | # | Decision | Why |
 |---|---|---|
-| D-1 | **Wrap per-OS primitives**: Linux → `nsjail`, macOS → `sandbox-exec`, WSL → `nsjail`. Operator can override to `firejail` on Linux via `WALTER_SANDBOX_PROVIDER=firejail`. | Per parent D-1. No invented sandbox; we use mature tools. |
+| D-1 | **Wrap per-OS primitives**: Linux → `nsjail`, macOS → `sandbox-exec`. Operator can override to `firejail` on Linux via `WALTER_SANDBOX_PROVIDER=firejail`. WSL is not separately detected in this shim slice; if it reports `Linux` from `uname -s`, it follows the Linux path. | Per parent D-1. No invented sandbox; we use mature tools. |
 | D-2 | **Single uniform shim**: `scripts/walter/lib/sandbox.sh` exposes `walter_sandbox_run <profile> <cmd...>` (positional args; the `<cmd...>` collects the executable plus its args — identical to the AC-1 signature). Internally resolves the per-OS invocation. | Skills + hooks don't care which sandbox is active; they call the shim. |
 | D-3 | **Two profiles for v0.5.x**: `walter-hook-default` (for PreToolUse hooks — read-only repo + read-only operator overlay + no net) and `walter-skill-default` (for skill executions — read-write repo + read-only overlay + network per A-1 allowlist). | Most hooks don't need write or net. Skills are the place real work happens. |
 | D-4 | **Default policy: allow most, deny dangerous**. From parent D-1 open question — `walter-skill-default` denies: write outside cwd repo + parent (limit 1 level up); access to `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 / capability-tokens — NOT the whole `state/` directory, which also holds decision journals + knowledge cards that skills legitimately read), `~/.gnupg/`, `*.pem`, `*.key`; signal to PIDs outside the sandboxed tree. Allows everything else by default. | Reflects parent D-1 second option. Lower footgun for first-time adopters. Operator hardens per project via overlay profile. Scoping the state deny to `session-*.key` only avoids breaking the general `state/` use cases. |
@@ -48,7 +48,6 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
   - `walter_sandbox_check` — verifies the provider binary is installed + the default profiles exist
 - [ ] Linux default = `nsjail` (operator can override to `firejail` via `WALTER_SANDBOX_PROVIDER=firejail`).
 - [ ] macOS default = `sandbox-exec` (no override available; only one option).
-- [ ] WSL = `nsjail` (same as Linux).
 - [ ] Other OS = fail with `walter-sandbox: no supported sandbox provider on <os>; sandbox required by A-3` (fail-CLOSED).
 - [ ] bats coverage in `tests/walter/sandbox-shim.bats`:
   - macOS path: `walter_sandbox_provider` → `sandbox-exec`

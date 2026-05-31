@@ -2,11 +2,12 @@
 # tests/walter/sandbox-shim.bats
 #
 # OSS Trust A-3 process isolation sandbox — AC-1 coverage.
+# shellcheck disable=SC2030,SC2031
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   SANDBOX_LIB="$REPO_ROOT/scripts/walter/lib/sandbox.sh"
-  TMP_HOME="$(mktemp -d)"
+  TMP_HOME="$(mktemp -d "${TMPDIR:-/tmp}/walter-sandbox-shim.XXXXXX")"
   MOCK_BIN="$TMP_HOME/bin"
   mkdir -p "$MOCK_BIN"
   export HOME="$TMP_HOME"
@@ -98,15 +99,6 @@ EOF
   [ "$output" = "firejail" ]
 }
 
-@test "AC-1: WSL uses nsjail" {
-  _mock_uname Linux
-
-  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_provider"
-
-  [ "$status" -eq 0 ]
-  [ "$output" = "nsjail" ]
-}
-
 @test "AC-1: unsupported OS fails closed" {
   _mock_uname FreeBSD
 
@@ -123,6 +115,37 @@ EOF
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"provider missing: nsjail"* ]]
+}
+
+@test "AC-1: sandbox run executes the provider path resolved before profile lookup" {
+  _mock_uname Linux
+  _mock_provider nsjail
+  local shadow_bin="$TMP_HOME/shadow-bin"
+  mkdir -p "$shadow_bin"
+  cat > "$shadow_bin/nsjail" <<'EOF'
+#!/usr/bin/env bash
+printf 'shadowed'
+exit 42
+EOF
+  chmod +x "$shadow_bin/nsjail"
+  export WALTER_SANDBOX_PROVIDER_LOG="$TMP_HOME/provider.log"
+
+  run bash -c "
+    source '$SANDBOX_LIB'
+    walter_sandbox_check() {
+      PATH='$shadow_bin':\$PATH
+      hash -r
+      return 0
+    }
+    walter_sandbox_profile_path() {
+      printf '%s\n' '$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.nsjail.conf'
+    }
+    walter_sandbox_run walter-hook-default bash -c 'printf trusted'
+  "
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "trusted" ]
+  grep -q '/nsjail' "$WALTER_SANDBOX_PROVIDER_LOG"
 }
 
 @test "AC-1: bundled profile lookup is stable outside repo" {
