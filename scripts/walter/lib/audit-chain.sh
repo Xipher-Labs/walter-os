@@ -67,33 +67,65 @@ walter_audit_input_summary() {
 }
 
 _walter_audit_reclaim_lock() {
-  local lock_path="$1" stale_path
+  local lock_path="$1" expected_pid="${2:-}" expected_identity="${3:-}" reaper_path stale_path current_pid current_identity reclaimed=1
+  reaper_path="${lock_path}.reaper"
+  mkdir "$reaper_path" 2>/dev/null || return 1
+  current_pid=""
+  current_identity=""
+  if [[ -f "${lock_path}/pid" ]]; then
+    current_pid="$(sed -n '1p' "${lock_path}/pid" 2>/dev/null || true)"
+    current_identity="$(sed -n '2p' "${lock_path}/pid" 2>/dev/null || true)"
+  fi
+  if [[ "$current_pid" != "$expected_pid" || "$current_identity" != "$expected_identity" ]]; then
+    rmdir "$reaper_path" 2>/dev/null || true
+    return 1
+  fi
   stale_path="${lock_path}.stale.${BASHPID:-$$}.${RANDOM:-0}"
   if mv "$lock_path" "$stale_path" 2>/dev/null; then
     rm -rf -- "$stale_path"
-    return 0
+    reclaimed=0
   fi
-  return 1
+  rmdir "$reaper_path" 2>/dev/null || true
+  return "$reclaimed"
+}
+
+_walter_audit_process_identity() {
+  local pid="$1"
+  ps -p "$pid" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//'
 }
 
 _walter_audit_acquire_lock() {
-  local lock_path="$1" wait_seconds="${WALTER_AUDIT_LOCK_WAIT_SECONDS:-10}" start pid_file owner_pid now lock_mtime stale_after
+  local lock_path="$1" wait_seconds="${WALTER_AUDIT_LOCK_WAIT_SECONDS:-10}" start pid_file owner_pid owner_identity current_identity now lock_mtime stale_after
   start="$(date +%s)"
   while ! mkdir "$lock_path" 2>/dev/null; do
     now="$(date +%s)"
     pid_file="${lock_path}/pid"
     owner_pid=""
-    [[ -f "$pid_file" ]] && owner_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    owner_identity=""
+    if [[ -f "$pid_file" ]]; then
+      owner_pid="$(sed -n '1p' "$pid_file" 2>/dev/null || true)"
+      owner_identity="$(sed -n '2p' "$pid_file" 2>/dev/null || true)"
+    fi
+    lock_mtime="$(stat -f %m "$lock_path" 2>/dev/null || stat -c %Y "$lock_path" 2>/dev/null || printf '%s' "$now")"
+    stale_after="${WALTER_AUDIT_STALE_LOCK_SECONDS:-300}"
     if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
       if ! kill -0 "$owner_pid" 2>/dev/null; then
-        _walter_audit_reclaim_lock "$lock_path" || true
+        _walter_audit_reclaim_lock "$lock_path" "$owner_pid" "$owner_identity" || true
+        continue
+      fi
+      if [[ -n "$owner_identity" ]]; then
+        current_identity="$(_walter_audit_process_identity "$owner_pid")"
+        if [[ -n "$current_identity" && "$current_identity" != "$owner_identity" && $((now - lock_mtime)) -ge "$stale_after" ]]; then
+          _walter_audit_reclaim_lock "$lock_path" "$owner_pid" "$owner_identity" || true
+          continue
+        fi
+      elif [[ $((now - lock_mtime)) -ge "$stale_after" ]]; then
+        _walter_audit_reclaim_lock "$lock_path" "$owner_pid" "$owner_identity" || true
         continue
       fi
     else
-      lock_mtime="$(stat -f %m "$lock_path" 2>/dev/null || stat -c %Y "$lock_path" 2>/dev/null || printf '%s' "$now")"
-      stale_after="${WALTER_AUDIT_STALE_LOCK_SECONDS:-300}"
       if [[ $((now - lock_mtime)) -ge "$stale_after" ]]; then
-        _walter_audit_reclaim_lock "$lock_path" || true
+        _walter_audit_reclaim_lock "$lock_path" "$owner_pid" "$owner_identity" || true
         continue
       fi
     fi
@@ -103,7 +135,7 @@ _walter_audit_acquire_lock() {
     fi
     sleep 0.05
   done
-  printf '%s\n' "${BASHPID:-$$}" > "${lock_path}/pid" || {
+  printf '%s\n%s\n' "${BASHPID:-$$}" "$(_walter_audit_process_identity "${BASHPID:-$$}")" > "${lock_path}/pid" || {
     rmdir "$lock_path" 2>/dev/null || true
     return 1
   }

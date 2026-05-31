@@ -35,6 +35,11 @@ _sha256() {
   fi
 }
 
+_pid_identity() {
+  local pid="$1"
+  ps -p "$pid" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//'
+}
+
 _verify_chain() {
   local file="$1" prev="null" line actual row=0
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -145,13 +150,26 @@ _verify_chain() {
 @test "B-1: old lock with live pid is not reclaimed" {
   lock_dir="$WALTER_CONFIG/audit/.chain.lock"
   mkdir -p "$lock_dir"
-  printf '%s\n' "$$" > "$lock_dir/pid"
+  printf '%s\n%s\n' "$$" "$(_pid_identity "$$")" > "$lock_dir/pid"
 
   run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_STALE_LOCK_SECONDS=0 WALTER_AUDIT_LOCK_WAIT_SECONDS=0 walter_audit_append Bash 'after old lock' allow approval-gate ok"
 
   [ "$status" -ne 0 ]
   [ ! -f "$(_chain_path)" ]
   [ -d "$lock_dir" ]
+}
+
+@test "B-1: stale lock with reused pid identity is reclaimed" {
+  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
+  mkdir -p "$lock_dir"
+  printf '%s\n%s\n' "$$" "Mon Jan  1 00:00:00 2001" > "$lock_dir/pid"
+
+  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_STALE_LOCK_SECONDS=0 walter_audit_append Bash 'after reused pid' allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+  [ -f "$(_chain_path)" ]
+  jq -e '.input_summary == "after reused pid"' "$(_chain_path)"
+  [ ! -d "$lock_dir" ]
 }
 
 @test "B-1: input summaries are single-line and capped" {
