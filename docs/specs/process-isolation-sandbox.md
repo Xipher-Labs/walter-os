@@ -227,7 +227,10 @@ Each ≤300 LOC. 3-round review.
 
 1. **macOS `sandbox-exec` is deprecated by Apple but still functional.** Should we use it (proposal — no current alternative) or skip macOS sandboxing for v0.5.x and wait for a replacement (Apple hasn't announced one yet)? Proposal: use it; document the deprecation in `docs/operational/sandbox-profiles.md`; operators who don't want it can opt out via the two-factor bypass (`WALTER_SANDBOX_BYPASS=1` env var AND `--no-sandbox` flag on the command — both required per D-6 — NOT the env var alone, which by itself does nothing).
 2. **Linux `nsjail` requires kernel features that some restrictive hosting providers disable.** Fall back to `firejail`? Proposal: yes — `firejail` is more widely available; document the trade-off (nsjail is more fine-grained, firejail is more available). Operator chooses via `WALTER_SANDBOX_PROVIDER`.
-3. **`walter-skill-default` allows writing to "cwd repo + 1 level parent"** — too tight (operators do legitimately write to `~/Desktop/`)? Too loose? Proposal: keep tight; operator-overlay profile extends if they need a wider write scope per-project.
+3. **`walter-skill-default` write scope** — the default writable boundary is
+   the workspace scope (Git worktree root when available, otherwise cwd). Too
+   tight for some operators? Proposal: keep tight; operator-overlay profiles
+   extend it when a project needs a wider write scope.
 
 ## Refs
 
