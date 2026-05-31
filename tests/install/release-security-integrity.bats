@@ -108,8 +108,10 @@ setup() {
 }
 
 @test "release workflow does not delete existing provenance before replacement" {
+  local joined
+  joined=$(awk 'BEGIN{RS=""} {gsub(/\\\n[[:space:]]*/, " "); print}' "$WORKFLOW")
   local stale_block
-  stale_block=$(sed -n '/for stale in \\/,/; do/p' "$WORKFLOW")
+  stale_block=$(echo "$joined" | grep -Eo 'for stale in [^;]+; do' || true)
   if echo "$stale_block" | grep -E 'intoto\.jsonl' >/dev/null 2>&1; then
     echo "stale release-asset deletion includes provenance before replacement:"
     echo "$stale_block"
@@ -151,6 +153,7 @@ setup() {
 @test "release workflow generates SLSA subjects from release artifacts" {
   grep -E 'slsa-subjects: \$\{\{ steps\.slsa-subjects\.outputs\.hashes \}\}' "$WORKFLOW" >/dev/null
   grep -E 'id:[[:space:]]+slsa-subjects' "$WORKFLOW" >/dev/null
+  # shellcheck disable=SC1003
   grep -E 'sha256sum[[:space:]]+\\' "$WORKFLOW" >/dev/null
   grep -E 'base64 -w0' "$WORKFLOW" >/dev/null
   grep -E 'GITHUB_OUTPUT' "$WORKFLOW" >/dev/null
