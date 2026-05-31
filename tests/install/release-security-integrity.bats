@@ -93,3 +93,62 @@ setup() {
   # Checksum manifests must not vary with runner locale.
   grep -E 'LC_ALL=C[[:space:]]+sort[[:space:]]*>[[:space:]]*"\$\{CHECKSUMS_FILE\}"' "$WORKFLOW" >/dev/null
 }
+
+@test "release workflow pins release runners for reproducibility" {
+  if grep -E 'runs-on:[[:space:]]+ubuntu-latest' "$WORKFLOW" >/dev/null 2>&1; then
+    echo "release.yml uses floating ubuntu-latest runner"
+    grep -nE 'runs-on:[[:space:]]+ubuntu-latest' "$WORKFLOW"
+    return 1
+  fi
+  grep -E 'runs-on:[[:space:]]+ubuntu-24\.04' "$WORKFLOW" >/dev/null
+}
+
+@test "release workflow builds source archive with deterministic gzip" {
+  grep -E 'git archive --format=tar .*"\$\{TAG\}"' "$WORKFLOW" >/dev/null
+  grep -E 'gzip -n -9 <' "$WORKFLOW" >/dev/null
+
+  if grep -E 'git archive --format=tar\.gz' "$WORKFLOW" >/dev/null 2>&1; then
+    echo "source archive uses git archive --format=tar.gz instead of tar | gzip -n"
+    grep -nE 'git archive --format=tar\.gz' "$WORKFLOW"
+    return 1
+  fi
+}
+
+@test "release workflow verifies source archive reproducibility before upload" {
+  grep -E 'cmp "\$\{ASSET_DIR\}/\$\{SOURCE_TARBALL\}" "\$\{RUNNER_TEMP\}/\$\{SOURCE_TARBALL\}\.verify"' "$WORKFLOW" >/dev/null
+  grep -E 'test -s "\$\{ASSET_DIR\}/\$\{SOURCE_TARBALL\}"' "$WORKFLOW" >/dev/null
+}
+
+@test "release workflow uploads deterministic source archive" {
+  local joined
+  joined=$(awk 'BEGIN{RS=""} {gsub(/\\\n[[:space:]]*/, " "); print}' "$WORKFLOW")
+  echo "$joined" | grep -E 'gh release upload[^|;&]*"\$\{ASSET_DIR\}/\$\{SOURCE_TARBALL\}"' >/dev/null
+}
+
+@test "release workflow generates SLSA subjects from release artifacts" {
+  grep -E 'slsa-subjects: \$\{\{ steps\.slsa-subjects\.outputs\.hashes \}\}' "$WORKFLOW" >/dev/null
+  grep -E 'id:[[:space:]]+slsa-subjects' "$WORKFLOW" >/dev/null
+  grep -E 'sha256sum[[:space:]]+\\' "$WORKFLOW" >/dev/null
+  grep -E 'base64 -w0' "$WORKFLOW" >/dev/null
+  grep -E 'GITHUB_OUTPUT' "$WORKFLOW" >/dev/null
+}
+
+@test "release workflow emits SLSA3 provenance via upstream generator" {
+  grep -E 'name:[[:space:]]+SLSA provenance' "$WORKFLOW" >/dev/null
+  grep -E 'needs:[[:space:]]+\[release, security\]' "$WORKFLOW" >/dev/null
+  grep -E 'actions:[[:space:]]+read' "$WORKFLOW" >/dev/null
+  grep -E 'id-token:[[:space:]]+write' "$WORKFLOW" >/dev/null
+  grep -E 'contents:[[:space:]]+write' "$WORKFLOW" >/dev/null
+  grep -E 'slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v2\.1\.0' "$WORKFLOW" >/dev/null
+  grep -E 'base64-subjects:[[:space:]]+"\$\{\{ needs\.security\.outputs\.slsa-subjects \}\}"' "$WORKFLOW" >/dev/null
+  grep -E 'upload-assets:[[:space:]]+true' "$WORKFLOW" >/dev/null
+  grep -E 'upload-tag-name:[[:space:]]+"\$\{\{ needs\.release\.outputs\.tag \}\}"' "$WORKFLOW" >/dev/null
+  grep -E 'provenance-name:[[:space:]]+"walter-os-\$\{\{ needs\.release\.outputs\.tag \}\}\.intoto\.jsonl"' "$WORKFLOW" >/dev/null
+}
+
+@test "provenance subject set covers published security artifacts" {
+  grep -E 'source\.tar\.gz' "$WORKFLOW" >/dev/null
+  grep -E 'sbom\.cdx\.json' "$WORKFLOW" >/dev/null
+  grep -E 'checksums\.sha256$' "$WORKFLOW" >/dev/null
+  grep -E '(\$\{CHECKSUMS_FILE\}|checksums\.sha256)\.cosign\.bundle' "$WORKFLOW" >/dev/null
+}

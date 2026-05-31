@@ -40,7 +40,7 @@ permissions:
 jobs:
   release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.refs.outputs.tag }}
       version: ${{ steps.refs.outputs.version }}
@@ -120,10 +120,13 @@ jobs:
   security:
     name: SBOM + checksums + cosign signing
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    outputs:
+      slsa-subjects: ${{ steps.slsa-subjects.outputs.hashes }}
     env:
       ASSET_DIR: /tmp/release-assets
       SBOM_FILE: walter-os-${{ needs.release.outputs.tag }}.sbom.cdx.json
+      SOURCE_TARBALL: walter-os-${{ needs.release.outputs.tag }}.source.tar.gz
       CHECKSUMS_FILE: checksums.sha256
       TAG: ${{ needs.release.outputs.tag }}
 
@@ -141,6 +144,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${ASSET_DIR}"
+
+      - name: Build deterministic source archive
+        run: |
+          set -euo pipefail
+          archive_tmp="${RUNNER_TEMP}/${TAG}.source.tar"
+          archive_verify_tmp="${RUNNER_TEMP}/${TAG}.source.verify.tar"
+
+          git archive --format=tar --prefix="walter-os-${TAG}/" "${TAG}" > "${archive_tmp}"
+          gzip -n -9 < "${archive_tmp}" > "${ASSET_DIR}/${SOURCE_TARBALL}"
+
+          git archive --format=tar --prefix="walter-os-${TAG}/" "${TAG}" > "${archive_verify_tmp}"
+          gzip -n -9 < "${archive_verify_tmp}" > "${RUNNER_TEMP}/${SOURCE_TARBALL}.verify"
+
+          cmp "${ASSET_DIR}/${SOURCE_TARBALL}" "${RUNNER_TEMP}/${SOURCE_TARBALL}.verify"
+          test -s "${ASSET_DIR}/${SOURCE_TARBALL}"
 
       # Step B: Generate CycloneDX SBOM directly into the asset directory.
       # We bypass anchore/sbom-action's upload-release-assets feature here
@@ -161,6 +179,20 @@ jobs:
           set -euo pipefail
           test -s "${ASSET_DIR}/${SBOM_FILE}"
           echo "SBOM size: $(wc -c < "${ASSET_DIR}/${SBOM_FILE}") bytes"
+
+      - name: Canonicalize SBOM ordering
+        run: |
+          set -euo pipefail
+          tmp="${ASSET_DIR}/${SBOM_FILE}.tmp"
+          jq '
+            if (.components | type) == "array" then
+              .components |= sort_by(.["bom-ref"] // .name // "")
+            else . end
+            | if (.dependencies | type) == "array" then
+              .dependencies |= sort_by(.ref // "")
+            else . end
+          ' "${ASSET_DIR}/${SBOM_FILE}" > "${tmp}"
+          mv "${tmp}" "${ASSET_DIR}/${SBOM_FILE}"
 
       # Step C: Download EVERY existing release asset (archives, binaries,
       # JSON, anything attached). No --pattern filter — the cosign
@@ -235,6 +267,18 @@ jobs:
             --bundle "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
           test -s "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle"
 
+      - name: Generate SLSA provenance subjects
+        id: slsa-subjects
+        run: |
+          set -euo pipefail
+          cd "${ASSET_DIR}"
+          echo "hashes=$(sha256sum \
+            "${SOURCE_TARBALL}" \
+            "${SBOM_FILE}" \
+            "${CHECKSUMS_FILE}" \
+            "${CHECKSUMS_FILE}.cosign.bundle" \
+            | base64 -w0)" >> "${GITHUB_OUTPUT}"
+
       # Step F: Upload SBOM + checksums + bundle. --clobber so
       # workflow_dispatch re-runs overwrite previous artifacts
       # cleanly. The legacy .sig + .pem pair is no longer produced —
@@ -273,8 +317,25 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$TAG" \
+            "${ASSET_DIR}/${SOURCE_TARBALL}" \
             "${ASSET_DIR}/${SBOM_FILE}" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}" \
             "${ASSET_DIR}/${CHECKSUMS_FILE}.cosign.bundle" \
             --repo "${RELEASE_REPO}" \
             --clobber
+
+  provenance:
+    name: SLSA provenance
+    needs: [release, security]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    # The SLSA generic reusable workflow must use a full semver tag, not a
+    # commit SHA; upstream rejects SHA refs for verifier compatibility.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.security.outputs.slsa-subjects }}"
+      upload-assets: true
+      upload-tag-name: "${{ needs.release.outputs.tag }}"
+      provenance-name: "walter-os-${{ needs.release.outputs.tag }}.intoto.jsonl"

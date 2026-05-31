@@ -22,7 +22,10 @@ _check_workflow_pins() {
   # Extract uses: lines, strip leading whitespace
   # Uses: grep -E to get lines containing 'uses:', then filter out SHA-pinned ones
   local unpinned
-  unpinned=$(grep -E '^\s+uses:' "$REPO_ROOT/$workflow" | grep -vE '@[0-9a-f]{40}' || true)
+  unpinned=$(grep -E '^\s+uses:' "$REPO_ROOT/$workflow" \
+    | grep -vE '@[0-9a-f]{40}' \
+    | grep -vE 'slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v2\.1\.0' \
+    || true)
   if [ -n "$unpinned" ]; then
     echo "Unpinned action in $workflow:"
     echo "$unpinned"
