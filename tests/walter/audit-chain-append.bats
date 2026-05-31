@@ -250,6 +250,22 @@ SH
   jq -e '.decision == "block" and .decision_reason == ("bad" + "\u001b" + "\u0007" + "\b" + " reason")' "$(_chain_path)"
 }
 
+@test "B-1: dependency failure rows without jq cannot extend existing chains" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' block approval-gate ok >/dev/null"
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin:/usr/bin:/bin' walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"jq required to append to existing chain"* ]]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+}
+
 @test "B-1: custom audit dir is honored" {
   custom="$TMP_HOME/custom-audit"
 

@@ -385,13 +385,17 @@ walter_audit_append() {
       _walter_audit_release_lock "$lock_path"
       return 1
     fi
-    if command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
-      _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || {
-        exec 9>&-
-        _walter_audit_release_lock "$lock_path"
-        return 1
-      }
+    if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
+      echo "walter-audit-chain: jq required to append to existing chain: $chain_path" >&2
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
     fi
+    _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || {
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
     previous_hash="$(walter_audit_hash_string "$previous_line")"
   fi
 
