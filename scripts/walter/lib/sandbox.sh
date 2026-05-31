@@ -103,7 +103,19 @@ walter_sandbox_runtime_dir() {
 }
 
 _walter_sandbox_sed_escape() {
+  case "$1" in
+    *$'\n'*|*$'\r'*)
+      echo "walter-sandbox: path contains newline characters" >&2
+      return 1
+      ;;
+  esac
   printf '%s' "$1" | sed 's/[\\\/&]/\\&/g'
+}
+
+_walter_sandbox_cleanup_materialized() {
+  local path="$1"
+  rm -f -- "$path" "${path}.tmp"
+  [[ ! -d "${path}.scratch" ]] || rm -rf -- "${path}.scratch"
 }
 
 _walter_sandbox_profile_has_placeholders() {
@@ -166,39 +178,44 @@ walter_sandbox_materialize_profile() {
   if grep -q '@WALTER_SANDBOX_SCRATCH@' "$src"; then
     scratch_dir="${dest}.scratch"
     mkdir -m 700 "$scratch_dir" || {
-      rm -f "$dest" "$tmp_dest"
+      _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
     scratch_value="$(_walter_sandbox_sed_escape "$(cd "$scratch_dir" && pwd -P)")" || {
-      rmdir "$scratch_dir" 2>/dev/null || true
-      rm -f "$dest" "$tmp_dest"
+      _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
   else
     scratch_value=""
   fi
   repo_root_raw="$(walter_sandbox_repo_root)" || {
-    [[ -z "${scratch_dir:-}" ]] || rmdir "$scratch_dir" 2>/dev/null || true
-    rm -f "$dest" "$tmp_dest"
+    _walter_sandbox_cleanup_materialized "$dest"
     return 1
   }
-  repo_root="$(_walter_sandbox_sed_escape "$repo_root_raw")"
-  config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")"
-  home_value="$(_walter_sandbox_sed_escape "${HOME}")"
+  repo_root="$(_walter_sandbox_sed_escape "$repo_root_raw")" || {
+    _walter_sandbox_cleanup_materialized "$dest"
+    return 1
+  }
+  config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")" || {
+    _walter_sandbox_cleanup_materialized "$dest"
+    return 1
+  }
+  home_value="$(_walter_sandbox_sed_escape "${HOME}")" || {
+    _walter_sandbox_cleanup_materialized "$dest"
+    return 1
+  }
   sed \
     -e "s/@WALTER_OS_HOME@/${repo_root}/g" \
     -e "s/@WALTER_CONFIG@/${config_dir}/g" \
     -e "s/@HOME@/${home_value}/g" \
     -e "s/@WALTER_SANDBOX_SCRATCH@/${scratch_value}/g" \
     "$src" > "$tmp_dest" || {
-      [[ -z "${scratch_dir:-}" ]] || rmdir "$scratch_dir" 2>/dev/null || true
-      rm -f "$dest" "$tmp_dest"
+      _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
   chmod 600 "$tmp_dest" 2>/dev/null || true
   mv "$tmp_dest" "$dest" || {
-    [[ -z "${scratch_dir:-}" ]] || rmdir "$scratch_dir" 2>/dev/null || true
-    rm -f "$dest" "$tmp_dest"
+    _walter_sandbox_cleanup_materialized "$dest"
     return 1
   }
   printf '%s\n' "$dest"
@@ -270,8 +287,7 @@ walter_sandbox_run() {
       ;;
   esac
   if [[ "$cleanup_profile" -eq 1 ]]; then
-    rm -f "$profile_path"
-    [[ ! -d "${profile_path}.scratch" ]] || rm -rf "${profile_path}.scratch"
+    _walter_sandbox_cleanup_materialized "$profile_path"
   fi
   return "$status"
 }

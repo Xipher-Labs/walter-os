@@ -59,6 +59,13 @@ _mode() {
   [ "$output" = 'path\\name\&\/x' ]
 }
 
+@test "AC-2: sed replacement escaping rejects newlines" {
+  run bash -c "source '$SANDBOX_LIB'; _walter_sandbox_sed_escape \$'bad\npath'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"path contains newline characters"* ]]
+}
+
 @test "AC-2: nsjail hook profile mounts Walter roots read-only" {
   profile="$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.nsjail.conf"
 
@@ -129,6 +136,15 @@ _mode() {
 
   run grep -q '@WALTER_SANDBOX_SCRATCH@' "$profile"
   [ "$status" -ne 0 ]
+}
+
+@test "AC-2: sandbox materialization cleans early path failures" {
+  run bash -c "source '$SANDBOX_LIB'; WALTER_CONFIG=\$'bad\npath' walter_sandbox_materialize_profile walter-hook-default sandbox-exec"
+
+  [ "$status" -ne 0 ]
+  run find "$WALTER_RUNTIME_DIR/sandbox" -maxdepth 1 -name 'walter-hook-default.sandbox-exec.*' -print
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
 }
 
 @test "AC-2: repo root helper does not change caller cwd" {
