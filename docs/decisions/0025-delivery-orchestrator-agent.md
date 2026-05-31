@@ -2,7 +2,7 @@
 
 **Status**: Proposed
 **Date**: 2026-05-24
-**Deciders**: Operator (f0x1777)
+**Deciders**: Operator
 **Part of**: `docs/specs/autonomous-delivery-roadmap.md` (AD-1)
 **Relates to**: `docs/specs/walter-council-v2.md`, ADR-0009/0023
 
