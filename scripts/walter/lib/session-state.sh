@@ -111,6 +111,34 @@ walter_session_get() {
   cat "$file"
 }
 
+_walter_session_revoke_capability_material() {
+  local file="$1" private_key caps_dir state_dir
+  [[ -f "$file" ]] || return 0
+  state_dir="$(_walter_session_state_dir)"
+  private_key="$(jq -r '.capability_private_key_path // empty' "$file" 2>/dev/null || true)"
+  caps_dir="$(jq -r '.capability_tokens_dir // empty' "$file" 2>/dev/null || true)"
+
+  if [[ -n "${private_key:-}" ]]; then
+    case "$private_key" in
+      "$state_dir"/session-*.key) ;;
+      *) return 1 ;;
+    esac
+    if [[ -e "$private_key" ]] && ! rm -f "$private_key"; then
+      return 1
+    fi
+  fi
+
+  if [[ -n "${caps_dir:-}" ]]; then
+    case "$caps_dir" in
+      "$state_dir"/caps-*) ;;
+      *) return 1 ;;
+    esac
+    if [[ -d "$caps_dir" ]] && ! rm -r "$caps_dir"; then
+      return 1
+    fi
+  fi
+}
+
 _walter_session_write_new() {
   local repo="$1" file="$2" now_epoch="$3"
   local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub
@@ -250,13 +278,19 @@ walter_session_touch() {
     return 11
   fi
 
+  local expiry_trigger=""
   if awk -v now="$now_epoch" -v last="$last_epoch" -v idle="$max_idle" 'BEGIN { exit !((now - last) > (idle * 60)) }'; then
-    _walter_session_result "expired" "max-idle" "$file"
-    return 10
+    expiry_trigger="max-idle"
+  elif awk -v now="$now_epoch" -v started="$started_epoch" -v hours="$max_hours" 'BEGIN { exit !((now - started) > (hours * 3600)) }'; then
+    expiry_trigger="max-hours"
   fi
 
-  if awk -v now="$now_epoch" -v started="$started_epoch" -v hours="$max_hours" 'BEGIN { exit !((now - started) > (hours * 3600)) }'; then
-    _walter_session_result "expired" "max-hours" "$file"
+  if [[ -n "$expiry_trigger" ]]; then
+    if ! _walter_session_revoke_capability_material "$file"; then
+      _walter_session_result "error" "state-delete" "$file"
+      return 12
+    fi
+    _walter_session_result "expired" "$expiry_trigger" "$file"
     return 10
   fi
 
@@ -276,28 +310,11 @@ walter_session_touch() {
 
 walter_session_end() {
   local repo="${1:-${PWD}}"
-  local file private_key caps_dir
+  local file
   file="$(walter_session_state_file "$repo")"
-  if [[ -f "$file" ]]; then
-    private_key="$(jq -r '.capability_private_key_path // empty' "$file" 2>/dev/null || true)"
-    caps_dir="$(jq -r '.capability_tokens_dir // empty' "$file" 2>/dev/null || true)"
-  fi
-  if [[ -n "${private_key:-}" ]] && ! rm -f "$private_key"; then
+  if ! _walter_session_revoke_capability_material "$file"; then
     _walter_session_result "error" "state-delete" "$file"
     return 12
-  fi
-  if [[ -n "${caps_dir:-}" ]]; then
-    case "$caps_dir" in
-      "$(_walter_session_state_dir)"/caps-*) ;;
-      *)
-        _walter_session_result "error" "state-delete" "$file"
-        return 12
-        ;;
-    esac
-    if [[ -d "$caps_dir" ]] && ! rm -r "$caps_dir"; then
-      _walter_session_result "error" "state-delete" "$file"
-      return 12
-    fi
   fi
   if ! rm -f "$file"; then
     _walter_session_result "error" "state-delete" "$file"

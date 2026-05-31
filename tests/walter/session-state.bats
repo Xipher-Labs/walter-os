@@ -86,6 +86,10 @@ _mode() {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   first_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
 
   export WALTER_SESSION_NOW_EPOCH=1767231001
   run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
@@ -95,6 +99,9 @@ _mode() {
   [[ "$output" == *'"trigger":"max-idle"'* ]]
   second_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
   [ "$first_id" = "$second_id" ]
+  [ ! -f "$private_key" ]
+  [ ! -d "$caps_dir" ]
+  [ -f "$public_key" ]
 }
 
 @test "session touch after max hours reports max-hours expiry" {
@@ -237,6 +244,24 @@ _mode() {
   [ "$status" -eq 0 ]
   [ ! -f "$state_file" ]
   [ ! -f "$private_key" ]
+}
+
+@test "session end rejects private key paths outside the state directory" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  victim="$TMP_HOME/victim.txt"
+  printf 'keep me\n' > "$victim"
+  tmp_state="${state_file}.tmp"
+  jq --arg victim "$victim" '.capability_private_key_path = $victim' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"trigger":"state-delete"'* ]]
+  [ -f "$victim" ]
+  [ -f "$state_file" ]
 }
 
 @test "session end reports delete failures" {
