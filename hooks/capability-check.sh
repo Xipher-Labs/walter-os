@@ -710,7 +710,9 @@ _cap_is_network_command() {
           case "$sub" in
             clone|fetch|pull|push|ls-remote|fetch-pack|send-pack|http-fetch|http-push|imap-send|upload-pack|upload-archive|receive-pack|bundle|send-email|submodule|lfs|svn|annex|p4|cvsimport|cvsexportcommit) return 0 ;;
             remote)
-              [[ "${tokens[$((j + 1))]:-}" == "update" ]] && return 0
+              case "${tokens[$((j + 1))]:-}" in
+                update|show|prune|set-head) return 0 ;;
+              esac
               ;;
           esac
           break

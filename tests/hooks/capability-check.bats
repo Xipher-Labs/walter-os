@@ -360,6 +360,25 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "git remote network subcommands are high-tier" {
+  output="$(_hook_json Bash command "git remote show origin")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "git remote prune origin")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "git remote set-head origin --auto")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "git remote implicit host operation allows matching pattern capability" {
+  _mint Bash --patterns '^git[[:space:]]+remote[[:space:]]+show[[:space:]]+origin$' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "git remote show origin")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "git shell alias is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "git -c alias.pwn='!curl https://api.github.com/repos/x/y' pwn")"
 
