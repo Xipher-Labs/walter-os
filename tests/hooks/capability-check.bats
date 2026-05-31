@@ -805,11 +805,19 @@ _mint() {
 }
 
 @test "Bash egress with matching pattern capability is allowed" {
-  _mint Bash --patterns '^curl[[:space:]].*api[.]github[.]com' --duration 30m >/dev/null
+  _mint Bash --network api.github.com --patterns '^curl[[:space:]].*api[.]github[.]com' --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
 
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash egress with matching pattern still requires every host" {
+  _mint Bash --network api.github.com --patterns '^curl[[:space:]].*api[.]github[.]com' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y && curl https://evil.example")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "argument-less git fetch is high-tier and blocked without capability" {
@@ -827,7 +835,7 @@ _mint() {
 }
 
 @test "Bash command with matching pattern capability is allowed" {
-  _mint Bash --patterns '^gh[[:space:]]+pr[[:space:]]+review.*--approve' --duration 30m >/dev/null
+  _mint Bash --network github.com --patterns '^gh[[:space:]]+pr[[:space:]]+review.*--approve' --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "gh pr review 243 --approve")"
   echo "$output" | jq -e '.decision == "allow"'

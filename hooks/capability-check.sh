@@ -1140,7 +1140,7 @@ _cap_claim_covers_hosts() {
 
 _cap_claim_matches() {
   local claims="$1" tool="$2" target="$3" hosts="$4" repo="$5"
-  local cap_tool count idx value
+  local cap_tool count idx value pattern_matched=1
   cap_tool="$(jq -r '.tool // empty' <<< "$claims")"
   [[ "$cap_tool" == "$tool" ]] || return 1
 
@@ -1159,15 +1159,20 @@ _cap_claim_matches() {
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
         value="$(jq -r --argjson idx "$idx" '.scope.patterns[$idx]' <<< "$claims")"
-        [[ -n "$value" ]] && grep -Eq -- "$value" <<< "$target" 2>/dev/null && return 0
+        if [[ -n "$value" ]] && grep -Eq -- "$value" <<< "$target" 2>/dev/null; then
+          pattern_matched=0
+        fi
         idx=$((idx + 1))
       done
 
       if [[ -n "$hosts" ]]; then
-        _cap_requires_pattern_scope "$tool" "$target" && return 1
+        if _cap_requires_pattern_scope "$tool" "$target"; then
+          [[ "$pattern_matched" -eq 0 ]] || return 1
+        fi
         _cap_claim_covers_hosts "$claims" "$hosts" && return 0
         return 1
       fi
+      [[ "$pattern_matched" -eq 0 ]] && return 0
       ;;
   esac
   return 1
