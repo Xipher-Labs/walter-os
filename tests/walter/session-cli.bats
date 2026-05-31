@@ -39,3 +39,13 @@ teardown() {
   echo "$output" | jq -e '.status == "ended"'
   [ ! -f "$state_file" ]
 }
+
+@test "/session command has frontmatter and forwards arguments" {
+  command_file="$REPO_ROOT/commands/session.md"
+
+  [ -f "$command_file" ]
+  [ "$(sed -n '1p' "$command_file")" = "---" ]
+  grep -q '^description:' "$command_file"
+  grep -q '^argument-hint: status|restart$' "$command_file"
+  grep -q 'walter-os session \$ARGUMENTS' "$command_file"
+}
