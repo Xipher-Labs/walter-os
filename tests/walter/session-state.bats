@@ -100,6 +100,30 @@ teardown() {
   jq -e '.max_hours_at_start == 4 and .max_idle_min_at_start == 30' "$state_file"
 }
 
+@test "invalid configured limits fall back to safe defaults" {
+  export WALTER_SESSION_MAX_HOURS=banana
+  export WALTER_SESSION_MAX_IDLE_MIN=0
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  jq -e '.max_hours_at_start == 8 and .max_idle_min_at_start == 60' "$state_file"
+}
+
+@test "session touch rejects clock rewind" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+
+  export WALTER_SESSION_NOW_EPOCH=1767225599
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 11 ]
+  [[ "$output" == *'"status":"invalid"'* ]]
+  [[ "$output" == *'"trigger":"clock-rewind"'* ]]
+}
+
 @test "session end removes state file" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null

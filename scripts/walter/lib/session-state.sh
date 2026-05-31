@@ -48,8 +48,18 @@ _walter_session_state_dir() {
   printf '%s/state' "${WALTER_CONFIG:-$HOME/.config/walter-os}"
 }
 
+_walter_session_positive_int_or_default() {
+  local value="$1" default="$2"
+  if [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$default"
+  fi
+}
+
 _walter_session_effective_max_hours() {
-  local configured="${WALTER_SESSION_MAX_HOURS:-8}"
+  local configured
+  configured="$(_walter_session_positive_int_or_default "${WALTER_SESSION_MAX_HOURS:-8}" 8)"
   if [[ "${WALTER_PHI_MODE:-0}" == "1" ]]; then
     if awk -v v="$configured" 'BEGIN { exit !(v > 4) }'; then
       echo 4
@@ -60,7 +70,8 @@ _walter_session_effective_max_hours() {
 }
 
 _walter_session_effective_idle_min() {
-  local configured="${WALTER_SESSION_MAX_IDLE_MIN:-60}"
+  local configured
+  configured="$(_walter_session_positive_int_or_default "${WALTER_SESSION_MAX_IDLE_MIN:-60}" 60)"
   if [[ "${WALTER_PHI_MODE:-0}" == "1" ]]; then
     if awk -v v="$configured" 'BEGIN { exit !(v > 30) }'; then
       echo 30
@@ -87,7 +98,7 @@ walter_session_get() {
 
 _walter_session_write_new() {
   local repo="$1" file="$2" now_epoch="$3"
-  local state_dir now_iso max_hours max_idle
+  local state_dir now_iso max_hours max_idle tmp_file
   state_dir="$(dirname "$file")"
   now_iso="$(_walter_session_iso "$now_epoch")"
   max_hours="$(_walter_session_effective_max_hours)"
@@ -95,8 +106,9 @@ _walter_session_write_new() {
 
   mkdir -p "$state_dir"
   chmod 700 "$state_dir" 2>/dev/null || true
+  tmp_file="$(mktemp "${state_dir}/session.XXXXXX")"
 
-  jq -n \
+  if ! jq -n \
     --arg session_id "$(_walter_session_uuid)" \
     --arg started_at "$now_iso" \
     --arg last_activity_at "$now_iso" \
@@ -111,7 +123,15 @@ _walter_session_write_new() {
       max_hours_at_start: $max_hours,
       max_idle_min_at_start: $max_idle,
       extensions: []
-    }' > "$file"
+    }' > "$tmp_file"; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+  chmod 600 "$tmp_file" 2>/dev/null || true
+  if ! mv "$tmp_file" "$file"; then
+    rm -f "$tmp_file"
+    return 1
+  fi
 }
 
 _walter_session_result() {
@@ -166,8 +186,17 @@ walter_session_touch() {
     return 10
   fi
 
-  jq --arg now "$now_iso" '.last_activity_at = $now' "$file" > "${file}.tmp"
-  mv "${file}.tmp" "$file"
+  local tmp_file
+  tmp_file="$(mktemp "${file}.XXXXXX")"
+  if ! jq --arg now "$now_iso" '.last_activity_at = $now' "$file" > "$tmp_file"; then
+    rm -f "$tmp_file"
+    return 12
+  fi
+  chmod 600 "$tmp_file" 2>/dev/null || true
+  if ! mv "$tmp_file" "$file"; then
+    rm -f "$tmp_file"
+    return 12
+  fi
   _walter_session_result "active" "" "$file"
 }
 
