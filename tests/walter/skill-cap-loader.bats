@@ -77,3 +77,26 @@ YAML
   [ "$status" -ne 0 ]
   [[ "$output" == *"invalid capability entry"* ]]
 }
+
+@test "skill cap loader writes no partial tokens when later entry is invalid" {
+  _write_config <<'YAML'
+skills:
+  aaa-good:
+    tool: Bash
+    scope:
+      patterns: ["nuclei[[:space:]].*"]
+    duration: 4h
+  zzz-bad:
+    tool: Bash
+    scope: {}
+    duration: 4h
+YAML
+
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  run bash -c "source '$LOADER'; walter_skill_caps_mint_defaults '$REPO_UNDER_TEST'"
+
+  [ "$status" -ne 0 ]
+  [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "0" ]
+}

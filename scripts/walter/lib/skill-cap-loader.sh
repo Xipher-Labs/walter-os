@@ -46,6 +46,19 @@ _walter_skill_cap_write_token() {
   mv "$tmp_file" "$token_file"
 }
 
+_walter_skill_cap_rollback_tokens() {
+  local state_file="$1" nonce caps_dir
+  shift
+
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  [[ -d "$caps_dir" ]] || return 0
+
+  for nonce in "$@"; do
+    [[ "$nonce" =~ ^[A-Za-z0-9._-]+$ ]] || continue
+    rm -f "${caps_dir}/cap-${nonce}.paseto"
+  done
+}
+
 _walter_skill_cap_validate_entry() {
   local config_json="$1" skill="$2"
   jq -e --arg skill "$skill" '
@@ -67,6 +80,7 @@ walter_skill_caps_mint_defaults() {
   local repo="${1:-$PWD}" config_path="${2:-}" state_file config_json skill enabled
   local tool duration paths network patterns duration_seconds now_epoch now_iso
   local requested_exp session_exp exp_epoch exp_iso nonce session_id claims token
+  local minted_nonces=()
 
   if [[ -z "$config_path" ]]; then
     config_path="$(walter_skill_cap_config_path 2>/dev/null || true)"
@@ -101,6 +115,15 @@ walter_skill_caps_mint_defaults() {
       echo "walter-skill-caps: invalid capability entry for skill: $skill" >&2
       return 1
     fi
+
+    duration="$(jq -r --arg skill "$skill" '.[$skill].duration' <<< "$config_json")"
+    walter_cap_duration_to_seconds "$duration" >/dev/null || return 1
+  done < <(jq -r 'keys[]' <<< "$config_json")
+
+  while IFS= read -r skill; do
+    [[ -n "$skill" ]] || continue
+    enabled="$(jq -r --arg skill "$skill" '.[$skill] | if has("enabled") then .enabled else true end' <<< "$config_json")"
+    [[ "$enabled" == "true" ]] || continue
 
     tool="$(jq -r --arg skill "$skill" '.[$skill].tool' <<< "$config_json")"
     duration="$(jq -r --arg skill "$skill" '.[$skill].duration' <<< "$config_json")"
@@ -150,7 +173,14 @@ walter_skill_caps_mint_defaults() {
         exp:$exp,
         nonce:$nonce
       }')"
-    token="$(walter_cap_sign_claims "$state_file" "$claims")" || return 1
-    _walter_skill_cap_write_token "$state_file" "$nonce" "$token" || return 1
+    token="$(walter_cap_sign_claims "$state_file" "$claims")" || {
+      _walter_skill_cap_rollback_tokens "$state_file" "${minted_nonces[@]}"
+      return 1
+    }
+    if ! _walter_skill_cap_write_token "$state_file" "$nonce" "$token"; then
+      _walter_skill_cap_rollback_tokens "$state_file" "${minted_nonces[@]}" "$nonce"
+      return 1
+    fi
+    minted_nonces+=("$nonce")
   done < <(jq -r 'keys[]' <<< "$config_json")
 }
