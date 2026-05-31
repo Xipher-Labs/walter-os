@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# hooks/capability-check.sh
+# PreToolUse hook for Walter-OS session capability tokens.
+#
+# This hook composes after approval-gate.sh. Approval-gate decides whether the
+# operator/trust policy allows an operation at all; this hook requires a valid
+# session-bound capability token for high-blast-radius tool calls.
+
+set -uo pipefail
+
+REPO_ROOT="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+SESSION_LIB="${REPO_ROOT}/scripts/walter/lib/session-state.sh"
+CAP_LIB="${REPO_ROOT}/scripts/walter/lib/capability-token.sh"
+
+if [[ ! -f "$SESSION_LIB" || ! -f "$CAP_LIB" ]]; then
+  printf '%s\n' '{"decision":"block","reason":"capability-check: missing Walter-OS capability libraries — failing closed"}'
+  exit 0
+fi
+
+# shellcheck source=/dev/null
+source "$SESSION_LIB"
+# shellcheck source=/dev/null
+source "$CAP_LIB"
+
+_cap_emit_allow() {
+  printf '%s\n' '{"decision":"allow"}'
+  exit 0
+}
+
+_cap_emit_allow_warn() {
+  local msg="$1"
+  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$msg" '$m')"
+  exit 0
+}
+
+_cap_emit_block() {
+  local reason="$1"
+  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
+  exit 0
+}
+
+_cap_mktemp_file() {
+  mktemp -t walter-capability-check.XXXXXX 2>/dev/null \
+    || mktemp "${TMPDIR:-/tmp}/walter-capability-check.XXXXXX" 2>/dev/null
+}
+
+_cap_has_bypass_flag() {
+  local command="$1" tokfile hit=1
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+    grep -qxF -- '--allow-no-cap' "$tokfile" && hit=0
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+  return "$hit"
+}
+
+_cap_extract_host() {
+  local command="$1" host=""
+  if [[ "$command" =~ https?://([^/[:space:]\"\'\)]+) ]]; then
+    host="${BASH_REMATCH[1]}"
+  elif [[ "$command" =~ git@([^:[:space:]]+): ]]; then
+    host="${BASH_REMATCH[1]}"
+  fi
+  host="${host#*@}"
+  host="${host%%:*}"
+  printf '%s' "$host"
+}
+
+_cap_is_network_command() {
+  local command="$1"
+  [[ "$command" =~ (^|[[:space:];|&()])(curl|wget)[[:space:]] ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])git[[:space:]]+(clone|fetch|pull|push|ls-remote)[[:space:]] ]] && return 0
+  return 1
+}
+
+_cap_is_high_tier() {
+  local tool="$1" target="$2"
+  local sensitive_bash_re='capability-token[.]sh|walter_cap_sign_claims|session-[^[:space:];|&]*[.]key'
+  case "$tool" in
+    Edit|Write|MultiEdit|NotebookEdit)
+      [[ -n "$target" ]]
+      ;;
+    Bash)
+      _cap_is_network_command "$target" && return 0
+      [[ "$target" =~ (^|[[:space:];|&()])gh[[:space:]]+pr[[:space:]]+review.*--approve ]] && return 0
+      [[ "$target" =~ walter-os[[:space:]]+cap[[:space:]]+mint ]] && return 0
+      [[ "$target" =~ $sensitive_bash_re ]] && return 0
+      return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_cap_glob_matches() {
+  local value="$1" pattern="$2"
+  [[ -n "$pattern" ]] || return 1
+  # shellcheck disable=SC2053 # Capability path scopes intentionally use glob semantics.
+  [[ "$value" == $pattern ]]
+}
+
+_cap_host_matches() {
+  local host="$1" pattern="$2"
+  [[ -n "$host" && -n "$pattern" ]] || return 1
+  case "$pattern" in
+    '*') return 0 ;;
+    '*.'*) [[ "$host" == "${pattern#*.}" ]] && return 1; [[ "$host" == *".${pattern#*.}" ]] ;;
+    *) [[ "$host" == "$pattern" ]] ;;
+  esac
+}
+
+_cap_claim_matches() {
+  local claims="$1" tool="$2" target="$3" host="$4"
+  local cap_tool count idx value
+  cap_tool="$(jq -r '.tool // empty' <<< "$claims")"
+  [[ "$cap_tool" == "$tool" ]] || return 1
+
+  case "$tool" in
+    Edit|Write|MultiEdit|NotebookEdit)
+      count="$(jq '.scope.paths // [] | length' <<< "$claims")"
+      idx=0
+      while [[ "$idx" -lt "$count" ]]; do
+        value="$(jq -r --argjson idx "$idx" '.scope.paths[$idx]' <<< "$claims")"
+        _cap_glob_matches "$target" "$value" && return 0
+        idx=$((idx + 1))
+      done
+      ;;
+    Bash)
+      count="$(jq '.scope.patterns // [] | length' <<< "$claims")"
+      idx=0
+      while [[ "$idx" -lt "$count" ]]; do
+        value="$(jq -r --argjson idx "$idx" '.scope.patterns[$idx]' <<< "$claims")"
+        [[ -n "$value" && "$target" =~ $value ]] && return 0
+        idx=$((idx + 1))
+      done
+
+      count="$(jq '.scope.network // [] | length' <<< "$claims")"
+      idx=0
+      while [[ "$idx" -lt "$count" ]]; do
+        value="$(jq -r --argjson idx "$idx" '.scope.network[$idx]' <<< "$claims")"
+        _cap_host_matches "$host" "$value" && return 0
+        idx=$((idx + 1))
+      done
+      ;;
+  esac
+  return 1
+}
+
+_cap_find_match() {
+  local repo="$1" tool="$2" target="$3" host="$4"
+  local state_file caps_dir token_file claims
+  state_file="$(walter_session_state_file "$repo")"
+  [[ -f "$state_file" ]] || return 1
+  _walter_cap_validate_state "$state_file" >/dev/null 2>&1 || return 1
+  caps_dir="$(jq -r '.capability_tokens_dir // empty' "$state_file")"
+  [[ -d "$caps_dir" ]] || return 1
+
+  for token_file in "$caps_dir"/cap-*.paseto; do
+    [[ -f "$token_file" ]] || continue
+    if claims="$(walter_cap_verify_token "$state_file" "$(cat "$token_file")" 2>/dev/null)" && \
+       _cap_claim_matches "$claims" "$tool" "$target" "$host"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+_cap_target_from_json() {
+  local tool="$1" input="$2"
+  case "$tool" in
+    Bash) jq -r '.tool_input.command // ""' <<< "$input" ;;
+    Edit|Write|MultiEdit|NotebookEdit) jq -r '.tool_input.file_path // ""' <<< "$input" ;;
+    *) printf '' ;;
+  esac
+}
+
+_cap_main_json() {
+  local input="$1" tool target repo host
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '%s\n' '{"decision":"block","reason":"capability-check: jq missing — failing closed"}'
+    exit 0
+  fi
+  tool="$(jq -r '.tool_name // ""' <<< "$input")"
+  target="$(_cap_target_from_json "$tool" "$input")"
+  repo="${WALTER_SESSION_REPO:-$PWD}"
+  host="$(_cap_extract_host "$target")"
+
+  _cap_is_high_tier "$tool" "$target" || _cap_emit_allow
+
+  if [[ "$tool" == "Bash" && "${WALTER_CAP_BYPASS:-0}" == "1" ]] && _cap_has_bypass_flag "$target"; then
+    _cap_emit_allow_warn "capability-check: WALTER_CAP_BYPASS=1 + --allow-no-cap bypassed capability enforcement"
+  fi
+
+  if _cap_find_match "$repo" "$tool" "$target" "$host"; then
+    _cap_emit_allow
+  fi
+
+  _cap_emit_block "capability-check: no valid token for ${tool} on ${target:-<empty>}; mint with: walter-os cap mint ${tool} --duration 30m"
+}
+
+input="$(cat)"
+[[ -z "$input" ]] && _cap_emit_allow
+_cap_main_json "$input"

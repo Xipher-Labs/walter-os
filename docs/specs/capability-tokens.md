@@ -79,12 +79,12 @@ renderer mangles multi-line fenced code blocks inside table cells.
 - [x] bats coverage in `tests/walter/cap-cli.bats`.
 
 ### AC-3 — `hooks/capability-check.sh` PreToolUse hook
-- [ ] Hook runs in the PreToolUse chain after `approval-gate.sh` (so a category is already classified).
-- [ ] For `Edit`/`Write`: extracts `file_path`; checks every cap in the session's `caps-<session>/` dir for `tool` matching AND `scope.paths` glob matching.
-- [ ] For `Bash`: extracts `command`; checks every cap for `tool=Bash` AND (a) `scope.patterns` regex matching OR (b) network destination in `scope.network` (parsed from curl/git/etc. like A-1 egress hook does).
-- [ ] If a high-tier op has NO matching cap → block with `"capability-check: no valid token for <tool> on <target>; mint with: walter-os cap mint <tool> ..."`.
-- [ ] If a low-tier op has no cap → passthrough allow (existing approval-gate is the only check).
-- [ ] bats coverage in `tests/hooks/capability-check.bats`:
+- [x] Hook runs in the PreToolUse chain after `approval-gate.sh` (so a category is already classified).
+- [x] For `Edit`/`Write`: extracts `file_path`; checks every cap in the session's `caps-<session>/` dir for `tool` matching AND `scope.paths` glob matching.
+- [x] For `Bash`: extracts `command`; checks every cap for `tool=Bash` AND (a) `scope.patterns` regex matching OR (b) network destination in `scope.network` (parsed from curl/git/etc. like A-1 egress hook does).
+- [x] If a high-tier op has NO matching cap → block with `"capability-check: no valid token for <tool> on <target>; mint with: walter-os cap mint <tool> ..."`.
+- [x] If a low-tier op has no cap → passthrough allow (existing approval-gate is the only check).
+- [x] bats coverage in `tests/hooks/capability-check.bats`:
   - High-tier op with no cap → block
   - High-tier op with matching cap → allow
   - High-tier op with EXPIRED cap → block

@@ -1046,14 +1046,17 @@ merge_claude_hooks() {
   #   2. approval-gate.sh  → TIER-based approval matrix (P1-05/P1-06).
   #      Decides whether destructive ops / pushes / PRs need operator
   #      confirmation. Consults ~/.config/walter-os/agent-approvals.yml.
-  #   3. network-gate.sh   → default-deny network egress (#122 OSS Trust
+  #   3. capability-check.sh → session capability-token enforcement
+  #      (#122 capability tokens). Requires valid caps for high-blast-radius
+  #      Bash/Edit/Write operations after approval-gate policy allows them.
+  #   4. network-gate.sh   → default-deny network egress (#122 OSS Trust
   #      A-2). Blocks any outbound network call whose host isn't in the
   #      operator's egress-allowlist.txt. Composes with approval-gate
   #      (WHAT vs WHERE). Last of the gates because it's the only one
   #      that needs the loader to source + per-call host extraction.
-  #   4. branch-flow-guard.sh → blocks pushes that violate the
+  #   5. branch-flow-guard.sh → blocks pushes that violate the
   #      configured branch flow (single-tier vs three-stage).
-  #   5. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
+  #   6. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
   #
   # bash-denylist + approval-gate were ABSENT from this template at
   # one point (Codex R2 MEDIUM M2 caught the regression). The bats
@@ -1083,6 +1086,7 @@ merge_claude_hooks() {
         hooks: [
           { type: "command", command: ($repo + "/hooks/bash-denylist.sh"),    _walter_os: true },
           { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/network-gate.sh"),     _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
@@ -1091,6 +1095,8 @@ merge_claude_hooks() {
       {
         matcher: "Write|Edit",
         hooks: [
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },
           {
             type: "command",
             command: ($repo + "/hooks/wiki-validator-hook.sh"),
