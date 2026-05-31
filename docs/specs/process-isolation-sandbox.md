@@ -81,8 +81,8 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
   
   envar: ["PATH", "HOME", "USER", "LANG", "WALTER_CONFIG", "WALTER_OS_HOME"]
   
+  keep_caps: false
   disable_no_new_privs: false
-  cap: "" # drop all
   iface_no_lo: true
   # No internet — hooks shouldn't need to call out.
   ```

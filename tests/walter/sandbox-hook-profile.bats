@@ -43,7 +43,8 @@ _mode() {
   grep -q 'dst: "/"' "$profile"
   grep -q 'fstype: "tmpfs"' "$profile"
   grep -q 'iface_no_lo: true' "$profile"
-  grep -q 'cap: ""' "$profile"
+  run grep -q 'cap: ""' "$profile"
+  [ "$status" -ne 0 ]
 }
 
 @test "AC-2: nsjail hook profile mounts Walter roots read-only" {
@@ -72,9 +73,13 @@ _mode() {
   grep -q '^net none$' "$profile"
   grep -q '^private-tmp$' "$profile"
   grep -q '^read-only /$' "$profile"
+  grep -q '^whitelist-ro @WALTER_OS_HOME@$' "$profile"
+  grep -q '^whitelist-ro @WALTER_CONFIG@$' "$profile"
   grep -q '^read-only @WALTER_OS_HOME@$' "$profile"
   grep -q '^read-only @WALTER_CONFIG@$' "$profile"
   grep -q '^blacklist @HOME@/.ssh$' "$profile"
+  grep -q '^blacklist @HOME@/\*/\*.pem$' "$profile"
+  grep -q '^blacklist @HOME@/\*/\*/\*.key$' "$profile"
 }
 
 @test "AC-2: sandbox materializes hook profile placeholders safely" {
