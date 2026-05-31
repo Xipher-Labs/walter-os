@@ -253,6 +253,24 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: command-substitution walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'walter-os cap "$(printf mint)" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution cap.sh subcommand is blocked" {
+  run "$HOOK" check 'scripts/walter/subcommands/cap.sh "$(printf mint)" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: backtick walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'walter-os cap `printf mint` Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
