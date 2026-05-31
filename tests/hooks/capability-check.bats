@@ -246,6 +246,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "curl socks proxy host must be covered by network capability" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --socks5 evil.example https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "curl connect-to host must be covered by network capability" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 

@@ -347,13 +347,13 @@ _cap_extract_curl_hosts() {
           candidate="${tokens[$j]}"
           case "$candidate" in
             ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') break ;;
-            --proxy|--preproxy|-x)
+            --proxy|--preproxy|--socks4|--socks4a|--socks5|--socks5-hostname|-x)
               host="$(_cap_normalize_host "${tokens[$((j + 1))]:-}")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               j=$((j + 2))
               continue
               ;;
-            --proxy=*|--preproxy=*)
+            --proxy=*|--preproxy=*|--socks4=*|--socks4a=*|--socks5=*|--socks5-hostname=*)
               host="$(_cap_normalize_host "${candidate#*=}")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               ;;
