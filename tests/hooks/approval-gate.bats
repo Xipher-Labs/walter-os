@@ -271,6 +271,24 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: expanded walter-os cap word with mint is blocked" {
+  run "$HOOK" check 'p=p; walter-os ca$p mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: expanded cap word with dynamic subcommand is blocked" {
+  run "$HOOK" check 'p=p; walter-os ca$p "$(printf mint)" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: expanded Walter state path with key filename is blocked" {
+  run "$HOOK" check 'd=state; cat "$HOME/.config/walter-os/$d/session-abc.key"'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
