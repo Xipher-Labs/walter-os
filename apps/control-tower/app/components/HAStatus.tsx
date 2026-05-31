@@ -21,9 +21,17 @@ function HealthCell({ healthy }: { healthy: boolean | null }) {
   const status = healthToStatus(healthy);
   const label =
     healthy === null ? "n/a" : healthy ? "healthy" : "down";
+  // srOnlyLabel={false} renders the state as visible text beside the dot so the
+  // status is never conveyed by hue alone (WCAG 1.4.1, AC-5) — matching the
+  // agent board and alert feed, where the label is always on screen.
   return (
     <span className="inline-flex justify-center">
-      <StatusDot status={status} label={label} pulse={false} />
+      <StatusDot
+        status={status}
+        label={label}
+        srOnlyLabel={false}
+        pulse={false}
+      />
     </span>
   );
 }
