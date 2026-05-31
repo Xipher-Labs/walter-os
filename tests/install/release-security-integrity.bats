@@ -99,7 +99,22 @@ setup() {
   joined=$(awk 'BEGIN{RS=""} {gsub(/\\\n[[:space:]]*/, " "); print}' "$WORKFLOW")
   echo "$joined" | grep -E 'rm -f .*walter-os-\*\.intoto\.jsonl' >/dev/null
   grep -E '![[:space:]]+-name "\*\.intoto\.jsonl"' "$WORKFLOW" >/dev/null
-  grep -E 'walter-os-\$\{TAG\}\.intoto\.jsonl' "$WORKFLOW" >/dev/null
+}
+
+@test "workflow dispatch provenance is bound to the requested tag ref" {
+  grep -E 'workflow_dispatch' "$WORKFLOW" >/dev/null
+  grep -E 'GITHUB_REF.*refs/tags/\$\{tag\}' "$WORKFLOW" >/dev/null
+  grep -E 'workflow_dispatch re-signs must run with --ref \$\{tag\}' "$WORKFLOW" >/dev/null
+}
+
+@test "release workflow does not delete existing provenance before replacement" {
+  local stale_block
+  stale_block=$(sed -n '/for stale in \\/,/; do/p' "$WORKFLOW")
+  if echo "$stale_block" | grep -E 'intoto\.jsonl' >/dev/null 2>&1; then
+    echo "stale release-asset deletion includes provenance before replacement:"
+    echo "$stale_block"
+    return 1
+  fi
 }
 
 @test "release workflow pins release runners for reproducibility" {
