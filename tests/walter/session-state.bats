@@ -92,8 +92,7 @@ _mode() {
   [ ! -d "$lock_dir" ]
 }
 
-@test "session start reclaims an old lock even when pid looks alive" {
-  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+@test "session start does not reclaim an old lock with a live pid" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   export WALTER_SESSION_LOCK_STALE_SEC=30
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
@@ -102,12 +101,10 @@ _mode() {
   printf '1767220000\n' > "$lock_dir/created_epoch"
   printf '%s\n' "$$" > "$lock_dir/pid"
 
-  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+  run bash -c "source '$LIB'; _walter_session_reclaim_stale_lock '$lock_dir'"
 
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'"status":"started"'* ]]
-  [ -f "$state_file" ]
-  [ ! -d "$lock_dir" ]
+  [ "$status" -ne 0 ]
+  [ -d "$lock_dir" ]
 }
 
 @test "session start removes orphan material from stale startup lock" {
@@ -120,10 +117,12 @@ _mode() {
   orphan_id="orphan-session"
   mkdir -p "$lock_dir" "$state_dir/caps-${orphan_id}"
   printf '1767220000\n' > "$lock_dir/created_epoch"
-  printf '%s\n' "$$" > "$lock_dir/pid"
+  printf '999999999\n' > "$lock_dir/pid"
   printf '%s\n' "$orphan_id" > "$lock_dir/session_id"
   printf 'orphan-private\n' > "$state_dir/session-${orphan_id}.key"
   printf 'orphan-public\n' > "$state_dir/session-${orphan_id}.pub"
+  printf 'orphan-temp-private\n' > "$state_dir/session-${orphan_id}.key.tmp"
+  printf 'orphan-temp-public\n' > "$state_dir/session-${orphan_id}.pub.tmp"
 
   run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
 
@@ -131,6 +130,8 @@ _mode() {
   [ -f "$state_file" ]
   [ ! -f "$state_dir/session-${orphan_id}.key" ]
   [ ! -f "$state_dir/session-${orphan_id}.pub" ]
+  [ ! -f "$state_dir/session-${orphan_id}.key.tmp" ]
+  [ ! -f "$state_dir/session-${orphan_id}.pub.tmp" ]
   [ ! -d "$state_dir/caps-${orphan_id}" ]
   [ ! -d "$lock_dir" ]
 }

@@ -176,7 +176,7 @@ _walter_session_cleanup_lock_material() {
   private_key="$(_walter_session_private_key_file "$session_id")"
   public_key="$(_walter_session_public_key_file "$session_id")"
   caps_dir="$(_walter_session_caps_dir "$session_id")"
-  rm -f "$private_key" "$public_key" 2>/dev/null || true
+  rm -f "$private_key" "$public_key" "${private_key}.tmp" "${public_key}.tmp" 2>/dev/null || true
   if [[ -d "$caps_dir" ]]; then
     rm -r "$caps_dir" 2>/dev/null || true
   fi
@@ -187,6 +187,17 @@ _walter_session_reclaim_stale_lock() {
   [[ -d "$lock_dir" ]] || return 0
   stale_after="$(_walter_session_positive_int_or_default "${WALTER_SESSION_LOCK_STALE_SEC:-30}" 30)"
   now_epoch="$(_walter_session_now_epoch)"
+  pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
+    if kill -0 "$pid" 2>/dev/null; then
+      return 1
+    fi
+    _walter_session_cleanup_lock_material "$lock_dir"
+    _walter_session_release_lock "$lock_dir"
+    [[ ! -d "$lock_dir" ]]
+    return
+  fi
+
   created_epoch="$(cat "$lock_dir/created_epoch" 2>/dev/null || true)"
   if [[ "$created_epoch" =~ ^[0-9]+$ ]] && (( now_epoch - created_epoch > stale_after )); then
     _walter_session_cleanup_lock_material "$lock_dir"
@@ -195,17 +206,7 @@ _walter_session_reclaim_stale_lock() {
     return
   fi
 
-  if [[ ! -f "$lock_dir/pid" ]]; then
-    return 1
-  fi
-  pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
-  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
-  if kill -0 "$pid" 2>/dev/null; then
-    return 1
-  fi
-  _walter_session_cleanup_lock_material "$lock_dir"
-  _walter_session_release_lock "$lock_dir"
-  [[ ! -d "$lock_dir" ]]
+  return 1
 }
 
 _walter_session_write_lock_owner() {
@@ -266,15 +267,9 @@ _walter_session_write_new() {
     rm -r "$caps_dir"
     return 1
   fi
-  tmp_key="$(mktemp "${state_dir}/session-key.XXXXXX")" || {
-    rm -r "$caps_dir"
-    return 1
-  }
-  tmp_pub="$(mktemp "${state_dir}/session-pub.XXXXXX")" || {
-    rm -f "$tmp_key"
-    rm -r "$caps_dir"
-    return 1
-  }
+  tmp_key="${private_key}.tmp"
+  tmp_pub="${public_key}.tmp"
+  rm -f "$tmp_key" "$tmp_pub"
   if ! "$openssl_bin" genpkey -algorithm ED25519 -out "$tmp_key" >/dev/null 2>&1; then
     rm -f "$tmp_key" "$tmp_pub"
     rm -r "$caps_dir"
