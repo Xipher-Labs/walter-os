@@ -125,6 +125,41 @@ teardown() {
   [[ "$output" != *"do not read"* ]]
 }
 
+@test "walter-os cap list rejects expired sessions and revokes material" {
+  cd "$REPO_UNDER_TEST"
+  export WALTER_SESSION_MAX_HOURS=8
+  export WALTER_SESSION_MAX_IDLE_MIN=60
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  export WALTER_SESSION_NOW_EPOCH=1767229261
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+
+  run "$CLI" cap list
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"session expired"* ]]
+  [ ! -f "$private_key" ]
+}
+
+@test "walter-os cap revoke rejects expired sessions and revokes material" {
+  cd "$REPO_UNDER_TEST"
+  export WALTER_SESSION_MAX_HOURS=8
+  export WALTER_SESSION_MAX_IDLE_MIN=60
+  "$CLI" cap mint Write --paths README.md --duration 5m >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  nonce="$("$CLI" cap list | jq -r '.[0].nonce')"
+  export WALTER_SESSION_NOW_EPOCH=1767229261
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+
+  run "$CLI" cap revoke "$nonce"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"session expired"* ]]
+  [ ! -f "$private_key" ]
+}
+
 @test "walter-os cap mint rejects bare duration integers" {
   cd "$REPO_UNDER_TEST"
 

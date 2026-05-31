@@ -250,6 +250,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: broad Walter state JSON glob is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/state/*.json'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: recursive Walter state token read is blocked" {
   run "$HOOK" check 'find ~/.config/walter-os/state -name "cap-*.paseto" -exec cat {} \;'
   [[ "$status" -eq 7 ]]
@@ -292,6 +298,11 @@ teardown() {
 
 @test "CLI: walter-os cap verify remains allowed" {
   run "$HOOK" check "walter-os cap verify /tmp/cap-test.paseto"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: cap.sh verify with variable token file remains allowed" {
+  run "$HOOK" check 'scripts/walter/subcommands/cap.sh verify "$token_file"'
   [[ "$status" -eq 0 ]]
 }
 

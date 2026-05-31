@@ -193,7 +193,7 @@ _is_capability_token_mint_payload() {
   local command_indirect_cap_mint="(^|[[:space:];|&()])${shell_expansion}[[:space:]]+cap[[:space:]]+([^[:space:];|&]*${shell_expansion}|[$]?mint)([[:space:]]|$)"
   # shellcheck disable=SC2016 # Literal $() and backticks are part of the regex.
   local command_substitution_walter_mint='(^|[[:space:];|&()])([$][(][^;|&)]*walter-os[^;|&)]*[)]|`[^;|&`]*walter-os[^;|&`]*`)[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
-  local cap_script_dynamic="(^|[[:space:];|&()])[^;|&]*cap[.]sh[^;|&]*${shell_expansion}"
+  local cap_script_dynamic="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap[.]sh[[:space:]]+[^[:space:];|&]*${shell_expansion}"
   local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_expansion}"
   local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_expansion}"
   local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
@@ -300,7 +300,8 @@ _is_capability_private_key_payload() {
        [[ "$normalized" == *"\$HOME/.config/walter-os"* ]] || \
        [[ "$normalized" == *"\${HOME}/.config/walter-os"* ]]; } && \
      [[ "$normalized" == *"/state/"* ]] && \
-     { [[ "$normalized" =~ [.](key) ]] || \
+     { [[ "$normalized" =~ [*][.]json ]] || \
+       [[ "$normalized" =~ [.](key) ]] || \
        [[ "$normalized" =~ $session_metadata_re ]]; }; then
     return 0
   fi
