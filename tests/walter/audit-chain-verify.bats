@@ -1,0 +1,103 @@
+#!/usr/bin/env bats
+# tests/walter/audit-chain-verify.bats
+#
+# OSS Trust B-1 audit-chain verifier coverage.
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  AUDIT_LIB="$REPO_ROOT/scripts/walter/lib/audit-chain.sh"
+  WALTER_OS_BIN="$REPO_ROOT/bin/walter-os"
+  TMP_HOME="$(mktemp -d "$REPO_ROOT/.tmp-audit-verify.XXXXXX")"
+  export HOME="$TMP_HOME/home"
+  export WALTER_CONFIG="$TMP_HOME/home/.config/walter-os"
+  export WALTER_AUDIT_DATE="2026-05-31"
+  export WALTER_AUDIT_NOW="2026-05-31T12:00:00Z"
+  export WALTER_SESSION_ID="session-test"
+  export WALTER_OS_HOME="$REPO_ROOT"
+  mkdir -p "$WALTER_CONFIG"
+}
+
+teardown() {
+  [[ -n "${TMP_HOME:-}" ]] || return 0
+  case "$TMP_HOME" in
+    "$REPO_ROOT"/.tmp-audit-verify.*) rm -rf "$TMP_HOME" ;;
+  esac
+}
+
+_chain_path() {
+  printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
+}
+
+_make_chain() {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
+  WALTER_AUDIT_NOW="2026-05-31T12:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'rm -rf /tmp/nope' block bash-denylist destructive >/dev/null"
+}
+
+@test "B-1: clean chain verifies through library" {
+  _make_chain
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified 2 row(s)"* ]]
+}
+
+@test "B-1: tampered prev_hash fails with row number" {
+  _make_chain
+  jq -cS '.prev_hash = "deadbeef"' "$(_chain_path)" > "$(_chain_path).tmp"
+  mv "$(_chain_path).tmp" "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 1: prev_hash mismatch"* ]]
+}
+
+@test "B-1: tampered first row breaks second-row chain" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered"')"
+  second="$(sed -n '2p' "$(_chain_path)")"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 2: prev_hash mismatch"* ]]
+}
+
+@test "B-1: invalid JSON fails with row number" {
+  _make_chain
+  printf '{bad-json\n' >> "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 3: invalid JSON object"* ]]
+}
+
+@test "B-1: missing chain returns non-zero" {
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"chain not found"* ]]
+}
+
+@test "B-1: empty chain returns non-zero" {
+  mkdir -p "$(dirname "$(_chain_path)")"
+  : > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"empty chain"* ]]
+}
+
+@test "B-1: walter-os audit verify-chain dispatches to verifier" {
+  _make_chain
+
+  run bash "$WALTER_OS_BIN" audit verify-chain 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified 2 row(s)"* ]]
+}

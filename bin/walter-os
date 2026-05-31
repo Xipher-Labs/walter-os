@@ -18,6 +18,7 @@
 # Subcommands:
 #   audit                       Run supply-chain audit now (foreground)
 #   status [--models]           Show audit + spend status, or model routing
+#   audit verify-chain [date]   Verify tamper-evident audit hash chain
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
@@ -140,6 +141,15 @@ print_help() {
 # ---------- audit ----------
 
 cmd_audit() {
+  case "${1:-}" in
+    verify-chain)
+      shift
+      # shellcheck source=/dev/null
+      source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh"
+      walter_audit_verify_chain "$@"
+      return $?
+      ;;
+  esac
   exec "${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/audit.sh" "$@"
 }
 
