@@ -5,16 +5,22 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   OBS_DIR="$REPO_ROOT/setup/walter-host/services/observability"
   COMPOSE="$OBS_DIR/compose.yml"
+  AUDIT_COMPOSE="$OBS_DIR/compose.audit.yml"
   PROMTAIL="$OBS_DIR/promtail/promtail.yml"
   DASHBOARD="$OBS_DIR/grafana/provisioning/dashboards/walter-audit.json"
   OBS_DOC="$REPO_ROOT/docs/operational/observability.md"
 }
 
-@test "promtail mounts the Walter audit directory read-only" {
-  grep -q "source: \${WALTER_AUDIT_DIR:-/home/walter/.config/walter-os/audit}" "$COMPOSE"
-  grep -q "target: /var/log/walter-audit" "$COMPOSE"
-  grep -q "read_only: true" "$COMPOSE"
-  grep -q "create_host_path: false" "$COMPOSE"
+@test "default observability compose does not require an audit directory" {
+  run grep -q "target: /var/log/walter-audit" "$COMPOSE"
+  [ "$status" -ne 0 ]
+}
+
+@test "audit override mounts the Walter audit directory read-only" {
+  grep -q "source: \${WALTER_AUDIT_DIR:-/home/walter/.config/walter-os/audit}" "$AUDIT_COMPOSE"
+  grep -q "target: /var/log/walter-audit" "$AUDIT_COMPOSE"
+  grep -q "read_only: true" "$AUDIT_COMPOSE"
+  grep -q "create_host_path: false" "$AUDIT_COMPOSE"
   grep -q "WALTER_AUDIT_HOST: \${WALTER_AUDIT_HOST:-walter-vm}" "$COMPOSE"
   grep -q -- "-config.expand-env=true" "$COMPOSE"
 }
@@ -76,6 +82,7 @@ PY
 }
 
 @test "observability docs cover audit telemetry mount, labels, and dashboard" {
+  grep -q "compose.audit.yml" "$OBS_DOC"
   grep -q "/home/walter/.config/walter-os/audit" "$OBS_DOC"
   grep -q "WALTER_AUDIT_DIR" "$OBS_DOC"
   grep -q "create_host_path: false" "$OBS_DOC"

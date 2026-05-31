@@ -60,12 +60,6 @@ services:
     volumes:
       - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
       - /var/log:/var/log:ro
-      - type: bind
-        source: ${WALTER_AUDIT_DIR:-/home/walter/.config/walter-os/audit}
-        target: /var/log/walter-audit
-        read_only: true
-        bind:
-          create_host_path: false
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [obs_net]

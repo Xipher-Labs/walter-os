@@ -1,0 +1,17 @@
+# Optional Walter audit-chain telemetry override.
+#
+# Use with:
+#   docker compose -f compose.yml -f compose.audit.yml up -d
+#
+# The audit directory must already exist and be readable by Docker. Keeping
+# create_host_path disabled avoids silently creating a root-owned host path.
+
+services:
+  promtail:
+    volumes:
+      - type: bind
+        source: ${WALTER_AUDIT_DIR:-/home/walter/.config/walter-os/audit}
+        target: /var/log/walter-audit
+        read_only: true
+        bind:
+          create_host_path: false
