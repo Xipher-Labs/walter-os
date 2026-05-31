@@ -108,6 +108,7 @@ _cap_extract_hosts() {
     _cap_extract_gh_host "$command"
     _cap_extract_curl_hosts "$command"
     _cap_extract_positional_network_hosts "$command"
+    _cap_extract_git_ssh_override_hosts "$command"
     _cap_extract_shell_c_hosts "$command"
   } | awk 'NF && !seen[$0]++'
 }
@@ -505,6 +506,45 @@ _cap_extract_positional_network_hosts() {
           [[ -n "$host" ]] && printf '%s\n' "$host"
           break
         done
+        ;;
+    esac
+    idx=$((idx + 1))
+  done
+}
+
+_cap_extract_git_ssh_override_hosts() {
+  local command="$1" tokfile token next override idx
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    token="${tokens[$idx]}"
+    case "$token" in
+      GIT_SSH_COMMAND=*)
+        override="${token#GIT_SSH_COMMAND=}"
+        _cap_emit_proxy_command_hosts "$override"
+        ;;
+      -c)
+        next="${tokens[$((idx + 1))]:-}"
+        case "$next" in
+          [Cc]ore.[Ss]sh[Cc]ommand=*)
+            override="${next#*=}"
+            _cap_emit_proxy_command_hosts "$override"
+            ;;
+        esac
+        idx=$((idx + 1))
+        ;;
+      -c[Cc]ore.[Ss]sh[Cc]ommand=*)
+        override="${token#*=}"
+        _cap_emit_proxy_command_hosts "$override"
         ;;
     esac
     idx=$((idx + 1))

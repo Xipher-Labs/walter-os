@@ -310,6 +310,24 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "git ssh command override host must be covered" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "GIT_SSH_COMMAND='ssh evil.example' git fetch git@github.com:org/repo")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "git -c core.sshCommand='ssh evil.example' fetch git@github.com:org/repo")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "git ssh command override is allowed when all hosts are covered" {
+  _mint Bash --network github.com --network evil.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "GIT_SSH_COMMAND='ssh evil.example' git fetch git@github.com:org/repo")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "absolute-path git fetch is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "/opt/homebrew/bin/git fetch")"
 
