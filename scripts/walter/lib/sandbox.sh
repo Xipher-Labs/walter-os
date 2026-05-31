@@ -160,7 +160,6 @@ _walter_sandbox_cleanup_materialized() {
   rm -f -- "$path" "${path}.tmp" "${path}.pre" "${path}.deny"
   [[ ! -d "${path}.scratch" ]] || rm -rf -- "${path}.scratch"
   [[ ! -d "${path}.root" ]] || rm -rf -- "${path}.root"
-  [[ ! -d "${path}.invisible" ]] || rm -rf -- "${path}.invisible"
 }
 
 _walter_sandbox_profile_has_placeholders() {

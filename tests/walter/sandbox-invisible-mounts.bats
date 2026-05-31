@@ -71,7 +71,9 @@ EOF
   grep -q '^~/.ssh/:dir$' "$defaults"
   grep -q '^~/.aws/:dir$' "$defaults"
   grep -q '^~/.gnupg/:dir$' "$defaults"
+  # shellcheck disable=SC2016 # Match literal env-var syntax in the default path list.
   grep -q '^\$WALTER_CONFIG/state/:dir$' "$defaults"
+  # shellcheck disable=SC2016
   grep -q '^\$WALTER_CONFIG/overlay/personal.env:file$' "$defaults"
   grep -q '^~/.docker/config.json:file$' "$defaults"
 }
