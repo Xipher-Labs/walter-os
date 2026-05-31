@@ -203,6 +203,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "curl resolve host must be covered by network capability" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --resolve api.github.com:443:evil.example https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "curl resolve host is allowed when all hosts are covered" {
+  _mint Bash --network api.github.com --network evil.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --resolve api.github.com:443:evil.example https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "git ssh URL with matching network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
@@ -541,6 +557,12 @@ _mint() {
 
 @test "Write absolute reentry traversal to protected path is blocked" {
   output="$(_hook_json Write file_path "$REPO_UNDER_TEST/../$(basename "$REPO_UNDER_TEST")/hooks/approval-gate.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write relative reentry traversal to protected path is blocked" {
+  output="$(_hook_json Write file_path "../$(basename "$REPO_UNDER_TEST")/hooks/approval-gate.sh")"
 
   echo "$output" | jq -e '.decision == "block"'
 }

@@ -316,6 +316,20 @@ _cap_extract_curl_hosts() {
               host="$(_cap_normalize_host "$host")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               ;;
+            --resolve)
+              value="${tokens[$((j + 1))]:-}"
+              IFS=':' read -r _ _ host <<< "$value"
+              host="$(_cap_normalize_host "$host")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              j=$((j + 2))
+              continue
+              ;;
+            --resolve=*)
+              value="${candidate#*=}"
+              IFS=':' read -r _ _ host <<< "$value"
+              host="$(_cap_normalize_host "$host")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              ;;
           esac
           j=$((j + 1))
         done
@@ -747,13 +761,20 @@ _cap_normalize_repo_path() {
   while [[ "$target" == ./* ]]; do
     target="${target#./}"
   done
-  target="$(_cap_lexical_normalize_path "$target")"
 
   if [[ -n "$repo" ]]; then
     norm_repo="$(_cap_lexical_normalize_path "$repo")"
     case "$target" in
-      "$norm_repo"/*) target="${target#"$norm_repo"/}" ;;
+      /*) ;;
+      *) target="${norm_repo}/${target}" ;;
     esac
+    target="$(_cap_lexical_normalize_path "$target")"
+    case "$target" in
+      "$norm_repo"/*) target="${target#"$norm_repo"/}" ;;
+      "$norm_repo") target="." ;;
+    esac
+  else
+    target="$(_cap_lexical_normalize_path "$target")"
   fi
 
   printf '%s\n' "$target"
