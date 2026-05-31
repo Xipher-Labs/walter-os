@@ -91,6 +91,21 @@ _mint() {
   echo "$output" | jq -er '.reason' | grep -q 'python3 is required'
 }
 
+@test "low-tier Bash without python3 passes through" {
+  mkdir -p "$BATS_TEST_TMPDIR/no-python-bin"
+  ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/no-python-bin/dirname"
+  ln -s "$(command -v jq)" "$BATS_TEST_TMPDIR/no-python-bin/jq"
+  ln -s "$(command -v mktemp)" "$BATS_TEST_TMPDIR/no-python-bin/mktemp"
+  ln -s "$(command -v rm)" "$BATS_TEST_TMPDIR/no-python-bin/rm"
+
+  input="$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' "echo hello" | jq -Rs .)")"
+  output="$(printf '%s' "$input" \
+    | PATH="$BATS_TEST_TMPDIR/no-python-bin" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "invalid pattern capability is a quiet non-match" {
   _mint Bash --patterns '[' --duration 30m >/dev/null
 
@@ -761,6 +776,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "quoted shell-expanded network text remains low-tier" {
+  output="$(_hook_json Bash command "echo 'curl\${IFS}https://api.github.com'")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "network CLI names as arguments remain low-tier" {
   output="$(_hook_json Bash command "echo curl && printf '%s\n' gh")"
 
@@ -839,6 +860,18 @@ _mint() {
 
 @test "cap mint with command substitution egress requires capability" {
   output="$(_hook_json Bash command 'walter-os cap mint Bash --network $(curl https://evil.example) --duration 30m')"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "cap mint with shell-expanded network value requires capability" {
+  output="$(_hook_json Bash command 'walter-os cap mint Bash --network $HOST --duration 30m')"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "cap mint with braced shell-expanded network value requires capability" {
+  output="$(_hook_json Bash command 'walter-os cap mint Bash --network ${HOST} --duration 30m')"
 
   echo "$output" | jq -e '.decision == "block"'
 }

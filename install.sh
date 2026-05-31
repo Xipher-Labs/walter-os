@@ -1052,8 +1052,9 @@ merge_claude_hooks() {
   #   4. network-gate.sh   → default-deny network egress (#122 OSS Trust
   #      A-2). Blocks any outbound network call whose host isn't in the
   #      operator's egress-allowlist.txt. Composes with approval-gate
-  #      (WHAT vs WHERE). Last of the gates because it's the only one
-  #      that needs the loader to source + per-call host extraction.
+  #      and capability-check (policy/capability vs destination). Last
+  #      of the gates because it needs the egress loader plus its own
+  #      per-call host extraction.
   #   5. branch-flow-guard.sh → blocks pushes that violate the
   #      configured branch flow (single-tier vs three-stage).
   #   6. pre-commit-tests.sh → runs tests/lint/typecheck on commits.

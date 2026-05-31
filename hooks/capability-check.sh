@@ -237,10 +237,30 @@ _cap_token_has_shell_expansion() {
   [[ "$token" == *'${'* || "$token" == *'$('* || "$token" == *'$'* || "$token" == *'`'* || "$token" == *'<('* || "$token" == *'>('* ]]
 }
 
+_cap_token_has_shell_substitution() {
+  local token="$1"
+  # shellcheck disable=SC2016 # Literal shell substitution markers are intended.
+  [[ "$token" == *'$('* || "$token" == *'`'* || "$token" == *'<('* || "$token" == *'>('* ]]
+}
+
+_cap_has_shell_expansion() {
+  local command="$1"
+  local shell_param_re='[$]([A-Za-z_][A-Za-z0-9_]*|[0-9@*#?$!-])'
+  # shellcheck disable=SC2016 # Literal shell expansion markers are intended.
+  [[ "$command" == *'${'* || "$command" == *'$('* || "$command" == *'`'* || "$command" == *'<('* || "$command" == *'>('* || \
+     "$command" =~ $shell_param_re ]]
+}
+
 _cap_token_contains_network_expansion() {
   local token="$1"
   _cap_token_has_shell_expansion "$token" || return 1
   [[ "$token" =~ (^|[^A-Za-z0-9_./-])(curl|wget|gh|ssh|scp|rsync|ncat|nc|telnet|git|npm|pip|uv)([^A-Za-z0-9_./-]|$) ]]
+}
+
+_cap_command_has_obvious_network_cli() {
+  local command="$1"
+  local network_cli_re='(^|[[:space:];|&({])([^[:space:];|&()]*/)?(curl|wget|gh|ssh|scp|rsync|ncat|nc|telnet|git|npm|pip|uv)([[:space:];|&)}]|$)'
+  [[ "$command" =~ $network_cli_re ]]
 }
 
 _cap_token_is_assignment() {
@@ -581,6 +601,10 @@ _cap_is_network_command() {
     done < "$tokfile"
   else
     rm -f "$tokfile" 2>/dev/null || true
+    if ! command -v python3 >/dev/null 2>&1; then
+      _cap_command_has_obvious_network_cli "$command" && return 0
+      return 1
+    fi
     return 0
   fi
   rm -f "$tokfile" 2>/dev/null || true
@@ -596,8 +620,12 @@ _cap_is_network_command() {
         ;;
     esac
     if _cap_token_has_shell_expansion "$token"; then
-      _cap_token_contains_network_expansion "$token" && return 0
-      [[ "$command_position" -eq 1 ]] && ! _cap_token_is_assignment "$token" && return 0
+      if [[ "$command_position" -eq 1 ]]; then
+        _cap_token_contains_network_expansion "$token" && return 0
+        ! _cap_token_is_assignment "$token" && return 0
+      elif _cap_token_has_shell_substitution "$token"; then
+        _cap_token_contains_network_expansion "$token" && return 0
+      fi
     fi
     if [[ "$command_position" -eq 1 ]] && _cap_token_is_assignment "$token"; then
       idx=$((idx + 1))
@@ -835,17 +863,17 @@ _cap_is_network_command() {
 
 _cap_is_mint_command() {
   local command="$1"
+  _cap_is_mint_like_command "$command" || return 1
   _cap_has_compound_separator "$command" && return 1
-  _cap_has_shell_substitution "$command" && return 1
+  _cap_has_shell_expansion "$command" && return 1
+  return 0
+}
+
+_cap_is_mint_like_command() {
+  local command="$1"
   [[ "$command" =~ ^[[:space:]]*([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
   [[ "$command" =~ ^[[:space:]]*([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
   return 1
-}
-
-_cap_has_shell_substitution() {
-  local command="$1"
-  # shellcheck disable=SC2016 # Literal shell substitution markers are intended.
-  [[ "$command" == *'$('* || "$command" == *'`'* || "$command" == *'<('* || "$command" == *'>('* ]]
 }
 
 _cap_has_compound_separator() {
@@ -885,6 +913,10 @@ _cap_is_gh_pr_approve() {
     done < "$tokfile"
   else
     rm -f "$tokfile" 2>/dev/null || true
+    if ! command -v python3 >/dev/null 2>&1; then
+      [[ "$command" =~ (^|[[:space:];|&({])([^[:space:];|&()]*/)?gh[[:space:]]+pr[[:space:]]+review([^;|&]*)--approve([[:space:];|&)}]|$) ]] && return 0
+      return 1
+    fi
     return 0
   fi
   rm -f "$tokfile" 2>/dev/null || true
@@ -958,6 +990,7 @@ _cap_is_high_tier() {
       ;;
     Bash)
       _cap_is_mint_command "$target" && return 1
+      _cap_is_mint_like_command "$target" && return 0
       _cap_is_network_command "$target" && return 0
       _cap_is_gh_pr_approve "$target" && return 0
       [[ "$target" =~ $sensitive_bash_re ]] && return 0
