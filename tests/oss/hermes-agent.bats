@@ -73,8 +73,22 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
     grep -q '^ARG FASTER_WHISPER_VERSION=[0-9]' "$SERVICE_DIR/Dockerfile"
 }
 
+@test "Dockerfile uses uv supported no-cache flag" {
+    grep -q -- '--no-cache' "$SERVICE_DIR/Dockerfile"
+    run grep -q -- '--no-cache-dir' "$SERVICE_DIR/Dockerfile"
+    [ "$status" -ne 0 ]
+}
+
 @test "Dockerfile persists Hugging Face cache under hermes_data volume" {
     grep -q '^ENV HF_HOME=/opt/data/.cache/huggingface$' "$SERVICE_DIR/Dockerfile"
+}
+
+@test ".dockerignore keeps local secrets out of build context" {
+    [ -f "$SERVICE_DIR/.dockerignore" ]
+    grep -q '^\.env$' "$SERVICE_DIR/.dockerignore"
+    grep -q '^\.env\.\*$' "$SERVICE_DIR/.dockerignore"
+    grep -q '^\*\.pem$' "$SERVICE_DIR/.dockerignore"
+    grep -q '^\*\.key$' "$SERVICE_DIR/.dockerignore"
 }
 
 @test "compose.yml uses one Hermes base version variable for image and build arg" {

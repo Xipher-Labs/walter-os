@@ -30,12 +30,12 @@ ENV HF_HOME=/opt/data/.cache/huggingface
 
 # Layer 1: install faster-whisper into Hermes' venv.
 # Upstream uses uv as the package manager; we reuse it for consistency.
-# --python pinpoints the target venv interpreter; --no-cache-dir keeps the
+# --python pinpoints the target venv interpreter; --no-cache keeps the
 # image lean (model files come at runtime, not via pip).
 USER root
 RUN uv pip install \
       --python /opt/hermes/.venv/bin/python \
-      --no-cache-dir \
+      --no-cache \
       "faster-whisper==${FASTER_WHISPER_VERSION}"
 
 # Sanity check at build time so a broken release of faster-whisper fails the
