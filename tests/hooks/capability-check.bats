@@ -68,6 +68,12 @@ _mint() {
   echo "$output" | jq -er '.reason' | grep -q 'no valid token'
 }
 
+@test "semicolon-adjacent Bash egress without capability is blocked" {
+  output="$(_hook_json Bash command "true;curl https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Bash egress with matching network capability is allowed" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
@@ -359,6 +365,12 @@ _mint() {
 
 @test "Write path traversal to protected path without capability is blocked" {
   output="$(_hook_json Write file_path "docs/../hooks/approval-gate.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write absolute reentry traversal to protected path is blocked" {
+  output="$(_hook_json Write file_path "$REPO_UNDER_TEST/../$(basename "$REPO_UNDER_TEST")/hooks/approval-gate.sh")"
 
   echo "$output" | jq -e '.decision == "block"'
 }

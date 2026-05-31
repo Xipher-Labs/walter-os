@@ -69,11 +69,33 @@ _cap_mktemp_file() {
 _cap_has_bypass_flag() {
   local command="$1" tokfile hit=1
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
     grep -qxF -- '--allow-no-cap' "$tokfile" && hit=0
   fi
   rm -f "$tokfile" 2>/dev/null || true
   return "$hit"
+}
+
+_cap_write_shell_tokens() {
+  local command="$1" tokfile="$2"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$command" > "$tokfile" <<'PY'
+import shlex
+import sys
+
+lexer = shlex.shlex(sys.argv[1], posix=True, punctuation_chars=";&|()\n")
+lexer.whitespace = " \t"
+lexer.whitespace_split = True
+try:
+    for token in lexer:
+        print(token)
+except ValueError:
+    sys.exit(1)
+PY
+    return $?
+  fi
+
+  printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null
 }
 
 _cap_extract_hosts() {
@@ -147,7 +169,7 @@ _cap_extract_positional_network_hosts() {
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
     while IFS= read -r token; do
       tokens+=("$token")
     done < "$tokfile"
@@ -186,7 +208,7 @@ _cap_is_network_command() {
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
     while IFS= read -r token; do
       tokens+=("$token")
     done < "$tokfile"
@@ -308,7 +330,7 @@ _cap_is_gh_pr_approve() {
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
     while IFS= read -r token; do
       tokens+=("$token")
     done < "$tokfile"
@@ -409,18 +431,30 @@ _cap_glob_matches_path() {
 }
 
 _cap_normalize_repo_path() {
-  local target="$1" repo="$2" part normalized last
-  local -a parts=() stack=()
+  local target="$1" repo="$2" norm_repo
 
   while [[ "$target" == ./* ]]; do
     target="${target#./}"
   done
+  target="$(_cap_lexical_normalize_path "$target")"
 
   if [[ -n "$repo" ]]; then
+    norm_repo="$(_cap_lexical_normalize_path "$repo")"
     case "$target" in
-      "$repo"/*) target="${target#"$repo"/}" ;;
+      "$norm_repo"/*) target="${target#"$norm_repo"/}" ;;
     esac
   fi
+
+  printf '%s\n' "$target"
+}
+
+_cap_lexical_normalize_path() {
+  local target="$1" part normalized last absolute=""
+  local -a parts=() stack=()
+
+  case "$target" in
+    /*) absolute="/" ;;
+  esac
 
   IFS='/' read -r -a parts <<< "$target"
   for part in "${parts[@]}"; do
@@ -450,6 +484,11 @@ _cap_normalize_repo_path() {
       normalized+="/$part"
     fi
   done
+
+  if [[ -n "$absolute" ]]; then
+    normalized="/${normalized}"
+    [[ "$normalized" == "/" ]] || normalized="${normalized%/}"
+  fi
 
   printf '%s\n' "$normalized"
 }
