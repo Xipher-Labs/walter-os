@@ -221,6 +221,16 @@ SH
   [ -f "$custom/chain-2026-05-31.jsonl" ]
 }
 
+@test "B-1: chain path date follows captured row timestamp" {
+  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_DATE='2026-05-30' WALTER_AUDIT_NOW='2026-05-31T00:00:01Z' walter_audit_append Bash midnight allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl" ]
+  [ -f "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl" ]
+  [ ! -f "$WALTER_CONFIG/audit/chain-2026-05-30.jsonl" ]
+  jq -e '.ts == "2026-05-31T00:00:01Z"' "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl"
+}
+
 @test "B-1: append preserves caller RETURN traps" {
   marker="$TMP_HOME/caller-return-trap-ran"
 

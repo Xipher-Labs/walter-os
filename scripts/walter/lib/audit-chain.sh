@@ -29,6 +29,14 @@ walter_audit_timestamp() {
   printf '%s\n' "${WALTER_AUDIT_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 }
 
+walter_audit_date_from_timestamp() {
+  local timestamp="$1"
+  case "$timestamp" in
+    ????-??-??T*) printf '%s\n' "${timestamp%%T*}" ;;
+    *) walter_audit_date ;;
+  esac
+}
+
 walter_audit_hash_bytes() {
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 | awk '{print $1}'
@@ -158,13 +166,15 @@ walter_audit_append() {
   fi
 
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path lock_path previous_line previous_hash row summary
+  local audit_dir chain_path lock_path previous_line previous_hash row summary timestamp row_date
   audit_dir="$(walter_audit_dir)"
-  chain_path="$(walter_audit_chain_path)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
 
   _walter_audit_acquire_lock "$lock_path" || return 1
+  timestamp="$(walter_audit_timestamp)"
+  row_date="$(walter_audit_date_from_timestamp "$timestamp")"
+  chain_path="$(walter_audit_chain_path "$row_date")"
 
   previous_hash="null"
   if [[ -s "$chain_path" ]]; then
@@ -174,7 +184,7 @@ walter_audit_append() {
 
   summary="$(walter_audit_input_summary "$input")"
   row="$(jq -ncS \
-    --arg ts "$(walter_audit_timestamp)" \
+    --arg ts "$timestamp" \
     --arg session_id "${WALTER_SESSION_ID:-unknown}" \
     --arg operator "${USER:-unknown}" \
     --arg event "tool_invocation" \
