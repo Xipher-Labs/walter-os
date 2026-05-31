@@ -98,7 +98,7 @@ PY
     return $?
   fi
 
-  printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null
+  return 1
 }
 
 _cap_extract_hosts() {
@@ -127,7 +127,11 @@ _cap_extract_literal_hosts() {
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
-    prev="${tokens[$((idx - 1))]:-}"
+    if [[ "$idx" -eq 0 ]]; then
+      prev=""
+    else
+      prev="${tokens[$((idx - 1))]}"
+    fi
     case "$prev" in
       --body|-b|--message|-m|--title|--field|-f|--raw-field|-F|--jq|-q)
         idx=$((idx + 1))
@@ -177,6 +181,9 @@ _cap_normalize_host() {
   host="${host%%/*}"
   host="${host%%\?*}"
   host="${host%%#*}"
+  host="${host%%;*}"
+  host="${host%%&*}"
+  host="${host%%|*}"
   host="${host%;}"
   host="${host%&}"
   host="${host%,}"
@@ -237,7 +244,7 @@ _cap_emit_proxy_command_hosts() {
 }
 
 _cap_extract_gh_host() {
-  local command="$1" tokfile token cli idx j candidate host inline_gh_host=""
+  local command="$1" tokfile token cli idx j candidate host inline_gh_host="" shell_gh_host=""
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
@@ -258,6 +265,14 @@ _cap_extract_gh_host() {
     case "$token" in
       ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') inline_gh_host="" ;;
       GH_HOST=*) inline_gh_host="${token#GH_HOST=}"; idx=$((idx + 1)); continue ;;
+      export)
+        candidate="${tokens[$((idx + 1))]:-}"
+        if [[ "$candidate" == GH_HOST=* ]]; then
+          shell_gh_host="${candidate#GH_HOST=}"
+          idx=$((idx + 2))
+          continue
+        fi
+        ;;
     esac
     cli="$(_cap_normalize_cli_token "$token")"
     if [[ "$cli" != "gh" ]]; then
@@ -265,7 +280,7 @@ _cap_extract_gh_host() {
       continue
     fi
 
-    host="${inline_gh_host:-${GH_HOST:-github.com}}"
+    host="${inline_gh_host:-${shell_gh_host:-${GH_HOST:-github.com}}}"
     inline_gh_host=""
     j=$((idx + 1))
     while [[ "$j" -lt "${#tokens[@]}" ]]; do
@@ -273,7 +288,7 @@ _cap_extract_gh_host() {
       case "$candidate" in
         ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') break ;;
         --hostname=*|--host=*) host="${candidate#*=}" ;;
-        --hostname|--host|-h)
+        --hostname|--host)
           host="${tokens[$((j + 1))]:-$host}"
           j=$((j + 1))
           ;;
@@ -758,7 +773,7 @@ _cap_is_gh_pr_approve() {
     while [[ "$j" -lt "${#tokens[@]}" ]]; do
       sub="${tokens[$j]}"
       case "$sub" in
-        --repo|--hostname|-R|-h)
+        --repo|--hostname|-R)
           j=$((j + 2))
           continue
           ;;
@@ -811,32 +826,32 @@ _cap_is_high_tier() {
   esac
 }
 
-_cap_glob_matches() {
-  local value="$1" pattern="$2"
-  [[ -n "$pattern" ]] || return 1
-  # shellcheck disable=SC2053 # Capability path scopes intentionally use glob semantics.
-  [[ "$value" == $pattern ]]
-}
-
 _cap_glob_matches_path() {
-  local target="$1" repo="$2" pattern="$3" rel_target
+  local target="$1" repo="$2" pattern="$3"
   target="$(_cap_normalize_repo_path "$target" "$repo")"
   while [[ "$target" == ./* ]]; do
     target="${target#./}"
   done
-  _cap_glob_matches "$target" "$pattern" && return 0
-  if [[ -n "$repo" ]]; then
-    case "$target" in
-      "$repo"/*)
-        rel_target="${target#"$repo"/}"
-        while [[ "$rel_target" == ./* ]]; do
-          rel_target="${rel_target#./}"
-        done
-        _cap_glob_matches "$rel_target" "$pattern" && return 0
-        ;;
-    esac
-  fi
+  while [[ "$pattern" == ./* ]]; do
+    pattern="${pattern#./}"
+  done
+  # shellcheck disable=SC2053 # Capability path scopes intentionally use glob semantics.
+  [[ "$target" == $pattern || "$target" == */$pattern || "$target" == "$pattern"/* ]] && return 0
   return 1
+}
+
+_cap_claim_matches_path() {
+  local target="$1" repo="$2" pattern="$3"
+  target="$(_cap_normalize_repo_path "$target" "$repo")"
+  pattern="$(_cap_normalize_repo_path "$pattern" "$repo")"
+  while [[ "$target" == ./* ]]; do
+    target="${target#./}"
+  done
+  while [[ "$pattern" == ./* ]]; do
+    pattern="${pattern#./}"
+  done
+  # shellcheck disable=SC2053 # Capability path scopes intentionally use glob semantics.
+  [[ "$target" == $pattern || "$target" == "$pattern"/* ]]
 }
 
 _cap_normalize_repo_path() {
@@ -930,6 +945,7 @@ _cap_claim_covers_host() {
   idx=0
   while [[ "$idx" -lt "$count" ]]; do
     value="$(jq -r --argjson idx "$idx" '.scope.network[$idx]' <<< "$claims")"
+    value="$(_cap_normalize_host "$value")"
     _cap_host_matches "$host" "$value" && return 0
     idx=$((idx + 1))
   done
@@ -957,7 +973,7 @@ _cap_claim_matches() {
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
         value="$(jq -r --argjson idx "$idx" '.scope.paths[$idx]' <<< "$claims")"
-        _cap_glob_matches_path "$target" "$repo" "$value" && return 0
+        _cap_claim_matches_path "$target" "$repo" "$value" && return 0
         idx=$((idx + 1))
       done
       ;;
@@ -1010,7 +1026,7 @@ _cap_target_from_json() {
 }
 
 _cap_main_json() {
-  local input="$1" tool target repo hosts
+  local input="$1" tool target repo hosts="" hint
   if ! command -v jq >/dev/null 2>&1; then
     printf '%s\n' '{"decision":"block","reason":"capability-check: jq missing — failing closed"}'
     exit 0
@@ -1025,9 +1041,14 @@ _cap_main_json() {
     _cap_emit_block "capability-check: missing required target for ${tool} — failing closed"
   fi
   repo="${WALTER_SESSION_REPO:-$PWD}"
-  hosts="$(_cap_extract_hosts "$target")"
+  if [[ -d "$repo" ]]; then
+    repo="$(cd "$repo" && pwd -P)"
+  else
+    repo="$(_cap_lexical_normalize_path "$repo")"
+  fi
 
   _cap_is_high_tier "$tool" "$target" "$repo" || _cap_emit_allow
+  [[ "$tool" == "Bash" ]] && hosts="$(_cap_extract_hosts "$target")"
 
   if [[ "$tool" == "Bash" && "${WALTER_CAP_BYPASS:-0}" == "1" ]] && _cap_has_bypass_flag "$target"; then
     _cap_emit_allow_warn "capability-check: WALTER_CAP_BYPASS=1 + --allow-no-cap bypassed capability enforcement"
@@ -1037,13 +1058,21 @@ _cap_main_json() {
     _cap_emit_allow
   fi
 
-  _cap_emit_block "capability-check: no valid token for ${tool} on ${target:-<empty>}; mint with: walter-os cap mint ${tool} --duration 30m"
+  case "$tool" in
+    Bash) hint="walter-os cap mint Bash --network <host> --duration 30m (or --patterns <regex>)" ;;
+    *) hint="walter-os cap mint ${tool} --paths <glob> --duration 30m" ;;
+  esac
+  _cap_emit_block "capability-check: no valid token for ${tool} on ${target:-<empty>}; mint with: ${hint}"
 }
 
 input=""
+line=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   input+="${line}"$'\n'
 done
 input="${input%$'\n'}"
-[[ -z "$input" ]] && _cap_emit_block "capability-check: empty hook JSON — failing closed"
+if [[ -z "$input" ]]; then
+  printf '%s\n' '{"decision":"block","reason":"capability-check: empty hook JSON — failing closed"}'
+  exit 0
+fi
 _cap_main_json "$input"

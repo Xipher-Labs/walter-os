@@ -94,6 +94,20 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash egress matches normalized network capability values" {
+  _mint Bash --network HTTPS://API.GITHUB.COM/repos/example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "adjacent shell separator is stripped from extracted hosts" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com&&echo ok")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "backtick Bash egress with matching network capability is allowed" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
@@ -343,6 +357,22 @@ _mint() {
   output="$(_hook_json Bash command "env GH_HOST=ghe.example gh api repos/Xipher-Labs/walter-os")"
 
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "exported GH_HOST requires matching network capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "export GH_HOST=ghe.example; gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "gh help short flag is not parsed as a hostname override" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh -h pr review 244 --approve")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "gh hostname flag after subcommand requires matching capability" {
@@ -644,6 +674,30 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Write dot-relative path capability matches target" {
+  _mint Write --paths './docs/**' --duration 30m >/dev/null
+
+  output="$(_hook_json Write file_path "docs/specs/example.md")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Write directory path capability covers descendants" {
+  _mint Write --paths 'docs' --duration 30m >/dev/null
+
+  output="$(_hook_json Write file_path "docs/specs/example.md")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Write exact path capability does not match suffix elsewhere" {
+  _mint Write --paths 'AGENTS.md' --duration 30m >/dev/null
+
+  output="$(_hook_json Write file_path "contexts/work/AGENTS.md")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Write without matching path capability is blocked" {
   _mint Write --paths 'docs/**' --duration 30m >/dev/null
 
@@ -653,6 +707,12 @@ _mint() {
 
 @test "Write capability verifier library without capability is blocked" {
   output="$(_hook_json Write file_path "scripts/walter/lib/capability-token.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write absolute home ssh path is blocked as high-tier" {
+  output="$(_hook_json Write file_path "$TMP_HOME/.ssh/id_ed25519")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
