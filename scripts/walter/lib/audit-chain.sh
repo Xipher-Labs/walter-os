@@ -226,6 +226,12 @@ _walter_audit_release_lock() {
 
 _walter_audit_path_identity() {
   local path="$1" identity=""
+  identity="$(stat -Lc '%i' "$path" 2>/dev/null || true)"
+  if [[ -n "$identity" ]]; then
+    printf '%s\n' "$identity"
+    return 0
+  fi
+
   identity="$(stat -c '%i' "$path" 2>/dev/null || true)"
   if [[ -n "$identity" ]]; then
     printf '%s\n' "$identity"
