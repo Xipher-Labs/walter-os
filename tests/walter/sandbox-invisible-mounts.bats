@@ -114,7 +114,19 @@ EOF
   profile="$output"
   run grep -q "dst: \"$WALTER_CONFIG/overlay/personal.env\"" "$profile"
   [ "$status" -ne 0 ]
-  [ ! -e "${profile}.invisible" ]
+  [ ! -e "$(dirname "$profile")/invisible" ]
+}
+
+@test "A-5: high-tier materialization fails without provider invisible placeholder" {
+  mkdir -p "$WALTER_CONFIG/overlay/sandbox-profiles"
+  cat > "$WALTER_CONFIG/overlay/sandbox-profiles/no-invisible.nsjail.conf" <<'EOF'
+name: "no-invisible"
+EOF
+
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile no-invisible nsjail 1"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"missing invisible-mount placeholder"* ]]
 }
 
 @test "A-5: invisible placeholders are stable across starts" {

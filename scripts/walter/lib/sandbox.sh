@@ -777,6 +777,10 @@ walter_sandbox_materialize_profile() {
     return 1
   fi
   if ! _walter_sandbox_profile_has_placeholders "$src"; then
+    if [[ "$high_tier" == "1" ]]; then
+      echo "walter-sandbox: high-tier profile missing invisible-mount placeholder" >&2
+      return 1
+    fi
     printf '%s\n' "$src"
     return 0
   fi
@@ -920,6 +924,29 @@ walter_sandbox_materialize_profile() {
         _walter_sandbox_cleanup_materialized "$dest"
         return 1
       }
+      case "$provider" in
+        nsjail)
+          if ! grep -q '@WALTER_NSJAIL_INVISIBLE_MOUNTS@' "$src"; then
+            echo "walter-sandbox: high-tier nsjail profile missing invisible-mount placeholder" >&2
+            _walter_sandbox_cleanup_materialized "$dest"
+            return 1
+          fi
+          ;;
+        firejail)
+          if ! grep -q '@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@' "$src"; then
+            echo "walter-sandbox: high-tier firejail profile missing invisible blacklist placeholder" >&2
+            _walter_sandbox_cleanup_materialized "$dest"
+            return 1
+          fi
+          ;;
+        sandbox-exec)
+          if ! grep -q '@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@' "$src"; then
+            echo "walter-sandbox: high-tier sandbox-exec profile missing invisible deny placeholder" >&2
+            _walter_sandbox_cleanup_materialized "$dest"
+            return 1
+          fi
+          ;;
+      esac
     fi
   fi
   nsjail_session_key_mounts=""
