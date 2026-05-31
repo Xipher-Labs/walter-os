@@ -56,7 +56,10 @@ _audit_early_decision() {
 # `=~` and `read -a` which both work in 3.2 — but indexed-array growth +
 # `${arr[@]}` semantics differ in subtle ways. Inherit the same re-exec
 # dance bash-denylist.sh uses so this hook behaves identically.
-_walter_bash_major="${WALTER_BASH_MAJOR_FOR_TESTS:-${BASH_VERSION%%.*}}"
+_walter_bash_major="${BASH_VERSION%%.*}"
+if [[ "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
+  _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
+fi
 if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   if [[ "${WALTER_NETWORK_GATE_REEXEC:-0}" == "1" ]]; then
     _audit_early_decision block "network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."

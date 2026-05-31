@@ -75,7 +75,7 @@ _approval_gate_bash() {
 }
 
 _bash_denylist() {
-  _hook_event Bash "$1" | "$REPO_ROOT/hooks/bash-denylist.sh"
+  _hook_event Bash "$1" | bash "$REPO_ROOT/hooks/bash-denylist.sh"
 }
 
 _network_gate_bash() {
@@ -175,7 +175,7 @@ SH
 }
 
 @test "bash-denylist legacy bash block appends audit row" {
-  run bash -c "WALTER_BASH_MAJOR_FOR_TESTS=3; WALTER_BASH_DENYLIST_REEXEC=1; source '$REPO_ROOT/hooks/bash-denylist.sh'" \
+  run bash -c "WALTER_HOOK_TEST_MODE=1; WALTER_BASH_MAJOR_FOR_TESTS=3; WALTER_BASH_DENYLIST_REEXEC=1; source '$REPO_ROOT/hooks/bash-denylist.sh'" \
     <<< "$(_hook_event Bash "echo hi")"
 
   [ "$status" -eq 0 ]
@@ -205,7 +205,7 @@ SH
 }
 
 @test "network-gate legacy bash block appends audit row" {
-  run bash -c "WALTER_BASH_MAJOR_FOR_TESTS=3; WALTER_NETWORK_GATE_REEXEC=1; source '$REPO_ROOT/hooks/network-gate.sh'" \
+  run bash -c "WALTER_HOOK_TEST_MODE=1; WALTER_BASH_MAJOR_FOR_TESTS=3; WALTER_NETWORK_GATE_REEXEC=1; source '$REPO_ROOT/hooks/network-gate.sh'" \
     <<< "$(_hook_event Bash "curl https://example.com")"
 
   [ "$status" -eq 0 ]

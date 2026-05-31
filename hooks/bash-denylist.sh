@@ -34,7 +34,10 @@ _audit_early_decision() {
   fi
 }
 
-_walter_bash_major="${WALTER_BASH_MAJOR_FOR_TESTS:-${BASH_VERSION%%.*}}"
+_walter_bash_major="${BASH_VERSION%%.*}"
+if [[ "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
+  _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
+fi
 if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   # One-shot guard: if we already attempted a re-exec and ended up back in
   # bash < 4, stop. Without this, a candidate path that itself resolves to
