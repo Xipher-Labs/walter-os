@@ -24,7 +24,7 @@ _walter_session_iso() {
 _walter_session_epoch() {
   local iso="$1"
   date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso" +%s 2>/dev/null \
-    || date -u -d "$iso" +%s
+    || date -u -d "$iso" +%s 2>/dev/null
 }
 
 _walter_session_uuid() {
@@ -169,8 +169,14 @@ walter_session_touch() {
     return 11
   fi
 
-  started_epoch="$(_walter_session_epoch "$started_at")"
-  last_epoch="$(_walter_session_epoch "$last_activity_at")"
+  if ! started_epoch="$(_walter_session_epoch "$started_at")" || [[ ! "$started_epoch" =~ ^[0-9]+$ ]]; then
+    _walter_session_result "invalid" "malformed-state" "$file"
+    return 11
+  fi
+  if ! last_epoch="$(_walter_session_epoch "$last_activity_at")" || [[ ! "$last_epoch" =~ ^[0-9]+$ ]]; then
+    _walter_session_result "invalid" "malformed-state" "$file"
+    return 11
+  fi
 
   if (( now_epoch < started_epoch || now_epoch < last_epoch )); then
     _walter_session_result "invalid" "clock-rewind" "$file"

@@ -149,6 +149,22 @@ teardown() {
   [[ "$output" == *'"trigger":"malformed-state"'* ]]
 }
 
+@test "session touch fails closed on malformed timestamps" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  mkdir -p "$(dirname "$state_file")"
+  jq -n \
+    --arg started_at "not-a-date" \
+    --arg last_activity_at "2026-01-01T00:00:00Z" \
+    '{session_id:"bad", started_at:$started_at, last_activity_at:$last_activity_at}' > "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 11 ]
+  [[ "$output" == *'"status":"invalid"'* ]]
+  [[ "$output" == *'"trigger":"malformed-state"'* ]]
+}
+
 @test "session touch fails closed when state cannot be created" {
   rm -rf "$WALTER_CONFIG"
   printf '%s\n' "not a directory" > "$WALTER_CONFIG"
