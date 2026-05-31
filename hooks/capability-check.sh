@@ -218,6 +218,12 @@ _cap_token_has_shell_expansion() {
   [[ "$token" == *'${'* || "$token" == *'$('* || "$token" == *'$'* || "$token" == *'`'* || "$token" == *'<('* || "$token" == *'>('* ]]
 }
 
+_cap_token_contains_network_expansion() {
+  local token="$1"
+  _cap_token_has_shell_expansion "$token" || return 1
+  [[ "$token" =~ (^|[^A-Za-z0-9_./-])(curl|wget|gh|ssh|scp|rsync|ncat|nc|telnet|git|npm|pip|uv)([^A-Za-z0-9_./-]|$) ]]
+}
+
 _cap_token_is_assignment() {
   local token="$1"
   [[ "$token" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]
@@ -525,6 +531,7 @@ _cap_is_network_command() {
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
     if _cap_token_has_shell_expansion "$token"; then
+      _cap_token_contains_network_expansion "$token" && return 0
       case "$token" in
         curl*|wget*|gh*|ssh*|scp*|rsync*|ncat*|nc*|telnet*|git*)
           return 0

@@ -81,6 +81,18 @@ _mint() {
   echo "$output" | jq -er '.reason' | grep -q 'no valid token'
 }
 
+@test "quoted command substitution egress without capability is blocked" {
+  output="$(_hook_json Bash command 'echo "$(curl https://api.github.com/repos/x/y)"')"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "assignment command substitution egress without capability is blocked" {
+  output="$(_hook_json Bash command 'body="$(curl https://api.github.com/repos/x/y)"; echo "$body"')"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Bash tokenization failure is treated as high-tier" {
   output="$(_hook_json Bash command "curl 'https://api.github.com/repos/x/y")"
 
@@ -112,6 +124,13 @@ _mint() {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command 'echo `curl https://api.github.com/repos/x/y`')"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "quoted command substitution egress with matching capability is allowed" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command 'echo "$(curl https://api.github.com/repos/x/y)"')"
   echo "$output" | jq -e '.decision == "allow"'
 }
 
