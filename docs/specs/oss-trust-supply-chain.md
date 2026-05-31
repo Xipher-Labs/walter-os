@@ -20,7 +20,8 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 
 - **SLSA L4** (two-person review, hermetic builds with no network). Out of scope until v2.0+.
 - **Reproducible builds for user-runnable build outputs** (control-tower Next.js bundle, walter-host service images). Each has its own reproducibility roadmap; the OSS Trust roadmap (see Parent above — umbrella `DEC-4` cross-cutting decision on reproducibility scope) scopes us to `release.yml` artifacts only. (The umbrella roadmap uses the `DEC-N` prefix for cross-cutting decisions to disambiguate from per-layer `D-N` decisions like Layer D's D-1 GitHub Security Advisories item — referencing "D-4" alone would be ambiguous.)
-- **Building our own SLSA generator.** We use `actions/attest-build-provenance` (official GH-maintained, SLSA-L3-conformant). No bespoke provenance plumbing.
+- **Building our own SLSA generator.** We use the upstream SLSA generic
+  generator reusable workflow. No bespoke provenance plumbing.
 - **Self-hosted runners.** GitHub-hosted runners qualify as SLSA L3 builders out of the box. Self-hosting would force us to re-prove builder isolation and is a hard regression for solo-operator setups.
 - **Reproducibility across operating systems.** This spec implements C-2 by pinning the runner image to `ubuntu-24.04` (replacing the current `ubuntu-latest` in `release.yml` — AC-4 below makes the pin an explicit acceptance criterion). The pinning IS one of this spec's outputs, not an external invariant the spec is relying on. Cross-OS reproducibility (running the recipe on macOS or Windows runners) is a v2.0+ stretch goal.
 - **Python reproducibility** in C-2 (the roadmap's open question #4). Scoped here to **bash + the source tarball + SBOM + checksums**. Python deferred to a v1.x sub-issue. Control-tower JS bundles also deferred to their own roadmap.
@@ -31,12 +32,12 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 
 | # | Decision | Why |
 |---|---|---|
-| C1-D-1 | **Generator**: `actions/attest-build-provenance` pinned by commit SHA (e.g. `@<40-char-sha>`), never by mutable tag like `@v2`. | Official GitHub-maintained action, SLSA L3 conformant, emits in-toto v1.0 statements. Pinning by SHA keeps supply-chain hygiene consistent with `release.yml`'s existing pin policy. The plan picks the concrete SHA at implementation time so this spec doesn't go stale on tag movement. |
+| C1-D-1 | **Generator**: `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0`. This is the one explicit exception to the repo's SHA-only workflow pin rule. | The SLSA generic generator is a reusable workflow builder, not a normal action. Upstream requires referencing it by release tag so `slsa-verifier` can validate the trusted builder identity embedded in provenance. The workflow-pin test allowlists only this exact ref and documents the exception. |
 | C1-D-2 | **Subject set**: every artifact attached to the GH Release that this workflow produces. That's: source tarball (`.tar.gz` — the `.zip` GitHub auto-attaches to every tag is NOT in the SLSA subject set because the rest of this spec — C2-D-2 deterministic recipe, AC-4 — only defines a reproducible-build recipe for the tarball; the auto-zip is built by GitHub at download time from the same commit and isn't run-to-run reproducible under our control), SBOM (`walter-os-<tag>.sbom.cdx.json`), the checksums file (`checksums.sha256` — name comes from the existing `release.yml`), and the cosign bundle (`checksums.sha256.cosign.bundle`). Note: as of v0.4.1, `release.yml` produces ONLY the bundle — standalone `.sig` + `.pem` files are no longer emitted because cosign v3+ forces bundle-only output ([PR #108](https://github.com/Xipher-Labs/walter-os/pull/108), merged before v0.4.1 — the corresponding doc update in `docs/security/verification.md` is the source of truth). The bundle carries the signature + Fulcio cert internally. | "Sign everything we publish AND can reproduce" — a forker shouldn't have to wonder whether the SBOM has a different provenance than the tarball. Artifact names match what `release.yml` actually emits as of v0.4.1 (verified against the current workflow). |
-| C1-D-3 | **Attestation storage**: GitHub-native (each artifact gets a `.intoto.jsonl` attached to the release + the same attestation registered with Sigstore Rekor by the action). | `actions/attest-build-provenance` does both automatically. No separate uploader needed. |
-| C1-D-4 | **Verification path**: documented in `docs/security/verification.md` with two commands — `gh attestation verify <file> --repo Xipher-Labs/walter-os` (GitHub-native, no extra tooling) and `slsa-verifier verify-artifact <file> --provenance-path <file>.intoto.jsonl --source-uri github.com/Xipher-Labs/walter-os --source-tag <tag>` (cross-platform). | Two paths covers the "operator already has gh CLI" case and the "I'm verifying from a non-GH context" case. |
-| C1-D-5 | **CI enforcement**: a new `verify-attestation` job in `release.yml` runs `gh attestation verify` against every uploaded artifact AFTER the upload step. If verification fails, the workflow fails — we don't ship a release whose own attestation we can't verify. | Catch attestation regressions at release time, not when a downstream user complains weeks later. |
-| C1-D-6 | **Backfill policy**: pre-v1.0 releases (v0.x.y) do NOT get retroactive provenance. v1.0+ ships with provenance from day one. | Backfilling would require re-running release pipelines against archived tags with potentially-drifted toolchains; the integrity gain doesn't justify the regression risk. Document the cutoff in `docs/security/verification.md`. |
+| C1-D-3 | **Attestation storage**: one release-level `walter-os-<tag>.intoto.jsonl` attached to the GitHub Release. | The SLSA generic generator consumes the base64 subject digest list and uploads a single provenance file covering all release artifacts. |
+| C1-D-4 | **Verification path**: documented in `docs/security/verification.md` with `slsa-verifier verify-artifact <file> --provenance-path walter-os-<tag>.intoto.jsonl --source-uri github.com/Xipher-Labs/walter-os --source-tag <tag>` run once per artifact. | The SLSA generic generator emits one release-level provenance file covering all release-artifact subjects. `slsa-verifier` is the ecosystem-compatible verification path for that builder. |
+| C1-D-5 | **CI enforcement**: the provenance job depends on the release-artifact and security-artifact jobs. If the generator cannot validate the subject list, produce provenance, or upload it to the release, the workflow fails. | Catch provenance regressions at release time, not when a downstream user complains weeks later. |
+| C1-D-6 | **Backfill policy**: releases cut before this workflow change do NOT get retroactive provenance. | Backfilling would require re-running release pipelines against archived tags with potentially-drifted toolchains; the integrity gain doesn't justify the regression risk. Document the cutoff in `docs/security/verification.md`. |
 
 ### C-2 — Reproducible builds
 
@@ -53,19 +54,19 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 ## Acceptance criteria
 
 ### AC-1 — SLSA Build L3 attestation in `release.yml` (C-1)
-- [ ] `release.yml` gains an `attest` step after artifact assembly that calls `actions/attest-build-provenance@<commit-sha>` (40-char SHA, never a mutable tag like `v2`) with `subject-path` covering tarball + SBOM + `checksums.sha256` + its signature/bundle.
-- [ ] The action emits one `.intoto.jsonl` per artifact and uploads to Rekor + GH attestation store automatically.
+- [ ] `release.yml` gains a SLSA provenance job that calls `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0` with a base64 subject list covering tarball + SBOM + `checksums.sha256` + its bundle.
+- [ ] The generator emits one release-level `.intoto.jsonl` covering every subject digest.
 - [ ] The release uploads ALSO include the `.intoto.jsonl` files as release assets (operator-friendly: one place to download).
 
-### AC-2 — Attestation verification job (C-1)
-- [ ] New job `verify-attestation` (depends on the existing `release` job + the existing `security` job — the job formerly referred to as `sbom-and-sign` in earlier drafts of this spec; the in-repo `release.yml` names it `security: SBOM + checksums + cosign signing`) runs after upload.
-- [ ] For every uploaded artifact, runs `gh attestation verify <file> --repo $GITHUB_REPOSITORY` and asserts exit 0.
-- [ ] Job failure marks the workflow failed AND deletes the GH Release (so a half-attested release never sits at the public URL).
-- [ ] bats coverage in `tests/release/attestation-verify.bats` (uses a release-artifact fixture).
+### AC-2 — Provenance generation enforcement (C-1)
+- [ ] New provenance job depends on the existing `release` job + the existing `security` job.
+- [ ] The job receives the exact base64 subject list emitted by the security job.
+- [ ] Generator failure marks the workflow failed.
+- [ ] Bats coverage verifies the job dependency, subject wiring, and generator ref.
 
 ### AC-3 — Verification docs (C-1)
-- [ ] `docs/security/verification.md` gains a "SLSA provenance verification" section with both `gh attestation verify` and `slsa-verifier` examples.
-- [ ] Section includes the v1.0 cutoff statement (pre-v1.0 has no retroactive provenance).
+- [ ] `docs/security/verification.md` gains a "SLSA provenance verification" section with `slsa-verifier` examples.
+- [ ] Section states that releases cut before this workflow change have no retroactive provenance.
 - [ ] Cross-link from `README.md` "Security" section to the verification doc.
 
 ### AC-4 — Reproducible source tarball + SBOM + checksums (C-2)
@@ -101,7 +102,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 | **Compromised maintainer publishes a malicious release** | SLSA provenance proves the artifact came from THIS workflow on THIS commit. A maintainer with repo-write but no workflow-edit access can't forge it. | C-1 |
 | **GH Actions runner compromise injects backdoor at build time** | Reproducible build: an independent forker rebuilds from source and compares hashes. Mismatch → public detection. | C-2 |
 | **Tampered SBOM (false-clean dependency report)** | SBOM is in the attestation subject set; signature covers it. Also, reproducibility check would catch any tampering that produced a different SBOM hash. | C-1 + C-2 |
-| **Replay attack: attacker presents an old, valid attestation for a new malicious artifact** | `gh attestation verify` checks the subject digest; presenting an attestation for file A while serving file B fails verification. | C-1 |
+| **Replay attack: attacker presents old, valid provenance for a new malicious artifact** | `slsa-verifier verify-artifact` checks the subject digest; presenting provenance for file A while serving file B fails verification. | C-1 |
 | **Sigstore Rekor tampering** | Rekor is append-only and itself audited; we trust Rekor at the level of Sigstore's threat model. Documented as such. | C-1 |
 | **Reproducibility gaps from toolchain drift (GH runner image update)** | Pinned tool versions + CI smoke check. If the runner image bumps a pinned tool, CI fails before release. | C-2 |
 | **Operator runs `reproduce.sh` against an off-tag working tree → false mismatch** | Script first does `git status` (refuses to proceed on dirty tree) AND `git rev-parse <tag>^{commit}` vs `git rev-parse HEAD` (refuses to proceed if HEAD ≠ the named tag's commit). The previous draft referenced `git verify-tag <tag>` — that's intentionally NOT required, because Walter-OS release tags are annotated but NOT GPG/SSH-signed today (the integrity floor comes from cosign attestation on the published artifacts, not from tag signatures). Re-introducing `git verify-tag` as a required check would either always fail (unsigned tags) or force an out-of-scope tag-signing migration. If/when we adopt signed tags, the verify step gets added then. | C-2 |
@@ -118,8 +119,8 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 C-1 first (faster, lower risk, unblocks the "we have SLSA Build L3" claim for v1.0 marketing). C-2 second (depends on `release.yml` already cleaned up by C-1).
 
 **C-1 PRs (≤200 LOC each, 3-round review):**
-1. AC-1 — `attest-build-provenance` step + release-asset upload
-2. AC-2 — `verify-attestation` job + bats
+1. AC-1 — SLSA generic generator job + release-asset upload
+2. AC-2 — provenance generation enforcement + bats
 3. AC-3 — verification docs + cross-links
 
 **C-2 PRs (≤200 LOC each, 3-round review):**
@@ -131,9 +132,14 @@ C-1 first (faster, lower risk, unblocks the "we have SLSA Build L3" claim for v1
 ## Open questions for the operator
 
 1. **C-2 language scope**: bash + source tarball + SBOM + checksums only (proposal — matches roadmap D-4), or also include JS bundles (`apps/control-tower` Next.js output)? Proposal: bash + source ONLY for v1.0; JS bundle reproducibility in its own roadmap.
-2. **Attestation file naming**: GitHub default `<artifact>.intoto.jsonl` (proposal — matches `gh attestation verify` defaults) or shorten to `<artifact>.attestation.jsonl`? Proposal: `.intoto.jsonl` (don't fight the ecosystem).
+2. **Provenance file naming**: release-level `walter-os-<tag>.intoto.jsonl`
+   (proposal — matches the SLSA generic generator output) or per-artifact
+   provenance names? Proposal: one release-level `.intoto.jsonl`.
 3. **`reproducibility-check` failure handling**: hard-fail the workflow + delete the release (proposal — strict, matches AC-6) or soft-fail with a warning + open a tracking issue? Proposal: hard-fail. Reproducibility is binary; "mostly reproducible" is worthless.
-4. **v1.0 cutoff vs partial backfill**: leave pre-v1.0 releases without provenance (proposal — too risky to backfill), or backfill v0.5.0+ (last few releases) with provenance built from `git archive` + a fresh attestation? Proposal: no backfill. Document the cutoff.
+4. **Workflow-change cutoff vs partial backfill**: leave releases cut before
+   this workflow change without provenance (proposal — too risky to backfill),
+   or backfill recent releases with provenance built from `git archive` + a
+   fresh attestation? Proposal: no backfill. Document the cutoff.
 
 ## Refs
 
@@ -143,7 +149,7 @@ C-1 first (faster, lower risk, unblocks the "we have SLSA Build L3" claim for v1
 - SLSA spec: <https://slsa.dev/spec/v1.2/>
 - SLSA Build Track basics: <https://slsa.dev/spec/v1.2/build-track-basics>
 - SLSA Build L3 requirements: <https://slsa.dev/spec/v1.2/build-requirements>
-- `actions/attest-build-provenance`: <https://github.com/actions/attest-build-provenance>
+- SLSA GitHub generator: <https://github.com/slsa-framework/slsa-github-generator>
 - `slsa-verifier`: <https://github.com/slsa-framework/slsa-verifier>
 - Reproducible Builds project: <https://reproducible-builds.org/>
 - `git archive` reproducibility: <https://reproducible-builds.org/docs/archives/>
