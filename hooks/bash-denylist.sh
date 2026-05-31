@@ -24,11 +24,15 @@ fi
 _audit_early_decision() {
   local decision="$1" reason="${2:-}"
   if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append Bash "" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || true
+    walter_audit_append Bash "" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
   fi
 }
 
-if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+_walter_bash_major="${WALTER_BASH_MAJOR_FOR_TESTS:-${BASH_VERSION%%.*}}"
+if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   # One-shot guard: if we already attempted a re-exec and ended up back in
   # bash < 4, stop. Without this, a candidate path that itself resolves to
   # bash 3.2 (e.g., symlink chain) would loop forever. Codex review of #81.
@@ -55,6 +59,7 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   printf '%s\n' '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
+unset _walter_bash_major
 #
 # Bypass escape (two-factor): the hook allows a matched pattern only if BOTH
 #   1. the env var WALTER_DENYLIST_BYPASS=1 is set in the hook's environment, AND
@@ -76,7 +81,10 @@ INPUT="$(cat)"
 _audit_decision() {
   local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
   if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append Bash "$input_summary" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || true
+    walter_audit_append Bash "$input_summary" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
   fi
 }
 

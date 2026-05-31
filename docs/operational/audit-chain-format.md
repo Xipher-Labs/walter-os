@@ -35,7 +35,15 @@ Each line is canonical JSON (`jq -cS`) with these unsigned B-1 foundation fields
 
 Append operations take a sidecar lock at `audit/.chain.lock`, reopen the active `chain-YYYY-MM-DD.jsonl` path inside the lock, read the last row, compute the next `prev_hash`, and append one line.
 
-This slice does not wire the writer into PreToolUse hooks yet. Until the follow-up hook-integration PR lands, rows are produced only by callers that explicitly invoke `walter_audit_append`.
+Hook-integration rows currently use these `decision_source` values:
+
+- `approval-gate`
+- `bash-denylist`
+- `network-gate`
+- `branch-flow-guard`
+- `pre-commit-tests`
+
+Audit append failures fail closed for hook decisions. If a hook cannot append its row, it emits a block decision instead of allowing an unaudited tool invocation.
 
 Verify a day with:
 

@@ -52,7 +52,10 @@ fi
 audit_approval_decision() {
   local audit_tool="${1:-unknown}" audit_input="${2:-}" audit_decision="$3" audit_reason="${4:-}"
   if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append "$audit_tool" "$audit_input" "$audit_decision" "approval-gate" "$audit_reason" >/dev/null 2>&1 || true
+    walter_audit_append "$audit_tool" "$audit_input" "$audit_decision" "approval-gate" "$audit_reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"approval-gate: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
   fi
 }
 

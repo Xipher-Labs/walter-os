@@ -139,6 +139,17 @@ SH
   jq -e '.decision_source == "approval-gate" and .decision == "block" and .decision_reason != ""' "$(_chain_path)"
 }
 
+@test "approval-gate blocks when audit append fails" {
+  mkdir -p "$(dirname "$(_chain_path)")"
+  printf '\n' > "$(_chain_path)"
+
+  run _approval_gate_bash "echo hi"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("audit-chain append failed"))'
+  [ "$(_rows)" = "1" ]
+}
+
 @test "bash-denylist allow appends exactly one audit row" {
   run _bash_denylist "echo hi"
 
@@ -158,7 +169,7 @@ SH
 }
 
 @test "bash-denylist legacy bash block appends audit row" {
-  run bash -c "BASH_VERSION=3.2; WALTER_BASH_DENYLIST_REEXEC=1; source '$REPO_ROOT/hooks/bash-denylist.sh'" \
+  run bash -c "WALTER_BASH_MAJOR_FOR_TESTS=3; WALTER_BASH_DENYLIST_REEXEC=1; source '$REPO_ROOT/hooks/bash-denylist.sh'" \
     <<< "$(_hook_event Bash "echo hi")"
 
   [ "$status" -eq 0 ]
@@ -188,7 +199,7 @@ SH
 }
 
 @test "network-gate legacy bash block appends audit row" {
-  run bash -c "BASH_VERSION=3.2; WALTER_NETWORK_GATE_REEXEC=1; source '$REPO_ROOT/hooks/network-gate.sh'" \
+  run bash -c "WALTER_BASH_MAJOR_FOR_TESTS=3; WALTER_NETWORK_GATE_REEXEC=1; source '$REPO_ROOT/hooks/network-gate.sh'" \
     <<< "$(_hook_event Bash "curl https://example.com")"
 
   [ "$status" -eq 0 ]

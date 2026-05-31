@@ -21,7 +21,10 @@ fi
 audit_precommit_decision() {
   local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
   if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append Bash "$input_summary" "$decision" "pre-commit-tests" "$reason" >/dev/null 2>&1 || true
+    walter_audit_append Bash "$input_summary" "$decision" "pre-commit-tests" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"pre-commit-tests: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
   fi
 }
 

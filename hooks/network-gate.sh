@@ -42,7 +42,10 @@ fi
 _audit_early_decision() {
   local decision="$1" reason="${2:-}"
   if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append unknown "" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || true
+    walter_audit_append unknown "" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"network-gate: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
   fi
 }
 
@@ -50,7 +53,8 @@ _audit_early_decision() {
 # `=~` and `read -a` which both work in 3.2 — but indexed-array growth +
 # `${arr[@]}` semantics differ in subtle ways. Inherit the same re-exec
 # dance bash-denylist.sh uses so this hook behaves identically.
-if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+_walter_bash_major="${WALTER_BASH_MAJOR_FOR_TESTS:-${BASH_VERSION%%.*}}"
+if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   if [[ "${WALTER_NETWORK_GATE_REEXEC:-0}" == "1" ]]; then
     _audit_early_decision block "network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."
     printf '%s\n' '{"decision":"block","reason":"network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."}'
@@ -66,6 +70,7 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   printf '%s\n' '{"decision":"block","reason":"network-gate: requires bash >= 4.0 — install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
+unset _walter_bash_major
 
 # ---------- stdin parsing ----------
 
@@ -74,7 +79,10 @@ INPUT="$(cat)"
 _audit_decision() {
   local audit_tool="${TOOL_NAME:-unknown}" decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
   if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append "$audit_tool" "$input_summary" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || true
+    walter_audit_append "$audit_tool" "$input_summary" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"network-gate: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
   fi
 }
 
