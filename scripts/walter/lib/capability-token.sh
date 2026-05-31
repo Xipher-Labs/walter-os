@@ -194,9 +194,29 @@ _walter_cap_validate_active_session() {
   fi
 }
 
+_walter_cap_validate_claims_schema() {
+  local payload_file="$1" session_id="$2"
+  jq -e --arg sid "$session_id" '
+    (.iss == "walter-os") and
+    (.sub | type == "string" and length > 0) and
+    (.session_id == $sid) and
+    (.tool | type == "string" and length > 0) and
+    (.scope | type == "object") and
+    (.scope.paths | type == "array" and all(.[]; type == "string")) and
+    (.scope.network | type == "array" and all(.[]; type == "string")) and
+    (.scope.patterns | type == "array" and all(.[]; type == "string")) and
+    (.iat | type == "string" and length > 0) and
+    (.exp | type == "string" and length > 0) and
+    (.nonce | type == "string" and test("^[A-Za-z0-9._-]+$"))
+  ' "$payload_file" >/dev/null || {
+    echo "walter-cap: invalid claims schema" >&2
+    return 1
+  }
+}
+
 walter_cap_sign_claims() {
   local state_file="$1" claims_json="$2"
-  local session_id private_key tmp_dir payload_file footer_file pae_file sig_file body_file token_body token_footer openssl_bin exp exp_epoch session_end
+  local session_id private_key tmp_dir payload_file footer_file pae_file sig_file body_file token_body token_footer openssl_bin iat iat_epoch exp exp_epoch session_end
   _walter_cap_require_runtime || return 1
   _walter_cap_validate_state "$state_file" || return 1
   _walter_cap_validate_active_session "$state_file" || return 1
@@ -225,9 +245,24 @@ walter_cap_sign_claims() {
     rm -r "$tmp_dir"
     return 1
   fi
+  if ! _walter_cap_validate_claims_schema "$payload_file" "$session_id"; then
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  iat="$(jq -r '.iat // empty' "$payload_file")"
+  if [[ -z "$iat" ]] || ! iat_epoch="$(_walter_session_epoch "$iat")" || [[ ! "$iat_epoch" =~ ^[0-9]+$ ]]; then
+    echo "walter-cap: invalid iat claim" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
   exp="$(jq -r '.exp // empty' "$payload_file")"
   if [[ -z "$exp" ]] || ! exp_epoch="$(_walter_session_epoch "$exp")" || [[ ! "$exp_epoch" =~ ^[0-9]+$ ]]; then
     echo "walter-cap: invalid exp claim" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  if (( iat_epoch >= exp_epoch )); then
+    echo "walter-cap: iat must be before exp" >&2
     rm -r "$tmp_dir"
     return 1
   fi
@@ -259,7 +294,7 @@ walter_cap_sign_claims() {
 
 walter_cap_verify_token() {
   local state_file="$1" token="$2"
-  local prefix purpose body footer extra session_id public_key tmp_dir body_file payload_file footer_file sig_file pae_file openssl_bin exp exp_epoch now_epoch session_end
+  local prefix purpose body footer extra session_id public_key tmp_dir body_file payload_file footer_file sig_file pae_file openssl_bin iat iat_epoch exp exp_epoch now_epoch session_end
   _walter_cap_require_runtime || return 1
   _walter_cap_validate_state "$state_file" || return 1
   _walter_cap_validate_active_session "$state_file" || return 1
@@ -306,6 +341,16 @@ walter_cap_verify_token() {
     rm -r "$tmp_dir"
     return 1
   fi
+  if ! _walter_cap_validate_claims_schema "$payload_file" "$session_id"; then
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  iat="$(jq -r '.iat // empty' "$payload_file")"
+  if [[ -z "$iat" ]] || ! iat_epoch="$(_walter_session_epoch "$iat")" || [[ ! "$iat_epoch" =~ ^[0-9]+$ ]]; then
+    echo "walter-cap: invalid iat claim" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
   if ! _walter_cap_pae_to_file "$payload_file" "$footer_file" "$pae_file"; then
     rm -r "$tmp_dir"
     return 1
@@ -319,6 +364,11 @@ walter_cap_verify_token() {
   exp="$(jq -r '.exp // empty' "$payload_file")"
   if [[ -z "$exp" ]] || ! exp_epoch="$(_walter_session_epoch "$exp")" || [[ ! "$exp_epoch" =~ ^[0-9]+$ ]]; then
     echo "walter-cap: invalid exp claim" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  if (( iat_epoch >= exp_epoch )); then
+    echo "walter-cap: iat must be before exp" >&2
     rm -r "$tmp_dir"
     return 1
   fi

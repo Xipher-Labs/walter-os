@@ -27,6 +27,32 @@ _state_file() {
   bash -c "source '$SESSION_LIB'; walter_session_state_file '$WALTER_SESSION_REPO'"
 }
 
+_raw_sign_claims_without_schema_gate() {
+  local state_file="$1" claims="$2"
+  bash -c '
+    set -euo pipefail
+    source "$1"
+    state_file="$2"
+    claims="$3"
+    session_id="$(jq -r ".session_id" "$state_file")"
+    private_key="$(jq -r ".capability_private_key_path" "$state_file")"
+    openssl_bin="$(_walter_session_openssl)"
+    tmp_dir="$(mktemp -d)"
+    payload_file="$tmp_dir/payload.json"
+    footer_file="$tmp_dir/footer.json"
+    pae_file="$tmp_dir/pae.bin"
+    sig_file="$tmp_dir/sig.bin"
+    body_file="$tmp_dir/body.bin"
+    printf "%s" "$claims" | jq -cS . > "$payload_file"
+    jq -ncS --arg kid "$session_id" "{alg:\"Ed25519\", kid:\$kid}" > "$footer_file"
+    _walter_cap_pae_to_file "$payload_file" "$footer_file" "$pae_file"
+    "$openssl_bin" pkeyutl -sign -inkey "$private_key" -rawin -in "$pae_file" -out "$sig_file" >/dev/null 2>&1
+    cat "$payload_file" "$sig_file" > "$body_file"
+    printf "v4.public.%s.%s" "$(_walter_cap_b64url_encode_file "$body_file")" "$(_walter_cap_b64url_encode_file "$footer_file")"
+    rm -r "$tmp_dir"
+  ' _ "$CAP_LIB" "$state_file" "$claims"
+}
+
 @test "capability helper signs and verifies claims" {
   bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   state_file="$(_state_file)"
@@ -97,6 +123,48 @@ _state_file() {
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"capability paths do not match session id"* ]]
+}
+
+@test "capability helper rejects signed claims missing required schema fields" {
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, exp:"2026-01-01T00:30:00Z"}')"
+  token="$(_raw_sign_claims_without_schema_gate "$state_file" "$claims")"
+
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$token'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid claims schema"* ]]
+}
+
+@test "capability helper rejects signed claims with malformed scope arrays" {
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Bash", scope:{paths:"*", network:[], patterns:[]}, iat:"2026-01-01T00:00:00Z", exp:"2026-01-01T00:30:00Z", nonce:"bad-scope"}')"
+  token="$(_raw_sign_claims_without_schema_gate "$state_file" "$claims")"
+
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$token'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid claims schema"* ]]
+}
+
+@test "capability helper rejects signed claims with invalid iat" {
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Bash", scope:{paths:[], network:[], patterns:[".*"]}, iat:"not-a-date", exp:"2026-01-01T00:30:00Z", nonce:"bad-iat"}')"
+  token="$(_raw_sign_claims_without_schema_gate "$state_file" "$claims")"
+
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$token'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid iat claim"* ]]
 }
 
 @test "capability helper rejects tokens after session idle expiry" {
