@@ -57,6 +57,16 @@ walter_audit_normalize_row() {
   jq -cS .
 }
 
+walter_audit_json_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '"%s"' "$value"
+}
+
 walter_audit_input_summary() {
   local input="$1" redactor=""
   if [[ -n "${WALTER_OS_HOME:-}" && -x "${WALTER_OS_HOME}/scripts/agent-secret-redactor.sh" ]]; then
@@ -177,11 +187,6 @@ walter_audit_append() {
     echo "walter-audit-chain: usage: walter_audit_append <tool> <input> <decision> <source> <reason>" >&2
     return 2
   }
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "walter-audit-chain: jq required" >&2
-    return 3
-  fi
-
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
   local audit_dir chain_path lock_path previous_line previous_hash row summary timestamp row_date
   audit_dir="$(walter_audit_dir)"
@@ -205,22 +210,26 @@ walter_audit_append() {
   fi
 
   summary="$(walter_audit_input_summary "$input")"
-  row="$(jq -ncS \
-    --arg ts "$timestamp" \
-    --arg session_id "${WALTER_SESSION_ID:-unknown}" \
-    --arg operator "${USER:-unknown}" \
-    --arg event "tool_invocation" \
-    --arg tool "$tool" \
-    --arg input_summary "$summary" \
-    --arg decision "$decision" \
-    --arg decision_source "$source" \
-    --arg decision_reason "$reason" \
-    --arg prev_hash "$previous_hash" \
-    '{ts:$ts,session_id:$session_id,operator:$operator,event:$event,tool:$tool,input_summary:$input_summary,decision:$decision,decision_source:$decision_source,decision_reason:$decision_reason,prev_hash:$prev_hash}')" || {
-      exec 9>&-
-      _walter_audit_release_lock "$lock_path"
-      return 1
-    }
+  if command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
+    row="$(jq -ncS \
+      --arg ts "$timestamp" \
+      --arg session_id "${WALTER_SESSION_ID:-unknown}" \
+      --arg operator "${USER:-unknown}" \
+      --arg event "tool_invocation" \
+      --arg tool "$tool" \
+      --arg input_summary "$summary" \
+      --arg decision "$decision" \
+      --arg decision_source "$source" \
+      --arg decision_reason "$reason" \
+      --arg prev_hash "$previous_hash" \
+      '{ts:$ts,session_id:$session_id,operator:$operator,event:$event,tool:$tool,input_summary:$input_summary,decision:$decision,decision_source:$decision_source,decision_reason:$decision_reason,prev_hash:$prev_hash}')" || {
+        exec 9>&-
+        _walter_audit_release_lock "$lock_path"
+        return 1
+      }
+  else
+    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+  fi
 
   printf '%s\n' "$row" >&9 || {
     exec 9>&-

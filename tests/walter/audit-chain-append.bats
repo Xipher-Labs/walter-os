@@ -234,6 +234,21 @@ SH
   [[ "$summary" != *"abcdefghijklmnopqrstuvwxyz1234567890"* ]]
 }
 
+@test "B-1: dependency failure rows append without jq" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin:/usr/bin:/bin' walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 0 ]
+  [ -f "$(_chain_path)" ]
+  jq -e '.decision == "block" and .decision_source == "approval-gate" and .decision_reason == "jq missing"' "$(_chain_path)"
+}
+
 @test "B-1: custom audit dir is honored" {
   custom="$TMP_HOME/custom-audit"
 
