@@ -210,7 +210,7 @@ cmd_cap_list() {
     for token_file in "$caps_dir"/cap-*.paseto; do
       [[ -f "$token_file" ]] || continue
       if claims="$(walter_cap_verify_token "$state_file" "$(cat "$token_file")" 2>/dev/null)"; then
-        jq -cS --arg file "$token_file" '. + {file:$file}' <<< "$claims"
+        jq -cS . <<< "$claims"
       fi
     done
   } | jq -s .

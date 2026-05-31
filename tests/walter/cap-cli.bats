@@ -56,6 +56,8 @@ teardown() {
   nonce="$(echo "$output" | jq -r '.[0].nonce')"
   [ "$nonce" != "null" ]
   echo "$output" | jq -e '.[0].tool == "Write"'
+  echo "$output" | jq -e '.[0] | has("file") | not'
+  [[ "$output" != *"cap-"*".paseto"* ]]
 
   run "$CLI" cap revoke "$nonce"
 

@@ -227,6 +227,7 @@ _is_capability_private_key_payload() {
   local session_artifact_re='session-[^[:space:];|&]*[.](key|json|pub)'
   local session_metadata_re='session-[^[:space:];|&]*[.](json|pub)'
   local caps_artifact_re='caps-[^[:space:];|&/]+(/[[:graph:]]*)?'
+  local cap_token_artifact_re='cap-[^[:space:];|&/]*[.]paseto'
   local relative_session_secret_re='(^|[[:space:];|&])([.]/)?session-[^/[:space:];|&]*[.](key|json)([[:space:];|&]|$)'
   local relative_caps_token_re='(^|[[:space:];|&])([.]/)?caps-[^/[:space:];|&]+/cap-[^/[:space:];|&]*[.]paseto([[:space:];|&]|$)'
 
@@ -243,6 +244,16 @@ _is_capability_private_key_payload() {
        [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
        [[ "$normalized" == *"$literal_home_state"* ]] || \
        [[ "$normalized" == *"$literal_braced_home_state"* ]]; }; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$config_state_dir"* ]] || \
+       [[ "$normalized" == *".config/walter-os/state"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; } && \
+     [[ "$normalized" =~ $cap_token_artifact_re ]]; then
     return 0
   fi
 
