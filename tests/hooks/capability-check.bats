@@ -51,6 +51,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash egress requires capability coverage for every destination" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y && curl https://uploads.github.com/upload")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash egress with all network destinations covered is allowed" {
+  _mint Bash --network api.github.com --network uploads.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y && curl https://uploads.github.com/upload")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash command with matching pattern capability is allowed" {
   _mint Bash --patterns '^gh[[:space:]]+pr[[:space:]]+review.*--approve' --duration 30m >/dev/null
 
@@ -75,6 +91,14 @@ _mint() {
   _mint Write --paths 'docs/**' --duration 30m >/dev/null
 
   output="$(_hook_json Write file_path "docs/specs/example.md")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Write absolute repo path matches relative path capability" {
+  _mint Write --paths 'docs/**' --duration 30m >/dev/null
+
+  output="$(_hook_json Write file_path "$REPO_UNDER_TEST/docs/specs/example.md")"
+
   echo "$output" | jq -e '.decision == "allow"'
 }
 

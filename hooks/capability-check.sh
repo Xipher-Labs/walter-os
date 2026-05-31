@@ -54,16 +54,31 @@ _cap_has_bypass_flag() {
   return "$hit"
 }
 
-_cap_extract_host() {
-  local command="$1" host=""
-  if [[ "$command" =~ https?://([^/[:space:]\"\'\)]+) ]]; then
-    host="${BASH_REMATCH[1]}"
-  elif [[ "$command" =~ git@([^:[:space:]]+): ]]; then
-    host="${BASH_REMATCH[1]}"
-  fi
-  host="${host#*@}"
-  host="${host%%:*}"
-  printf '%s' "$host"
+_cap_extract_hosts() {
+  local command="$1" token host
+  printf '%s\n' "$command" | tr '[:space:]' '\n' | while IFS= read -r token; do
+    token="${token#\"}"
+    token="${token%\"}"
+    token="${token#\'}"
+    token="${token%\'}"
+    token="${token%)}"
+
+    host=""
+    case "$token" in
+      http://*|https://*)
+        host="${token#*://}"
+        host="${host%%/*}"
+        ;;
+      git@*:*)
+        host="${token#git@}"
+        host="${host%%:*}"
+        ;;
+    esac
+
+    host="${host#*@}"
+    host="${host%%:*}"
+    [[ -n "$host" ]] && printf '%s\n' "$host"
+  done | awk 'NF && !seen[$0]++'
 }
 
 _cap_is_network_command() {
@@ -100,6 +115,20 @@ _cap_glob_matches() {
   [[ "$value" == $pattern ]]
 }
 
+_cap_glob_matches_path() {
+  local target="$1" repo="$2" pattern="$3" rel_target
+  _cap_glob_matches "$target" "$pattern" && return 0
+  if [[ -n "$repo" ]]; then
+    case "$target" in
+      "$repo"/*)
+        rel_target="${target#"$repo"/}"
+        _cap_glob_matches "$rel_target" "$pattern" && return 0
+        ;;
+    esac
+  fi
+  return 1
+}
+
 _cap_host_matches() {
   local host="$1" pattern="$2"
   [[ -n "$host" && -n "$pattern" ]] || return 1
@@ -110,8 +139,29 @@ _cap_host_matches() {
   esac
 }
 
+_cap_claim_covers_host() {
+  local claims="$1" host="$2" count idx value
+  count="$(jq '.scope.network // [] | length' <<< "$claims")"
+  idx=0
+  while [[ "$idx" -lt "$count" ]]; do
+    value="$(jq -r --argjson idx "$idx" '.scope.network[$idx]' <<< "$claims")"
+    _cap_host_matches "$host" "$value" && return 0
+    idx=$((idx + 1))
+  done
+  return 1
+}
+
+_cap_claim_covers_hosts() {
+  local claims="$1" hosts="$2" host
+  [[ -n "$hosts" ]] || return 1
+  while IFS= read -r host; do
+    [[ -z "$host" ]] && continue
+    _cap_claim_covers_host "$claims" "$host" || return 1
+  done <<< "$hosts"
+}
+
 _cap_claim_matches() {
-  local claims="$1" tool="$2" target="$3" host="$4"
+  local claims="$1" tool="$2" target="$3" hosts="$4" repo="$5"
   local cap_tool count idx value
   cap_tool="$(jq -r '.tool // empty' <<< "$claims")"
   [[ "$cap_tool" == "$tool" ]] || return 1
@@ -122,24 +172,21 @@ _cap_claim_matches() {
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
         value="$(jq -r --argjson idx "$idx" '.scope.paths[$idx]' <<< "$claims")"
-        _cap_glob_matches "$target" "$value" && return 0
+        _cap_glob_matches_path "$target" "$repo" "$value" && return 0
         idx=$((idx + 1))
       done
       ;;
     Bash)
+      if [[ -n "$hosts" ]]; then
+        _cap_claim_covers_hosts "$claims" "$hosts" && return 0
+        return 1
+      fi
+
       count="$(jq '.scope.patterns // [] | length' <<< "$claims")"
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
         value="$(jq -r --argjson idx "$idx" '.scope.patterns[$idx]' <<< "$claims")"
         [[ -n "$value" && "$target" =~ $value ]] && return 0
-        idx=$((idx + 1))
-      done
-
-      count="$(jq '.scope.network // [] | length' <<< "$claims")"
-      idx=0
-      while [[ "$idx" -lt "$count" ]]; do
-        value="$(jq -r --argjson idx "$idx" '.scope.network[$idx]' <<< "$claims")"
-        _cap_host_matches "$host" "$value" && return 0
         idx=$((idx + 1))
       done
       ;;
@@ -148,7 +195,7 @@ _cap_claim_matches() {
 }
 
 _cap_find_match() {
-  local repo="$1" tool="$2" target="$3" host="$4"
+  local repo="$1" tool="$2" target="$3" hosts="$4"
   local state_file caps_dir token_file claims
   state_file="$(walter_session_state_file "$repo")"
   [[ -f "$state_file" ]] || return 1
@@ -159,7 +206,7 @@ _cap_find_match() {
   for token_file in "$caps_dir"/cap-*.paseto; do
     [[ -f "$token_file" ]] || continue
     if claims="$(walter_cap_verify_token "$state_file" "$(cat "$token_file")" 2>/dev/null)" && \
-       _cap_claim_matches "$claims" "$tool" "$target" "$host"; then
+       _cap_claim_matches "$claims" "$tool" "$target" "$hosts" "$repo"; then
       return 0
     fi
   done
@@ -176,7 +223,7 @@ _cap_target_from_json() {
 }
 
 _cap_main_json() {
-  local input="$1" tool target repo host
+  local input="$1" tool target repo hosts
   if ! command -v jq >/dev/null 2>&1; then
     printf '%s\n' '{"decision":"block","reason":"capability-check: jq missing — failing closed"}'
     exit 0
@@ -184,7 +231,7 @@ _cap_main_json() {
   tool="$(jq -r '.tool_name // ""' <<< "$input")"
   target="$(_cap_target_from_json "$tool" "$input")"
   repo="${WALTER_SESSION_REPO:-$PWD}"
-  host="$(_cap_extract_host "$target")"
+  hosts="$(_cap_extract_hosts "$target")"
 
   _cap_is_high_tier "$tool" "$target" || _cap_emit_allow
 
@@ -192,7 +239,7 @@ _cap_main_json() {
     _cap_emit_allow_warn "capability-check: WALTER_CAP_BYPASS=1 + --allow-no-cap bypassed capability enforcement"
   fi
 
-  if _cap_find_match "$repo" "$tool" "$target" "$host"; then
+  if _cap_find_match "$repo" "$tool" "$target" "$hosts"; then
     _cap_emit_allow
   fi
 
