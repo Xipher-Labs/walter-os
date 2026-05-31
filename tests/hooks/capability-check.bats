@@ -68,6 +68,13 @@ _mint() {
   echo "$output" | jq -er '.reason' | grep -q 'no valid token'
 }
 
+@test "Bash access to capability bearer tokens is high-tier" {
+  output="$(_hook_json Bash command 'cat ~/.config/walter-os/state/caps-abc/cap-token.paseto')"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'no valid token'
+}
+
 @test "high-tier enforcement without python3 fails closed with actionable reason" {
   mkdir -p "$BATS_TEST_TMPDIR/no-python-bin"
   ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/no-python-bin/dirname"
