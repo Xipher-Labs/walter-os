@@ -218,14 +218,29 @@ _cap_extract_gh_host() {
       candidate="${tokens[$j]}"
       case "$candidate" in
         ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') break ;;
-        --hostname=*) host="${candidate#--hostname=}" ;;
-        --hostname|-h)
+        --hostname=*|--host=*) host="${candidate#*=}" ;;
+        --hostname|--host|-h)
           host="${tokens[$((j + 1))]:-$host}"
           j=$((j + 1))
           ;;
+        --repo|-R)
+          candidate="${tokens[$((j + 1))]:-}"
+          if [[ "$candidate" == */*/* ]]; then
+            candidate="${candidate%%/*}"
+            [[ "$candidate" == *.* ]] && host="$candidate"
+          fi
+          j=$((j + 1))
+          ;;
+        --repo=*|-R*)
+          candidate="${candidate#*=}"
+          candidate="${candidate#-R}"
+          if [[ "$candidate" == */*/* ]]; then
+            candidate="${candidate%%/*}"
+            [[ "$candidate" == *.* ]] && host="$candidate"
+          fi
+          ;;
         --*) ;;
         -*) ;;
-        *) break ;;
       esac
       j=$((j + 1))
     done

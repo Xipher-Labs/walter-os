@@ -240,6 +240,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "gh hostname flag after subcommand requires matching capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh api --hostname ghe.example repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "gh repo host requires matching capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh -R ghe.example/Xipher-Labs/walter-os pr view 244")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "compound gh commands require every hostname capability" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
