@@ -534,6 +534,23 @@ analyze() {
   esac
 }
 
+is_capability_terminal_block() {
+  local tool="$1"
+  local payload="$2"
+
+  case "$tool" in
+    Bash)
+      _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"
+      ;;
+    Read|Grep|Glob|LS|Edit|Write|MultiEdit|NotebookEdit)
+      _is_capability_private_key_payload "$payload"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # ---------- consensus eligibility ----------
 # Categories that are eligible for consensus auto-approval when consensus mode is ON.
 # These are low-risk categories where the Council can vote without operator.
@@ -633,7 +650,8 @@ if [[ $# -gt 0 ]]; then
         apply_trust_tier "$cli_tool" "$cli_command"
       fi
 
-      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+         ! is_capability_terminal_block "$cli_tool" "$cli_command"; then
         # Standing-approval check (CLI-mode hint: WALTER_AGENT_NAME env)
         # Guard: skip entirely when PANIC_LOCKED — panic lock is terminal, no override allowed.
         agent="${WALTER_AGENT_NAME:-unknown}"
@@ -726,7 +744,7 @@ case "$tool" in
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
     ;;
   Grep)
-    payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.glob, .tool_input.pattern] | map(select(. != null)) | join(" ")')
+    payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.glob] | map(select(. != null)) | join(" ")')
     ;;
   Glob)
     payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.pattern] | map(select(. != null)) | join(" ")')
@@ -757,7 +775,8 @@ if [[ "$PANIC_LOCKED" -eq 0 ]]; then
   apply_trust_tier "$tool" "$payload"
 fi
 
-if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+   ! is_capability_terminal_block "$tool" "$payload"; then
   # Guard: skip when PANIC_LOCKED — panic lock is terminal, no override allowed.
   agent="${WALTER_AGENT_NAME:-unknown}"
   if matches_standing_approval "$agent" "$tool" "$payload"; then

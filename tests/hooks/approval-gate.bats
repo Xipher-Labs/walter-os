@@ -398,6 +398,17 @@ teardown() {
   [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
 }
 
+@test "Hook: Grep pattern mentioning capability key metadata is allowed on repo paths" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"capability_private_key_path","path":"hooks"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: Grep target path blocks capability state discovery" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"session","path":"~/.config/walter-os/state"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
 @test "Hook: Write tool blocks capability state mutation" {
   result=$(echo '{"tool_name":"Write","tool_input":{"file_path":"~/.config/walter-os/state/session-abc.json"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
@@ -553,6 +564,25 @@ EOF
   # the lint-fixes standing approval fires because target ends in .ts — must allow.
   PATH="$WALTER_CONFIG/mock-bin:$PATH" run "$HOOK" check "auth/index.ts" --tool Edit
   [[ "$status" -eq 0 ]]
+}
+
+@test "Capability terminal: Plane approval cannot allow cap mint" {
+  mkdir -p "$WALTER_CONFIG/mock-bin"
+  cat > "$WALTER_CONFIG/mock-bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '{"label_names":["approved-by-operator"]}\n'
+EOF
+  chmod +x "$WALTER_CONFIG/mock-bin/curl"
+
+  export WALTER_AGENT_PLANE_ISSUE="TEST-999"
+  export PLANE_API_TOKEN="test-token"
+  export PLANE_API_URL="https://plane.test"
+  export PLANE_WORKSPACE="workspace"
+  export PLANE_PROJECT="project"
+
+  PATH="$WALTER_CONFIG/mock-bin:$PATH" run "$HOOK" check "walter-os cap mint Bash --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|mints[[:space:]]capability ]]
 }
 
 # ---------- P0-03: fail-closed on missing jq ----------
