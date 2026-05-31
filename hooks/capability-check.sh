@@ -19,6 +19,7 @@ CAP_HIGH_TIER_PATH_PATTERNS=(
   '.claude/settings.json'
   '.github/workflows/*'
   'install.sh'
+  'bin/walter-os'
   'AGENTS.md'
   'CLAUDE.md'
   'mcp/servers.json'

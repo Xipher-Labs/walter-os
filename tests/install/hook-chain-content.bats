@@ -88,9 +88,19 @@ setup() {
   grep -q 'matcher: "Write|Edit|MultiEdit|NotebookEdit"' "$REPO_ROOT/install.sh"
 }
 
+@test "AC-3 (#122 capability): read hook matcher includes read tools" {
+  grep -q 'matcher: "Read|Grep|Glob|LS"' "$REPO_ROOT/install.sh"
+}
+
 @test "AC-3 (#122 capability): edit hook chain includes capability-check" {
   sed -n '/matcher: "Write|Edit|MultiEdit|NotebookEdit"/,/wiki-validator-hook[.]sh/p' "$REPO_ROOT/install.sh" \
     | grep -q 'hooks/capability-check.sh'
+}
+
+@test "AC-3 (#122 capability): read hook chain includes approval gate" {
+  read_chain="$(sed -n '/matcher: "Read|Grep|Glob|LS"/,/]/p' "$REPO_ROOT/install.sh")"
+
+  grep -q 'hooks/approval-gate.sh' <<< "$read_chain"
 }
 
 @test "AC-5 (#122 A-2): network-gate.sh appears BEFORE branch-flow-guard.sh" {

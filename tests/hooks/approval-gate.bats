@@ -491,6 +491,11 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: Edit on walter-os dispatcher is blocked" {
+  run "$HOOK" check "bin/walter-os" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
 @test "CLI: Edit on .env file is blocked" {
   run "$HOOK" check ".env.local" --tool Edit
   [[ "$status" -eq 7 ]]

@@ -958,6 +958,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "Write walter-os dispatcher without capability is blocked" {
+  output="$(_hook_json Write file_path "bin/walter-os")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Write dot-relative protected path without capability is blocked" {
   output="$(_hook_json Write file_path "./install.sh")"
 

@@ -1094,6 +1094,12 @@ merge_claude_hooks() {
         ]
       },
       {
+        matcher: "Read|Grep|Glob|LS",
+        hooks: [
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true }
+        ]
+      },
+      {
         matcher: "Write|Edit|MultiEdit|NotebookEdit",
         hooks: [
           { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
