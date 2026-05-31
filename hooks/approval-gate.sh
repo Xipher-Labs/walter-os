@@ -171,11 +171,14 @@ _tier_rank() {
 
 _is_capability_token_mint_payload() {
   local payload="$1"
+  local normalized="${payload//\"/}"
   local walter_cli='(^|[[:space:];|&])([^[:space:];|&]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
   local cap_script='(^|[[:space:];|&])([^[:space:];|&]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
   local cap_function='(^|[[:space:];|&])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 
-  [[ "$payload" =~ $walter_cli ]] || [[ "$payload" =~ $cap_script ]] || [[ "$payload" =~ $cap_function ]]
+  normalized="${normalized//\'/}"
+
+  [[ "$normalized" =~ $walter_cli ]] || [[ "$normalized" =~ $cap_script ]] || [[ "$normalized" =~ $cap_function ]]
 }
 
 _is_capability_private_key_payload() {
@@ -462,6 +465,8 @@ analyze() {
     Bash)
       if matches_any_regex "$payload" "${BLOCK_BASH_PATTERNS[@]}"; then
         block "Bash command matches blocked pattern: ${payload:0:120}"
+      elif _is_capability_token_mint_payload "$payload"; then
+        block "Bash command mints capability token: ${payload:0:120}"
       elif _is_capability_private_key_payload "$payload"; then
         block "Bash command accesses capability private key material: ${payload:0:120}"
       fi

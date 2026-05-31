@@ -112,6 +112,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked ]]
 }
 
+@test "CLI: quoted walter-os cap mint is blocked for operator approval" {
+  run "$HOOK" check '"walter-os" cap mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: quoted cap.sh mint entrypoint is blocked for operator approval" {
+  run "$HOOK" check './scripts/walter/subcommands/"cap.sh" mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: direct capability signing helper is blocked for operator approval" {
   run "$HOOK" check "source scripts/walter/lib/capability-token.sh; walter_cap_sign_claims state.json '{}'"
   [[ "$status" -eq 7 ]]
