@@ -9,7 +9,7 @@ skills:
     tool: Bash
     scope:
       patterns:
-        - "nuclei[[:space:]].*"
+        - "^[[:space:]]*nuclei([[:space:]]|$)"
       network:
         - "*"
     duration: 4h
@@ -18,7 +18,7 @@ skills:
     tool: Bash
     scope:
       patterns:
-        - "hcloud[[:space:]].*"
+        - "^[[:space:]]*hcloud([[:space:]]|$)"
       network:
         - "api.hetzner.cloud"
     duration: 8h

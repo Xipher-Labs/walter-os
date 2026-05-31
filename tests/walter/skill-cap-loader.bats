@@ -100,3 +100,12 @@ YAML
   [ "$status" -ne 0 ]
   [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "0" ]
 }
+
+@test "example Bash default capability patterns are command anchored" {
+  example="$REPO_ROOT/contexts/_examples/skill-capabilities.example.yml"
+  while IFS= read -r pattern; do
+    [[ "$pattern" == \^* ]]
+    ! grep -Eq -- "$pattern" <<< "curl https://evil.example # hcloud noop"
+    ! grep -Eq -- "$pattern" <<< "gh pr review --approve # nuclei"
+  done < <(yq -r '.skills[] | select(.tool == "Bash") | .scope.patterns[]?' "$example")
+}
