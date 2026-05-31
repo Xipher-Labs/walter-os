@@ -122,7 +122,6 @@ walter_audit_append() {
   mkdir -p "$audit_dir" || return 1
 
   _walter_audit_acquire_lock "$lock_path" || return 1
-  trap '_walter_audit_release_lock "$lock_path"' RETURN
 
   previous_hash="null"
   if [[ -s "$chain_path" ]]; then
@@ -144,17 +143,14 @@ walter_audit_append() {
     --arg prev_hash "$previous_hash" \
     '{ts:$ts,session_id:$session_id,operator:$operator,event:$event,tool:$tool,input_summary:$input_summary,decision:$decision,decision_source:$decision_source,decision_reason:$decision_reason,prev_hash:$prev_hash}')" || {
       _walter_audit_release_lock "$lock_path"
-      trap - RETURN
       return 1
     }
 
   printf '%s\n' "$row" >> "$chain_path" || {
     _walter_audit_release_lock "$lock_path"
-    trap - RETURN
     return 1
   }
   _walter_audit_release_lock "$lock_path"
-  trap - RETURN
   printf '%s\n' "$chain_path"
 }
 

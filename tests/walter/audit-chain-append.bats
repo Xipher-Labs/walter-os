@@ -155,3 +155,20 @@ _verify_chain() {
   [ "$output" = "$custom/chain-2026-05-31.jsonl" ]
   [ -f "$custom/chain-2026-05-31.jsonl" ]
 }
+
+@test "B-1: append preserves caller RETURN traps" {
+  marker="$TMP_HOME/caller-return-trap-ran"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    caller_with_trap() {
+      trap \"printf ran > '$marker'\" RETURN
+      walter_audit_append Bash ls allow approval-gate ok >/dev/null
+    }
+    caller_with_trap
+  "
+
+  [ "$status" -eq 0 ]
+  [ -f "$marker" ]
+  [ "$(cat "$marker")" = "ran" ]
+}
