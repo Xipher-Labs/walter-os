@@ -42,12 +42,13 @@ teardown() {
   cat > "$TMP_CFG/env" <<'ENV'
 WALTER_SESSION_MAX_HOURS=8
 WALTER_SESSION_MAX_IDLE_MIN=60
+WALTER_SESSION_LOCK_WAIT_SEC=45
 ENV
 
-  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; echo \"\${WALTER_SESSION_MAX_HOURS:-UNSET}|\${WALTER_SESSION_MAX_IDLE_MIN:-UNSET}\""
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; echo \"\${WALTER_SESSION_MAX_HOURS:-UNSET}|\${WALTER_SESSION_MAX_IDLE_MIN:-UNSET}|\${WALTER_SESSION_LOCK_WAIT_SEC:-UNSET}\""
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"8|60"* ]]
+  [[ "$output" == *"8|60|45"* ]]
 }
 
 @test "A-2: OpenSSL executable override is not loaded from data env" {

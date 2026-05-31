@@ -103,6 +103,12 @@ _walter_session_positive_int_or_default() {
   fi
 }
 
+_walter_session_lock_wait_attempt_limit() {
+  local wait_sec
+  wait_sec="$(_walter_session_positive_int_or_default "${WALTER_SESSION_LOCK_WAIT_SEC:-30}" 30)"
+  printf '%s' $((wait_sec * 10))
+}
+
 _walter_session_effective_max_hours() {
   local configured
   configured="$(_walter_session_positive_int_or_default "${WALTER_SESSION_MAX_HOURS:-8}" 8)"
@@ -349,8 +355,9 @@ walter_session_touch() {
   max_idle="$(_walter_session_effective_idle_min)"
 
   if [[ ! -f "$file" ]]; then
-    local lock_dir lock_attempts=0
+    local lock_dir lock_attempts=0 lock_attempt_limit
     lock_dir="${file}.lock"
+    lock_attempt_limit="$(_walter_session_lock_wait_attempt_limit)"
     mkdir -p "$(dirname "$file")" || {
       _walter_session_result "error" "state-write" "$file"
       return 12
@@ -369,10 +376,12 @@ walter_session_touch() {
       fi
       _walter_session_release_lock "$lock_dir"
     else
-      while [[ ! -f "$file" && "$lock_attempts" -lt 50 ]]; do
-        sleep 0.1
-        lock_attempts=$((lock_attempts + 1))
-      done
+      if [[ ! -f "$file" ]] && ! _walter_session_reclaim_stale_lock "$lock_dir"; then
+        while [[ ! -f "$file" && "$lock_attempts" -lt "$lock_attempt_limit" ]]; do
+          sleep 0.1
+          lock_attempts=$((lock_attempts + 1))
+        done
+      fi
       if [[ ! -f "$file" ]] && _walter_session_reclaim_stale_lock "$lock_dir"; then
         if mkdir "$lock_dir" 2>/dev/null; then
           _walter_session_mark_lock_or_fail "$lock_dir" "$file" || return 12

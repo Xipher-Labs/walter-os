@@ -107,6 +107,30 @@ _mode() {
   [ -d "$lock_dir" ]
 }
 
+@test "session lock wait timeout is configurable in seconds" {
+  run bash -c "source '$LIB'; WALTER_SESSION_LOCK_WAIT_SEC=2; _walter_session_lock_wait_attempt_limit"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "20" ]
+}
+
+@test "session start respects live lock wait timeout before failing" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_SESSION_LOCK_WAIT_SEC=1
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  lock_dir="${state_file}.lock"
+  mkdir -p "$lock_dir"
+  printf '%s\n' "$$" > "$lock_dir/pid"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+  [ -d "$lock_dir" ]
+  [ ! -f "$state_file" ]
+}
+
 @test "session start removes orphan material from stale startup lock" {
   command -v openssl >/dev/null 2>&1 || skip "openssl required"
   export WALTER_SESSION_NOW_EPOCH=1767225600

@@ -48,6 +48,7 @@ WALTER_ENV_ALLOWLIST=(
   WALTER_TRUST_TIERS
   WALTER_SESSION_MAX_HOURS
   WALTER_SESSION_MAX_IDLE_MIN
+  WALTER_SESSION_LOCK_WAIT_SEC
 )
 
 # Returns 0 if $1 is in the allowlist (built-in + operator override file).
