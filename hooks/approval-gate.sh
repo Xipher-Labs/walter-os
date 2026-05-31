@@ -474,12 +474,14 @@ analyze() {
       fi
       ;;
     Edit|Write|MultiEdit|NotebookEdit)
-      if matches_any_glob "$payload" "${BLOCK_PATH_PATTERNS[@]}"; then
+      if _is_capability_private_key_payload "$payload"; then
+        block "${tool} modifies capability private key material: ${payload:0:120}"
+      elif matches_any_glob "$payload" "${BLOCK_PATH_PATTERNS[@]}"; then
         block "Edit/Write to protected path: $payload"
       fi
       ;;
     *)
-      # Other tools (Read, Grep, Glob, etc.) — fast-path allow.
+      # Other tools — fast-path allow.
       :
       ;;
   esac

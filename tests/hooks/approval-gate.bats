@@ -147,6 +147,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: Write tool on session state JSON is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/session-abc.json" --tool Write
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
@@ -252,6 +258,12 @@ teardown() {
 
 @test "Hook: Glob tool blocks capability state discovery" {
   result=$(echo '{"tool_name":"Glob","tool_input":{"pattern":"~/.config/walter-os/state/session-*.json"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Write tool blocks capability state mutation" {
+  result=$(echo '{"tool_name":"Write","tool_input":{"file_path":"~/.config/walter-os/state/session-abc.json"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
   [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
 }
