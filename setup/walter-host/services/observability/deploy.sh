@@ -31,20 +31,24 @@ fi
 sudo install -d -m 755 "$DATA_DIR" \
   "$DATA_DIR/prometheus" \
   "$DATA_DIR/loki" \
-  "$DATA_DIR/grafana"
+  "$DATA_DIR/grafana" \
+  "$DATA_DIR/promtail"
 # Loki container runs as 10001:10001
 sudo chown -R 10001:10001 "$DATA_DIR/loki"
 # Grafana container runs as 472:472
 sudo chown -R 472:472 "$DATA_DIR/grafana"
 # Prometheus container runs as 65534:65534 (nobody)
 sudo chown -R 65534:65534 "$DATA_DIR/prometheus"
+# Promtail container runs as root by default; keep positions file off the
+# writable container layer while restricting host-side access.
+sudo chmod 700 "$DATA_DIR/promtail"
 
 # 3. Bring up
 sudo docker compose --env-file "$ENV_FILE" up -d
 
 # 4. Wait for Grafana healthy
 echo "→ waiting for Grafana healthy..."
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   status=$(sudo docker inspect --format '{{.State.Health.Status}}' grafana 2>/dev/null || echo unknown)
   [[ "$status" == "healthy" ]] && break
   sleep 5

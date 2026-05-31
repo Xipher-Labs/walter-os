@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016
 # Static-analysis assertions for Walter audit-chain telemetry in Loki/Grafana.
 
 setup() {
@@ -8,7 +9,9 @@ setup() {
   AUDIT_COMPOSE="$OBS_DIR/compose.audit.yml"
   PROMTAIL="$OBS_DIR/promtail/promtail.yml"
   AUDIT_PROMTAIL="$OBS_DIR/promtail/promtail.audit.yml"
+  DEPLOY_SH="$OBS_DIR/deploy.sh"
   DASHBOARD="$OBS_DIR/grafana/provisioning/dashboards/walter-audit.json"
+  DATASOURCES="$OBS_DIR/grafana/provisioning/datasources/datasources.yml"
   ENV_TEMPLATE="$OBS_DIR/.env.template"
   OBS_DOC="$REPO_ROOT/docs/operational/observability.md"
 }
@@ -20,6 +23,10 @@ setup() {
   [ "$status" -ne 0 ]
   run grep -q -- "-config.expand-env=true" "$COMPOSE"
   [ "$status" -ne 0 ]
+  grep -q "/mnt/walter-vm-data/observability/promtail:/promtail:rw" "$COMPOSE"
+  grep -q "filename: /promtail/promtail-positions.yaml" "$PROMTAIL"
+  grep -q '"$DATA_DIR/promtail"' "$DEPLOY_SH"
+  grep -q 'chmod 700 "$DATA_DIR/promtail"' "$DEPLOY_SH"
 }
 
 @test "audit override mounts the Walter audit directory read-only" {
@@ -50,13 +57,25 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
-@test "audit promtail config keeps shared jobs in parity with the base config" {
+@test "audit promtail config keeps shared jobs in parity except host override" {
   command -v ruby >/dev/null 2>&1 || skip "ruby required"
 
   ruby -ryaml -e '
     base = YAML.load_file(ARGV[0]).fetch("scrape_configs")
     audit = YAML.load_file(ARGV[1]).fetch("scrape_configs")
     audit_shared = audit.reject { |job| job.fetch("job_name") == "walter-audit-chain" }
+    normalize = lambda do |jobs|
+      Marshal.load(Marshal.dump(jobs)).each do |job|
+        (job["static_configs"] || []).each do |cfg|
+          labels = cfg["labels"] || {}
+          labels["host"] = "walter-os" if labels["host"] == "${WALTER_AUDIT_HOST:-walter-os}"
+        end
+      end
+    end
+    audit_hosts = audit_shared.flat_map { |job| (job["static_configs"] || []).map { |cfg| (cfg["labels"] || {})["host"] } }.compact
+    abort "audit override must apply WALTER_AUDIT_HOST to static host labels" unless audit_hosts.all? { |host| host == "${WALTER_AUDIT_HOST:-walter-os}" }
+    base = normalize.call(base)
+    audit_shared = normalize.call(audit_shared)
     abort "shared promtail jobs drift from base config" unless audit_shared == base
   ' "$PROMTAIL" "$AUDIT_PROMTAIL"
 }
@@ -76,6 +95,36 @@ import sys
 dashboard = json.load(open(sys.argv[1], encoding="utf-8"))
 assert dashboard["uid"] == "walter-audit"
 assert len(dashboard.get("panels", [])) >= 6
+PY
+}
+
+@test "Grafana audit dashboard uses the provisioned Loki datasource UID" {
+  command -v ruby >/dev/null 2>&1 || skip "ruby required"
+  command -v python3 >/dev/null 2>&1 || skip "python3 required"
+
+  loki_uid="$(ruby -ryaml -e '
+    datasources = YAML.load_file(ARGV[0]).fetch("datasources")
+    loki = datasources.find { |entry| entry["type"] == "loki" }
+    abort "missing loki datasource" unless loki
+    puts loki.fetch("uid")
+  ' "$DATASOURCES")"
+
+  python3 - "$DASHBOARD" "$loki_uid" <<'PY'
+import json
+import sys
+
+dashboard = json.load(open(sys.argv[1], encoding="utf-8"))
+loki_uid = sys.argv[2]
+assert loki_uid == "loki"
+for panel in dashboard.get("panels", []):
+    datasource = panel.get("datasource") or {}
+    if datasource:
+        assert datasource.get("uid") == loki_uid
+    for target in panel.get("targets", []):
+        target_ds = target.get("datasource") or {}
+        if target_ds:
+            assert target_ds.get("uid") == loki_uid
+assert f"%22uid%22%3A%22{loki_uid}%22" in dashboard.get("links", [{}])[0].get("url", "")
 PY
 }
 
@@ -122,9 +171,10 @@ panel = next(
 expr = panel["targets"][0]["expr"]
 assert '{app="walter-os", kind="audit-chain"}' in expr
 assert '| json' not in expr
-assert '|= "\\"session_id\\":"' in expr
-assert '| pattern ' in expr
-assert '<session_id>' in expr
+assert '|= "\\"session_id\\""' in expr
+assert '| regexp ' in expr
+assert '(?P<session_id>' in expr
+assert '\\s*' in expr
 assert 'session_id != ""' in expr
 PY
 }

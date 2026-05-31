@@ -4,7 +4,7 @@ server:
   log_level: warn
 
 positions:
-  filename: /tmp/promtail-positions.yaml
+  filename: /promtail/promtail-positions.yaml
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
@@ -30,7 +30,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: syslog
-          host: walter-os
+          host: ${WALTER_AUDIT_HOST:-walter-os}
           __path__: /var/log/syslog
 
   - job_name: walter-watchdog
@@ -38,7 +38,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: walter-watchdog
-          host: walter-os
+          host: ${WALTER_AUDIT_HOST:-walter-os}
           __path__: /var/log/walter-watchdog.log
 
   # This file is loaded with -config.expand-env=true. Escape any literal "$"
@@ -65,5 +65,5 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: restic
-          host: walter-os
+          host: ${WALTER_AUDIT_HOST:-walter-os}
           __path__: /var/log/walter-vm-restic/*.log

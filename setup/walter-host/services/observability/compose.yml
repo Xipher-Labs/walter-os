@@ -60,6 +60,7 @@ services:
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /mnt/walter-vm-data/observability/promtail:/promtail:rw
     networks: [obs_net]
     depends_on:
       loki:

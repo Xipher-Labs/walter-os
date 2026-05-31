@@ -4,7 +4,7 @@ server:
   log_level: warn
 
 positions:
-  filename: /tmp/promtail-positions.yaml
+  filename: /promtail/promtail-positions.yaml
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
