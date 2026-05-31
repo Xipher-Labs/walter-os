@@ -294,6 +294,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "env-wrapped GH_HOST requires matching network capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "env GH_HOST=ghe.example gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "env-wrapped GH_HOST with matching network capability is allowed" {
+  _mint Bash --network ghe.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "env GH_HOST=ghe.example gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "gh hostname flag after subcommand requires matching capability" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
