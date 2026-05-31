@@ -32,8 +32,8 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 |---|---|---|
 | D-1 | **Wrap per-OS primitives**: Linux → `nsjail`, macOS → `sandbox-exec`, WSL → `nsjail`. Operator can override to `firejail` on Linux via `WALTER_SANDBOX_PROVIDER=firejail`. | Per parent D-1. No invented sandbox; we use mature tools. |
 | D-2 | **Single uniform shim**: `scripts/walter/lib/sandbox.sh` exposes `walter_sandbox_run <profile> <cmd...>` (positional args; the `<cmd...>` collects the executable plus its args — identical to the AC-1 signature). Internally resolves the per-OS invocation. | Skills + hooks don't care which sandbox is active; they call the shim. |
-| D-3 | **Two profiles for v0.5.x**: `walter-hook-default` (for PreToolUse hooks — read-only filesystem except private sandbox scratch + no net) and `walter-skill-default` (for skill executions — read-write repo + read-only overlay + network per A-1 allowlist). | Most hooks don't need host writes or net. Skills are the place real work happens. |
-| D-4 | **Default policy: allow most, deny dangerous**. From parent D-1 open question — `walter-skill-default` denies: write outside cwd repo + parent (limit 1 level up); access to `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 / capability-tokens — NOT the whole `state/` directory, which also holds decision journals + knowledge cards that skills legitimately read), `~/.gnupg/`, `*.pem`, `*.key`; signal to PIDs outside the sandboxed tree. Allows everything else by default. | Reflects parent D-1 second option. Lower footgun for first-time adopters. Operator hardens per project via overlay profile. Scoping the state deny to `session-*.key` only avoids breaking the general `state/` use cases. |
+| D-3 | **Two profiles for v0.5.x**: `walter-hook-default` (for PreToolUse hooks — read-only filesystem except private sandbox scratch + no net) and `walter-skill-default` (for skill executions — read-write repo + read-only overlay + no inherited host network on Linux `nsjail`). | Most hooks don't need host writes or net. Skills are the place real work happens; Linux skills must not bypass A-1 by opening sockets inside an already-approved outer invocation. |
+| D-4 | **Default policy: allow most, deny dangerous**. From parent D-1 open question — `walter-skill-default` denies: write outside the workspace scope (Git worktree root when available, otherwise cwd); access to `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 / capability-tokens — NOT the whole `state/` directory, which also holds decision journals + knowledge cards that skills legitimately read), `~/.gnupg/`, and operator-controlled `*.pem` / `*.key` files under the workspace scope, `WALTER_CONFIG`, and `HOME`; signal to PIDs outside the sandboxed tree. Allows read-only system runtime dependencies by default. | Reflects parent D-1 second option. Lower footgun for first-time adopters. Operator hardens per project via overlay profile. Scoping the state deny to `session-*.key` only avoids breaking the general `state/` use cases. Scoping `*.pem` / `*.key` denies to operator-controlled trees avoids breaking system trust stores and toolchains that rely on read-only `/usr`, `/bin`, `/lib`, and minimal `/etc` runtime files. |
 | D-5 | **`walter-skill-default` honors the `cap_token` IF present**: if the calling tool has a valid PASETO cap-token (A-2) declaring `scope.paths`, the sandbox tightens to those paths. No cap → fall back to the D-4 default-allow-but-deny-sensitive policy. | Composes with A-2. A high-tier op that already required a cap also benefits from path-tightened sandbox. |
 | D-6 | **Bypass requires `WALTER_SANDBOX_BYPASS=1` + `--no-sandbox` flag** in the tool command — same two-factor pattern. Logged in the audit chain. | Same as bash-denylist + egress-allowlist bypass. |
 | D-7 | **Sandbox failure semantics**: if the per-OS primitive is missing or fails to start, hook emits a `block` (fail-CLOSED). Don't silently run unsandboxed. | Same posture as P0-03 jq-fail-closed. |
@@ -110,17 +110,29 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 
 ### AC-3 — `walter-skill-default` profile
 - [ ] `setup/sandbox-profiles/walter-skill-default.nsjail.conf`:
-  - Repo cwd + 1-level parent: `rw: true`
+  - Workspace scope: current Git worktree root when available, otherwise cwd;
+    `rw: true`
   - Operator overlay: `rw: false`
-  - DENY: `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 only — NOT the whole `state/` dir; matches D-4's narrower scope so skills can still read decision journals + knowledge cards from `state/`), `~/.gnupg/`, `*.pem`, `*.key`
-  - Network: per A-1 egress allowlist (sandbox doesn't override; A-1 hook is still authoritative)
+  - DENY: `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 only — NOT the whole `state/` dir; matches D-4's narrower scope so skills can still read decision journals + knowledge cards from `state/`), `~/.gnupg/`, and operator-controlled `*.pem` / `*.key` under workspace scope, `WALTER_CONFIG`, and `HOME`.
+  - Linux dynamic `*.pem` / `*.key` masks are generated for operator-controlled trees with a bounded scan
+    (`WALTER_SANDBOX_KEY_SCAN_MAX_DEPTH`, `WALTER_SANDBOX_KEY_SCAN_MAX_ENTRIES`)
+    and fail closed if the scan budget is exceeded.
+  - Linux `nsjail` exposes minimal read-only system runtime files/trees needed
+    by ordinary tools. System trust stores and read-only host runtime
+    dependencies are not part of the default `*.pem` / `*.key` deny contract;
+    high-sensitivity operators should tighten these through overlay profiles.
+  - Network: isolated namespace for Linux `nsjail` skills so inner tool calls cannot bypass A-1's hook-level parser by opening sockets after the outer skill invocation is approved. Future mediated egress can re-open explicit destinations.
   - Signal scope: cgroup-limited (no kill outside sandboxed PID tree)
-- [ ] macOS equivalent in `walter-skill-default.sb`.
+- [ ] macOS equivalent in `walter-skill-default.sb`. `sandbox-exec` uses
+  a default-allow read posture so shell tooling can still load system
+  dependencies, but enforces workspace-scope-only writes, sensitive read denies,
+  session-key denies, and signal blocking. Strict read whitelisting remains
+  stronger on the Linux `nsjail` profile.
 - [ ] bats coverage in `tests/walter/sandbox-skill-profile.bats`:
   - Write to cwd-repo → allowed
-  - Write to `~/Desktop/` (outside cwd parent) → blocked
+  - Write to `~/Desktop/` (outside workspace scope) → blocked
   - Read `~/.ssh/id_rsa` → blocked
-  - Read `~/Projects-Personal/walter-os/README.md` from a cwd of `~/.../some-other-project` → blocked (outside cwd parent)
+  - Read `~/Projects-Personal/walter-os/README.md` from a cwd of `~/.../some-other-project` → blocked by the Linux `nsjail` mount model (macOS keeps default-read compatibility and relies on sensitive-path denies)
   - `kill -9 <operator-shell-pid>` → blocked
 
 ### AC-4 — Hook + skill integration
@@ -188,7 +200,7 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 | Allowed Bash spawns long-running miner | `walter-skill-default` cgroup-limits the PID tree; kill on session end. |
 | Allowed Bash kills operator's shell | Signal scope limited to sandbox PID tree. |
 | Sandbox provider replaced with a no-op binary | `walter_sandbox_check` (AC-1) currently only verifies the binary is INSTALLED + the profile files exist; that's not enough to detect a binary swap. Detection needs a checksum baseline + diff (same pattern as P1-07 external-hook integrity). The daily audit's `check_sandbox_state()` (AC-5) is extended to snapshot the sha256 of `$(command -v <provider>)` on first run and emit a `crit` finding on any subsequent change. Documented as the actual detection mechanism, NOT `walter_sandbox_check` alone. |
-| Operator legitimately needs to write outside cwd parent | `WALTER_SANDBOX_BYPASS=1` + `--no-sandbox` two-factor (logged) OR ship a custom profile via overlay. |
+| Operator legitimately needs to write outside workspace scope | `WALTER_SANDBOX_BYPASS=1` + `--no-sandbox` two-factor (logged) OR ship a custom profile via overlay. |
 | Cap-token scoped to one path; sandbox profile-rewrite leaks broader access | The dynamic profile rewriter is the SOLE source of truth for the wrapped command's mounts; `walter-skill-default` is the default ONLY when no cap is present. Bats test asserts. |
 
 ## Out of scope

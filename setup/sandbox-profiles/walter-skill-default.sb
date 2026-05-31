@@ -1,4 +1,49 @@
-;; Walter-OS skill sandbox profile scaffold.
-;; AC-3 tightens this profile in a follow-up PR.
+;; Walter-OS skill sandbox profile.
+;; Workspace scope is writable; operator config is read-only; sensitive homes hidden.
 (version 1)
+
 (allow default)
+(deny signal
+  (require-all
+    (require-not (target self))
+    (require-not (target children))))
+(allow signal (target self))
+(allow signal (target children))
+(deny file-write*
+  (require-all
+    (require-not (subpath "@WALTER_SANDBOX_PARENT@"))
+    (require-not (subpath "@WALTER_SANDBOX_SCRATCH@"))
+    (require-not (literal "/dev/null"))))
+(deny file-write* (subpath "@WALTER_CONFIG@"))
+(deny file-write* (subpath "@HOME@/.ssh"))
+(deny file-write* (subpath "@HOME@/.aws"))
+(deny file-write* (subpath "@HOME@/.gnupg"))
+(deny file-read* (subpath "@HOME@/.ssh"))
+(deny file-read* (subpath "@HOME@/.aws"))
+(deny file-read* (subpath "@HOME@/.gnupg"))
+(deny file-read* (regex #"^@WALTER_CONFIG_REGEX@/state/session-[^/]*[.]key$"))
+(deny file-read* (regex #"^@WALTER_CONFIG_REGEX@/state/session-[^/]*[.]key[.]tmp$"))
+(deny file-read*
+  (require-all
+    (subpath "@WALTER_SANDBOX_PARENT@")
+    (regex #".*[.]pem$")))
+(deny file-read*
+  (require-all
+    (subpath "@WALTER_SANDBOX_PARENT@")
+    (regex #".*[.]key$")))
+(deny file-read*
+  (require-all
+    (subpath "@WALTER_CONFIG@")
+    (regex #".*[.]pem$")))
+(deny file-read*
+  (require-all
+    (subpath "@WALTER_CONFIG@")
+    (regex #".*[.]key$")))
+(deny file-read*
+  (require-all
+    (subpath "@HOME@")
+    (regex #".*[.]pem$")))
+(deny file-read*
+  (require-all
+    (subpath "@HOME@")
+    (regex #".*[.]key$")))

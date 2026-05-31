@@ -140,6 +140,13 @@ The six requested runtime tracks map to this implementation order:
      `tests/walter/sandbox-skill-profile.bats`.
    - Deliverable: repo-scoped skill profile, sensitive path deny rules, and
      signal/network constraints per OS.
+   - Current slice: implement workspace-scope write scoping, sensitive read denies
+     for operator-controlled trees, session-key denies, signal isolation, and
+     Linux `nsjail` network namespace isolation. Linux `nsjail` provides the
+     strictest read mount model; macOS `sandbox-exec` keeps default-read
+     compatibility while blocking writes outside the workspace scope. Linux
+     dynamic key masks use a bounded scan for workspace, `WALTER_CONFIG`, and
+     `HOME` paths and fail closed if the scan budget is exceeded.
 8. **Hook and skill integration**.
    - Files: `hooks/*.sh`, skill execution entry points, `install.sh`,
      `skills/daily-supply-chain-audit/scripts/audit.sh`.

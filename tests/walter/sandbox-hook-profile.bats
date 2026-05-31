@@ -207,6 +207,16 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+@test "AC-2: hook profile materialization does not require live cwd" {
+  dead_cwd="$TMP_HOME/deleted-cwd"
+  mkdir -p "$dead_cwd"
+
+  run bash -c "cd '$dead_cwd'; rmdir '$dead_cwd'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default sandbox-exec"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == "$WALTER_RUNTIME_DIR"/sandbox/walter-hook-default.sandbox-exec.* ]]
+}
+
 @test "AC-2: sandbox-exec hook profile enforces read/write/network boundaries when available" {
   command -v sandbox-exec >/dev/null || skip "sandbox-exec not installed"
   sandbox-exec -p '(version 1) (allow default)' /usr/bin/true >/dev/null 2>&1 \

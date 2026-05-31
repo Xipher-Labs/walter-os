@@ -118,7 +118,7 @@ Each ≤200 LOC. 3-round review.
 ## Open questions for the operator
 
 1. **`~/.docker/config.json` in the default list**: it contains registry credentials in many setups. Include (proposal) or skip (some tooling reads it)? Proposal: include; operator can remove via `!~/.docker/config.json` in overlay.
-2. **macOS `sandbox-exec` deny-subpath syntax**: should we also block via `(deny file-write* (subpath ...))` even though A-5 is about reads? Proposal: read-only deny; write is already covered by A-3 default deny outside cwd parent.
+2. **macOS `sandbox-exec` deny-subpath syntax**: should we also block via `(deny file-write* (subpath ...))` even though A-5 is about reads? Proposal: read-only deny; write is already covered by A-3 default deny outside the workspace scope.
 3. **`!`-prefix syntax for overlay removal**: clear enough? Or use a separate `invisible-paths-exclude.txt`? Proposal: `!`-prefix; same-file is simpler.
 
 ## Refs
