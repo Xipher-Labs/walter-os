@@ -8,39 +8,12 @@
 
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
 SESSION_LIB="${REPO_ROOT}/scripts/walter/lib/session-state.sh"
 CAP_LIB="${REPO_ROOT}/scripts/walter/lib/capability-token.sh"
+PROTECTED_PATHS_LIB="${REPO_ROOT}/scripts/walter/lib/protected-paths.sh"
 
-# Keep this security-critical surface in sync with approval-gate.sh
-# BLOCK_PATH_PATTERNS until both hooks share a single policy library.
-CAP_HIGH_TIER_PATH_PATTERNS=(
-  'hooks/*.sh'
-  '.claude/settings.json'
-  '.github/workflows/*'
-  'install.sh'
-  'bin/walter-os'
-  'AGENTS.md'
-  'CLAUDE.md'
-  'mcp/servers.json'
-  'scripts/walter/lib/capability-token.sh'
-  'scripts/walter/lib/session-state.sh'
-  'scripts/walter/subcommands/cap.sh'
-  'agents/*.md'
-  'skills/*/SKILL.md'
-  'auth/*'
-  'crypto/*'
-  'personal/health/*'
-  '*.key'
-  '*.pem'
-  '*.crt'
-  '.ssh/*'
-  '*/.ssh/*'
-  '*.env'
-  '*.env.*'
-)
-
-if [[ ! -f "$SESSION_LIB" || ! -f "$CAP_LIB" ]]; then
+if [[ ! -f "$SESSION_LIB" || ! -f "$CAP_LIB" || ! -f "$PROTECTED_PATHS_LIB" ]]; then
   printf '%s\n' '{"decision":"block","reason":"capability-check: missing Walter-OS capability libraries — failing closed"}'
   exit 0
 fi
@@ -49,6 +22,10 @@ fi
 source "$SESSION_LIB"
 # shellcheck source=/dev/null
 source "$CAP_LIB"
+# shellcheck source=/dev/null
+source "$PROTECTED_PATHS_LIB"
+
+declare -a CAP_HIGH_TIER_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 
 _cap_emit_allow() {
   printf '%s\n' '{"decision":"allow"}'
@@ -973,11 +950,11 @@ _cap_is_gh_pr_approve() {
     while [[ "$j" -lt "${#tokens[@]}" ]]; do
       sub="${tokens[$j]}"
       case "$sub" in
-        --repo|--hostname|-R)
+        --repo|--hostname|--host|-R)
           j=$((j + 2))
           continue
           ;;
-        --repo=*|--hostname=*|-*)
+        --repo=*|--hostname=*|--host=*|-*)
           j=$((j + 1))
           continue
           ;;

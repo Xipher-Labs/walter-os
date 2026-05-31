@@ -650,6 +650,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "gh pr approve with host flag requires pattern capability" {
+  _mint Bash --network ghe.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh --host ghe.example pr review 244 --approve")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh comment body URL is not treated as network destination" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
@@ -959,6 +967,12 @@ _mint() {
 
   output="$(_hook_json Write file_path "hooks/example.sh")"
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Write protected path without capability is blocked" {
+  output="$(_hook_json Write file_path "hooks/example.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "medium-tier Write without capability passes through" {
