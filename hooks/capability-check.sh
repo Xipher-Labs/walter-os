@@ -64,6 +64,16 @@ _cap_emit_block() {
   exit 0
 }
 
+_cap_summarize_target() {
+  local target="$1"
+  target="${target//$'\n'/ }"
+  target="${target//$'\r'/ }"
+  if [[ "${#target}" -gt 240 ]]; then
+    target="${target:0:240}..."
+  fi
+  printf '%s\n' "$target"
+}
+
 _cap_mktemp_file() {
   mktemp -t walter-capability-check.XXXXXX 2>/dev/null \
     || mktemp "${TMPDIR:-/tmp}/walter-capability-check.XXXXXX" 2>/dev/null
@@ -1107,7 +1117,7 @@ _cap_claim_matches() {
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
         value="$(jq -r --argjson idx "$idx" '.scope.patterns[$idx]' <<< "$claims")"
-        [[ -n "$value" ]] && grep -Eq -- "$value" <<< "$target" && return 0
+        [[ -n "$value" ]] && grep -Eq -- "$value" <<< "$target" 2>/dev/null && return 0
         idx=$((idx + 1))
       done
 
@@ -1173,6 +1183,9 @@ _cap_main_json() {
   fi
 
   _cap_is_high_tier "$tool" "$target" "$repo" || _cap_emit_allow
+  if ! command -v python3 >/dev/null 2>&1; then
+    _cap_emit_block "capability-check: python3 is required for high-tier capability enforcement - failing closed"
+  fi
   [[ "$tool" == "Bash" ]] && hosts="$(_cap_extract_hosts "$target")"
 
   if [[ "$tool" == "Bash" && "${WALTER_CAP_BYPASS:-0}" == "1" ]] && _cap_has_bypass_flag "$target"; then
@@ -1187,7 +1200,7 @@ _cap_main_json() {
     Bash) hint="walter-os cap mint Bash --network <host> --duration 30m (or --patterns <regex>)" ;;
     *) hint="walter-os cap mint ${tool} --paths <glob> --duration 30m" ;;
   esac
-  _cap_emit_block "capability-check: no valid token for ${tool} on ${target:-<empty>}; mint with: ${hint}"
+  _cap_emit_block "capability-check: no valid token for ${tool} on $(_cap_summarize_target "${target:-<empty>}"); mint with: ${hint}"
 }
 
 input=""

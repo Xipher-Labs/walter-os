@@ -68,6 +68,44 @@ _mint() {
   echo "$output" | jq -er '.reason' | grep -q 'no valid token'
 }
 
+@test "high-tier enforcement without python3 fails closed with actionable reason" {
+  mkdir -p "$BATS_TEST_TMPDIR/no-python-bin"
+  ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/no-python-bin/dirname"
+  ln -s "$(command -v jq)" "$BATS_TEST_TMPDIR/no-python-bin/jq"
+  ln -s "$(command -v mktemp)" "$BATS_TEST_TMPDIR/no-python-bin/mktemp"
+  ln -s "$(command -v rm)" "$BATS_TEST_TMPDIR/no-python-bin/rm"
+
+  input="$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' "curl https://api.github.com/repos/x/y" | jq -Rs .)")"
+  output="$(printf '%s' "$input" \
+    | PATH="$BATS_TEST_TMPDIR/no-python-bin" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'python3 is required'
+}
+
+@test "invalid pattern capability is a quiet non-match" {
+  _mint Bash --patterns '[' --duration 30m >/dev/null
+
+  input="$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' "curl https://api.github.com/repos/x/y" | jq -Rs .)")"
+  run /bin/bash -c 'printf "%s" "$1" | WALTER_SESSION_REPO="$2" bash "$3"' _ "$input" "$REPO_UNDER_TEST" "$HOOK"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  ! grep -qi 'grep' <<< "$output"
+}
+
+@test "high-tier block reason summarizes multiline targets" {
+  long_command=$'curl https://api.github.com/repos/x/y\nprintf secret'
+
+  output="$(_hook_json Bash command "$long_command")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  reason="$(echo "$output" | jq -er '.reason')"
+  [[ "$reason" != *$'\n'* ]]
+}
+
 @test "semicolon-adjacent Bash egress without capability is blocked" {
   output="$(_hook_json Bash command "true;curl https://api.github.com/repos/x/y")"
 
@@ -803,9 +841,9 @@ _mint() {
 }
 
 @test "Write with matching path capability is allowed" {
-  _mint Write --paths 'docs/**' --duration 30m >/dev/null
+  _mint Write --paths 'hooks/*.sh' --duration 30m >/dev/null
 
-  output="$(_hook_json Write file_path "docs/specs/example.md")"
+  output="$(_hook_json Write file_path "hooks/example.sh")"
   echo "$output" | jq -e '.decision == "allow"'
 }
 
@@ -816,9 +854,9 @@ _mint() {
 }
 
 @test "Write absolute repo path matches relative path capability" {
-  _mint Write --paths 'docs/**' --duration 30m >/dev/null
+  _mint Write --paths 'hooks/*.sh' --duration 30m >/dev/null
 
-  output="$(_hook_json Write file_path "$REPO_UNDER_TEST/docs/specs/example.md")"
+  output="$(_hook_json Write file_path "$(cd "$REPO_UNDER_TEST" && pwd -P)/hooks/example.sh")"
 
   echo "$output" | jq -e '.decision == "allow"'
 }
