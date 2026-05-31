@@ -94,6 +94,14 @@ setup() {
   grep -E 'LC_ALL=C[[:space:]]+sort[[:space:]]*>[[:space:]]*"\$\{CHECKSUMS_FILE\}"' "$WORKFLOW" >/dev/null
 }
 
+@test "release workflow excludes stale provenance from checksum payload" {
+  local joined
+  joined=$(awk 'BEGIN{RS=""} {gsub(/\\\n[[:space:]]*/, " "); print}' "$WORKFLOW")
+  echo "$joined" | grep -E 'rm -f .*walter-os-\*\.intoto\.jsonl' >/dev/null
+  grep -E '![[:space:]]+-name "\*\.intoto\.jsonl"' "$WORKFLOW" >/dev/null
+  grep -E 'walter-os-\$\{TAG\}\.intoto\.jsonl' "$WORKFLOW" >/dev/null
+}
+
 @test "release workflow pins release runners for reproducibility" {
   if grep -E 'runs-on:[[:space:]]+ubuntu-latest' "$WORKFLOW" >/dev/null 2>&1; then
     echo "release.yml uses floating ubuntu-latest runner"

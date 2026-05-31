@@ -226,12 +226,14 @@ jobs:
           rm -f "${CHECKSUMS_FILE}" \
                 "${CHECKSUMS_FILE}.sig" \
                 "${CHECKSUMS_FILE}.pem" \
-                "${CHECKSUMS_FILE}.cosign.bundle"
+                "${CHECKSUMS_FILE}.cosign.bundle" \
+                walter-os-*.intoto.jsonl
           find . -maxdepth 1 -type f \
             ! -name "${CHECKSUMS_FILE}" \
             ! -name "${CHECKSUMS_FILE}.sig" \
             ! -name "${CHECKSUMS_FILE}.pem" \
             ! -name "*.cosign.bundle" \
+            ! -name "*.intoto.jsonl" \
             -exec sha256sum {} + | LC_ALL=C sort > "${CHECKSUMS_FILE}"
           test -s "${CHECKSUMS_FILE}"
           echo "----- checksums.sha256 -----"
@@ -295,7 +297,10 @@ jobs:
           RELEASE_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          for stale in "${CHECKSUMS_FILE}.sig" "${CHECKSUMS_FILE}.pem"; do
+          for stale in \
+            "${CHECKSUMS_FILE}.sig" \
+            "${CHECKSUMS_FILE}.pem" \
+            "walter-os-${TAG}.intoto.jsonl"; do
             # gh release delete-asset exits non-zero if the asset
             # doesn't exist — that's fine for releases that never
             # had it. `|| true` keeps the workflow moving; we log
