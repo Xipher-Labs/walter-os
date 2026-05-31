@@ -125,11 +125,13 @@ test.describe("Control Tower smoke tests", () => {
     await expect(page.locator("a[href='/history']")).toHaveText("History");
     // The wordmark identifies the app.
     await expect(page.locator("nav")).toContainText("Walter Council");
-    // The overview link is the active section on "/" (aria-current=page).
-    await expect(page.locator("a[href='/']").first()).toHaveAttribute(
-      "aria-current",
-      "page"
-    );
+    // The "Overview" nav link is the active section on "/" (aria-current=page).
+    // exact:true avoids matching the "Skip to overview" skip-link, and the
+    // accessible name avoids the wordmark, which also points at "/" but is not
+    // a section marker.
+    await expect(
+      page.getByRole("link", { name: "Overview", exact: true })
+    ).toHaveAttribute("aria-current", "page");
   });
 
   test("(9) Council Chat page loads", async ({ page }) => {
