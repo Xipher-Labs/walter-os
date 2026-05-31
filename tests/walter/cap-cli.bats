@@ -160,5 +160,15 @@ teardown() {
   run "$CLI" cap mint Bash --patterns '.*' --duration 5m
 
   [ "$status" -eq 4 ]
-  [[ "$output" == *"cap minting blocked inside subagent context"* ]]
+  [[ "$output" == *"cap minting blocked inside agent context"* ]]
+}
+
+@test "walter-os cap mint is blocked inside named agent context" {
+  cd "$REPO_UNDER_TEST"
+  export WALTER_AGENT_NAME=reviewer
+
+  run "$CLI" cap mint Bash --patterns '.*' --duration 5m
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"cap minting blocked inside agent context"* ]]
 }

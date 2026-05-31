@@ -160,6 +160,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: python subprocess walter-os cap mint is blocked" {
+  run "$HOOK" check 'python3 -c '\''import subprocess; subprocess.run(["bin/walter-os","cap","mint","Bash","--duration","5m"])'\'''
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: command-substitution cap.sh mint is blocked" {
   run "$HOOK" check 'token=$(scripts/walter/subcommands/cap.sh mint Bash --patterns ".*" --duration 5m)'
   [[ "$status" -eq 7 ]]

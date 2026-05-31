@@ -110,8 +110,9 @@ cmd_cap_mint() {
   }
   shift || true
 
-  if [[ -n "${WALTER_AGENT_CONTEXT:-}" ]]; then
-    echo "walter-os cap mint: cap minting blocked inside subagent context (caller=${WALTER_AGENT_CONTEXT}). Operator must mint caps in the top-level session." >&2
+  if [[ -n "${WALTER_AGENT_CONTEXT:-}" || -n "${WALTER_AGENT_NAME:-}" ]]; then
+    local caller="${WALTER_AGENT_NAME:-${WALTER_AGENT_CONTEXT:-unknown}}"
+    echo "walter-os cap mint: cap minting blocked inside agent context (caller=${caller}). Operator must mint caps in the top-level session." >&2
     return 4
   fi
 
