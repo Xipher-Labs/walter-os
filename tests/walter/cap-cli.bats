@@ -71,6 +71,23 @@ teardown() {
   [ "$output" = "[]" ]
 }
 
+@test "walter-os cap verify rejects copied revoked tokens" {
+  cd "$REPO_UNDER_TEST"
+  "$CLI" cap mint Write --paths README.md --duration 5m >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  token_file="$(find "$caps_dir" -type f -name 'cap-*.paseto' | head -1)"
+  nonce="$("$CLI" cap list | jq -r '.[0].nonce')"
+  copied_token="$TMP_HOME/copied-token.paseto"
+  cp "$token_file" "$copied_token"
+
+  "$CLI" cap revoke "$nonce" >/dev/null
+  run "$CLI" cap verify "$copied_token"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"token has been revoked"* ]]
+}
+
 @test "walter-os cap revoke rejects mutated capability paths" {
   cd "$REPO_UNDER_TEST"
   "$CLI" cap mint Write --paths README.md --duration 5m >/dev/null

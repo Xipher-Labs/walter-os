@@ -238,7 +238,7 @@ cmd_cap_list() {
 }
 
 cmd_cap_verify() {
-  local token_file="${1:-}" repo="${2:-$PWD}" state_file
+  local token_file="${1:-}" repo="${2:-$PWD}" state_file claims nonce caps_dir canonical_file token canonical_token
   [[ -n "$token_file" && -f "$token_file" ]] || {
     echo "walter-os cap verify: token file required" >&2
     return 2
@@ -247,7 +247,25 @@ cmd_cap_verify() {
     echo "walter-os cap verify: active session required" >&2
     return 1
   }
-  walter_cap_verify_token "$state_file" "$(cat "$token_file")"
+  token="$(cat "$token_file")"
+  claims="$(walter_cap_verify_token "$state_file" "$token")" || return $?
+  nonce="$(jq -r '.nonce // empty' <<< "$claims")"
+  [[ -n "$nonce" && "$nonce" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "walter-os cap verify: token nonce missing or unsafe" >&2
+    return 1
+  }
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  canonical_file="${caps_dir}/cap-${nonce}.paseto"
+  if [[ ! -f "$canonical_file" ]]; then
+    echo "walter-os cap verify: token has been revoked" >&2
+    return 1
+  fi
+  canonical_token="$(cat "$canonical_file")"
+  if [[ "$canonical_token" != "$token" ]]; then
+    echo "walter-os cap verify: token does not match active session record" >&2
+    return 1
+  fi
+  printf '%s\n' "$claims"
 }
 
 cmd_cap_revoke() {
