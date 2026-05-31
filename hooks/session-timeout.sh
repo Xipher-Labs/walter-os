@@ -94,6 +94,18 @@ _result="$(walter_session_touch "$_repo_path" 2>/dev/null)"
 _status=$?
 
 if [[ "$_status" -eq 0 ]]; then
+  _session_status="$(printf '%s' "$_result" | jq -r '.status // empty' 2>/dev/null || true)"
+  if [[ "$_session_status" == "started" ]]; then
+    _skill_cap_loader="${WALTER_OS_HOME}/scripts/walter/lib/skill-cap-loader.sh"
+    if [[ ! -f "$_skill_cap_loader" ]]; then
+      _block "Walter-OS session timeout: skill-cap-loader library missing - failing closed for safety."
+    fi
+    # shellcheck source=/dev/null
+    source "$_skill_cap_loader"
+    if ! walter_skill_caps_mint_defaults "$_repo_path" >/dev/null 2>&1; then
+      _block "Walter-OS session timeout: default skill capability minting failed - failing closed for safety."
+    fi
+  fi
   _allow
 fi
 

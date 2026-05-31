@@ -93,7 +93,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
   - Two-factor bypass (`WALTER_CAP_BYPASS=1` + `--allow-no-cap`) → allow with WARN
 
 ### AC-4 — Default skill capabilities
-- [ ] `contexts/_examples/skill-capabilities.example.yml`:
+- [x] `contexts/_examples/skill-capabilities.example.yml`:
   ```yaml
   # When these skills are autoloaded at session start, walter-os
   # auto-mints a default capability so the skill works without operator
@@ -114,7 +114,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
         network: ["api.hetzner.cloud"]
       duration: 8h
   ```
-- [ ] `scripts/walter/lib/skill-cap-loader.sh` reads the YAML at session start and mints matching tokens.
+- [x] `scripts/walter/lib/skill-cap-loader.sh` reads the YAML at session start and mints matching tokens.
 
 ### AC-5 — Daily-audit integration
 - [ ] `daily-supply-chain-audit` adds `check_cap_state()`:

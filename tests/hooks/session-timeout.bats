@@ -44,6 +44,27 @@ _call_restart_hook() {
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
 }
 
+@test "UserPromptSubmit hook auto-mints default skill capabilities on fresh session" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  docs-writer:
+    tool: Write
+    scope:
+      paths: ["docs/**"]
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "1" ]
+}
+
 @test "UserPromptSubmit hook allows active session within limits" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   _call_hook >/dev/null
