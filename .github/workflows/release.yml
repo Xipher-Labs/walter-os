@@ -3,9 +3,8 @@ name: Release
 # Triggered on push of a v* tag (e.g., v0.3.0), or manually via
 # workflow_dispatch with an explicit tag input. The manual trigger lets
 # us (re-)run SBOM + checksums + cosign signing for an existing release
-# without rolling a new tag — useful when an automated push created the
-# release but the security job missed it, or when bumping cosign-installer
-# version means re-signing existing tags.
+# without rolling a new tag, but it must be dispatched on the same tag ref
+# as the input tag so SLSA provenance binds to the tag commit.
 #
 # Two jobs run in sequence:
 #   1. `release`  — creates the GitHub Release with auto-generated notes
@@ -52,6 +51,10 @@ jobs:
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             tag="${{ inputs.tag }}"
+            if [[ "${GITHUB_REF}" != "refs/tags/${tag}" ]]; then
+              echo "ERROR: workflow_dispatch re-signs must run with --ref ${tag} so provenance binds to the tag commit." >&2
+              exit 1
+            fi
           else
             tag="${GITHUB_REF_NAME}"
           fi
@@ -299,8 +302,7 @@ jobs:
           set -euo pipefail
           for stale in \
             "${CHECKSUMS_FILE}.sig" \
-            "${CHECKSUMS_FILE}.pem" \
-            "walter-os-${TAG}.intoto.jsonl"; do
+            "${CHECKSUMS_FILE}.pem"; do
             # gh release delete-asset exits non-zero if the asset
             # doesn't exist — that's fine for releases that never
             # had it. `|| true` keeps the workflow moving; we log
