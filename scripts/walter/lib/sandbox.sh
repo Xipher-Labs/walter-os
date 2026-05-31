@@ -106,6 +106,14 @@ _walter_sandbox_sed_escape() {
   printf '%s' "$1" | sed 's/[\/&]/\\&/g'
 }
 
+_walter_sandbox_profile_has_placeholders() {
+  local path="$1"
+  grep -q '@WALTER_OS_HOME@' "$path" \
+    || grep -q '@WALTER_CONFIG@' "$path" \
+    || grep -q '@HOME@' "$path" \
+    || grep -q '@WALTER_SANDBOX_SCRATCH@' "$path"
+}
+
 walter_sandbox_profile_path() {
   [[ "$#" -ge 1 ]] || {
     echo "walter-sandbox: usage: walter_sandbox_profile_path <profile> [provider]" >&2
@@ -146,7 +154,7 @@ walter_sandbox_materialize_profile() {
     echo "walter-sandbox: profile missing: $src" >&2
     return 1
   fi
-  if ! grep -q '@WALTER_OS_HOME@\|@WALTER_CONFIG@\|@HOME@\|@WALTER_SANDBOX_SCRATCH@' "$src"; then
+  if ! _walter_sandbox_profile_has_placeholders "$src"; then
     printf '%s\n' "$src"
     return 0
   fi
@@ -210,30 +218,43 @@ walter_sandbox_run() {
     echo "walter-sandbox: usage: walter_sandbox_run <profile> <cmd...>" >&2
     return 2
   }
-  local profile="$1" provider profile_path
+  local profile="$1" provider profile_path cleanup_profile status
   shift
 
   provider="$(walter_sandbox_provider)" || return 1
   walter_sandbox_check "$profile" || return 1
   profile_path="$(walter_sandbox_materialize_profile "$profile" "$provider")" || return 1
+  cleanup_profile=0
+  case "$profile_path" in
+    */sandbox/"$profile"."$provider".*) cleanup_profile=1 ;;
+  esac
 
   case "$provider" in
     sandbox-exec)
       if [[ -d "${profile_path}.scratch" ]]; then
         TMPDIR="${profile_path}.scratch/" "$provider" -f "$profile_path" -- "$@"
+        status=$?
       else
         "$provider" -f "$profile_path" -- "$@"
+        status=$?
       fi
       ;;
     nsjail)
       "$provider" --config "$profile_path" -- "$@"
+      status=$?
       ;;
     firejail)
       "$provider" --profile="$profile_path" -- "$@"
+      status=$?
       ;;
     *)
       echo "walter-sandbox: unsupported provider: $provider" >&2
       return 1
       ;;
   esac
+  if [[ "$cleanup_profile" -eq 1 ]]; then
+    rm -f "$profile_path"
+    [[ ! -d "${profile_path}.scratch" ]] || rm -rf "${profile_path}.scratch"
+  fi
+  return "$status"
 }

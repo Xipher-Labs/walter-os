@@ -182,4 +182,8 @@ _mode() {
     run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default curl --connect-timeout 2 https://example.com"
     [ "$status" -ne 0 ]
   fi
+
+  run find "$WALTER_RUNTIME_DIR/sandbox" -maxdepth 1 -name 'walter-hook-default.sandbox-exec.*' -print
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
 }
