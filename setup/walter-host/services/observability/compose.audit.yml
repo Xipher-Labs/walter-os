@@ -8,7 +8,11 @@
 
 services:
   promtail:
+    command: -config.file=/etc/promtail/promtail.audit.yml -config.expand-env=true
+    environment:
+      WALTER_AUDIT_HOST: ${WALTER_AUDIT_HOST:-walter-vm}
     volumes:
+      - ./promtail/promtail.audit.yml:/etc/promtail/promtail.audit.yml:ro
       - type: bind
         source: ${WALTER_AUDIT_DIR:-/home/walter/.config/walter-os/audit}
         target: /var/log/walter-audit

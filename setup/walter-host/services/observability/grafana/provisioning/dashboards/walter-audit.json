@@ -10,7 +10,7 @@
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
-  "refresh": "30s",
+  "refresh": "5m",
   "time": {
     "from": "now-24h",
     "to": "now"
@@ -84,7 +84,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (decision) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | __error__=\"\")[24h]))",
+          "expr": "sum by (decision) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | __error__=\"\")[$__range]))",
           "legendFormat": "{{decision}}",
           "refId": "A",
           "datasource": {
@@ -110,7 +110,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (tool) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | decision=\"block\" | __error__=\"\")[7d])))",
+          "expr": "topk(10, sum by (tool) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | decision=\"block\" | __error__=\"\")[$__range])))",
           "legendFormat": "{{tool}}",
           "refId": "A",
           "datasource": {
@@ -136,7 +136,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (decision_reason) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | decision=\"block\" | __error__=\"\")[7d])))",
+          "expr": "topk(10, sum by (decision_reason) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | decision=\"block\" | __error__=\"\")[$__range])))",
           "legendFormat": "{{decision_reason}}",
           "refId": "A",
           "datasource": {
@@ -162,7 +162,7 @@
       },
       "targets": [
         {
-          "expr": "count(count by (session_id) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | session_id != \"\" | __error__=\"\")[24h])))",
+          "expr": "count(count by (session_id) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | session_id != \"\" | __error__=\"\")[$__range])))",
           "legendFormat": "sessions",
           "refId": "A",
           "datasource": {
@@ -223,7 +223,7 @@
     {
       "title": "Loki Explore",
       "type": "link",
-      "url": "/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bapp%3D%5C%22walter-os%5C%22,%20kind%3D%5C%22audit-chain%5C%22%7D%20%7C%20json%22%7D%5D%7D"
+      "url": "/explore?left=%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22queries%22%3A%5B%7B%22expr%22%3A%22%7Bapp%3D%5C%22walter-os%5C%22%2C%20kind%3D%5C%22audit-chain%5C%22%7D%20%7C%20json%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-24h%22%2C%22to%22%3A%22now%22%7D%7D"
     }
   ]
 }

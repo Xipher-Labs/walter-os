@@ -54,9 +54,7 @@ services:
     image: grafana/promtail:3.6.10
     container_name: promtail
     restart: unless-stopped
-    command: -config.file=/etc/promtail/promtail.yml -config.expand-env=true
-    environment:
-      WALTER_AUDIT_HOST: ${WALTER_AUDIT_HOST:-walter-vm}
+    command: -config.file=/etc/promtail/promtail.yml
     volumes:
       - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
       - /var/log:/var/log:ro

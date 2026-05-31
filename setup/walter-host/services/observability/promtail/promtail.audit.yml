@@ -41,6 +41,25 @@ scrape_configs:
           host: walter-os
           __path__: /var/log/walter-watchdog.log
 
+  # This file is loaded with -config.expand-env=true. Escape any literal "$"
+  # in future label values, regex replacements, or paths as "$$".
+  - job_name: walter-audit-chain
+    pipeline_stages:
+      - json:
+          expressions:
+            audit_ts: ts
+      - timestamp:
+          source: audit_ts
+          format: RFC3339Nano
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: walter-audit-chain
+          app: walter-os
+          kind: audit-chain
+          host: ${WALTER_AUDIT_HOST:-walter-vm}
+          __path__: /var/log/walter-audit/chain-*.jsonl
+
   - job_name: restic
     static_configs:
       - targets: [localhost]

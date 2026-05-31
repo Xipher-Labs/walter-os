@@ -7,12 +7,18 @@ setup() {
   COMPOSE="$OBS_DIR/compose.yml"
   AUDIT_COMPOSE="$OBS_DIR/compose.audit.yml"
   PROMTAIL="$OBS_DIR/promtail/promtail.yml"
+  AUDIT_PROMTAIL="$OBS_DIR/promtail/promtail.audit.yml"
   DASHBOARD="$OBS_DIR/grafana/provisioning/dashboards/walter-audit.json"
+  ENV_TEMPLATE="$OBS_DIR/.env.template"
   OBS_DOC="$REPO_ROOT/docs/operational/observability.md"
 }
 
 @test "default observability compose does not require an audit directory" {
   run grep -q "target: /var/log/walter-audit" "$COMPOSE"
+  [ "$status" -ne 0 ]
+  run grep -q "job_name: walter-audit-chain" "$PROMTAIL"
+  [ "$status" -ne 0 ]
+  run grep -q -- "-config.expand-env=true" "$COMPOSE"
   [ "$status" -ne 0 ]
 }
 
@@ -21,23 +27,27 @@ setup() {
   grep -q "target: /var/log/walter-audit" "$AUDIT_COMPOSE"
   grep -q "read_only: true" "$AUDIT_COMPOSE"
   grep -q "create_host_path: false" "$AUDIT_COMPOSE"
-  grep -q "WALTER_AUDIT_HOST: \${WALTER_AUDIT_HOST:-walter-vm}" "$COMPOSE"
-  grep -q -- "-config.expand-env=true" "$COMPOSE"
+  grep -q "promtail.audit.yml" "$AUDIT_COMPOSE"
+  grep -q "WALTER_AUDIT_HOST: \${WALTER_AUDIT_HOST:-walter-vm}" "$AUDIT_COMPOSE"
+  grep -q -- "-config.expand-env=true" "$AUDIT_COMPOSE"
 }
 
 @test "promtail scrapes audit-chain jsonl files from the mounted path" {
-  grep -q "job_name: walter-audit-chain" "$PROMTAIL"
-  grep -q "audit_ts: ts" "$PROMTAIL"
-  grep -q "source: audit_ts" "$PROMTAIL"
-  grep -q "format: RFC3339" "$PROMTAIL"
-  grep -q "__path__: /var/log/walter-audit/chain-\\*.jsonl" "$PROMTAIL"
+  grep -q "job_name: walter-audit-chain" "$AUDIT_PROMTAIL"
+  grep -q "audit_ts: ts" "$AUDIT_PROMTAIL"
+  grep -q "source: audit_ts" "$AUDIT_PROMTAIL"
+  grep -q "format: RFC3339Nano" "$AUDIT_PROMTAIL"
+  grep -q "__path__: /var/log/walter-audit/chain-\\*.jsonl" "$AUDIT_PROMTAIL"
+  grep -q '\$\$' "$AUDIT_PROMTAIL"
 }
 
 @test "promtail uses only low-cardinality audit-chain labels" {
-  grep -q "app: walter-os" "$PROMTAIL"
-  grep -q "kind: audit-chain" "$PROMTAIL"
-  grep -q 'host: ${WALTER_AUDIT_HOST}' "$PROMTAIL"
-  run grep -E "chain_id:|event_id:|session_id:|agent:|model:" "$PROMTAIL"
+  audit_job="$(sed -n '/job_name: walter-audit-chain/,/job_name: restic/p' "$AUDIT_PROMTAIL")"
+  grep -q "job: walter-audit-chain" <<<"$audit_job"
+  grep -q "app: walter-os" <<<"$audit_job"
+  grep -q "kind: audit-chain" <<<"$audit_job"
+  grep -q 'host: ${WALTER_AUDIT_HOST:-walter-vm}' <<<"$audit_job"
+  run grep -E "chain_id:|event_id:|session_id:|agent:|model:" <<<"$audit_job"
   [ "$status" -ne 0 ]
 }
 
@@ -83,6 +93,7 @@ PY
 
 @test "observability docs cover audit telemetry mount, labels, and dashboard" {
   grep -q "compose.audit.yml" "$OBS_DOC"
+  grep -q "promtail.audit.yml" "$OBS_DOC"
   grep -q "/home/walter/.config/walter-os/audit" "$OBS_DOC"
   grep -q "WALTER_AUDIT_DIR" "$OBS_DOC"
   grep -q "create_host_path: false" "$OBS_DOC"
@@ -92,4 +103,9 @@ PY
   grep -q "kind=audit-chain" "$OBS_DOC"
   grep -q "WALTER_AUDIT_HOST" "$OBS_DOC"
   grep -q "walter-audit" "$OBS_DOC"
+}
+
+@test "env template lists audit telemetry knobs" {
+  grep -q "WALTER_AUDIT_DIR=/home/walter/.config/walter-os/audit" "$ENV_TEMPLATE"
+  grep -q "WALTER_AUDIT_HOST=walter-vm" "$ENV_TEMPLATE"
 }
