@@ -103,6 +103,10 @@ _wiki_validator_write() {
     | bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
 }
 
+_wiki_validator_empty() {
+  printf '' | bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
+}
+
 _rows() {
   wc -l < "$(_chain_path)" | tr -d ' '
 }
@@ -269,6 +273,15 @@ SH
   echo "$output" | jq -e '.decision == "allow"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "wiki-validator-hook" and .decision == "allow" and .tool == "Write"' "$(_chain_path)"
+}
+
+@test "wiki-validator-hook empty stdin appends exactly one audit row" {
+  run _wiki_validator_empty
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "wiki-validator-hook" and .decision == "allow" and .tool == "unknown" and .decision_reason == "empty hook input"' "$(_chain_path)"
 }
 
 @test "wiki-validator-hook blocks when audit append fails" {
