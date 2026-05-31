@@ -487,7 +487,7 @@ _cap_extract_positional_network_hosts() {
 }
 
 _cap_is_network_command() {
-  local command="$1" tokfile token cli idx j k sub prev command_position hosts
+  local command="$1" tokfile token cli idx j k sub prev command_position
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
@@ -527,8 +527,7 @@ _cap_is_network_command() {
           break
         done
         if [[ "$command_position" -eq 1 ]]; then
-          hosts="$(_cap_extract_hosts "$command")"
-          [[ -n "$hosts" ]] && return 0
+          return 0
         fi
       fi
     fi

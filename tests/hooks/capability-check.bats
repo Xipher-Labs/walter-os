@@ -140,6 +140,19 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "variable-expanded command word without static URL is blocked" {
+  output="$(_hook_json Bash command 'cmd=ssh; $cmd git@github.com')"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "variable-expanded command word with matching pattern capability is allowed" {
+  _mint Bash --patterns '^cmd=ssh; [$]cmd git@github[.]com$' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command 'cmd=ssh; $cmd git@github.com')"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress with query-only URL matches host capability" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
