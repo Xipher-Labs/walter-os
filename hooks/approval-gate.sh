@@ -222,10 +222,14 @@ _is_capability_private_key_payload() {
   local session_artifact_re='session-[^[:space:];|&]*[.](key|json|pub)'
   local session_metadata_re='session-[^[:space:];|&]*[.](json|pub)'
   local caps_artifact_re='caps-[^[:space:];|&/]+(/[[:graph:]]*)?'
+  local relative_session_secret_re='(^|[[:space:];|&])([.]/)?session-[^/[:space:];|&]*[.](key|json)([[:space:];|&]|$)'
+  local relative_caps_token_re='(^|[[:space:];|&])([.]/)?caps-[^/[:space:];|&]+/cap-[^/[:space:];|&]*[.]paseto([[:space:];|&]|$)'
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
   [[ "$normalized" == *"capability_private_key_path"* ]] && return 0
+  [[ "$normalized" =~ $relative_session_secret_re ]] && return 0
+  [[ "$normalized" =~ $relative_caps_token_re ]] && return 0
 
   if [[ "$normalized" =~ (tar|zip|cp|rsync|ditto) ]] && \
      { [[ "$normalized" == *"$config_state_dir"* ]] || \

@@ -232,6 +232,24 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: derived state directory relative session key is blocked" {
+  run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; openssl pkeyutl -sign -inkey session-abc.key -rawin -in payload -out sig'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: derived state directory relative session JSON is blocked" {
+  run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; cat ./session-abc.json'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: relative capability bearer token path is blocked" {
+  run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; cat caps-abc/cap-token.paseto'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: escaped Walter state directory is blocked" {
   run "$HOOK" check 'cat ~/.config/walter-os/st\ate/*.key'
   [[ "$status" -eq 7 ]]
