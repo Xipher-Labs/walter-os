@@ -183,7 +183,7 @@ walter_audit_append() {
   fi
 
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path lock_path previous_line previous_hash row summary timestamp row_date
+  local audit_dir chain_path lock_path previous_line previous_hash row summary timestamp row_date chain_fd
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -193,9 +193,14 @@ walter_audit_append() {
   row_date="$(walter_audit_date_from_timestamp "$timestamp")"
   chain_path="$(walter_audit_chain_path "$row_date")"
 
+  exec {chain_fd}<>"$chain_path" || {
+    _walter_audit_release_lock "$lock_path"
+    return 1
+  }
+
   previous_hash="null"
-  if [[ -s "$chain_path" ]]; then
-    previous_line="$(tail -n 1 "$chain_path")"
+  previous_line="$(tail -n 1 <&"$chain_fd")"
+  if [[ -n "$previous_line" ]]; then
     previous_hash="$(walter_audit_hash_string "$previous_line")"
   fi
 
@@ -212,14 +217,17 @@ walter_audit_append() {
     --arg decision_reason "$reason" \
     --arg prev_hash "$previous_hash" \
     '{ts:$ts,session_id:$session_id,operator:$operator,event:$event,tool:$tool,input_summary:$input_summary,decision:$decision,decision_source:$decision_source,decision_reason:$decision_reason,prev_hash:$prev_hash}')" || {
+      exec {chain_fd}>&-
       _walter_audit_release_lock "$lock_path"
       return 1
     }
 
-  printf '%s\n' "$row" >> "$chain_path" || {
+  printf '%s\n' "$row" >&"$chain_fd" || {
+    exec {chain_fd}>&-
     _walter_audit_release_lock "$lock_path"
     return 1
   }
+  exec {chain_fd}>&-
   _walter_audit_release_lock "$lock_path"
   printf '%s\n' "$chain_path"
 }
