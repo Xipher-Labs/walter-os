@@ -114,11 +114,22 @@ test.describe("Control Tower smoke tests", () => {
     expect(typeof body.consensus).toBe("boolean");
   });
 
-  test("(8) Nav links render on dashboard", async ({ page }) => {
+  test("(8) Nav links render with labels and mark the active section", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await expect(page.locator("a[href='/council']")).toBeVisible();
-    await expect(page.locator("a[href='/ideation']")).toBeVisible();
-    await expect(page.locator("a[href='/history']")).toBeVisible();
+    // Assert the rendered link text, not just presence, so a broken/relabelled
+    // nav is caught (the shared TopNav labels each route).
+    await expect(page.locator("a[href='/council']")).toHaveText("Council");
+    await expect(page.locator("a[href='/ideation']")).toHaveText("Ideation");
+    await expect(page.locator("a[href='/history']")).toHaveText("History");
+    // The wordmark identifies the app.
+    await expect(page.locator("nav")).toContainText("Walter Council");
+    // The overview link is the active section on "/" (aria-current=page).
+    await expect(page.locator("a[href='/']").first()).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
   });
 
   test("(9) Council Chat page loads", async ({ page }) => {
@@ -128,8 +139,15 @@ test.describe("Control Tower smoke tests", () => {
     await expect(page.locator("button", { hasText: "Send to Council" })).toBeVisible();
   });
 
-  test("(10) History page loads", async ({ page }) => {
+  test("(10) History page loads with the shared nav rendered", async ({
+    page,
+  }) => {
     await page.goto("/history");
     await expect(page.locator("h1")).toContainText("Conversation History");
+    // The redesign moved every page onto the shared TopNav; assert it actually
+    // rendered (wordmark + a working route link) rather than only checking the
+    // page heading exists.
+    await expect(page.locator("nav")).toContainText("Walter Council");
+    await expect(page.locator("a[href='/']").first()).toBeVisible();
   });
 });
