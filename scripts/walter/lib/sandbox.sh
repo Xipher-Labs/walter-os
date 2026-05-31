@@ -67,15 +67,28 @@ _walter_sandbox_path_mode() {
   fi
 }
 
+_walter_sandbox_current_uid() {
+  local uid
+  uid="$(id -u 2>/dev/null)" || {
+    echo "walter-sandbox: failed to determine current uid" >&2
+    return 1
+  }
+  if [[ -z "$uid" ]]; then
+    echo "walter-sandbox: failed to determine current uid" >&2
+    return 1
+  fi
+  printf '%s\n' "$uid"
+}
+
 _walter_sandbox_validate_owned_dir() {
   local path="$1" owner uid mode
   if [[ -L "$path" || ! -d "$path" ]]; then
     echo "walter-sandbox: unsafe runtime path: $path" >&2
     return 1
   fi
-  uid="$(id -u 2>/dev/null || true)"
+  uid="$(_walter_sandbox_current_uid)" || return 1
   owner="$(_walter_sandbox_path_uid "$path")" || return 1
-  if [[ -n "$uid" && "$owner" != "$uid" ]]; then
+  if [[ "$owner" != "$uid" ]]; then
     echo "walter-sandbox: runtime path not owned by current user: $path" >&2
     return 1
   fi
@@ -88,7 +101,7 @@ _walter_sandbox_validate_owned_dir() {
 
 walter_sandbox_runtime_dir() {
   local base dir uid
-  uid="$(id -u 2>/dev/null || printf '%s' "unknown")"
+  uid="$(_walter_sandbox_current_uid)" || return 1
   base="${WALTER_RUNTIME_DIR:-${TMPDIR:-/tmp}/walter-os-${uid}}"
   if [[ -L "$base" ]]; then
     echo "walter-sandbox: unsafe runtime path: $base" >&2
@@ -121,10 +134,6 @@ _walter_sandbox_sed_escape() {
       echo "walter-sandbox: path contains newline characters" >&2
       return 1
       ;;
-    *\"*)
-      echo "walter-sandbox: path contains double quote characters" >&2
-      return 1
-      ;;
   esac
   printf '%s' "$1" | sed 's/[\\\/&]/\\&/g'
 }
@@ -147,11 +156,23 @@ _walter_sandbox_regex_escape() {
   printf '%s' "$1" | sed 's/[][\\.^$*+?{}()|]/\\&/g'
 }
 
+_walter_sandbox_quoted_path_escape() {
+  local path="$1"
+  path="${path//\\/\\\\}"
+  path="${path//\"/\\\"}"
+  printf '%s' "$path"
+}
+
 _walter_sandbox_profile_escape() {
   local provider="$1" value="$2"
-  if [[ "$provider" == "firejail" ]]; then
-    value="$(_walter_sandbox_firejail_path_escape "$value")" || return 1
-  fi
+  case "$provider" in
+    firejail)
+      value="$(_walter_sandbox_firejail_path_escape "$value")" || return 1
+      ;;
+    nsjail|sandbox-exec)
+      value="$(_walter_sandbox_quoted_path_escape "$value")" || return 1
+      ;;
+  esac
   _walter_sandbox_sed_escape "$value"
 }
 
@@ -591,6 +612,13 @@ walter_sandbox_materialize_profile() {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     fi
+    case "$parent_raw" in
+      *\"*)
+        echo "walter-sandbox: workspace path contains double quote characters: $parent_raw" >&2
+        _walter_sandbox_cleanup_materialized "$dest"
+        return 1
+        ;;
+    esac
     parent_value="$(_walter_sandbox_profile_escape "$provider" "$parent_raw")" || {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
@@ -783,7 +811,11 @@ walter_sandbox_materialize_profile() {
     fi
   done < "$tmp_pre"
   rm -f -- "$tmp_pre"
-  chmod 600 "$tmp_dest" 2>/dev/null || true
+  chmod 600 "$tmp_dest" 2>/dev/null || {
+    echo "walter-sandbox: failed to chmod generated profile: $tmp_dest" >&2
+    _walter_sandbox_cleanup_materialized "$dest"
+    return 1
+  }
   mv "$tmp_dest" "$dest" || {
     _walter_sandbox_cleanup_materialized "$dest"
     return 1
@@ -791,13 +823,30 @@ walter_sandbox_materialize_profile() {
   printf '%s\n' "$dest"
 }
 
-walter_sandbox_check() {
-  local profile="${1:-walter-hook-default}" provider profile_path
-  provider="$(walter_sandbox_provider)" || return 1
-  if ! command -v "$provider" >/dev/null 2>&1; then
+walter_sandbox_provider_path() {
+  [[ "$#" -eq 1 ]] || {
+    echo "walter-sandbox: usage: walter_sandbox_provider_path <provider>" >&2
+    return 2
+  }
+  local provider="$1" provider_path provider_dir provider_base
+  provider_path="$(type -P -- "$provider" 2>/dev/null || true)"
+  if [[ -z "$provider_path" ]]; then
     echo "walter-sandbox: provider missing: $provider" >&2
     return 1
   fi
+  provider_dir="${provider_path%/*}"
+  provider_base="${provider_path##*/}"
+  if [[ "$provider_dir" == "$provider_path" ]]; then
+    provider_dir="."
+  fi
+  provider_dir="$(cd "$provider_dir" && pwd -P)" || return 1
+  printf '%s\n' "${provider_dir}/${provider_base}"
+}
+
+walter_sandbox_check() {
+  local profile="${1:-walter-hook-default}" provider profile_path
+  provider="$(walter_sandbox_provider)" || return 1
+  walter_sandbox_provider_path "$provider" >/dev/null || return 1
   profile_path="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
   if [[ ! -f "$profile_path" ]]; then
     echo "walter-sandbox: profile missing: $profile_path" >&2
@@ -810,10 +859,11 @@ walter_sandbox_run() {
     echo "walter-sandbox: usage: walter_sandbox_run <profile> <cmd...>" >&2
     return 2
   }
-  local profile="$1" provider profile_path cleanup_profile status
+  local profile="$1" provider provider_path profile_path cleanup_profile status
   shift
 
   provider="$(walter_sandbox_provider)" || return 1
+  provider_path="$(walter_sandbox_provider_path "$provider")" || return 1
   walter_sandbox_check "$profile" || return 1
   profile_path="$(walter_sandbox_materialize_profile "$profile" "$provider")" || return 1
   cleanup_profile=0
@@ -824,13 +874,13 @@ walter_sandbox_run() {
   case "$provider" in
     sandbox-exec)
       if [[ -d "${profile_path}.scratch" ]]; then
-        if TMPDIR="${profile_path}.scratch/" "$provider" -f "$profile_path" -- "$@"; then
+        if TMPDIR="${profile_path}.scratch/" "$provider_path" -f "$profile_path" -- "$@"; then
           status=0
         else
           status=$?
         fi
       else
-        if "$provider" -f "$profile_path" -- "$@"; then
+        if "$provider_path" -f "$profile_path" -- "$@"; then
           status=0
         else
           status=$?
@@ -838,14 +888,14 @@ walter_sandbox_run() {
       fi
       ;;
     nsjail)
-      if "$provider" --config "$profile_path" -- "$@"; then
+      if "$provider_path" --config "$profile_path" -- "$@"; then
         status=0
       else
         status=$?
       fi
       ;;
     firejail)
-      if "$provider" --profile="$profile_path" -- "$@"; then
+      if "$provider_path" --profile="$profile_path" -- "$@"; then
         status=0
       else
         status=$?
