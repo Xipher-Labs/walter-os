@@ -1,6 +1,6 @@
 ---
 name: ui-ux-pro-max
-description: Passive design-system reference corpus — look up color palettes, font pairings, product-to-style mappings, named visual styles, component/pattern/layout/spacing/chart conventions, design-system presets, anti-patterns, WCAG-cited UX guidelines, and per-stack UI rules by grep/Read over the vendored CSVs. Triggers on "what palette for a fintech app", "font pairing for healthcare", "design patterns for developer tools", "Next.js UI conventions", "look up a design system". NOT a review gate (use frontend-quality) and NOT the design-craft authority (use impeccable) — this is lookup data only.
+description: Passive design-system reference corpus — look up color palettes, font pairings, product-to-style mappings, named visual styles, chart-type selection, icon libraries, landing-page patterns, app-interface and UX guidelines, React performance rules, UI reasoning, and per-stack UI rules by grep/Read over the vendored CSVs. Triggers on "what palette for a fintech app", "font pairing for healthcare", "chart type for time-series", "Next.js UI conventions", "landing page section order". NOT a review gate (use frontend-quality) and NOT the design-craft authority (use impeccable) — this is lookup data only.
 license: MIT
 ---
 
@@ -13,8 +13,9 @@ not a quality gate, and not a second design opinion. It is lookup data.
 ## What this is (and is not)
 
 - **IS**: a queryable corpus of palettes, font pairings, product-to-style
-  patterns, named visual styles, components/patterns/layouts, anti-patterns,
-  WCAG-cited UX guidelines, and per-framework UI rules. You grep it to ground
+  patterns, named visual styles, chart-type selection, icon libraries,
+  landing-page patterns, app-interface and UX guidelines, React performance
+  rules, UI reasoning, and per-framework UI rules. You grep it to ground
   design decisions in concrete prior art.
 - **IS NOT** a review or quality gate — that is `frontend-quality`
   (WCAG 2.2 AA, Core Web Vitals).
@@ -33,38 +34,51 @@ greppable.
 
 ## The corpus
 
-### `data/*.csv` — cross-cutting design data (13 files)
+### `data/*.csv` — cross-cutting design data (11 files)
 
-- `products.csv` — product type -> recommended styles, color approach,
-  typography, key features, UX priorities, reference apps. Columns:
-  `id,product_type,category,recommended_styles,color_approach,typography,key_features,ux_priorities,reference_apps`
-- `colors.csv` — named palettes with hex sets, mood, use cases, pairing notes,
-  accessibility. Columns: `id,name,type,hex_codes,mood,use_cases,pairing_notes,accessibility`
-- `fonts.csv` — font families with pairings, use cases, weights, fallback,
-  performance notes. Columns: `id,name,category,pairing,use_cases,weights,fallback,performance_notes`
-- `typography.csv` — type-scale presets. Columns:
-  `id,scale_name,base_size,scale_ratio,headings,body,use_case`
-- `styles.csv` — named visual styles with characteristics, best-for, color
-  tendency, examples.
-- `components.csv` — component variants, states, accessibility, best practices.
-- `patterns.csv` — UX/interaction patterns with when-to-use and implementation.
-- `layouts.csv` — layout structures with responsive notes and examples.
-- `spacing.csv` — spacing-scale presets.
-- `charts.csv` — chart-type selection by data type, with libraries and a11y.
-- `design-systems.csv` — named design-system presets (principles, color, type,
-  components, spacing).
-- `anti-patterns.csv` — what to avoid, why, what to do instead, severity.
-- `ux-guidelines.csv` — UX rules with priority, rationale, implementation, and
-  `wcag_reference`.
+Every CSV has a header row; the column names below are the **real** headers
+(line 1 of each file).
+
+- `products.csv` — product type -> style and palette recommendations.
+  Columns: `No,Product Type,Keywords,Primary Style Recommendation,Secondary Styles,Landing Page Pattern,Dashboard Style (if applicable),Color Palette Focus,Key Considerations`
+- `colors.csv` — named palettes as full token sets (primary/secondary/accent,
+  on-colors, background, card, muted, border, destructive, ring) per product
+  type. Columns: `No,Product Type,Primary,On Primary,Secondary,On Secondary,Accent,On Accent,Background,Foreground,Card,Card Foreground,Muted,Muted Foreground,Border,Destructive,On Destructive,Ring,Notes`
+- `typography.csv` — font pairings (heading + body) with mood, Google Fonts
+  URL, CSS import, and Tailwind config. This is the **font-pairing** file.
+  Columns: `No,Font Pairing Name,Category,Heading Font,Body Font,Mood/Style Keywords,Best For,Google Fonts URL,CSS Import,Tailwind Config,Notes`
+- `styles.csv` — named visual styles with colors, effects, best-for, light/dark
+  support, accessibility, framework compatibility, and AI-prompt keywords.
+  Columns: `No,Style Category,Type,Keywords,Primary Colors,Secondary Colors,Effects & Animation,Best For,Do Not Use For,Light Mode ✓,Dark Mode ✓,Performance,Accessibility,Mobile-Friendly,Conversion-Focused,Framework Compatibility,Era/Origin,Complexity,AI Prompt Keywords,CSS/Technical Keywords,Implementation Checklist,Design System Variables`
+- `charts.csv` — chart-type selection by data type, with secondary options,
+  volume thresholds, color/a11y guidance, and library recommendations.
+  Columns: `No,Data Type,Keywords,Best Chart Type,Secondary Options,When to Use,When NOT to Use,Data Volume Threshold,Color Guidance,Accessibility Grade,Accessibility Notes,A11y Fallback,Library Recommendation,Interactive Level`
+- `icons.csv` — icon lookup by category/name with library, import code, and
+  recommended usage. Columns: `No,Category,Icon Name,Keywords,Library,Import Code,Usage,Best For,Style`
+- `landing.csv` — landing-page patterns: section order, CTA placement, color
+  strategy, recommended effects, conversion notes.
+  Columns: `No,Pattern Name,Keywords,Section Order,Primary CTA Placement,Color Strategy,Recommended Effects,Conversion Optimization`
+- `app-interface.csv` — application-interface issues with do/don't and good/bad
+  code examples, by severity. Columns: `No,Category,Issue,Keywords,Platform,Description,Do,Don't,Code Example Good,Code Example Bad,Severity`
+- `ux-guidelines.csv` — UX rules with do/don't, good/bad code examples, and
+  severity. Columns: `No,Category,Issue,Platform,Description,Do,Don't,Code Example Good,Code Example Bad,Severity`
+- `react-performance.csv` — React performance issues with do/don't and
+  good/bad code examples, by severity. Columns: `No,Category,Issue,Keywords,Platform,Description,Do,Don't,Code Example Good,Code Example Bad,Severity`
+- `ui-reasoning.csv` — higher-level UI decision rules: recommended pattern,
+  style/color/typography priorities, key effects, decision rules, anti-patterns.
+  Columns: `No,UI_Category,Recommended_Pattern,Style_Priority,Color_Mood,Typography_Mood,Key_Effects,Decision_Rules,Anti_Patterns,Severity`
 
 Note: upstream's large `google-fonts.csv` (~745KB) is intentionally **not**
-vendored — use `fonts.csv` for curated pairings.
+vendored — use `typography.csv` for curated font pairings.
 
 ### `data/stacks/*.csv` — per-framework UI rules (16 files)
 
-`angular`, `astro`, `flutter`, `htmx`, `laravel`, `nextjs`, `nuxt`, `react`,
-`remix`, `solid`, `svelte`, `sveltekit`, `swiftui`, `tanstack`, `vue`, `wxt`.
-Each carries framework-specific UI/UX conventions with rationale and examples.
+`angular`, `astro`, `flutter`, `html-tailwind`, `jetpack-compose`, `laravel`,
+`nextjs`, `nuxt-ui`, `nuxtjs`, `react`, `react-native`, `shadcn`, `svelte`,
+`swiftui`, `threejs`, `vue`.
+
+Each per-stack file shares the same schema — framework-specific guidelines with
+rationale and good/bad code examples. Columns: `No,Category,Guideline,Description,Do,Don't,Code Good,Code Bad,Severity,Docs URL`.
 
 ### `reference/quick-reference.md`
 
@@ -73,28 +87,55 @@ when you want orientation before diving into the CSVs).
 
 ## How to use it (concrete examples)
 
-Look up the recommended styles and palette approach for a product type:
+Look up the recommended styles and landing pattern for a product type
+(matches the `Product Type` / `Keywords` columns of `products.csv`):
 
 ```bash
 grep -i fintech skills/ui-ux-pro-max/data/products.csv
 ```
 
-Find palettes by mood / use case:
+Pull a full palette token set for a product type from `colors.csv`:
 
 ```bash
-grep -i "healthcare\|clinical\|calm" skills/ui-ux-pro-max/data/colors.csv
+grep -i "healthcare\|saas\|dashboard" skills/ui-ux-pro-max/data/colors.csv
 ```
 
-Pull the UI conventions for a specific framework:
+Find a font pairing by mood or use case (`typography.csv` is the pairing
+file — `Font Pairing Name` / `Mood/Style Keywords` / `Best For`):
+
+```bash
+grep -i "serif\|editorial\|elegant" skills/ui-ux-pro-max/data/typography.csv
+```
+
+Pick a chart type for a given data type from `charts.csv`:
+
+```bash
+grep -i "time-series\|comparison\|distribution" skills/ui-ux-pro-max/data/charts.csv
+```
+
+Look up a landing-page section order / CTA placement from `landing.csv`:
+
+```bash
+grep -i "hero\|pricing\|testimonial" skills/ui-ux-pro-max/data/landing.csv
+```
+
+Pull the UI conventions for a specific framework (per-stack files share the
+`Category` / `Guideline` / `Severity` schema):
 
 ```bash
 grep -i "form\|validation" skills/ui-ux-pro-max/data/stacks/nextjs.csv
 ```
 
-Find high-priority, WCAG-cited UX rules:
+Find high-severity UX rules with good/bad code examples (`Severity` column):
 
 ```bash
 grep -i "critical\|high" skills/ui-ux-pro-max/data/ux-guidelines.csv
+```
+
+Look up React performance pitfalls from `react-performance.csv`:
+
+```bash
+grep -i "re-render\|memo\|effect" skills/ui-ux-pro-max/data/react-performance.csv
 ```
 
 ## Workflow positioning
