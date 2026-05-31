@@ -375,6 +375,17 @@ walter_audit_append() {
     _walter_audit_release_lock "$lock_path"
     return 1
   }
+  if ! _walter_audit_fd_matches_path 9 "$chain_path"; then
+    exec 9>&-
+    _walter_audit_release_lock "$lock_path"
+    retry_count="${WALTER_AUDIT_APPEND_RETRY:-0}"
+    if [[ "$retry_count" -ge 3 ]]; then
+      echo "walter-audit-chain: chain path changed after append: $chain_path" >&2
+      return 1
+    fi
+    WALTER_AUDIT_APPEND_RETRY=$((retry_count + 1)) walter_audit_append "$tool" "$input" "$decision" "$source" "$reason"
+    return "$?"
+  fi
   exec 9>&-
   _walter_audit_release_lock "$lock_path"
   printf '%s\n' "$chain_path"
