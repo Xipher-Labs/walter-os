@@ -21,6 +21,11 @@ walter_audit_chain_path() {
   printf '%s/chain-%s.jsonl\n' "$(walter_audit_dir)" "$date_value"
 }
 
+walter_audit_root_path() {
+  local date_value="${1:-$(walter_audit_date)}"
+  printf '%s/root-%s.txt\n' "$(walter_audit_dir)" "$date_value"
+}
+
 walter_audit_lock_path() {
   printf '%s/.chain.lock\n' "$(walter_audit_dir)"
 }
@@ -348,13 +353,49 @@ _walter_audit_verify_chain_file_unlocked() {
   printf '%s\n' "$row_number"
 }
 
+_walter_audit_write_root_unlocked() {
+  local root_path="$1" root_hash="$2" tmp_path
+  [[ "$root_hash" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "walter-audit-chain: invalid root hash: $root_hash" >&2
+    return 1
+  }
+  tmp_path="$(mktemp "${root_path}.XXXXXX")" || return 1
+  printf '%s' "$root_hash" > "$tmp_path" || {
+    rm -f "$tmp_path"
+    return 1
+  }
+  chmod 600 "$tmp_path" || {
+    rm -f "$tmp_path"
+    return 1
+  }
+  mv "$tmp_path" "$root_path" || {
+    rm -f "$tmp_path"
+    return 1
+  }
+}
+
+_walter_audit_verify_root_unlocked() {
+  local root_path="$1" expected_hash="$2" root_hash
+  if [[ ! -f "$root_path" ]]; then
+    echo "walter-audit-chain: root hash not found: $root_path" >&2
+    return 1
+  fi
+  root_hash="$(cat "$root_path")" || return 1
+  if [[ "$root_hash" != "$expected_hash" ]]; then
+    echo "walter-audit-chain: root hash mismatch: $root_path" >&2
+    echo "  expected: $expected_hash" >&2
+    echo "  actual:   $root_hash" >&2
+    return 1
+  fi
+}
+
 walter_audit_append() {
   [[ "$#" -eq 5 ]] || {
     echo "walter-audit-chain: usage: walter_audit_append <tool> <input> <decision> <source> <reason>" >&2
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row summary timestamp row_date
+  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row summary timestamp row_date root_hash
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -364,6 +405,7 @@ walter_audit_append() {
   timestamp="$(walter_audit_timestamp)"
   row_date="$(walter_audit_date_from_timestamp "$timestamp")"
   chain_path="$(walter_audit_chain_path "$row_date")"
+  root_path="$(walter_audit_root_path "$row_date")"
 
   if [[ ! -e "$chain_path" ]]; then
     : > "$chain_path" || {
@@ -412,6 +454,11 @@ walter_audit_append() {
       return 1
     }
     previous_hash="$(walter_audit_hash_string "$previous_line")"
+    _walter_audit_verify_root_unlocked "$root_path" "$previous_hash" || {
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
   fi
 
   summary="$(walter_audit_input_summary "$input")"
@@ -475,6 +522,13 @@ walter_audit_append() {
     WALTER_AUDIT_APPEND_RETRY=$((retry_count + 1)) walter_audit_append "$tool" "$input" "$decision" "$source" "$reason"
     return "$?"
   fi
+  root_hash="$(walter_audit_hash_string "$row")"
+  _walter_audit_write_root_unlocked "$root_path" "$root_hash" || {
+    _walter_audit_truncate_fd 9 "$pre_write_size" || true
+    exec 9>&-
+    _walter_audit_release_lock "$lock_path"
+    return 1
+  }
   exec 9>&-
   _walter_audit_release_lock "$lock_path"
   printf '%s\n' "$chain_path"
@@ -490,9 +544,10 @@ walter_audit_verify_chain() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path lock_path row_count verify_status
+  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count verify_status root_hash previous_line
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
+  root_path="$(walter_audit_root_path "$date_value")"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
   chmod 700 "$audit_dir" || return 1
@@ -504,7 +559,13 @@ walter_audit_verify_chain() {
   fi
 
   if row_count="$(_walter_audit_verify_chain_file_unlocked "$chain_path")"; then
-    verify_status=0
+    previous_line="$(tail -n 1 "$chain_path")"
+    root_hash="$(walter_audit_hash_string "$previous_line")"
+    if _walter_audit_verify_root_unlocked "$root_path" "$root_hash"; then
+      verify_status=0
+    else
+      verify_status="$?"
+    fi
   else
     verify_status="$?"
   fi

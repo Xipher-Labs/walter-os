@@ -27,6 +27,10 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+_root_path() {
+  printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
+}
+
 _mode_of() {
   if stat -f %Lp "$1" >/dev/null 2>&1; then
     stat -f %Lp "$1"
@@ -62,9 +66,12 @@ _verify_chain() {
   [ "$status" -eq 0 ]
   [ "$output" = "$(_chain_path)" ]
   [ -f "$(_chain_path)" ]
+  [ -f "$(_root_path)" ]
   [ "$(_mode_of "$WALTER_CONFIG/audit")" = "700" ]
   [ "$(_mode_of "$(_chain_path)")" = "600" ]
+  [ "$(_mode_of "$(_root_path)")" = "600" ]
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+  [ "$(cat "$(_root_path)")" = "$(_sha256 "$(sed -n '1p' "$(_chain_path)")")" ]
   jq -e '.prev_hash == "null"' "$(_chain_path)"
   jq -e '.tool == "Bash" and .decision == "allow" and .decision_source == "approval-gate"' "$(_chain_path)"
 }

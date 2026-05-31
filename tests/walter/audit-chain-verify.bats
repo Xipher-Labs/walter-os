@@ -28,10 +28,22 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+_root_path() {
+  printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
+}
+
 _make_chain() {
   bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
   WALTER_AUDIT_NOW="2026-05-31T12:00:01Z" \
     bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'rm -rf /tmp/nope' block bash-denylist destructive >/dev/null"
+}
+
+_sha256() {
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+  else
+    printf '%s' "$1" | sha256sum | awk '{print $1}'
+  fi
 }
 
 @test "B-1: clean chain verifies through library" {
@@ -66,6 +78,18 @@ _make_chain() {
   [[ "$output" == *"row 2: prev_hash mismatch"* ]]
 }
 
+@test "B-1: tampered final row breaks root hash" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)")"
+  second="$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"root hash mismatch"* ]]
+}
+
 @test "B-1: invalid JSON fails with row number" {
   _make_chain
   printf '{bad-json\n' >> "$(_chain_path)"
@@ -98,6 +122,20 @@ _make_chain() {
 
   [ "$status" -eq 1 ]
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
+}
+
+@test "B-1: append rejects tampered final row before adding row" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)")"
+  second="$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after tail tamper' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"root hash mismatch"* ]]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
+  [ "$(cat "$(_root_path)")" != "$(_sha256 "$second")" ]
 }
 
 @test "B-1: unterminated final row fails verification" {
