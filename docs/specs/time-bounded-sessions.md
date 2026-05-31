@@ -99,17 +99,17 @@ A-2 / capability-tokens).
   - Invocation after `max_hours` since start triggers end-of-session
 
 ### AC-2 — `hooks/session-timeout.sh` hook
-- [ ] Hook runs on every `UserPromptSubmit` (Claude Code).
-- [ ] `install.sh` (and `install.sh --upgrade`) registers the new
+- [x] Hook runs on every `UserPromptSubmit` (Claude Code).
+- [x] `install.sh` (and `install.sh --upgrade`) registers the new
   `UserPromptSubmit` hook in `~/.claude/settings.json` alongside the
   existing `SessionStart` + `PreToolUse` registrations. Today the
   installer wires only those two events; the new hook needs an
   explicit registration step plus the same hook-checksums baseline
   treatment as the other hooks.
-- [ ] Reads / writes session state via `session-state.sh`.
-- [ ] On expiry: emits `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","permissionDecision":"block","permissionDecisionReason":"Walter-OS session expired at HH:MM (<trigger>=<effective-limit>). Type /session restart to begin a new session."}}` and exits 0. **Note**: this JSON shape is the Claude Code `UserPromptSubmit`-event contract (`hookSpecificOutput.permissionDecision`/`permissionDecisionReason`), which DIFFERS from the simpler `{"decision":"block","reason":"..."}` shape used by `PreToolUse` hooks like `bash-denylist.sh` and `approval-gate.sh`. The two contracts are not interchangeable — using the `PreToolUse` shape for a `UserPromptSubmit` hook produces a parse error in Claude Code and the hook fails open. See https://docs.claude.com/en/docs/claude-code/hooks for the per-event schema reference.
-- [ ] On non-expiry: passthrough allow.
-- [ ] bats coverage in `tests/hooks/session-timeout.bats`:
+- [x] Reads / writes session state via `session-state.sh`.
+- [x] On expiry: emits `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","permissionDecision":"block","permissionDecisionReason":"Walter-OS session expired at HH:MM (<trigger>=<effective-limit>). Type /session restart to begin a new session."}}` and exits 0. **Note**: this JSON shape is the Claude Code `UserPromptSubmit`-event contract (`hookSpecificOutput.permissionDecision`/`permissionDecisionReason`), which DIFFERS from the simpler `{"decision":"block","reason":"..."}` shape used by `PreToolUse` hooks like `bash-denylist.sh` and `approval-gate.sh`. The two contracts are not interchangeable — using the `PreToolUse` shape for a `UserPromptSubmit` hook produces a parse error in Claude Code and the hook fails open. See https://docs.claude.com/en/docs/claude-code/hooks for the per-event schema reference.
+- [x] On non-expiry: passthrough allow.
+- [x] bats coverage in `tests/hooks/session-timeout.bats`:
   - Within limits → allow
   - Beyond `max_hours` → block with `session expired (max-hours)` reason
   - Beyond `max_idle_min` → block with `session expired (max-idle)` reason
@@ -127,8 +127,8 @@ A-2 / capability-tokens).
 - [ ] bats coverage in `tests/walter/session-cli.bats`.
 
 ### AC-4 — Env var wiring
-- [ ] `WALTER_SESSION_MAX_HOURS`, `WALTER_SESSION_MAX_IDLE_MIN` added to `WALTER_ENV_ALLOWLIST` in `env-loader.sh` (extends the P1-09 allowlist).
-- [ ] Defaults documented in `contexts/_examples/personal.env.example` with sensible inline comments.
+- [x] `WALTER_SESSION_MAX_HOURS`, `WALTER_SESSION_MAX_IDLE_MIN` added to `WALTER_ENV_ALLOWLIST` in `env-loader.sh` (extends the P1-09 allowlist).
+- [x] Defaults documented in `contexts/_examples/personal.env.example` with sensible inline comments.
 
 ### AC-5 — PHI override
 - [ ] `medical-data-compliance` skill / hook: when active, exports `WALTER_SESSION_MAX_HOURS=4`, `WALTER_SESSION_MAX_IDLE_MIN=30`. These values are STICKY for the session — operator's `personal.env` cannot override upward.
