@@ -3,7 +3,21 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  TEST_HOME="$(mktemp -d)"
+  export HOME="$TEST_HOME"
+  export CLAUDE_HOME="$TEST_HOME/.claude"
+  export CODEX_HOME="$TEST_HOME/.codex"
+  export WALTER_CONFIG="$TEST_HOME/.config/walter-os"
+  export LAUNCH_AGENTS="$TEST_HOME/Library/LaunchAgents"
   cd "$REPO_ROOT"
+}
+
+teardown() {
+  case "${TEST_HOME:-}" in
+    /tmp/*|/var/folders/*|/var/tmp/*)
+      [[ -d "$TEST_HOME" ]] && rm -r "$TEST_HOME"
+      ;;
+  esac
 }
 
 @test "install.sh --dry-run exits 0" {

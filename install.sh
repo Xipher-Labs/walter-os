@@ -206,6 +206,7 @@ check_requirements() {
   check_required_tool git "brew install git  # or: sudo apt-get install -y git"
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
+  check_required_tool openssl "brew install openssl  # or: sudo apt-get install -y openssl"
   # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
@@ -490,24 +491,31 @@ check_preflight() {
   #
   # OS-specific install hints: pick brew vs apt/snap based on
   # `uname -s` so the hint matches the operator's machine.
-  local _pkg_hint_jq _pkg_hint_yq
+  local _pkg_hint_jq _pkg_hint_yq _pkg_hint_openssl
   case "$(uname -s)" in
     Darwin)
       _pkg_hint_jq="brew install jq"
       _pkg_hint_yq="brew install yq"
+      _pkg_hint_openssl="brew install openssl"
       ;;
     Linux)
       _pkg_hint_jq="sudo apt install jq  # or: sudo dnf install jq"
       _pkg_hint_yq="sudo snap install yq  # or: see https://github.com/mikefarah/yq#install"
+      _pkg_hint_openssl="sudo apt install openssl  # or: sudo dnf install openssl"
       ;;
     *)
       _pkg_hint_jq="install jq via your OS package manager"
       _pkg_hint_yq="install yq via your OS package manager"
+      _pkg_hint_openssl="install openssl via your OS package manager"
       ;;
   esac
 
   if ! command -v jq >/dev/null 2>&1; then
     err "jq required. ${_pkg_hint_jq}"
+    exit 4
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    err "openssl required for session capability keys. ${_pkg_hint_openssl}"
     exit 4
   fi
 
@@ -1342,7 +1350,7 @@ _install_deps_macos() {
   # in Step 1 and then trip on the missing tool the next time
   # approval-gate.sh ran on a hook event (the failure surfaces as a
   # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
-  local required_deps=(git curl jq yq docker bats)
+  local required_deps=(git curl jq openssl yq docker bats)
   local optional_deps=(python3)
 
   # Hard dependency: docker
@@ -1411,7 +1419,7 @@ _install_deps_macos() {
 
 _install_deps_linux() {
   # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
-  local required_deps=(git curl jq yq bats)
+  local required_deps=(git curl jq openssl yq bats)
   local optional_deps=(python3)
 
   # Hard dependency: docker

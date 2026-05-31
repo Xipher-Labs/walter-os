@@ -18,6 +18,7 @@ Run this first from a clean clone:
 | `git` | Clone/update Walter-OS | `brew install git` or `sudo apt-get install -y git` |
 | `curl` | Installer downloads and health checks | `brew install curl` or `sudo apt-get install -y curl` |
 | `jq` | Installer, hooks, MCP config generation | `brew install jq` or `sudo apt-get install -y jq` |
+| `openssl` | Session capability-key generation | `brew install openssl` or `sudo apt-get install -y openssl` |
 | `docker` | Full walter-host stack | OrbStack/Docker Desktop on macOS, Docker Engine on Linux |
 
 ## Secrets Bootstrap Tools

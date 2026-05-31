@@ -17,8 +17,12 @@ setup() {
 teardown() {
   chmod -R u+w "$TMP_HOME" 2>/dev/null || true
   case "$TMP_HOME" in
-    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
+    /tmp/*|/var/folders/*|/var/tmp/*) rm -r "$TMP_HOME" ;;
   esac
+}
+
+_mode() {
+  stat -f "%Lp" "$1" 2>/dev/null || stat -c "%a" "$1"
 }
 
 @test "session touch creates state file with current timestamps" {
@@ -32,6 +36,26 @@ teardown() {
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
   [ -f "$state_file" ]
   jq -e '.session_id and .started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:00:00Z"' "$state_file"
+}
+
+@test "session touch creates capability signing key material" {
+  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+
+  [ -f "$private_key" ]
+  [ -f "$public_key" ]
+  [ -d "$caps_dir" ]
+  [ "$(_mode "$private_key")" = "600" ]
+  [ "$(_mode "$caps_dir")" = "700" ]
+  openssl pkey -in "$private_key" -pubout 2>/dev/null | cmp -s - "$public_key"
 }
 
 @test "clock override is ignored outside explicit test mode" {
@@ -168,7 +192,7 @@ teardown() {
 }
 
 @test "session touch fails closed when state cannot be created" {
-  rm -rf "$WALTER_CONFIG"
+  rm -r "$WALTER_CONFIG"
   printf '%s\n' "not a directory" > "$WALTER_CONFIG"
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
@@ -183,12 +207,36 @@ teardown() {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
   [ -f "$state_file" ]
+  [ -f "$private_key" ]
+  [ -f "$public_key" ]
+  [ -d "$caps_dir" ]
 
   run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
 
   [ "$status" -eq 0 ]
   [ ! -f "$state_file" ]
+  [ ! -f "$private_key" ]
+  [ ! -d "$caps_dir" ]
+  [ -f "$public_key" ]
+}
+
+@test "session end tolerates an already-missing capabilities directory" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  rm -r "$caps_dir"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ ! -f "$state_file" ]
+  [ ! -f "$private_key" ]
 }
 
 @test "session end reports delete failures" {

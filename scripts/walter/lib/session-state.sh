@@ -48,6 +48,21 @@ _walter_session_state_dir() {
   printf '%s/state' "${WALTER_CONFIG:-$HOME/.config/walter-os}"
 }
 
+_walter_session_private_key_file() {
+  local session_id="$1"
+  printf '%s/session-%s.key' "$(_walter_session_state_dir)" "$session_id"
+}
+
+_walter_session_public_key_file() {
+  local session_id="$1"
+  printf '%s/session-%s.pub' "$(_walter_session_state_dir)" "$session_id"
+}
+
+_walter_session_caps_dir() {
+  local session_id="$1"
+  printf '%s/caps-%s' "$(_walter_session_state_dir)" "$session_id"
+}
+
 _walter_session_positive_int_or_default() {
   local value="$1" default="$2"
   if [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
@@ -98,21 +113,66 @@ walter_session_get() {
 
 _walter_session_write_new() {
   local repo="$1" file="$2" now_epoch="$3"
-  local state_dir now_iso max_hours max_idle tmp_file
+  local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub
   state_dir="$(dirname "$file")"
   now_iso="$(_walter_session_iso "$now_epoch")"
   max_hours="$(_walter_session_effective_max_hours)"
   max_idle="$(_walter_session_effective_idle_min)"
+  session_id="$(_walter_session_uuid)"
+  private_key="$(_walter_session_private_key_file "$session_id")"
+  public_key="$(_walter_session_public_key_file "$session_id")"
+  caps_dir="$(_walter_session_caps_dir "$session_id")"
 
   mkdir -p "$state_dir" || return 1
   chmod 700 "$state_dir" 2>/dev/null || true
-  tmp_file="$(mktemp "${state_dir}/session.XXXXXX")" || return 1
+  mkdir -p "$caps_dir" || return 1
+  chmod 700 "$caps_dir" 2>/dev/null || true
+
+  if ! command -v openssl >/dev/null 2>&1; then
+    rm -r "$caps_dir"
+    return 1
+  fi
+  tmp_key="$(mktemp "${state_dir}/session-key.XXXXXX")" || {
+    rm -r "$caps_dir"
+    return 1
+  }
+  tmp_pub="$(mktemp "${state_dir}/session-pub.XXXXXX")" || {
+    rm -f "$tmp_key"
+    rm -r "$caps_dir"
+    return 1
+  }
+  if ! openssl genpkey -algorithm ED25519 -out "$tmp_key" >/dev/null 2>&1; then
+    rm -f "$tmp_key" "$tmp_pub"
+    rm -r "$caps_dir"
+    return 1
+  fi
+  chmod 600 "$tmp_key" 2>/dev/null || true
+  if ! openssl pkey -in "$tmp_key" -pubout -out "$tmp_pub" >/dev/null 2>&1; then
+    rm -f "$tmp_key" "$tmp_pub"
+    rm -r "$caps_dir"
+    return 1
+  fi
+  chmod 644 "$tmp_pub" 2>/dev/null || true
+  if ! mv "$tmp_key" "$private_key" || ! mv "$tmp_pub" "$public_key"; then
+    rm -f "$tmp_key" "$tmp_pub" "$private_key" "$public_key"
+    rm -r "$caps_dir"
+    return 1
+  fi
+
+  tmp_file="$(mktemp "${state_dir}/session.XXXXXX")" || {
+    rm -f "$private_key" "$public_key"
+    rm -r "$caps_dir"
+    return 1
+  }
 
   if ! jq -n \
-    --arg session_id "$(_walter_session_uuid)" \
+    --arg session_id "$session_id" \
     --arg started_at "$now_iso" \
     --arg last_activity_at "$now_iso" \
     --arg repo_path "$repo" \
+    --arg private_key "$private_key" \
+    --arg public_key "$public_key" \
+    --arg caps_dir "$caps_dir" \
     --argjson max_hours "$max_hours" \
     --argjson max_idle "$max_idle" \
     '{
@@ -120,16 +180,23 @@ _walter_session_write_new() {
       started_at: $started_at,
       last_activity_at: $last_activity_at,
       repo_path: $repo_path,
+      capability_private_key_path: $private_key,
+      capability_public_key_path: $public_key,
+      capability_tokens_dir: $caps_dir,
       max_hours_at_start: $max_hours,
       max_idle_min_at_start: $max_idle,
       extensions: []
     }' > "$tmp_file"; then
     rm -f "$tmp_file"
+    rm -f "$private_key" "$public_key"
+    rm -r "$caps_dir"
     return 1
   fi
   chmod 600 "$tmp_file" 2>/dev/null || true
   if ! mv "$tmp_file" "$file"; then
     rm -f "$tmp_file"
+    rm -f "$private_key" "$public_key"
+    rm -r "$caps_dir"
     return 1
   fi
 }
@@ -209,8 +276,29 @@ walter_session_touch() {
 
 walter_session_end() {
   local repo="${1:-${PWD}}"
-  local file
+  local file private_key caps_dir
   file="$(walter_session_state_file "$repo")"
+  if [[ -f "$file" ]]; then
+    private_key="$(jq -r '.capability_private_key_path // empty' "$file" 2>/dev/null || true)"
+    caps_dir="$(jq -r '.capability_tokens_dir // empty' "$file" 2>/dev/null || true)"
+  fi
+  if [[ -n "${private_key:-}" ]] && ! rm -f "$private_key"; then
+    _walter_session_result "error" "state-delete" "$file"
+    return 12
+  fi
+  if [[ -n "${caps_dir:-}" ]]; then
+    case "$caps_dir" in
+      "$(_walter_session_state_dir)"/caps-*) ;;
+      *)
+        _walter_session_result "error" "state-delete" "$file"
+        return 12
+        ;;
+    esac
+    if [[ -d "$caps_dir" ]] && ! rm -r "$caps_dir"; then
+      _walter_session_result "error" "state-delete" "$file"
+      return 12
+    fi
+  fi
   if ! rm -f "$file"; then
     _walter_session_result "error" "state-delete" "$file"
     return 12

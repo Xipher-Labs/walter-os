@@ -76,6 +76,12 @@ setup() {
   [[ $(grep -cE 'local required_deps=\([^)]*\byq\b' "$INSTALL_SH") -ge 2 ]]
 }
 
+@test "openssl is required for session capability keys" {
+  grep -qE 'check_required_tool openssl' "$INSTALL_SH"
+  grep -qE 'openssl required for session capability keys' "$INSTALL_SH"
+  [[ $(grep -cE 'local required_deps=\([^)]*\bopenssl\b' "$INSTALL_SH") -ge 2 ]]
+}
+
 # -----------------------------------------------------------------------
 # Codex R2 #125: check_preflight ordering + flavor check
 # -----------------------------------------------------------------------
