@@ -62,6 +62,17 @@ audit_approval_decision() {
   fi
 }
 
+audit_dependency_failure_best_effort() {
+  local audit_tool="${1:-unknown}" audit_input="${2:-}" audit_reason="$3"
+  # jq-missing blocks happen before normal JSON tooling is available. The
+  # audit-chain helper can create an initial dependency-failure row without jq,
+  # but refuses to extend an existing chain because it cannot verify canonical
+  # JSON/root integrity. Keep the safety decision fail-closed either way.
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append "$audit_tool" "$audit_input" block "approval-gate" "$audit_reason" >/dev/null 2>&1 || true
+  fi
+}
+
 # Standing-approvals config path is HARDCODED (audit P1-06). The env var
 # `WALTER_STANDING_APPROVALS` is no longer honored as a config-pointer
 # override — letting attackers point this at an attacker-controlled YAML
@@ -822,9 +833,7 @@ if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Allowing all ops when jq is missing would let an attacker bypass the gate
   # by shadowing jq on PATH. See: docs/operational/security-audit-2026-05-11.md P0-03
   echo "approval-gate: jq missing — failing closed for safety. Install jq to proceed." >&2
-  if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append unknown "$input" block "approval-gate" "approval-gate: jq missing — failing closed for safety" >/dev/null 2>&1 || true
-  fi
+  audit_dependency_failure_best_effort unknown "$input" "approval-gate: jq missing — failing closed for safety"
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: jq missing — failing closed for safety"}}\n'
   exit 0
 fi
@@ -837,9 +846,7 @@ if ! command -v yq >/dev/null 2>&1; then
   # hard dependency, same as jq.
   # See: docs/operational/security-audit-2026-05-11.md P1-05
   echo "approval-gate: yq missing — failing closed for safety. Install yq to proceed." >&2
-  if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append unknown "$input" block "approval-gate" "approval-gate: yq missing — failing closed for safety" >/dev/null 2>&1 || true
-  fi
+  audit_approval_decision unknown "$input" block "approval-gate: yq missing — failing closed for safety"
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: yq missing — failing closed for safety"}}\n'
   exit 0
 fi

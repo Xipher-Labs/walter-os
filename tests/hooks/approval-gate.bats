@@ -896,12 +896,12 @@ EOF
 @test "P1-05: hook mode fails CLOSED when yq is missing" {
   command -v jq >/dev/null 2>&1 || skip "jq required"
 
-  # Build a minimal PATH that has every binary the hook NEEDS at startup
-  # (bash, jq, grep, sed, cat, rm, mkdir, printf, echo) but does NOT
-  # include yq. `command -v yq` then returns false.
+  # Build a minimal PATH that has every binary the hook and strict audit
+  # append path need, but does NOT include yq. `command -v yq` then
+  # returns false while the yq-missing decision can still be audited.
   local stub_dir
   stub_dir="$(mktemp -d)"
-  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr; do
+  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr chmod date tail od stat shasum sha256sum ps sleep perl cut dirname mv; do
     if [ -x "$(command -v "$bin" 2>/dev/null)" ]; then
       ln -sf "$(command -v "$bin")" "$stub_dir/$bin"
     fi

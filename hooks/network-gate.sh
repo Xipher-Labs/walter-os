@@ -95,6 +95,17 @@ _audit_decision() {
   fi
 }
 
+_audit_dependency_failure_best_effort() {
+  local reason="$1"
+  # jq-missing blocks happen before normal JSON tooling is available. The
+  # audit-chain helper can create an initial dependency-failure row without jq,
+  # but refuses to extend an existing chain because it cannot verify canonical
+  # JSON/root integrity. Keep the safety decision fail-closed either way.
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append unknown "$INPUT" block "network-gate" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
 _emit_allow() {
   _audit_decision allow "${1:-}"
   printf '%s\n' '{"decision":"allow"}'
@@ -118,9 +129,7 @@ _emit_allow_with_warn() {
 if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Same posture as bash-denylist.sh: without jq we cannot parse the
   # hook event. Fail-closed.
-  if declare -F walter_audit_append >/dev/null 2>&1; then
-    walter_audit_append unknown "$INPUT" block "network-gate" "network-gate: jq missing — failing closed for safety. Install jq to proceed." >/dev/null 2>&1 || true
-  fi
+  _audit_dependency_failure_best_effort "network-gate: jq missing — failing closed for safety. Install jq to proceed."
   printf '%s\n' '{"decision":"block","reason":"network-gate: jq missing — failing closed for safety. Install jq to proceed."}'
   exit 0
 fi
