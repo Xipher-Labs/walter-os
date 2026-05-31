@@ -71,15 +71,25 @@ export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // `mounted` guards every async callback so a reconnect timer or a late
+    // SSE event that fires after unmount can never call setState or open a new
+    // EventSource on a dead component.
+    let mounted = true;
+
     function connect() {
+      if (!mounted) return;
       const es = new EventSource(sseUrl);
       esRef.current = es;
 
-      es.onopen = () => setConnected(true);
+      es.onopen = () => {
+        if (mounted) setConnected(true);
+      };
 
       es.onmessage = (event) => {
+        if (!mounted) return;
         try {
           const data = JSON.parse(event.data) as MetricsSnapshot;
           setSnapshot(data);
@@ -90,17 +100,25 @@ export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
       };
 
       es.onerror = () => {
-        setConnected(false);
         es.close();
-        // Reconnect after 5s
-        setTimeout(connect, 5000);
+        if (!mounted) return;
+        setConnected(false);
+        // Reconnect after 5s; the handle is tracked so cleanup can cancel a
+        // pending reconnect on unmount.
+        reconnectRef.current = setTimeout(connect, 5000);
       };
     }
 
     connect();
 
     return () => {
+      mounted = false;
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+        reconnectRef.current = null;
+      }
       esRef.current?.close();
+      esRef.current = null;
     };
   }, [sseUrl]);
 
