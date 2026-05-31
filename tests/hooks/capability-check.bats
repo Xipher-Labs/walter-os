@@ -79,6 +79,24 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "gh api is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "npm install is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "npm install left-pad")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "local npm test remains low-tier without capability" {
+  output="$(_hook_json Bash command "npm test")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress requires capability coverage for every destination" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
@@ -169,6 +187,20 @@ _mint() {
 
   output="$(_hook_json Write file_path "hooks/approval-gate.sh")"
   echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "NotebookEdit sensitive notebook_path without capability is blocked" {
+  output="$(_hook_json NotebookEdit notebook_path "personal/health/notes.ipynb")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "NotebookEdit sensitive notebook_path with matching capability is allowed" {
+  _mint NotebookEdit --paths 'personal/health/**' --duration 30m >/dev/null
+
+  output="$(_hook_json NotebookEdit notebook_path "personal/health/notes.ipynb")"
+
+  echo "$output" | jq -e '.decision == "allow"'
 }
 
 @test "two-factor Bash bypass allows high-tier no-cap command with warning" {

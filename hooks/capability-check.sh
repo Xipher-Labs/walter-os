@@ -110,7 +110,14 @@ _cap_extract_hosts() {
 _cap_is_network_command() {
   local command="$1"
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(curl|wget)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?gh([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(ssh|scp|rsync|nc|ncat|telnet)([[:space:]]|$) ]] && return 0
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?git[[:space:]]+(clone|fetch|pull|push|ls-remote)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(pip|pip3|uv|uvx)[[:space:]]+(install|download|sync)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(npm|pnpm|yarn)[[:space:]]+(install|add|update|upgrade|dlx|exec)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(cargo|brew|gem)[[:space:]]+(install|search|update|upgrade)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?go[[:space:]]+(get|install)([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?go[[:space:]]+mod[[:space:]]+tidy([[:space:]]|$) ]] && return 0
   return 1
 }
 
@@ -259,7 +266,8 @@ _cap_target_from_json() {
   local tool="$1" input="$2"
   case "$tool" in
     Bash) jq -r '.tool_input.command // ""' <<< "$input" ;;
-    Edit|Write|MultiEdit|NotebookEdit) jq -r '.tool_input.file_path // ""' <<< "$input" ;;
+    Edit|Write|MultiEdit) jq -r '.tool_input.file_path // ""' <<< "$input" ;;
+    NotebookEdit) jq -r '.tool_input.notebook_path // .tool_input.file_path // ""' <<< "$input" ;;
     *) printf '' ;;
   esac
 }
