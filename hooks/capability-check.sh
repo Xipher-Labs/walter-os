@@ -566,6 +566,14 @@ _cap_is_network_command() {
         while [[ "$j" -lt "${#tokens[@]}" ]]; do
           sub="${tokens[$j]}"
           case "$sub" in
+            --proxy|--index-url|-i|--extra-index-url|--trusted-host|--cert|--client-cert|--cache-dir|--config-settings|--directory|--project|--config-file|--python)
+              j=$((j + 2))
+              continue
+              ;;
+            --proxy=*|--index-url=*|--extra-index-url=*|--trusted-host=*|--cert=*|--client-cert=*|--cache-dir=*|--config-settings=*|--directory=*|--project=*|--config-file=*|--python=*)
+              j=$((j + 1))
+              continue
+              ;;
             -*) j=$((j + 1)); continue ;;
             pip) j=$((j + 1)); continue ;;
             install|download|sync) return 0 ;;
@@ -584,6 +592,14 @@ _cap_is_network_command() {
                 while [[ "$j" -lt "${#tokens[@]}" ]]; do
                   sub="${tokens[$j]}"
                   case "$sub" in
+                    --proxy|--index-url|-i|--extra-index-url|--trusted-host|--cert|--client-cert|--cache-dir|--config-settings)
+                      j=$((j + 2))
+                      continue
+                      ;;
+                    --proxy=*|--index-url=*|--extra-index-url=*|--trusted-host=*|--cert=*|--client-cert=*|--cache-dir=*|--config-settings=*)
+                      j=$((j + 1))
+                      continue
+                      ;;
                     -*) j=$((j + 1)); continue ;;
                     install|download|sync) return 0 ;;
                   esac

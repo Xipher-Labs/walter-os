@@ -462,6 +462,24 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "pip install behind value-taking global flags is high-tier" {
+  output="$(_hook_json Bash command "pip --proxy http://proxy.example install requests")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "python -m pip install behind value-taking flags is high-tier" {
+  output="$(_hook_json Bash command "python -m pip --proxy http://proxy.example install requests")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "uv pip install behind value-taking global flags is high-tier" {
+  output="$(_hook_json Bash command "uv --directory /tmp/repo pip install requests")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "python -m pip install with matching pattern capability is allowed" {
   _mint Bash --patterns '^python -m pip install requests$' --duration 30m >/dev/null
 
