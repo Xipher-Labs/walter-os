@@ -90,6 +90,7 @@ setup() {
 @test "python3 is required for capability token operations" {
   grep -qE 'check_required_tool python3' "$INSTALL_SH"
   [[ $(grep -cE 'local required_deps=\([^)]*\bpython3\b' "$INSTALL_SH") -ge 2 ]]
+  grep -qE '\[\[ "\$dep" == "python3" \]\] && install_dep="python"' "$INSTALL_SH"
   grep -qE 'python3 is REQUIRED at runtime for capability token operations' "$INSTALL_SH"
   ! grep -qE 'check_optional_tool python3' "$INSTALL_SH"
 }

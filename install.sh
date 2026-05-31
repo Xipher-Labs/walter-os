@@ -1423,6 +1423,8 @@ _install_deps_macos() {
   fi
 
   for dep in "${required_deps[@]}"; do
+    local install_dep="$dep"
+    [[ "$dep" == "python3" ]] && install_dep="python"
     [[ "$dep" == "docker" ]] && continue
     if [[ "$dep" == "openssl" ]]; then
       if _openssl_bin="$(resolve_openssl_bin)"; then
@@ -1458,10 +1460,10 @@ _install_deps_macos() {
       ok "$dep already installed"
     else
       if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: brew install $dep"
+        dry "would run: brew install $install_dep"
       else
         say "Installing $dep via Homebrew..."
-        brew install "$dep"
+        brew install "$install_dep"
         ok "Installed $dep"
       fi
     fi
