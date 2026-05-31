@@ -178,13 +178,19 @@ _shellish_normalize_payload() {
 _is_capability_token_mint_payload() {
   local payload="$1"
   local normalized
-  local walter_cli='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap([[:space:]]|$)'
-  local cap_script='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh([[:space:]]|$)'
+  local walter_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
+  local cap_script_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
+  local walter_ambiguous='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$][A-Za-z_]'
+  local cap_script_ambiguous='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$][A-Za-z_]'
   local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
-  [[ "$normalized" =~ $walter_cli ]] || [[ "$normalized" =~ $cap_script ]] || [[ "$normalized" =~ $cap_function ]]
+  [[ "$normalized" =~ $walter_mint ]] || \
+    [[ "$normalized" =~ $cap_script_mint ]] || \
+    [[ "$normalized" =~ $walter_ambiguous ]] || \
+    [[ "$normalized" =~ $cap_script_ambiguous ]] || \
+    [[ "$normalized" =~ $cap_function ]]
 }
 
 _is_capability_private_key_payload() {

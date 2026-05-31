@@ -225,6 +225,22 @@ teardown() {
   [[ "$status" -eq 0 ]]
 }
 
+@test "CLI: walter-os cap list remains allowed" {
+  run "$HOOK" check "walter-os cap list"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: walter-os cap verify remains allowed" {
+  run "$HOOK" check "walter-os cap verify /tmp/cap-test.paseto"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: ambiguous variable cap subcommand is blocked" {
+  run "$HOOK" check 'walter-os cap $subcommand'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
