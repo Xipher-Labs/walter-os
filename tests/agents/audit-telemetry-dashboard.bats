@@ -51,6 +51,19 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "audit promtail config keeps shared jobs in parity with the base config" {
+  base_jobs="$(grep "job_name:" "$PROMTAIL" | sed 's/.*job_name: //')"
+  audit_jobs="$(grep "job_name:" "$AUDIT_PROMTAIL" | sed 's/.*job_name: //' | grep -v '^walter-audit-chain$')"
+
+  [ "$audit_jobs" = "$base_jobs" ]
+}
+
+@test "audit promtail config limits env expansion to audit host label" {
+  run bash -c 'grep -v "WALTER_AUDIT_HOST" "$1" | grep -v "^[[:space:]]*#" | grep -E '\''\$[{(]?[A-Za-z0-9_]'\''' _ "$AUDIT_PROMTAIL"
+
+  [ "$status" -ne 0 ]
+}
+
 @test "Grafana audit dashboard has stable UID and at least six panels" {
   command -v python3 >/dev/null 2>&1 || skip "python3 required"
   python3 - "$DASHBOARD" <<'PY'
