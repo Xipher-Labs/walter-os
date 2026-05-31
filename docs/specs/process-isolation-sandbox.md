@@ -17,7 +17,7 @@ A determined prompt-injection that reaches an "allowed" tool call (because it lo
 - Spawn long-running background processes (e.g. mining)
 - Signal / kill other operator processes
 
-A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny-specific-paths + signal scope**. To avoid first-day frustration we use an opinionated allow-by-default + deny-dangerous-paths posture (see D-4 for the default policy and rationale) rather than a strict deny-by-default. Operators can tighten to deny-by-default via overlay profiles for high-sensitivity projects.
+A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny-specific-paths + signal scope**. Hook execution uses a strict read-only posture with only a private scratch directory writable. Skill execution uses the more ergonomic default policy described in D-4, and operators can tighten it via overlay profiles for high-sensitivity projects.
 
 ## Non-goals
 
@@ -32,7 +32,7 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
 |---|---|---|
 | D-1 | **Wrap per-OS primitives**: Linux → `nsjail`, macOS → `sandbox-exec`, WSL → `nsjail`. Operator can override to `firejail` on Linux via `WALTER_SANDBOX_PROVIDER=firejail`. | Per parent D-1. No invented sandbox; we use mature tools. |
 | D-2 | **Single uniform shim**: `scripts/walter/lib/sandbox.sh` exposes `walter_sandbox_run <profile> <cmd...>` (positional args; the `<cmd...>` collects the executable plus its args — identical to the AC-1 signature). Internally resolves the per-OS invocation. | Skills + hooks don't care which sandbox is active; they call the shim. |
-| D-3 | **Two profiles for v0.5.x**: `walter-hook-default` (for PreToolUse hooks — read-only repo + read-only operator overlay + no net) and `walter-skill-default` (for skill executions — read-write repo + read-only overlay + network per A-1 allowlist). | Most hooks don't need write or net. Skills are the place real work happens. |
+| D-3 | **Two profiles for v0.5.x**: `walter-hook-default` (for PreToolUse hooks — read-only filesystem except private sandbox scratch + no net) and `walter-skill-default` (for skill executions — read-write repo + read-only overlay + network per A-1 allowlist). | Most hooks don't need host writes or net. Skills are the place real work happens. |
 | D-4 | **Default policy: allow most, deny dangerous**. From parent D-1 open question — `walter-skill-default` denies: write outside cwd repo + parent (limit 1 level up); access to `~/.ssh/`, `~/.aws/`, `~/.config/walter-os/state/session-*.key` (per-session signing keys from A-2 / capability-tokens — NOT the whole `state/` directory, which also holds decision journals + knowledge cards that skills legitimately read), `~/.gnupg/`, `*.pem`, `*.key`; signal to PIDs outside the sandboxed tree. Allows everything else by default. | Reflects parent D-1 second option. Lower footgun for first-time adopters. Operator hardens per project via overlay profile. Scoping the state deny to `session-*.key` only avoids breaking the general `state/` use cases. |
 | D-5 | **`walter-skill-default` honors the `cap_token` IF present**: if the calling tool has a valid PASETO cap-token (A-2) declaring `scope.paths`, the sandbox tightens to those paths. No cap → fall back to the D-4 default-allow-but-deny-sensitive policy. | Composes with A-2. A high-tier op that already required a cap also benefits from path-tightened sandbox. |
 | D-6 | **Bypass requires `WALTER_SANDBOX_BYPASS=1` + `--no-sandbox` flag** in the tool command — same two-factor pattern. Logged in the audit chain. | Same as bash-denylist + egress-allowlist bypass. |
@@ -91,6 +91,8 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
   - Running `cat ~/.ssh/id_rsa` via the profile → blocked
   - Running `cat $WALTER_OS_HOME/README.md` via the profile → allowed (read-only)
   - Running `echo X > $WALTER_OS_HOME/X` via the profile → blocked (read-only)
+  - Running `echo X > <cwd outside HOME/WALTER/config>` via the profile → blocked
+  - Running `mktemp` via the profile → allowed only inside private sandbox scratch
   - Network call (`curl https://example.com`) via the profile → blocked
 
 ### AC-3 — `walter-skill-default` profile

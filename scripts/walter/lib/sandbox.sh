@@ -146,7 +146,7 @@ walter_sandbox_materialize_profile() {
     echo "walter-sandbox: profile missing: $src" >&2
     return 1
   fi
-  if ! grep -q '@WALTER_OS_HOME@\|@WALTER_CONFIG@\|@HOME@' "$src"; then
+  if ! grep -q '@WALTER_OS_HOME@\|@WALTER_CONFIG@\|@HOME@\|@WALTER_SANDBOX_SCRATCH@' "$src"; then
     printf '%s\n' "$src"
     return 0
   fi
@@ -154,6 +154,21 @@ walter_sandbox_materialize_profile() {
   runtime_dir="$(walter_sandbox_runtime_dir)" || return 1
   dest="$(mktemp "${runtime_dir}/${profile}.${provider}.XXXXXX")" || return 1
   tmp_dest="${dest}.tmp"
+  local scratch_dir scratch_value
+  if grep -q '@WALTER_SANDBOX_SCRATCH@' "$src"; then
+    scratch_dir="${dest}.scratch"
+    mkdir -m 700 "$scratch_dir" || {
+      rm -f "$dest" "$tmp_dest"
+      return 1
+    }
+    scratch_value="$(_walter_sandbox_sed_escape "$(cd "$scratch_dir" && pwd -P)")" || {
+      rmdir "$scratch_dir" 2>/dev/null || true
+      rm -f "$dest" "$tmp_dest"
+      return 1
+    }
+  else
+    scratch_value=""
+  fi
   repo_root="$(_walter_sandbox_sed_escape "$(walter_sandbox_repo_root)")" || return 1
   config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")"
   home_value="$(_walter_sandbox_sed_escape "${HOME}")"
@@ -161,12 +176,15 @@ walter_sandbox_materialize_profile() {
     -e "s/@WALTER_OS_HOME@/${repo_root}/g" \
     -e "s/@WALTER_CONFIG@/${config_dir}/g" \
     -e "s/@HOME@/${home_value}/g" \
+    -e "s/@WALTER_SANDBOX_SCRATCH@/${scratch_value}/g" \
     "$src" > "$tmp_dest" || {
+      [[ -z "${scratch_dir:-}" ]] || rmdir "$scratch_dir" 2>/dev/null || true
       rm -f "$dest" "$tmp_dest"
       return 1
     }
   chmod 600 "$tmp_dest" 2>/dev/null || true
   mv "$tmp_dest" "$dest" || {
+    [[ -z "${scratch_dir:-}" ]] || rmdir "$scratch_dir" 2>/dev/null || true
     rm -f "$dest" "$tmp_dest"
     return 1
   }
@@ -201,7 +219,11 @@ walter_sandbox_run() {
 
   case "$provider" in
     sandbox-exec)
-      "$provider" -f "$profile_path" -- "$@"
+      if [[ -d "${profile_path}.scratch" ]]; then
+        TMPDIR="${profile_path}.scratch/" "$provider" -f "$profile_path" -- "$@"
+      else
+        "$provider" -f "$profile_path" -- "$@"
+      fi
       ;;
     nsjail)
       "$provider" --config "$profile_path" -- "$@"

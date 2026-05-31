@@ -133,7 +133,8 @@ The six requested runtime tracks map to this implementation order:
    - Files: `setup/sandbox-profiles/*`,
      `tests/walter/sandbox-hook-profile.bats`.
    - Deliverable: read-only hook profile, sensitive path deny rules,
-     no-network posture, and process/signal namespace constraints per OS.
+     private scratch-only writes, no-network posture, and process/signal
+     namespace constraints per OS.
 7. **Default skill profile**.
    - Files: `setup/sandbox-profiles/*`,
      `tests/walter/sandbox-skill-profile.bats`.

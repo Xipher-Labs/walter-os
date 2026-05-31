@@ -61,10 +61,12 @@ _mode() {
 @test "AC-2: macOS hook profile blocks network, writes, and sensitive reads" {
   profile="$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.sb"
 
+  grep -q '(deny default)' "$profile"
+  grep -q '(allow process\*)' "$profile"
+  grep -q '(allow file-read\*)' "$profile"
+  grep -q '(allow file-write\* (subpath "@WALTER_SANDBOX_SCRATCH@"))' "$profile"
+  grep -q '(allow file-write\* (literal "/dev/null"))' "$profile"
   grep -q '(deny network\*)' "$profile"
-  grep -q '(deny file-write\* (subpath "@HOME@"))' "$profile"
-  grep -q '(deny file-write\* (subpath "@WALTER_OS_HOME@"))' "$profile"
-  grep -q '(deny file-write\* (subpath "@WALTER_CONFIG@"))' "$profile"
   grep -q '@HOME@/.ssh' "$profile"
   grep -q '@HOME@/.gnupg' "$profile"
   grep -q '@HOME@/.aws' "$profile"
@@ -104,6 +106,20 @@ _mode() {
   [ "$output" != "$first_profile" ]
 }
 
+@test "AC-2: sandbox materializes private scratch placeholders" {
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default sandbox-exec"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  [[ "$profile" == "$WALTER_RUNTIME_DIR"/sandbox/walter-hook-default.sandbox-exec.* ]]
+  [ -d "${profile}.scratch" ]
+  [ "$(_mode "${profile}.scratch")" = "700" ]
+  grep -q "$(cd "${profile}.scratch" && pwd -P)" "$profile"
+
+  run grep -q '@WALTER_SANDBOX_SCRATCH@' "$profile"
+  [ "$status" -ne 0 ]
+}
+
 @test "AC-2: repo root helper does not change caller cwd" {
   mkdir -p "$TMP_HOME/outside"
 
@@ -141,24 +157,29 @@ _mode() {
   mkdir -p "$HOME/.ssh"
   printf 'secret\n' > "$HOME/.ssh/id_rsa"
 
-  profile="$(bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default sandbox-exec")"
+  outside_write="$REPO_ROOT/../.sandbox-outside-write-test.$$"
+  rm -f "$outside_write"
 
-  run sandbox-exec -f "$profile" /bin/cat "$WALTER_OS_HOME/README.md"
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/cat '$WALTER_OS_HOME/README.md'"
   [ "$status" -eq 0 ]
 
-  run sandbox-exec -f "$profile" /bin/sh -c "printf x > '$WALTER_OS_HOME/.sandbox-write-test'"
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/sh -c \"printf x > '$WALTER_OS_HOME/.sandbox-write-test'\""
   [ "$status" -ne 0 ]
   [ ! -e "$WALTER_OS_HOME/.sandbox-write-test" ]
 
-  run sandbox-exec -f "$profile" /bin/sh -c 'tmp="$(mktemp)"; printf ok > "$tmp"; cat "$tmp"; : >/dev/null'
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/sh -c 'tmp=\"\$(mktemp)\"; printf ok > \"\$tmp\"; cat \"\$tmp\"; : >/dev/null'"
   [ "$status" -eq 0 ]
   [ "$output" = "ok" ]
 
-  run sandbox-exec -f "$profile" /bin/cat "$HOME/.ssh/id_rsa"
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/sh -c \"printf x > '$outside_write'\""
+  [ "$status" -ne 0 ]
+  [ ! -e "$outside_write" ]
+
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/cat '$HOME/.ssh/id_rsa'"
   [ "$status" -ne 0 ]
 
   if command -v curl >/dev/null; then
-    run sandbox-exec -f "$profile" curl --connect-timeout 2 https://example.com
+    run bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default curl --connect-timeout 2 https://example.com"
     [ "$status" -ne 0 ]
   fi
 }
