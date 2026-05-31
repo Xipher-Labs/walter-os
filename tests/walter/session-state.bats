@@ -71,6 +71,37 @@ _openssl_or_skip() {
   "$openssl_bin" pkey -in "$private_key" -pubout 2>/dev/null | cmp -s - "$public_key"
 }
 
+@test "session touch fails closed when caps directory chmod fails" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  state_dir="$(dirname "$state_file")"
+
+  run bash -c "source '$LIB'; chmod() { if [[ \"\$1\" == \"700\" && \"\$2\" == */caps-* ]]; then return 1; fi; command chmod \"\$@\"; }; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+  [ ! -f "$state_file" ]
+  [ "$(find "$state_dir" -type d -name 'caps-*' | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "session touch fails closed when private key chmod fails" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  state_dir="$(dirname "$state_file")"
+
+  run bash -c "source '$LIB'; chmod() { if [[ \"\$1\" == \"600\" && \"\$2\" == */session-*.key.tmp ]]; then return 1; fi; command chmod \"\$@\"; }; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+  [ ! -f "$state_file" ]
+  [ "$(find "$state_dir" -type f -name 'session-*.key*' | wc -l | tr -d ' ')" = "0" ]
+  [ "$(find "$state_dir" -type d -name 'caps-*' | wc -l | tr -d ' ')" = "0" ]
+}
+
 @test "concurrent session starts leave one key and caps directory" {
   _openssl_or_skip >/dev/null
   export WALTER_SESSION_NOW_EPOCH=1767225600

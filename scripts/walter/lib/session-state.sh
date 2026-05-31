@@ -273,9 +273,12 @@ _walter_session_write_new() {
   fi
 
   mkdir -p "$state_dir" || return 1
-  chmod 700 "$state_dir" 2>/dev/null || true
+  chmod 700 "$state_dir" 2>/dev/null || return 1
   mkdir -p "$caps_dir" || return 1
-  chmod 700 "$caps_dir" 2>/dev/null || true
+  if ! chmod 700 "$caps_dir" 2>/dev/null; then
+    rm -r "$caps_dir"
+    return 1
+  fi
 
   if ! openssl_bin="$(_walter_session_openssl)"; then
     rm -r "$caps_dir"
@@ -289,13 +292,21 @@ _walter_session_write_new() {
     rm -r "$caps_dir"
     return 1
   fi
-  chmod 600 "$tmp_key" 2>/dev/null || true
+  if ! chmod 600 "$tmp_key" 2>/dev/null; then
+    rm -f "$tmp_key" "$tmp_pub"
+    rm -r "$caps_dir"
+    return 1
+  fi
   if ! "$openssl_bin" pkey -in "$tmp_key" -pubout -out "$tmp_pub" >/dev/null 2>&1; then
     rm -f "$tmp_key" "$tmp_pub"
     rm -r "$caps_dir"
     return 1
   fi
-  chmod 644 "$tmp_pub" 2>/dev/null || true
+  if ! chmod 644 "$tmp_pub" 2>/dev/null; then
+    rm -f "$tmp_key" "$tmp_pub"
+    rm -r "$caps_dir"
+    return 1
+  fi
   if ! mv "$tmp_key" "$private_key" || ! mv "$tmp_pub" "$public_key"; then
     rm -f "$tmp_key" "$tmp_pub" "$private_key" "$public_key"
     rm -r "$caps_dir"
@@ -335,7 +346,11 @@ _walter_session_write_new() {
     rm -r "$caps_dir"
     return 1
   fi
-  chmod 600 "$tmp_file" 2>/dev/null || true
+  if ! chmod 600 "$tmp_file" 2>/dev/null; then
+    rm -f "$tmp_file" "$private_key" "$public_key"
+    rm -r "$caps_dir"
+    return 1
+  fi
   if ! mv "$tmp_file" "$file"; then
     rm -f "$tmp_file"
     rm -f "$private_key" "$public_key"
