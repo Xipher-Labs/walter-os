@@ -126,7 +126,9 @@ _cap_extract_hosts() {
       [[ -n "$host" ]] && printf '%s\n' "$host"
     done
     _cap_extract_gh_host "$command"
+    _cap_extract_curl_hosts "$command"
     _cap_extract_positional_network_hosts "$command"
+    _cap_extract_shell_c_hosts "$command"
   } | awk 'NF && !seen[$0]++'
 }
 
@@ -135,6 +137,9 @@ _cap_normalize_host() {
   [[ -n "$host" ]] || return 0
   host="${host#\`}"
   host="${host%\`}"
+  case "$host" in
+    *://*) host="${host#*://}" ;;
+  esac
   host="${host#*@}"
   host="${host%%/*}"
   host="${host%%\?*}"
@@ -230,6 +235,102 @@ _cap_extract_gh_host() {
   done
 }
 
+_cap_extract_curl_hosts() {
+  local command="$1" tokfile token cli idx j candidate value host
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    cli="$(_cap_normalize_cli_token "${tokens[$idx]}")"
+    case "$cli" in
+      curl)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          candidate="${tokens[$j]}"
+          case "$candidate" in
+            ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') break ;;
+            --proxy|--preproxy|-x)
+              host="$(_cap_normalize_host "${tokens[$((j + 1))]:-}")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              j=$((j + 2))
+              continue
+              ;;
+            --proxy=*|--preproxy=*)
+              host="$(_cap_normalize_host "${candidate#*=}")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              ;;
+            -x*)
+              host="$(_cap_normalize_host "${candidate#-x}")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              ;;
+            --connect-to)
+              value="${tokens[$((j + 1))]:-}"
+              IFS=':' read -r _ _ host _ <<< "$value"
+              host="$(_cap_normalize_host "$host")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              j=$((j + 2))
+              continue
+              ;;
+            --connect-to=*)
+              value="${candidate#*=}"
+              IFS=':' read -r _ _ host _ <<< "$value"
+              host="$(_cap_normalize_host "$host")"
+              [[ -n "$host" ]] && printf '%s\n' "$host"
+              ;;
+          esac
+          j=$((j + 1))
+        done
+        ;;
+    esac
+    idx=$((idx + 1))
+  done
+}
+
+_cap_extract_shell_c_hosts() {
+  local command="$1" tokfile token cli idx j candidate body
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    cli="$(_cap_normalize_cli_token "${tokens[$idx]}")"
+    case "$cli" in
+      sh|bash|zsh)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          candidate="${tokens[$j]}"
+          case "$candidate" in
+            -c)
+              body="${tokens[$((j + 1))]:-}"
+              [[ -n "$body" ]] && _cap_extract_hosts "$body"
+              break
+              ;;
+            --) j=$((j + 1)); continue ;;
+            -*) j=$((j + 1)); continue ;;
+            *) break ;;
+          esac
+        done
+        ;;
+    esac
+    idx=$((idx + 1))
+  done
+}
+
 _cap_extract_positional_network_hosts() {
   local command="$1" tokfile token cli idx j candidate host
   local -a tokens=()
@@ -316,6 +417,21 @@ _cap_is_network_command() {
     case "$cli" in
       curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
         return 0
+        ;;
+      sh|bash|zsh)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          sub="${tokens[$j]}"
+          case "$sub" in
+            -c)
+              _cap_is_network_command "${tokens[$((j + 1))]:-}" && return 0
+              break
+              ;;
+            --) j=$((j + 1)); continue ;;
+            -*) j=$((j + 1)); continue ;;
+            *) break ;;
+          esac
+        done
         ;;
       git)
         j=$((idx + 1))
@@ -446,6 +562,21 @@ _cap_is_gh_pr_approve() {
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     cli="$(_cap_normalize_cli_token "${tokens[$idx]}")"
+    if [[ "$cli" == "sh" || "$cli" == "bash" || "$cli" == "zsh" ]]; then
+      j=$((idx + 1))
+      while [[ "$j" -lt "${#tokens[@]}" ]]; do
+        sub="${tokens[$j]}"
+        case "$sub" in
+          -c)
+            _cap_is_gh_pr_approve "${tokens[$((j + 1))]:-}" && return 0
+            break
+            ;;
+          --) j=$((j + 1)); continue ;;
+          -*) j=$((j + 1)); continue ;;
+          *) break ;;
+        esac
+      done
+    fi
     if [[ "$cli" != "gh" ]]; then
       idx=$((idx + 1))
       continue

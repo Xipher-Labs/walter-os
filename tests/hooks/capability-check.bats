@@ -101,6 +101,19 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "shell -c Bash egress without capability is blocked" {
+  output="$(_hook_json Bash command "sh -c 'curl https://api.github.com/repos/x/y'")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "shell -c Bash egress with matching network capability is allowed" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "bash -c 'curl https://api.github.com/repos/x/y'")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress with query-only URL matches host capability" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
@@ -149,6 +162,30 @@ _mint() {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "/usr/bin/curl https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "curl proxy host must be covered by network capability" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --proxy http://proxy.example:8080 https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "curl connect-to host must be covered by network capability" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --connect-to api.github.com:443:evil.example:443 https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "curl proxy host is allowed when all hosts are covered" {
+  _mint Bash --network api.github.com --network proxy.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --proxy http://proxy.example:8080 https://api.github.com/repos/x/y")"
 
   echo "$output" | jq -e '.decision == "allow"'
 }
@@ -223,6 +260,14 @@ _mint() {
   _mint Bash --network github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "gh pr review 244 -a")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "shell -c gh pr approve requires pattern capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "sh -c 'gh pr review 244 --approve'")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
