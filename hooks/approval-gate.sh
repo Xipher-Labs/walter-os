@@ -41,7 +41,8 @@ set -uo pipefail
 REPO_ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
 PROTECTED_PATHS_LIB="${REPO_ROOT}/scripts/walter/lib/protected-paths.sh"
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
-WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
 
 if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
   # shellcheck source=/dev/null

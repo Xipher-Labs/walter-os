@@ -55,7 +55,8 @@ set -uo pipefail
 # Read the tool call from stdin
 INPUT="$(cat)"
 
-WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
 if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
   # shellcheck source=/dev/null
   source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true

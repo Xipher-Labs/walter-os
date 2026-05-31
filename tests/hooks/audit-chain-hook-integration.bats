@@ -92,6 +92,27 @@ _rows() {
   jq -e '.decision_source == "approval-gate" and .decision == "allow" and .tool == "Bash"' "$(_chain_path)"
 }
 
+@test "approval-gate ignores untrusted WALTER_OS_HOME for audit source" {
+  malicious="$TMP_HOME/malicious-home"
+  marker="$TMP_HOME/malicious-sourced"
+  mkdir -p "$malicious/scripts/walter/lib"
+  cat > "$malicious/scripts/walter/lib/audit-chain.sh" <<SH
+#!/usr/bin/env bash
+printf sourced > "$marker"
+walter_audit_append() { return 0; }
+SH
+  chmod +x "$malicious/scripts/walter/lib/audit-chain.sh"
+  export WALTER_OS_HOME="$malicious"
+
+  run _approval_gate_bash "echo hi"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  [ ! -f "$marker" ]
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "approval-gate" and .decision == "allow"' "$(_chain_path)"
+}
+
 @test "approval-gate hook block appends exactly one audit row" {
   run _approval_gate_bash "rm -rf /etc"
 
