@@ -117,6 +117,31 @@ _verify_chain() {
   [ ! -d "$lock_dir" ]
 }
 
+@test "B-1: concurrent appenders reclaim one stale lock safely" {
+  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
+  mkdir -p "$lock_dir"
+  printf '999999\n' > "$lock_dir/pid"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    pids=()
+    for i in \$(seq 1 12); do
+      WALTER_AUDIT_NOW=\"2026-05-31T12:30:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=30 walter_audit_append Bash \"after-stale-\${i}\" allow approval-gate ok >/dev/null &
+      pids+=(\"\$!\")
+    done
+    status=0
+    for pid in \"\${pids[@]}\"; do
+      wait \"\$pid\" || status=1
+    done
+    exit \"\$status\"
+  "
+
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "12" ]
+  _verify_chain "$(_chain_path)"
+  [ ! -d "$lock_dir" ]
+}
+
 @test "B-1: old lock with live pid is not reclaimed" {
   lock_dir="$WALTER_CONFIG/audit/.chain.lock"
   mkdir -p "$lock_dir"

@@ -66,6 +66,16 @@ walter_audit_input_summary() {
   printf '%s' "$input" | tr '\n\r\t' '   ' | cut -c 1-200
 }
 
+_walter_audit_reclaim_lock() {
+  local lock_path="$1" stale_path
+  stale_path="${lock_path}.stale.${BASHPID:-$$}.${RANDOM:-0}"
+  if mv "$lock_path" "$stale_path" 2>/dev/null; then
+    rm -rf -- "$stale_path"
+    return 0
+  fi
+  return 1
+}
+
 _walter_audit_acquire_lock() {
   local lock_path="$1" wait_seconds="${WALTER_AUDIT_LOCK_WAIT_SECONDS:-10}" start pid_file owner_pid now lock_mtime stale_after
   start="$(date +%s)"
@@ -76,14 +86,14 @@ _walter_audit_acquire_lock() {
     [[ -f "$pid_file" ]] && owner_pid="$(cat "$pid_file" 2>/dev/null || true)"
     if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
       if ! kill -0 "$owner_pid" 2>/dev/null; then
-        rm -rf -- "$lock_path"
+        _walter_audit_reclaim_lock "$lock_path" || true
         continue
       fi
     else
       lock_mtime="$(stat -f %m "$lock_path" 2>/dev/null || stat -c %Y "$lock_path" 2>/dev/null || printf '%s' "$now")"
       stale_after="${WALTER_AUDIT_STALE_LOCK_SECONDS:-300}"
       if [[ $((now - lock_mtime)) -ge "$stale_after" ]]; then
-        rm -rf -- "$lock_path"
+        _walter_audit_reclaim_lock "$lock_path" || true
         continue
       fi
     fi
