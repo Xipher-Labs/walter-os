@@ -1,3 +1,11 @@
+> **Walter-OS note — bundled as guidance only.** This skill is vendored into
+> Walter-OS without its upstream Node CLI/scripts. Any `node {{scripts_path}}/*.mjs`,
+> `npx impeccable …`, or `/impeccable live|detect|pin` step below WILL NOT RUN
+> here and must NOT trigger a sandbox-permission request. Treat those steps as
+> the manual checklist they encode: apply the described checks/edits yourself.
+> The upstream executable tooling is out of scope for the Walter-OS adoption
+> (see docs/specs/ux-skills-adoption.md).
+
 Interactive live variant mode: select elements in the browser, pick a design action, and get AI-generated HTML+CSS variants hot-swapped via the dev server's HMR.
 
 ## Prerequisites

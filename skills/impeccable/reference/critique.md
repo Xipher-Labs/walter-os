@@ -1,3 +1,11 @@
+> **Walter-OS note — bundled as guidance only.** This skill is vendored into
+> Walter-OS without its upstream Node CLI/scripts. Any `node {{scripts_path}}/*.mjs`,
+> `npx impeccable …`, or `/impeccable live|detect|pin` step below WILL NOT RUN
+> here and must NOT trigger a sandbox-permission request. Treat those steps as
+> the manual checklist they encode: apply the described checks/edits yourself.
+> The upstream executable tooling is out of scope for the Walter-OS adoption
+> (see docs/specs/ux-skills-adoption.md).
+
 ### Purpose
 
 Resolve one stable target, run two independent assessments, synthesize a design critique, persist a snapshot, and ask the user what to improve next. The chat response is the primary deliverable; the snapshot is an archive/backlog for future commands.
