@@ -163,20 +163,47 @@ _walter_session_revoke_capability_material() {
 _walter_session_release_lock() {
   local lock_dir="$1"
   rm -f "$lock_dir/pid" 2>/dev/null || true
+  rm -f "$lock_dir/created_epoch" 2>/dev/null || true
   rmdir "$lock_dir" 2>/dev/null || true
 }
 
 _walter_session_reclaim_stale_lock() {
-  local lock_dir="$1" pid
+  local lock_dir="$1" pid created_epoch now_epoch stale_after
   [[ -d "$lock_dir" ]] || return 0
-  [[ -f "$lock_dir/pid" ]] || return 1
+  stale_after="$(_walter_session_positive_int_or_default "${WALTER_SESSION_LOCK_STALE_SEC:-30}" 30)"
+  now_epoch="$(_walter_session_now_epoch)"
+  created_epoch="$(cat "$lock_dir/created_epoch" 2>/dev/null || true)"
+  if [[ "$created_epoch" =~ ^[0-9]+$ ]] && (( now_epoch - created_epoch > stale_after )); then
+    _walter_session_release_lock "$lock_dir"
+    [[ ! -d "$lock_dir" ]]
+    return
+  fi
+
+  if [[ ! -f "$lock_dir/pid" ]]; then
+    return 1
+  fi
   pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   if kill -0 "$pid" 2>/dev/null; then
     return 1
   fi
-  rm -f "$lock_dir/pid" 2>/dev/null || return 1
-  rmdir "$lock_dir" 2>/dev/null
+  _walter_session_release_lock "$lock_dir"
+  [[ ! -d "$lock_dir" ]]
+}
+
+_walter_session_write_lock_owner() {
+  local lock_dir="$1"
+  printf '%s\n' "$(_walter_session_now_epoch)" > "$lock_dir/created_epoch" \
+    && printf '%s\n' "$$" > "$lock_dir/pid"
+}
+
+_walter_session_mark_lock_or_fail() {
+  local lock_dir="$1" file="$2"
+  if ! _walter_session_write_lock_owner "$lock_dir"; then
+    _walter_session_release_lock "$lock_dir"
+    _walter_session_result "error" "state-write" "$file"
+    return 12
+  fi
 }
 
 _walter_session_has_capability_material() {
@@ -314,11 +341,7 @@ walter_session_touch() {
       return 12
     }
     if mkdir "$lock_dir" 2>/dev/null; then
-      if ! printf '%s\n' "$$" > "$lock_dir/pid" 2>/dev/null; then
-        _walter_session_release_lock "$lock_dir"
-        _walter_session_result "error" "state-write" "$file"
-        return 12
-      fi
+      _walter_session_mark_lock_or_fail "$lock_dir" "$file" || return 12
       if [[ ! -f "$file" ]]; then
         if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
           _walter_session_release_lock "$lock_dir"
@@ -337,11 +360,7 @@ walter_session_touch() {
       done
       if [[ ! -f "$file" ]] && _walter_session_reclaim_stale_lock "$lock_dir"; then
         if mkdir "$lock_dir" 2>/dev/null; then
-          if ! printf '%s\n' "$$" > "$lock_dir/pid" 2>/dev/null; then
-            _walter_session_release_lock "$lock_dir"
-            _walter_session_result "error" "state-write" "$file"
-            return 12
-          fi
+          _walter_session_mark_lock_or_fail "$lock_dir" "$file" || return 12
           if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
             _walter_session_release_lock "$lock_dir"
             _walter_session_result "error" "state-write" "$file"

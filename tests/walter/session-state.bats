@@ -92,6 +92,24 @@ _mode() {
   [ ! -d "$lock_dir" ]
 }
 
+@test "session start reclaims an old lock even when pid looks alive" {
+  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_SESSION_LOCK_STALE_SEC=30
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  lock_dir="${state_file}.lock"
+  mkdir -p "$lock_dir"
+  printf '1767220000\n' > "$lock_dir/created_epoch"
+  printf '%s\n' "$$" > "$lock_dir/pid"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"started"'* ]]
+  [ -f "$state_file" ]
+  [ ! -d "$lock_dir" ]
+}
+
 @test "clock override is ignored outside explicit test mode" {
   unset WALTER_SESSION_TEST_CLOCK
   export WALTER_SESSION_NOW_EPOCH=1767225600
