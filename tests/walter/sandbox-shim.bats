@@ -100,8 +100,6 @@ EOF
 
 @test "AC-1: WSL uses nsjail" {
   _mock_uname Linux
-  export WALTER_SANDBOX_PROC_VERSION="$TMP_HOME/proc-version"
-  printf 'Linux version 5.15.0-microsoft-standard-WSL2\n' > "$WALTER_SANDBOX_PROC_VERSION"
 
   run bash -c "source '$SANDBOX_LIB'; walter_sandbox_provider"
 
@@ -121,7 +119,7 @@ EOF
 @test "AC-1: sandbox check fails when provider binary is missing" {
   _mock_uname Linux
 
-  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default"
+  run bash -c "command() { if [[ \"\$1\" == -v && \"\$2\" == nsjail ]]; then return 1; fi; builtin command \"\$@\"; }; source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"provider missing: nsjail"* ]]
