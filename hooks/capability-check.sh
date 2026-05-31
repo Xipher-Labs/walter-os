@@ -167,10 +167,14 @@ _cap_extract_gh_host() {
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+  [[ -n "$tokfile" ]] || return 0
+  if _cap_write_shell_tokens "$command" "$tokfile"; then
     while IFS= read -r token; do
       tokens+=("$token")
     done < "$tokfile"
+  else
+    rm -f "$tokfile" 2>/dev/null || true
+    return 0
   fi
   rm -f "$tokfile" 2>/dev/null || true
 
@@ -273,10 +277,14 @@ _cap_is_network_command() {
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+  [[ -n "$tokfile" ]] || return 0
+  if _cap_write_shell_tokens "$command" "$tokfile"; then
     while IFS= read -r token; do
       tokens+=("$token")
     done < "$tokfile"
+  else
+    rm -f "$tokfile" 2>/dev/null || true
+    return 0
   fi
   rm -f "$tokfile" 2>/dev/null || true
 
@@ -387,6 +395,7 @@ PY
     return $?
   fi
 
+  [[ "$command" == *$'\n'* ]] && return 0
   [[ "$command" =~ [\;\|\&] ]]
 }
 
@@ -395,10 +404,14 @@ _cap_is_gh_pr_approve() {
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+  [[ -n "$tokfile" ]] || return 0
+  if _cap_write_shell_tokens "$command" "$tokfile"; then
     while IFS= read -r token; do
       tokens+=("$token")
     done < "$tokfile"
+  else
+    rm -f "$tokfile" 2>/dev/null || true
+    return 0
   fi
   rm -f "$tokfile" 2>/dev/null || true
 

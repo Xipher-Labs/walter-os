@@ -74,6 +74,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "Bash tokenization failure is treated as high-tier" {
+  output="$(_hook_json Bash command "curl 'https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Bash egress with matching network capability is allowed" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
