@@ -178,6 +178,11 @@ _cap_token_has_shell_expansion() {
   [[ "$token" == *'${'* || "$token" == *'$('* || "$token" == *'$'* || "$token" == *'`'* || "$token" == *'<('* || "$token" == *'>('* ]]
 }
 
+_cap_token_is_assignment() {
+  local token="$1"
+  [[ "$token" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]
+}
+
 _cap_emit_split_hosts() {
   local hosts="$1" host
   local -a split_hosts=()
@@ -452,7 +457,7 @@ _cap_extract_positional_network_hosts() {
 }
 
 _cap_is_network_command() {
-  local command="$1" tokfile token cli idx j sub
+  local command="$1" tokfile token cli idx j k sub prev command_position hosts
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
@@ -476,6 +481,26 @@ _cap_is_network_command() {
           return 0
           ;;
       esac
+      if ! _cap_token_is_assignment "$token"; then
+        command_position=1
+        k=$((idx - 1))
+        while [[ "$k" -ge 0 ]]; do
+          prev="${tokens[$k]}"
+          case "$prev" in
+            ';'|'|'|'&'|'&&'|'||'|'(') break ;;
+          esac
+          if _cap_token_is_assignment "$prev"; then
+            k=$((k - 1))
+            continue
+          fi
+          command_position=0
+          break
+        done
+        if [[ "$command_position" -eq 1 ]]; then
+          hosts="$(_cap_extract_hosts "$command")"
+          [[ -n "$hosts" ]] && return 0
+        fi
+      fi
     fi
     cli="$(_cap_normalize_cli_token "$token")"
     case "$cli" in
