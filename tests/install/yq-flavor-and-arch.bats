@@ -87,6 +87,12 @@ setup() {
   [[ $(grep -cE 'local required_deps=\([^)]*\bopenssl\b' "$INSTALL_SH") -ge 2 ]]
 }
 
+@test "python3 is required for capability token operations" {
+  grep -qE 'check_required_tool python3' "$INSTALL_SH"
+  [[ $(grep -cE 'local required_deps=\([^)]*\bpython3\b' "$INSTALL_SH") -ge 2 ]]
+  ! grep -qE 'check_optional_tool python3' "$INSTALL_SH"
+}
+
 # -----------------------------------------------------------------------
 # Codex R2 #125: check_preflight ordering + flavor check
 # -----------------------------------------------------------------------

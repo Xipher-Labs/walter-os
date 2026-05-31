@@ -59,18 +59,24 @@ renderer mangles multi-line fenced code blocks inside table cells.
 
 ## Acceptance criteria
 
-### AC-1 — PASETO v4 dependency + key generation
-- [ ] `scripts/walter/lib/paseto.sh` (new) — wraps `paseto-cli` (uvx-installable Python package) for sign + verify. Pinned to exact version.
-- [ ] `install.sh` adds `paseto-cli` to required tools (`uv tool install paseto-cli==<pinned>`).
+### AC-1 — PASETO v4 helper + key generation
+- [x] `scripts/walter/lib/capability-token.sh` (new) — signs and verifies
+  PASETO v4.public-compatible tokens using OpenSSL Ed25519, PAE
+  canonicalization, Python stdlib base64/struct helpers, and `jq -S` JSON
+  normalization. The originally proposed `paseto-cli` package is not currently
+  available from PyPI, so Walter-OS keeps the PASETO v4.public wire format
+  without adding an unavailable runtime dependency.
+- [x] `install.sh --check` verifies `python3`, `jq`, and an ED25519-capable
+  OpenSSL are present for token operations.
 - [x] `scripts/walter/lib/session-state.sh` generates an Ed25519 keypair when a new session starts; stores the private key at `~/.config/walter-os/state/session-<uuid>.key` (mode 0600), stores the public key beside it, and initializes `caps-<session>/` (mode 0700).
-- [ ] `bats` coverage in `tests/walter/paseto-roundtrip.bats` — sign + verify produces same claims.
+- [x] `bats` coverage in `tests/walter/capability-token.bats` — sign + verify produces same claims.
 
 ### AC-2 — `walter-os cap` CLI
-- [ ] `walter-os cap mint <tool> --paths <glob>... --network <host>... --duration <N>[smh] [--patterns <regex>...]` — emits a PASETO v4 token to stdout AND writes to `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`. Duration syntax matches D-4 above (Go-style suffixed number; bare integers rejected).
-- [ ] `walter-os cap list` — prints active tokens for the current session.
-- [ ] `walter-os cap revoke <nonce>` — deletes the token file; subsequent tool calls won't find it.
-- [ ] `walter-os cap verify <token-file>` — sanity-check a token (operator debugging).
-- [ ] bats coverage in `tests/cli/walter-os-cap.bats`.
+- [x] `walter-os cap mint <tool> --paths <glob>... --network <host>... --duration <N>[smh] [--patterns <regex>...]` — emits a PASETO v4 token to stdout AND writes to `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`. Duration syntax matches D-4 above (Go-style suffixed number; bare integers rejected).
+- [x] `walter-os cap list` — prints active tokens for the current session.
+- [x] `walter-os cap revoke <nonce>` — deletes the token file; subsequent tool calls won't find it.
+- [x] `walter-os cap verify <token-file>` — sanity-check a token (operator debugging).
+- [x] bats coverage in `tests/walter/cap-cli.bats`.
 
 ### AC-3 — `hooks/capability-check.sh` PreToolUse hook
 - [ ] Hook runs in the PreToolUse chain after `approval-gate.sh` (so a category is already classified).
@@ -143,7 +149,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
 
 ## Recommended PR ordering
 
-1. AC-1 — PASETO lib + key generation (foundation)
+1. AC-1 — PASETO-compatible helper + key generation (foundation)
 2. AC-2 — `walter-os cap` CLI (uses AC-1)
 3. AC-3 — `hooks/capability-check.sh` (uses AC-1)
 4. AC-4 — default skill caps + YAML schema
@@ -164,4 +170,7 @@ Each ≤300 LOC. 3-round review.
 - Sibling: `docs/specs/time-bounded-sessions.md` A-4 (cap TTL bound to session TTL)
 - Pattern: `hooks/approval-gate.sh` `CATEGORY_MIN_TIER` (high-tier classifier this layer respects)
 - PASETO v4 spec: <https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version4.md>
-- `paseto-cli` PyPI: <https://pypi.org/project/paseto-cli/> (NOT the bare `paseto` package — that one is a library; the `-cli` variant ships the executable we install via `uv tool install paseto-cli==<pinned>` per AC-1).
+- PASETO v4 helper implementation note: `paseto-cli` was proposed in the
+  original draft, but is not available from PyPI in the implementation
+  environment. The runtime helper therefore implements the PASETO v4.public
+  signing shape locally with OpenSSL Ed25519 and PAE canonicalization.

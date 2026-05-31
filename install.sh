@@ -238,6 +238,7 @@ check_requirements() {
   check_required_tool git "brew install git  # or: sudo apt-get install -y git"
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
+  check_required_tool python3 "brew install python  # or: sudo apt-get install -y python3"
   if _openssl_bin="$(resolve_openssl_bin)"; then
     ok "openssl: ${_openssl_bin}"
   else
@@ -276,7 +277,6 @@ check_requirements() {
   check_optional_tool gitleaks "brew install gitleaks  # or: sudo apt-get install -y gitleaks"
   check_optional_tool node "Use mise: mise install node@22"
   check_optional_tool pnpm "Use mise: mise install pnpm@9"
-  check_optional_tool python3 "brew install python  # or: sudo apt-get install -y python3"
   check_optional_tool uvx "Use mise: mise install uv"
 
   say
@@ -1395,8 +1395,8 @@ _install_deps_macos() {
   # in Step 1 and then trip on the missing tool the next time
   # approval-gate.sh ran on a hook event (the failure surfaces as a
   # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
-  local required_deps=(git curl jq openssl yq docker bats)
-  local optional_deps=(python3)
+  local required_deps=(git curl jq python3 openssl yq docker bats)
+  local optional_deps=()
   local _openssl_bin
 
   # Hard dependency: docker
@@ -1483,8 +1483,8 @@ _install_deps_macos() {
 
 _install_deps_linux() {
   # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
-  local required_deps=(git curl jq openssl yq bats)
-  local optional_deps=(python3)
+  local required_deps=(git curl jq python3 openssl yq bats)
+  local optional_deps=()
   local _openssl_bin
 
   # Hard dependency: docker

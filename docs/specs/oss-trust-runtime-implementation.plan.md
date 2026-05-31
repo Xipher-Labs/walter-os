@@ -13,10 +13,39 @@ release hardening.
 
 1. Merge #218 (`codex/time-bounded-sessions`).
 2. Merge #219 (`codex/session-timeout-hook`).
-3. Rebase the capability-token stack onto `main` after #218/#219 land.
+3. Merge #241 (`codex/capability-token-foundation`).
+4. Rebase the capability-token stack onto `main` after #218/#219/#241 land.
 
 Until then, capability-token implementation PRs should be stacked on
-`codex/session-timeout-hook` so the diff only contains the next layer.
+`codex/capability-token-foundation` so the diff only contains the next layer.
+
+## Execution Tracks
+
+The six requested runtime tracks map to this implementation order:
+
+1. **Capability tokens** — session keys (#241), PASETO-compatible token helper,
+   `walter-os cap`, enforcement hook, default skill caps, daily audit checks.
+2. **Process isolation sandbox** — provider detection, default hook/skill
+   profiles, hook/skill wrapping, capability-aware dynamic profiles.
+3. **Read-only / hidden secret mounts** — implemented after the sandbox shim
+   exists, using `docs/specs/read-only-mounts.md` and type-checked placeholder
+   paths rather than ad hoc path masking.
+4. **Audit chain Merkle + signed receipts** — append-only JSONL chain, row
+   signatures, verifier, daily roots, optional Rekor upload.
+5. **Audit telemetry to Grafana/Loki** — Promtail tail config, Grafana
+   dashboard, Loki verification path, opt-out/retention controls.
+6. **SLSA L3 + reproducible builds** — provenance, deterministic artifacts,
+   reproducibility verifier, operator-facing verification docs.
+
+## Current Stack State
+
+- #218 and #219 are open, mergeable, and are prerequisites for the runtime
+  session lifecycle.
+- #241 is open, mergeable, and completes the session-key foundation slice:
+  per-session Ed25519 key material, caps directory creation, safe cleanup, and
+  install/runtime OpenSSL checks.
+- The next slice is **Capability Tokens / PASETO helper and CLI**, stacked on
+  #241.
 
 ## Design Risks To Resolve Before Claiming Completion
 
@@ -57,9 +86,10 @@ Until then, capability-token implementation PRs should be stacked on
      `scripts/walter/subcommands/cap.sh`, `bin/walter-os`,
      `tests/walter/capability-token.bats`, `tests/walter/cap-cli.bats`.
    - Deliverable: `walter-os cap mint|list|verify|revoke` for signed,
-     session-bound tokens. If the currently documented `paseto-cli` package is
-     unavailable, update the spec to the actual pinned implementation and keep
-     the wire format as PASETO v4 public.
+     session-bound tokens. `paseto-cli` is not currently available from PyPI
+     in this environment, so this slice uses a local PASETO v4.public-compatible
+     implementation built from OpenSSL Ed25519 signatures, PAE canonicalization,
+     Python stdlib encoding, and `jq -S` JSON normalization.
    - Verification: round-trip sign/verify, expiry, bare-duration rejection, and
      subagent mint refusal.
 3. **Capability enforcement hook**.
