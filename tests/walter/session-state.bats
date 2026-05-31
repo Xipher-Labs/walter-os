@@ -57,7 +57,7 @@ teardown() {
   jq -e '.started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:30:00Z"' "$state_file"
 }
 
-@test "session touch after idle window starts a new session" {
+@test "session touch after idle window reports max-idle expiry" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   first_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
@@ -65,10 +65,11 @@ teardown() {
   export WALTER_SESSION_NOW_EPOCH=1767231001
   run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
 
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'"status":"started"'* ]]
+  [ "$status" -eq 10 ]
+  [[ "$output" == *'"status":"expired"'* ]]
+  [[ "$output" == *'"trigger":"max-idle"'* ]]
   second_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
-  [ "$first_id" != "$second_id" ]
+  [ "$first_id" = "$second_id" ]
 }
 
 @test "session touch after max hours reports max-hours expiry" {
@@ -84,7 +85,7 @@ teardown() {
   [[ "$output" == *'"trigger":"max-hours"'* ]]
 }
 
-@test "session touch after both idle and max-hours windows rotates by idle" {
+@test "session touch after both idle and max-hours windows reports idle expiry" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   first_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
@@ -92,11 +93,11 @@ teardown() {
   export WALTER_SESSION_NOW_EPOCH=1767315600
   run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
 
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'"status":"started"'* ]]
+  [ "$status" -eq 10 ]
+  [[ "$output" == *'"status":"expired"'* ]]
   [[ "$output" == *'"trigger":"max-idle"'* ]]
   second_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
-  [ "$first_id" != "$second_id" ]
+  [ "$first_id" = "$second_id" ]
 }
 
 @test "PHI mode caps effective limits" {

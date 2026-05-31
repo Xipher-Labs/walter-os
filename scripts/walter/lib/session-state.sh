@@ -184,12 +184,8 @@ walter_session_touch() {
   fi
 
   if awk -v now="$now_epoch" -v last="$last_epoch" -v idle="$max_idle" 'BEGIN { exit !((now - last) > (idle * 60)) }'; then
-    if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
-      _walter_session_result "error" "state-write" "$file"
-      return 12
-    fi
-    _walter_session_result "started" "max-idle" "$file"
-    return 0
+    _walter_session_result "expired" "max-idle" "$file"
+    return 10
   fi
 
   if awk -v now="$now_epoch" -v started="$started_epoch" -v hours="$max_hours" 'BEGIN { exit !((now - started) > (hours * 3600)) }'; then

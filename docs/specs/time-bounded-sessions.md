@@ -94,7 +94,8 @@ A-2 / capability-tokens).
 - [x] `bats` coverage in `tests/walter/session-state.bats`:
   - First invocation creates the state file with current ts
   - Subsequent invocations within idle window update `last_activity_at`
-  - Invocation after `max_idle_min` gap creates a NEW session
+  - Invocation after `max_idle_min` gap reports `expired/max-idle` and leaves
+    state unchanged until an explicit restart
   - Invocation after `max_hours` since start triggers end-of-session
 
 ### AC-2 — `hooks/session-timeout.sh` hook
