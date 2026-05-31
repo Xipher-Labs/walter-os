@@ -152,6 +152,16 @@ _cap_normalize_host() {
   printf '%s\n' "$host"
 }
 
+_cap_emit_split_hosts() {
+  local hosts="$1" host
+  local -a split_hosts=()
+  IFS=',' read -r -a split_hosts <<< "$hosts"
+  for host in "${split_hosts[@]}"; do
+    host="$(_cap_normalize_host "$host")"
+    [[ -n "$host" ]] && printf '%s\n' "$host"
+  done
+}
+
 _cap_extract_gh_host() {
   local command="$1" tokfile token cli idx j candidate host
   local -a tokens=()
@@ -217,7 +227,31 @@ _cap_extract_positional_network_hosts() {
         while [[ "$j" -lt "${#tokens[@]}" ]]; do
           candidate="${tokens[$j]}"
           case "$candidate" in
-            -p|-i|-l|-o|-F|-J|-W|-w|-P|-S) j=$((j + 2)); continue ;;
+            -J)
+              _cap_emit_split_hosts "${tokens[$((j + 1))]:-}"
+              j=$((j + 2))
+              continue
+              ;;
+            -J*)
+              _cap_emit_split_hosts "${candidate#-J}"
+              j=$((j + 1))
+              continue
+              ;;
+            -o)
+              case "${tokens[$((j + 1))]:-}" in
+                [Pp]roxy[Jj]ump=*)
+                  _cap_emit_split_hosts "${tokens[$((j + 1))]#*=}"
+                  ;;
+              esac
+              j=$((j + 2))
+              continue
+              ;;
+            -o[Pp]roxy[Jj]ump=*)
+              _cap_emit_split_hosts "${candidate#*=}"
+              j=$((j + 1))
+              continue
+              ;;
+            -p|-i|-l|-F|-W|-w|-P|-S) j=$((j + 2)); continue ;;
             -*) j=$((j + 1)); continue ;;
           esac
           if [[ "$cli" == "scp" || "$cli" == "rsync" ]]; then

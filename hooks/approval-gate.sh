@@ -850,8 +850,11 @@ case "$tool" in
   Edit|MultiEdit)
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
     ;;
-  Write|NotebookEdit)
+  Write)
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
+    ;;
+  NotebookEdit)
+    payload=$(echo "$input" | jq -r '.tool_input.notebook_path // .tool_input.file_path // ""')
     ;;
   *)
     payload=""

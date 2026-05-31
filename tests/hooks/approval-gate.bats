@@ -565,6 +565,11 @@ teardown() {
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
 }
 
+@test "Hook: NotebookEdit blocks protected notebook_path" {
+  result=$(echo '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"personal/health/notes.ipynb"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+}
+
 @test "Hook: empty stdin allows" {
   result=$(echo '' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]

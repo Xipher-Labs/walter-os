@@ -207,6 +207,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "ssh jump host requires its own network capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "ssh -J evil.example git@github.com")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "ssh lowercases and trims positional host punctuation" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
