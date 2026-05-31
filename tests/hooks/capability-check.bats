@@ -67,6 +67,28 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash egress with matching pattern capability is allowed" {
+  _mint Bash --patterns '^curl[[:space:]].*api[.]github[.]com' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "argument-less git fetch is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "git fetch")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "argument-less git fetch with matching pattern capability is allowed" {
+  _mint Bash --patterns '^git[[:space:]]+fetch$' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "git fetch")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash command with matching pattern capability is allowed" {
   _mint Bash --patterns '^gh[[:space:]]+pr[[:space:]]+review.*--approve' --duration 30m >/dev/null
 
@@ -91,6 +113,12 @@ _mint() {
   _mint Write --paths 'docs/**' --duration 30m >/dev/null
 
   output="$(_hook_json Write file_path "docs/specs/example.md")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "medium-tier Write without capability passes through" {
+  output="$(_hook_json Write file_path "docs/specs/example.md")"
+
   echo "$output" | jq -e '.decision == "allow"'
 }
 

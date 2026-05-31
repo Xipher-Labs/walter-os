@@ -12,6 +12,28 @@ REPO_ROOT="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SESSION_LIB="${REPO_ROOT}/scripts/walter/lib/session-state.sh"
 CAP_LIB="${REPO_ROOT}/scripts/walter/lib/capability-token.sh"
 
+CAP_HIGH_TIER_PATH_PATTERNS=(
+  'hooks/*.sh'
+  '.claude/settings.json'
+  '.github/workflows/*'
+  'install.sh'
+  'AGENTS.md'
+  'CLAUDE.md'
+  'mcp/servers.json'
+  'agents/*.md'
+  'skills/*/SKILL.md'
+  'auth/*'
+  'crypto/*'
+  'personal/health/*'
+  '*.key'
+  '*.pem'
+  '*.crt'
+  '.ssh/*'
+  '*/.ssh/*'
+  '*.env'
+  '*.env.*'
+)
+
 if [[ ! -f "$SESSION_LIB" || ! -f "$CAP_LIB" ]]; then
   printf '%s\n' '{"decision":"block","reason":"capability-check: missing Walter-OS capability libraries — failing closed"}'
   exit 0
@@ -84,16 +106,24 @@ _cap_extract_hosts() {
 _cap_is_network_command() {
   local command="$1"
   [[ "$command" =~ (^|[[:space:];|&()])(curl|wget)[[:space:]] ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])git[[:space:]]+(clone|fetch|pull|push|ls-remote)[[:space:]] ]] && return 0
+  [[ "$command" =~ (^|[[:space:];|&()])git[[:space:]]+(clone|fetch|pull|push|ls-remote)([[:space:]]|$) ]] && return 0
+  return 1
+}
+
+_cap_is_high_tier_path() {
+  local target="$1" repo="$2" pattern
+  for pattern in "${CAP_HIGH_TIER_PATH_PATTERNS[@]}"; do
+    _cap_glob_matches_path "$target" "$repo" "$pattern" && return 0
+  done
   return 1
 }
 
 _cap_is_high_tier() {
-  local tool="$1" target="$2"
+  local tool="$1" target="$2" repo="$3"
   local sensitive_bash_re='capability-token[.]sh|walter_cap_sign_claims|session-[^[:space:];|&]*[.]key'
   case "$tool" in
     Edit|Write|MultiEdit|NotebookEdit)
-      [[ -n "$target" ]]
+      [[ -n "$target" ]] && _cap_is_high_tier_path "$target" "$repo"
       ;;
     Bash)
       _cap_is_network_command "$target" && return 0
@@ -177,11 +207,6 @@ _cap_claim_matches() {
       done
       ;;
     Bash)
-      if [[ -n "$hosts" ]]; then
-        _cap_claim_covers_hosts "$claims" "$hosts" && return 0
-        return 1
-      fi
-
       count="$(jq '.scope.patterns // [] | length' <<< "$claims")"
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
@@ -189,6 +214,11 @@ _cap_claim_matches() {
         [[ -n "$value" && "$target" =~ $value ]] && return 0
         idx=$((idx + 1))
       done
+
+      if [[ -n "$hosts" ]]; then
+        _cap_claim_covers_hosts "$claims" "$hosts" && return 0
+        return 1
+      fi
       ;;
   esac
   return 1
@@ -233,7 +263,7 @@ _cap_main_json() {
   repo="${WALTER_SESSION_REPO:-$PWD}"
   hosts="$(_cap_extract_hosts "$target")"
 
-  _cap_is_high_tier "$tool" "$target" || _cap_emit_allow
+  _cap_is_high_tier "$tool" "$target" "$repo" || _cap_emit_allow
 
   if [[ "$tool" == "Bash" && "${WALTER_CAP_BYPASS:-0}" == "1" ]] && _cap_has_bypass_flag "$target"; then
     _cap_emit_allow_warn "capability-check: WALTER_CAP_BYPASS=1 + --allow-no-cap bypassed capability enforcement"
