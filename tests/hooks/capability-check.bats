@@ -92,7 +92,7 @@ _mint() {
   echo "$output" | jq -er '.reason' | grep -q 'python3 is required'
 }
 
-@test "low-tier Bash without python3 passes through" {
+@test "Bash without python3 fails closed before low-tier classification" {
   mkdir -p "$BATS_TEST_TMPDIR/no-python-bin"
   ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/no-python-bin/dirname"
   ln -s "$(command -v jq)" "$BATS_TEST_TMPDIR/no-python-bin/jq"
@@ -104,7 +104,28 @@ _mint() {
   output="$(printf '%s' "$input" \
     | PATH="$BATS_TEST_TMPDIR/no-python-bin" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK")"
 
-  echo "$output" | jq -e '.decision == "allow"'
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'python3 is required for Bash capability inspection'
+}
+
+@test "Bash high-tier host extraction without awk fails closed" {
+  mkdir -p "$BATS_TEST_TMPDIR/no-awk-bin"
+  ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/no-awk-bin/dirname"
+  ln -s "$(command -v jq)" "$BATS_TEST_TMPDIR/no-awk-bin/jq"
+  ln -s "$(command -v mktemp)" "$BATS_TEST_TMPDIR/no-awk-bin/mktemp"
+  ln -s "$(command -v python3)" "$BATS_TEST_TMPDIR/no-awk-bin/python3"
+  ln -s "$(command -v rm)" "$BATS_TEST_TMPDIR/no-awk-bin/rm"
+  ln -s "$(command -v grep)" "$BATS_TEST_TMPDIR/no-awk-bin/grep"
+  ln -s "$(command -v tr)" "$BATS_TEST_TMPDIR/no-awk-bin/tr"
+
+  _mint Bash --network '*' --duration 30m >/dev/null
+  input="$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' "curl https://api.github.com/repos/x/y" | jq -Rs .)")"
+  output="$(printf '%s' "$input" \
+    | PATH="$BATS_TEST_TMPDIR/no-awk-bin" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'awk is required'
 }
 
 @test "invalid pattern capability is a quiet non-match" {
@@ -344,6 +365,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "curl connect-to bracketed IPv6 target host must be covered" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --connect-to api.github.com:443:'[::1]':443 https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "curl proxy host is allowed when all hosts are covered" {
   _mint Bash --network api.github.com --network proxy.example --duration 30m >/dev/null
 
@@ -356,6 +385,14 @@ _mint() {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "curl --resolve api.github.com:443:evil.example https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "curl resolve bracketed IPv6 address must be covered" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --resolve api.github.com:443:'[::1]' https://api.github.com/repos/x/y")"
 
   echo "$output" | jq -e '.decision == "block"'
 }

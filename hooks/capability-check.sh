@@ -126,6 +126,30 @@ _cap_extract_hosts() {
   } | awk 'NF && !seen[$0]++'
 }
 
+_cap_curl_after_second_field() {
+  local value="$1" rest
+  rest="$value"
+  if [[ "$rest" == \[*\]*:* ]]; then
+    rest="${rest#*\]}"
+    rest="${rest#:}"
+  else
+    rest="${rest#*:}"
+  fi
+  rest="${rest#*:}"
+  printf '%s\n' "$rest"
+}
+
+_cap_curl_connect_to_target_host() {
+  local value="$1" rest host
+  rest="$(_cap_curl_after_second_field "$value")"
+  if [[ "$rest" =~ ^(\[[^]]+\])(:.*)?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+  else
+    host="${rest%:*}"
+  fi
+  printf '%s\n' "$host"
+}
+
 _cap_extract_literal_hosts() {
   local command="$1" tokfile token prev host idx
   local -a tokens=()
@@ -403,7 +427,7 @@ _cap_extract_curl_hosts() {
               ;;
             --connect-to)
               value="${tokens[$((j + 1))]:-}"
-              IFS=':' read -r _ _ host _ <<< "$value"
+              host="$(_cap_curl_connect_to_target_host "$value")"
               host="$(_cap_normalize_host "$host")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               j=$((j + 2))
@@ -411,13 +435,13 @@ _cap_extract_curl_hosts() {
               ;;
             --connect-to=*)
               value="${candidate#*=}"
-              IFS=':' read -r _ _ host _ <<< "$value"
+              host="$(_cap_curl_connect_to_target_host "$value")"
               host="$(_cap_normalize_host "$host")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               ;;
             --resolve)
               value="${tokens[$((j + 1))]:-}"
-              IFS=':' read -r _ _ host <<< "$value"
+              host="$(_cap_curl_after_second_field "$value")"
               host="$(_cap_normalize_host "$host")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               j=$((j + 2))
@@ -425,7 +449,7 @@ _cap_extract_curl_hosts() {
               ;;
             --resolve=*)
               value="${candidate#*=}"
-              IFS=':' read -r _ _ host <<< "$value"
+              host="$(_cap_curl_after_second_field "$value")"
               host="$(_cap_normalize_host "$host")"
               [[ -n "$host" ]] && printf '%s\n' "$host"
               ;;
@@ -1236,11 +1260,19 @@ _cap_main_json() {
     repo="$(_cap_lexical_normalize_path "$repo")"
   fi
 
+  if [[ "$tool" == "Bash" ]] && ! command -v python3 >/dev/null 2>&1; then
+    _cap_emit_block "capability-check: python3 is required for Bash capability inspection - failing closed"
+  fi
   _cap_is_high_tier "$tool" "$target" "$repo" || _cap_emit_allow
   if ! command -v python3 >/dev/null 2>&1; then
     _cap_emit_block "capability-check: python3 is required for high-tier capability enforcement - failing closed"
   fi
-  [[ "$tool" == "Bash" ]] && hosts="$(_cap_extract_hosts "$target")"
+  if [[ "$tool" == "Bash" ]]; then
+    if ! command -v awk >/dev/null 2>&1; then
+      _cap_emit_block "capability-check: awk is required for Bash host extraction - failing closed"
+    fi
+    hosts="$(_cap_extract_hosts "$target")"
+  fi
 
   if [[ "$tool" == "Bash" && "${WALTER_CAP_BYPASS:-0}" == "1" ]] && _cap_has_bypass_flag "$target"; then
     _cap_emit_allow_warn "capability-check: WALTER_CAP_BYPASS=1 + --allow-no-cap bypassed capability enforcement"
