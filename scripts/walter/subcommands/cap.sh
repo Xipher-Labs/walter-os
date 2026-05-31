@@ -34,6 +34,15 @@ _cap_json_array_append() {
   jq -cn --argjson arr "$array_json" --arg value "$value" '$arr + [$value]'
 }
 
+_cap_option_value() {
+  local opt="$1" value="${2-}"
+  if [[ $# -lt 2 || -z "$value" ]]; then
+    echo "walter-os cap mint: missing value for $opt" >&2
+    return 2
+  fi
+  printf '%s' "$value"
+}
+
 _cap_start_or_get_state_file() {
   local repo="$1" result status state_file
   set +e
@@ -90,7 +99,7 @@ _cap_write_token_file() {
 
 cmd_cap_mint() {
   local tool="${1:-}" duration="" repo="$PWD" paths='[]' network='[]' patterns='[]'
-  local state_file now_epoch now_iso duration_seconds requested_exp session_exp exp_epoch exp_iso nonce session_id claims token
+  local state_file now_epoch now_iso duration_seconds requested_exp session_exp exp_epoch exp_iso nonce session_id claims token value
   [[ -n "$tool" ]] || {
     echo "walter-os cap mint: tool required" >&2
     return 2
@@ -105,15 +114,23 @@ cmd_cap_mint() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --duration)
-        duration="${2:-}"; shift 2 ;;
+        duration="$(_cap_option_value "$1" "${2-}")" || return $?
+        shift 2 ;;
       --paths|--path)
-        paths="$(_cap_json_array_append "$paths" "${2:-}")"; shift 2 ;;
+        value="$(_cap_option_value "$1" "${2-}")" || return $?
+        paths="$(_cap_json_array_append "$paths" "$value")"
+        shift 2 ;;
       --network)
-        network="$(_cap_json_array_append "$network" "${2:-}")"; shift 2 ;;
+        value="$(_cap_option_value "$1" "${2-}")" || return $?
+        network="$(_cap_json_array_append "$network" "$value")"
+        shift 2 ;;
       --patterns|--pattern)
-        patterns="$(_cap_json_array_append "$patterns" "${2:-}")"; shift 2 ;;
+        value="$(_cap_option_value "$1" "${2-}")" || return $?
+        patterns="$(_cap_json_array_append "$patterns" "$value")"
+        shift 2 ;;
       --repo)
-        repo="${2:-}"; shift 2 ;;
+        repo="$(_cap_option_value "$1" "${2-}")" || return $?
+        shift 2 ;;
       -h|--help|help)
         cap_usage; return 0 ;;
       *)

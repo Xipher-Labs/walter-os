@@ -77,6 +77,15 @@ teardown() {
   [[ "$output" == *"duration must include a unit"* ]]
 }
 
+@test "walter-os cap mint reports missing option values" {
+  cd "$REPO_UNDER_TEST"
+
+  run "$CLI" cap mint Bash --duration
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --duration"* ]]
+}
+
 @test "walter-os cap mint is blocked inside subagent context" {
   cd "$REPO_UNDER_TEST"
   export WALTER_AGENT_CONTEXT=reviewer

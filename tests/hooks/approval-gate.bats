@@ -100,6 +100,12 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: walter-os cap mint is blocked for operator approval" {
+  run "$HOOK" check "walter-os cap mint Bash --patterns '.*' --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]

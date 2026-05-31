@@ -94,6 +94,9 @@ declare -a BLOCK_BASH_PATTERNS=(
   # Disable hooks
   'git[[:space:]]+(commit|push).*--no-verify'
   '--no-gpg-sign'
+  # Capability minting must be operator-approved; otherwise an agent can mint
+  # the token that later satisfies capability enforcement.
+  '(^|[[:space:]])([^[:space:]]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
 )
 
 # Edit / Write paths that require approval. POSIX-glob style; we shell-match.
@@ -150,6 +153,7 @@ declare -A CATEGORY_MIN_TIER=(
   [run-tests-linters]="low"
   [gh-pr-comment]="low"
   [gh-pr-review-approve]="high"
+  [capability-token-mint]="high"
 )
 set -u
 
@@ -185,6 +189,12 @@ _classify_command() {
       # gh pr review --approve
       if [[ "$payload" =~ gh[[:space:]]+pr[[:space:]]+review.*--approve ]]; then
         echo "gh-pr-review-approve"; return
+      fi
+      # Capability minting is high risk and not trust-tier-overridable.
+      # It must stay blocked until an explicit standing approval or Plane
+      # operator approval is present.
+      if [[ "$payload" =~ (^|[[:space:]])([^[:space:]]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]]; then
+        echo "capability-token-mint"; return
       fi
       # Test / lint runners
       if [[ "$payload" =~ (bats|pytest|cargo[[:space:]]+test|pnpm[[:space:]]+test|npm[[:space:]]+test|eslint|shellcheck|ruff|clippy) ]]; then
@@ -371,6 +381,9 @@ apply_trust_tier() {
       block "trust tier '${agent_tier}' does not permit category '$category' (agent: $agent)"
     fi
   elif [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+    if [[ "$category" == "capability-token-mint" ]]; then
+      return 0
+    fi
     # The command was blocked by pattern, but trust tier may override.
     if _trust_tier_allows "$agent" "$category"; then
       decision="allow"

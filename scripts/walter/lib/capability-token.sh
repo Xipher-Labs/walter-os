@@ -124,6 +124,16 @@ _walter_cap_validate_state() {
   ' "$state_file" >/dev/null
 }
 
+_walter_cap_session_end_epoch() {
+  local state_file="$1" started_at max_hours started_epoch
+  started_at="$(jq -r '.started_at // empty' "$state_file")"
+  max_hours="$(jq -r '.max_hours_at_start // empty' "$state_file")"
+  [[ "$max_hours" =~ ^[1-9][0-9]*$ ]] || return 1
+  started_epoch="$(_walter_session_epoch "$started_at")"
+  [[ "$started_epoch" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' $((started_epoch + (max_hours * 3600)))
+}
+
 _walter_cap_validate_active_session() {
   local state_file="$1" started_at last_activity_at started_epoch last_epoch now_epoch max_hours max_idle expired_trigger=""
   started_at="$(jq -r '.started_at // empty' "$state_file")"
@@ -161,7 +171,7 @@ _walter_cap_validate_active_session() {
 
 walter_cap_sign_claims() {
   local state_file="$1" claims_json="$2"
-  local session_id private_key tmp_dir payload_file footer_file pae_file sig_file body_file token_body token_footer openssl_bin
+  local session_id private_key tmp_dir payload_file footer_file pae_file sig_file body_file token_body token_footer openssl_bin exp exp_epoch session_end
   _walter_cap_require_runtime || return 1
   _walter_cap_validate_state "$state_file" || return 1
   _walter_cap_validate_active_session "$state_file" || return 1
@@ -190,6 +200,22 @@ walter_cap_sign_claims() {
     rm -r "$tmp_dir"
     return 1
   fi
+  exp="$(jq -r '.exp // empty' "$payload_file")"
+  if [[ -z "$exp" ]] || ! exp_epoch="$(_walter_session_epoch "$exp")" || [[ ! "$exp_epoch" =~ ^[0-9]+$ ]]; then
+    echo "walter-cap: invalid exp claim" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  session_end="$(_walter_cap_session_end_epoch "$state_file")" || {
+    echo "walter-cap: cannot derive session end" >&2
+    rm -r "$tmp_dir"
+    return 1
+  }
+  if (( exp_epoch > session_end )); then
+    echo "walter-cap: token exp exceeds session end" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
   jq -ncS --arg kid "$session_id" '{alg:"Ed25519", kid:$kid}' > "$footer_file"
   if ! _walter_cap_pae_to_file "$payload_file" "$footer_file" "$pae_file"; then
     rm -r "$tmp_dir"
@@ -208,7 +234,7 @@ walter_cap_sign_claims() {
 
 walter_cap_verify_token() {
   local state_file="$1" token="$2"
-  local prefix purpose body footer extra session_id public_key tmp_dir body_file payload_file footer_file sig_file pae_file openssl_bin exp exp_epoch now_epoch
+  local prefix purpose body footer extra session_id public_key tmp_dir body_file payload_file footer_file sig_file pae_file openssl_bin exp exp_epoch now_epoch session_end
   _walter_cap_require_runtime || return 1
   _walter_cap_validate_state "$state_file" || return 1
   _walter_cap_validate_active_session "$state_file" || return 1
@@ -268,6 +294,16 @@ walter_cap_verify_token() {
   exp="$(jq -r '.exp // empty' "$payload_file")"
   if [[ -z "$exp" ]] || ! exp_epoch="$(_walter_session_epoch "$exp")" || [[ ! "$exp_epoch" =~ ^[0-9]+$ ]]; then
     echo "walter-cap: invalid exp claim" >&2
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  session_end="$(_walter_cap_session_end_epoch "$state_file")" || {
+    echo "walter-cap: cannot derive session end" >&2
+    rm -r "$tmp_dir"
+    return 1
+  }
+  if (( exp_epoch > session_end )); then
+    echo "walter-cap: token exp exceeds session end" >&2
     rm -r "$tmp_dir"
     return 1
   fi

@@ -75,6 +75,27 @@ _state_file() {
   [ ! -d "$caps_dir" ]
 }
 
+@test "capability helper rejects tokens whose exp exceeds session end" {
+  export WALTER_SESSION_MAX_HOURS=8
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  long_state="${state_file}.long"
+  jq '.max_hours_at_start = 12' "$state_file" > "$long_state"
+  mv "$long_state" "$state_file"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Bash", scope:{paths:[], network:[], patterns:[".*"]}, iat:"2026-01-01T00:00:00Z", exp:"2026-01-01T10:00:00Z", nonce:"too-long"}')"
+  token="$(bash -c "source '$CAP_LIB'; walter_cap_sign_claims '$state_file' '$claims'")"
+  restored="${state_file}.restored"
+  jq '.max_hours_at_start = 8' "$state_file" > "$restored"
+  mv "$restored" "$state_file"
+
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$token'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"token exp exceeds session end"* ]]
+}
+
 @test "duration parser rejects bare integers" {
   run bash -c "source '$CAP_LIB'; walter_cap_duration_to_seconds 4"
 
