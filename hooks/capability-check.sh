@@ -8,7 +8,7 @@
 
 set -uo pipefail
 
-REPO_ROOT="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SESSION_LIB="${REPO_ROOT}/scripts/walter/lib/session-state.sh"
 CAP_LIB="${REPO_ROOT}/scripts/walter/lib/capability-token.sh"
 
@@ -90,11 +90,9 @@ _cap_extract_hosts() {
       case "$token" in
         http://*|https://*)
           host="${token#*://}"
-          host="${host%%/*}"
           ;;
         ssh://*)
           host="${token#ssh://}"
-          host="${host%%/*}"
           ;;
         git@*:*)
           host="${token#git@}"
@@ -102,13 +100,32 @@ _cap_extract_hosts() {
           ;;
       esac
 
-      host="${host#*@}"
-      host="${host%%:*}"
+      host="$(_cap_normalize_host "$host")"
       [[ -n "$host" ]] && printf '%s\n' "$host"
     done
     _cap_extract_gh_host "$command"
     _cap_extract_positional_network_hosts "$command"
   } | awk 'NF && !seen[$0]++'
+}
+
+_cap_normalize_host() {
+  local host="$1"
+  [[ -n "$host" ]] || return 0
+  host="${host#*@}"
+  host="${host%%/*}"
+  host="${host%%\?*}"
+  host="${host%%#*}"
+  host="${host%;}"
+  host="${host%,}"
+  host="${host%)}"
+
+  if [[ "$host" =~ ^(\[[^]]+\])(:[0-9]+)?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+  else
+    host="${host%%:*}"
+  fi
+
+  printf '%s\n' "$host"
 }
 
 _cap_extract_gh_host() {
@@ -250,24 +267,38 @@ _cap_is_network_command() {
     idx=$((idx + 1))
   done
 
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(curl|wget)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?gh([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(ssh|scp|rsync|nc|ncat|telnet)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?git[[:space:]]+(clone|fetch|pull|push|ls-remote)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(pip|pip3|uv|uvx)[[:space:]]+(install|download|sync)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(npm|pnpm|yarn)[[:space:]]+(install|add|update|upgrade|dlx|exec)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(cargo|brew|gem)[[:space:]]+(install|search|update|upgrade)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?go[[:space:]]+(get|install)([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?go[[:space:]]+mod[[:space:]]+tidy([[:space:]]|$) ]] && return 0
   return 1
 }
 
 _cap_is_mint_command() {
   local command="$1"
-  [[ "$command" =~ [\;\|\&] ]] && return 1
+  _cap_has_compound_separator "$command" && return 1
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
   return 1
+}
+
+_cap_has_compound_separator() {
+  local command="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$command" <<'PY'
+import shlex
+import sys
+
+lexer = shlex.shlex(sys.argv[1], posix=True, punctuation_chars=";&|")
+lexer.whitespace_split = True
+try:
+    for token in lexer:
+        if token in {";", "|", "&", "&&", "||"}:
+            sys.exit(0)
+except ValueError:
+    sys.exit(0)
+sys.exit(1)
+PY
+    return $?
+  fi
+
+  [[ "$command" =~ [\;\|\&] ]]
 }
 
 _cap_is_gh_pr_approve() {
@@ -338,7 +369,6 @@ _cap_is_high_tier() {
       _cap_is_mint_command "$target" && return 1
       _cap_is_network_command "$target" && return 0
       _cap_is_gh_pr_approve "$target" && return 0
-      [[ "$target" =~ walter-os[[:space:]]+cap[[:space:]]+mint ]] && return 0
       [[ "$target" =~ $sensitive_bash_re ]] && return 0
       return 1
       ;;
@@ -357,6 +387,7 @@ _cap_glob_matches() {
 
 _cap_glob_matches_path() {
   local target="$1" repo="$2" pattern="$3" rel_target
+  target="$(_cap_normalize_repo_path "$target" "$repo")"
   while [[ "$target" == ./* ]]; do
     target="${target#./}"
   done
@@ -373,6 +404,52 @@ _cap_glob_matches_path() {
     esac
   fi
   return 1
+}
+
+_cap_normalize_repo_path() {
+  local target="$1" repo="$2" part normalized last
+  local -a parts=() stack=()
+
+  while [[ "$target" == ./* ]]; do
+    target="${target#./}"
+  done
+
+  if [[ -n "$repo" ]]; then
+    case "$target" in
+      "$repo"/*) target="${target#"$repo"/}" ;;
+    esac
+  fi
+
+  IFS='/' read -r -a parts <<< "$target"
+  for part in "${parts[@]}"; do
+    case "$part" in
+      ''|.) continue ;;
+      ..)
+        if [[ "${#stack[@]}" -gt 0 ]]; then
+          last=$((${#stack[@]} - 1))
+        else
+          last=-1
+        fi
+        if [[ "$last" -ge 0 && "${stack[$last]}" != ".." ]]; then
+          unset "stack[$last]"
+        else
+          stack+=("$part")
+        fi
+        ;;
+      *) stack+=("$part") ;;
+    esac
+  done
+
+  normalized=""
+  for part in "${stack[@]}"; do
+    if [[ -z "$normalized" ]]; then
+      normalized="$part"
+    else
+      normalized+="/$part"
+    fi
+  done
+
+  printf '%s\n' "$normalized"
 }
 
 _cap_host_matches() {
@@ -432,7 +509,7 @@ _cap_claim_matches() {
       idx=0
       while [[ "$idx" -lt "$count" ]]; do
         value="$(jq -r --argjson idx "$idx" '.scope.patterns[$idx]' <<< "$claims")"
-        [[ -n "$value" && "$target" =~ $value ]] && return 0
+        [[ -n "$value" ]] && grep -Eq -- "$value" <<< "$target" && return 0
         idx=$((idx + 1))
       done
 
@@ -468,9 +545,9 @@ _cap_find_match() {
 _cap_target_from_json() {
   local tool="$1" input="$2"
   case "$tool" in
-    Bash) jq -r '.tool_input.command // ""' <<< "$input" ;;
-    Edit|Write|MultiEdit) jq -r '.tool_input.file_path // ""' <<< "$input" ;;
-    NotebookEdit) jq -r '.tool_input.notebook_path // .tool_input.file_path // ""' <<< "$input" ;;
+    Bash) jq -er '.tool_input.command | select(type == "string" and length > 0)' <<< "$input" ;;
+    Edit|Write|MultiEdit) jq -er '.tool_input.file_path | select(type == "string" and length > 0)' <<< "$input" ;;
+    NotebookEdit) jq -er '(.tool_input.notebook_path // .tool_input.file_path) | select(type == "string" and length > 0)' <<< "$input" ;;
     *) printf '' ;;
   esac
 }
@@ -484,8 +561,12 @@ _cap_main_json() {
   if ! jq -e type >/dev/null 2>&1 <<< "$input"; then
     _cap_emit_block "capability-check: malformed hook JSON — failing closed"
   fi
-  tool="$(jq -r '.tool_name // ""' <<< "$input")"
-  target="$(_cap_target_from_json "$tool" "$input")"
+  if ! tool="$(jq -er '.tool_name | select(type == "string" and length > 0)' <<< "$input")"; then
+    _cap_emit_block "capability-check: missing tool_name — failing closed"
+  fi
+  if ! target="$(_cap_target_from_json "$tool" "$input")"; then
+    _cap_emit_block "capability-check: missing required target for ${tool} — failing closed"
+  fi
   repo="${WALTER_SESSION_REPO:-$PWD}"
   hosts="$(_cap_extract_hosts "$target")"
 
@@ -502,6 +583,10 @@ _cap_main_json() {
   _cap_emit_block "capability-check: no valid token for ${tool} on ${target:-<empty>}; mint with: walter-os cap mint ${tool} --duration 30m"
 }
 
-input="$(cat)"
-[[ -z "$input" ]] && _cap_emit_allow
+input=""
+while IFS= read -r line || [[ -n "$line" ]]; do
+  input+="${line}"$'\n'
+done
+input="${input%$'\n'}"
+[[ -z "$input" ]] && _cap_emit_block "capability-check: empty hook JSON — failing closed"
 _cap_main_json "$input"

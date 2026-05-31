@@ -44,6 +44,24 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "empty hook JSON fails closed" {
+  output="$(printf '' | WALTER_SESSION_REPO="$REPO_UNDER_TEST" bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash hook event without command fails closed" {
+  output="$(printf '{"tool_name":"Bash","tool_input":{}}' | WALTER_SESSION_REPO="$REPO_UNDER_TEST" bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "hook sources libraries from its own checkout" {
+  output="$(WALTER_OS_HOME="$TMP_HOME/other-checkout" _hook_json Bash command "echo hello")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "high-tier Bash egress without capability is blocked" {
   output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
   echo "$output" | jq -e '.decision == "block"'
@@ -55,6 +73,37 @@ _mint() {
 
   output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash egress with query-only URL matches host capability" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com?per_page=1")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash egress with IPv6 literal matches bracket capability" {
+  _mint Bash --network '[::1]' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl http://[::1]:8080")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "network wildcard matches any host" {
+  _mint Bash --network '*' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://evil.example")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "network subdomain wildcard matches subdomains only" {
+  _mint Bash --network '*.github.com' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
+  echo "$output" | jq -e '.decision == "allow"'
+
+  output="$(_hook_json Bash command "curl https://github.com")"
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "absolute-path curl without capability is blocked" {
@@ -171,6 +220,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "quoted network command example remains low-tier" {
+  output="$(_hook_json Bash command "printf '%s\n' 'curl https://api.github.com'")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress requires capability coverage for every destination" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
@@ -235,6 +290,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "walter-os cap mint with quoted regex alternation bootstraps" {
+  output="$(_hook_json Bash command "walter-os cap mint Bash --patterns 'curl|wget' --duration 30m")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "compound cap mint plus egress still requires capability" {
   output="$(_hook_json Bash command "walter-os cap mint Bash --network github.com --duration 30m; curl https://evil.example")"
 
@@ -271,6 +332,12 @@ _mint() {
 
 @test "Write dot-relative protected path without capability is blocked" {
   output="$(_hook_json Write file_path "./install.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write path traversal to protected path without capability is blocked" {
+  output="$(_hook_json Write file_path "docs/../hooks/approval-gate.sh")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
