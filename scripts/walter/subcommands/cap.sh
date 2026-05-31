@@ -101,6 +101,31 @@ _cap_write_token_file() {
   mv "$tmp_file" "$token_file"
 }
 
+_cap_mint_test_context_allowed() {
+  [[ "${WALTER_CAP_MINT_TEST_ALLOW:-0}" == "1" ]] || return 1
+  [[ "${WALTER_SESSION_TEST_CLOCK:-0}" == "1" ]] || return 1
+  case "${WALTER_CONFIG:-}" in
+    /tmp/*|/var/tmp/*|/var/folders/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_cap_require_operator_mint_context() {
+  if [[ -n "${WALTER_AGENT_CONTEXT:-}" || -n "${WALTER_AGENT_NAME:-}" ]]; then
+    local caller="${WALTER_AGENT_NAME:-${WALTER_AGENT_CONTEXT:-unknown}}"
+    echo "walter-os cap mint: cap minting blocked inside agent context (caller=${caller}). Operator must mint caps in the top-level session." >&2
+    return 4
+  fi
+  if [[ -t 0 && -t 1 ]]; then
+    return 0
+  fi
+  if _cap_mint_test_context_allowed; then
+    return 0
+  fi
+  echo "walter-os cap mint: interactive operator terminal required. Run cap mint directly from your terminal; noninteractive agent/script minting is blocked." >&2
+  return 4
+}
+
 cmd_cap_mint() {
   local tool="${1:-}" duration="" repo="$PWD" paths='[]' network='[]' patterns='[]'
   local state_file now_epoch now_iso duration_seconds requested_exp session_exp exp_epoch exp_iso nonce session_id claims token value
@@ -110,11 +135,7 @@ cmd_cap_mint() {
   }
   shift || true
 
-  if [[ -n "${WALTER_AGENT_CONTEXT:-}" || -n "${WALTER_AGENT_NAME:-}" ]]; then
-    local caller="${WALTER_AGENT_NAME:-${WALTER_AGENT_CONTEXT:-unknown}}"
-    echo "walter-os cap mint: cap minting blocked inside agent context (caller=${caller}). Operator must mint caps in the top-level session." >&2
-    return 4
-  fi
+  _cap_require_operator_mint_context || return $?
 
   while [[ $# -gt 0 ]]; do
     case "$1" in

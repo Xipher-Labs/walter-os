@@ -11,6 +11,7 @@ setup() {
   export WALTER_OS_HOME="$REPO_ROOT"
   export WALTER_SESSION_TEST_CLOCK=1
   export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_CAP_MINT_TEST_ALLOW=1
   REPO_UNDER_TEST="$TMP_HOME/work/repo"
   mkdir -p "$WALTER_CONFIG" "$REPO_UNDER_TEST"
   bash -c "source '$SESSION_LIB'; _walter_session_openssl" >/dev/null \
@@ -114,6 +115,16 @@ teardown() {
 
   [ "$status" -eq 2 ]
   [[ "$output" == *"duration must include a unit"* ]]
+}
+
+@test "walter-os cap mint rejects noninteractive mint outside test fixture" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+
+  run "$CLI" cap mint Bash --patterns '.*' --duration 5m
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"interactive operator terminal required"* ]]
 }
 
 @test "walter-os cap mint reports missing option values" {
