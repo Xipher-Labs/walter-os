@@ -225,7 +225,14 @@ _walter_audit_release_lock() {
 }
 
 _walter_audit_verify_chain_file_unlocked() {
-  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical
+  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex
+  if [[ -s "$chain_path" ]]; then
+    last_hex="$(tail -c 1 "$chain_path" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+    if [[ "$last_hex" != "0a" ]]; then
+      echo "walter-audit-chain: unterminated final row: $chain_path" >&2
+      return 1
+    fi
+  fi
   row_number=0
   expected_hash="null"
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -352,8 +359,11 @@ walter_audit_verify_chain() {
     return 1
   fi
 
-  row_count="$(_walter_audit_verify_chain_file_unlocked "$chain_path")"
-  verify_status="$?"
+  if row_count="$(_walter_audit_verify_chain_file_unlocked "$chain_path")"; then
+    verify_status=0
+  else
+    verify_status="$?"
+  fi
   _walter_audit_release_lock "$lock_path"
   [[ "$verify_status" -eq 0 ]] || return "$verify_status"
 

@@ -100,6 +100,28 @@ _make_chain() {
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
 }
 
+@test "B-1: unterminated final row fails verification" {
+  _make_chain
+  content="$(cat "$(_chain_path)")"
+  printf '%s' "$content" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated final row"* ]]
+}
+
+@test "B-1: append rejects unterminated chain before adding row" {
+  _make_chain
+  content="$(cat "$(_chain_path)")"
+  printf '%s' "$content" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after unterminated' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+}
+
 @test "B-1: missing chain returns non-zero" {
   run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
 
