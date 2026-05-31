@@ -45,6 +45,12 @@ _openssl_or_skip() {
   jq -e '.session_id and .started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:00:00Z"' "$state_file"
 }
 
+@test "session id fallback remains unique when uuidgen is unavailable" {
+  run bash -c "source '$LIB'; command() { if [[ \"\$1\" == \"-v\" && \"\$2\" == \"uuidgen\" ]]; then return 1; fi; builtin command \"\$@\"; }; first=\"\$(_walter_session_uuid)\"; second=\"\$(_walter_session_uuid)\"; [[ \"\$first\" != \"\$second\" ]] && [[ \"\$first\" =~ ^session-[a-f0-9]{32}$ ]] && [[ \"\$second\" =~ ^session-[a-f0-9]{32}$ ]]"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "session touch creates capability signing key material" {
   openssl_bin="$(_openssl_or_skip)"
   export WALTER_SESSION_NOW_EPOCH=1767225600

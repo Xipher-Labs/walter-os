@@ -28,10 +28,18 @@ _walter_session_epoch() {
 }
 
 _walter_session_uuid() {
+  local random_id
   if command -v uuidgen >/dev/null 2>&1; then
     uuidgen | tr '[:upper:]' '[:lower:]'
+  elif [[ -r /dev/urandom ]] && command -v od >/dev/null 2>&1; then
+    random_id="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d '[:space:]')"
+    if [[ "$random_id" =~ ^[a-f0-9]{32}$ ]]; then
+      printf 'session-%s' "$random_id"
+      return 0
+    fi
+    printf 'session-%s-%s-%s-%s' "$(_walter_session_now_epoch)" "$$" "$RANDOM" "$RANDOM"
   else
-    printf 'session-%s-%s' "$(_walter_session_now_epoch)" "$$"
+    printf 'session-%s-%s-%s-%s' "$(_walter_session_now_epoch)" "$$" "$RANDOM" "$RANDOM"
   fi
 }
 
