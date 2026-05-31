@@ -220,6 +220,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: capability bearer token read is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/caps-abc/cap-token.paseto" --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: capability bearer token glob is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/state/caps-abc/cap-*.paseto'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: escaped Walter state directory is blocked" {
   run "$HOOK" check 'cat ~/.config/walter-os/st\ate/*.key'
   [[ "$status" -eq 7 ]]
@@ -456,6 +468,18 @@ teardown() {
 
 @test "Hook: Grep target path blocks capability session material" {
   result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"session","path":"~/.config/walter-os/state/session-abc.key"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Grep split path plus key glob blocks capability session material" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"anything","path":"~/.config/walter-os/state","glob":"*.key"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Glob split caps path plus token pattern blocks bearer tokens" {
+  result=$(echo '{"tool_name":"Glob","tool_input":{"path":"~/.config/walter-os/state/caps-abc","pattern":"cap-*.paseto"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
   [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
 }

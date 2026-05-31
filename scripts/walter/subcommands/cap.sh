@@ -45,6 +45,11 @@ _cap_option_value() {
 
 _cap_start_or_get_state_file() {
   local repo="$1" result status state_file
+  state_file="$(walter_session_state_file "$repo")"
+  if [[ -f "$state_file" ]]; then
+    _walter_cap_validate_state "$state_file" || return 1
+    _walter_cap_validate_active_session "$state_file" || return 1
+  fi
   set +e
   result="$(walter_session_touch "$repo")"
   status=$?
@@ -53,7 +58,6 @@ _cap_start_or_get_state_file() {
     printf '%s\n' "$result" >&2
     return "$status"
   fi
-  state_file="$(walter_session_state_file "$repo")"
   [[ -f "$state_file" ]] || {
     echo "walter-os cap: session state missing after touch: $state_file" >&2
     return 12

@@ -136,6 +136,23 @@ teardown() {
   [[ "$output" == *"no remaining lifetime"* ]]
 }
 
+@test "walter-os cap mint rejects expired existing session before touch" {
+  cd "$REPO_UNDER_TEST"
+  export WALTER_SESSION_MAX_HOURS=8
+  export WALTER_SESSION_MAX_IDLE_MIN=60
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  export WALTER_SESSION_NOW_EPOCH=1767229261
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+
+  run "$CLI" cap mint Bash --patterns '.*' --duration 5m
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"session expired"* ]]
+  [ ! -f "$private_key" ]
+}
+
 @test "walter-os cap mint is blocked inside subagent context" {
   cd "$REPO_UNDER_TEST"
   export WALTER_AGENT_CONTEXT=reviewer

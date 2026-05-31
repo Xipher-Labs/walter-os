@@ -221,6 +221,7 @@ _is_capability_private_key_payload() {
   local literal_braced_home_state="\${HOME}/.config/walter-os/state"
   local session_artifact_re='session-[^[:space:];|&]*[.](key|json|pub)'
   local session_metadata_re='session-[^[:space:];|&]*[.](json|pub)'
+  local caps_artifact_re='caps-[^[:space:];|&/]+(/[[:graph:]]*)?'
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
@@ -243,6 +244,29 @@ _is_capability_private_key_payload() {
 
   if [[ "$normalized" == *"$config_state_dir/"* ]] && \
      [[ "$normalized" =~ $session_artifact_re ]]; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$config_state_dir"* ]] || \
+       [[ "$normalized" == *".config/walter-os"* ]] || \
+       [[ "$normalized" == *"\$WALTER_CONFIG"* ]] || \
+       [[ "$normalized" == *"\${WALTER_CONFIG}"* ]] || \
+       [[ "$normalized" == *"\$HOME/.config/walter-os"* ]] || \
+       [[ "$normalized" == *"\${HOME}/.config/walter-os"* ]]; } && \
+     [[ "$normalized" == *"/state/"* ]] && \
+     [[ "$normalized" =~ $caps_artifact_re ]]; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$literal_config_root"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_root"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_root"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_root"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; } && \
+     [[ "$normalized" =~ $caps_artifact_re ]]; then
     return 0
   fi
 
@@ -772,10 +796,28 @@ case "$tool" in
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
     ;;
   Grep)
-    payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.glob] | map(select(. != null)) | join(" ")')
+    payload=$(echo "$input" | jq -r '
+      .tool_input.path as $path |
+      .tool_input.glob as $glob |
+      [$path, $glob] | map(select(. != null)) | join(" ") as $joined |
+      if ($path != null and $path != "" and $glob != null and $glob != "") then
+        $joined + " " + ($path | sub("/+$"; "")) + "/" + $glob
+      else
+        $joined
+      end
+    ')
     ;;
   Glob)
-    payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.pattern] | map(select(. != null)) | join(" ")')
+    payload=$(echo "$input" | jq -r '
+      .tool_input.path as $path |
+      .tool_input.pattern as $pattern |
+      [$path, $pattern] | map(select(. != null)) | join(" ") as $joined |
+      if ($path != null and $path != "" and $pattern != null and $pattern != "") then
+        $joined + " " + ($path | sub("/+$"; "")) + "/" + $pattern
+      else
+        $joined
+      end
+    ')
     ;;
   LS)
     payload=$(echo "$input" | jq -r '.tool_input.path // ""')
