@@ -164,7 +164,22 @@ _walter_session_release_lock() {
   local lock_dir="$1"
   rm -f "$lock_dir/pid" 2>/dev/null || true
   rm -f "$lock_dir/created_epoch" 2>/dev/null || true
+  rm -f "$lock_dir/session_id" 2>/dev/null || true
   rmdir "$lock_dir" 2>/dev/null || true
+}
+
+_walter_session_cleanup_lock_material() {
+  local lock_dir="$1" session_id private_key public_key caps_dir
+  session_id="$(cat "$lock_dir/session_id" 2>/dev/null || true)"
+  [[ -n "$session_id" ]] || return 0
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 0
+  private_key="$(_walter_session_private_key_file "$session_id")"
+  public_key="$(_walter_session_public_key_file "$session_id")"
+  caps_dir="$(_walter_session_caps_dir "$session_id")"
+  rm -f "$private_key" "$public_key" 2>/dev/null || true
+  if [[ -d "$caps_dir" ]]; then
+    rm -r "$caps_dir" 2>/dev/null || true
+  fi
 }
 
 _walter_session_reclaim_stale_lock() {
@@ -174,6 +189,7 @@ _walter_session_reclaim_stale_lock() {
   now_epoch="$(_walter_session_now_epoch)"
   created_epoch="$(cat "$lock_dir/created_epoch" 2>/dev/null || true)"
   if [[ "$created_epoch" =~ ^[0-9]+$ ]] && (( now_epoch - created_epoch > stale_after )); then
+    _walter_session_cleanup_lock_material "$lock_dir"
     _walter_session_release_lock "$lock_dir"
     [[ ! -d "$lock_dir" ]]
     return
@@ -187,6 +203,7 @@ _walter_session_reclaim_stale_lock() {
   if kill -0 "$pid" 2>/dev/null; then
     return 1
   fi
+  _walter_session_cleanup_lock_material "$lock_dir"
   _walter_session_release_lock "$lock_dir"
   [[ ! -d "$lock_dir" ]]
 }
@@ -226,7 +243,7 @@ _walter_session_has_capability_material() {
 }
 
 _walter_session_write_new() {
-  local repo="$1" file="$2" now_epoch="$3"
+  local repo="$1" file="$2" now_epoch="$3" lock_dir="${4:-}"
   local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub openssl_bin
   state_dir="$(dirname "$file")"
   now_iso="$(_walter_session_iso "$now_epoch")"
@@ -236,6 +253,9 @@ _walter_session_write_new() {
   private_key="$(_walter_session_private_key_file "$session_id")"
   public_key="$(_walter_session_public_key_file "$session_id")"
   caps_dir="$(_walter_session_caps_dir "$session_id")"
+  if [[ -n "$lock_dir" ]]; then
+    printf '%s\n' "$session_id" > "$lock_dir/session_id" || return 1
+  fi
 
   mkdir -p "$state_dir" || return 1
   chmod 700 "$state_dir" 2>/dev/null || true
@@ -343,7 +363,7 @@ walter_session_touch() {
     if mkdir "$lock_dir" 2>/dev/null; then
       _walter_session_mark_lock_or_fail "$lock_dir" "$file" || return 12
       if [[ ! -f "$file" ]]; then
-        if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+        if ! _walter_session_write_new "$repo" "$file" "$now_epoch" "$lock_dir"; then
           _walter_session_release_lock "$lock_dir"
           _walter_session_result "error" "state-write" "$file"
           return 12
@@ -361,7 +381,7 @@ walter_session_touch() {
       if [[ ! -f "$file" ]] && _walter_session_reclaim_stale_lock "$lock_dir"; then
         if mkdir "$lock_dir" 2>/dev/null; then
           _walter_session_mark_lock_or_fail "$lock_dir" "$file" || return 12
-          if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+          if ! _walter_session_write_new "$repo" "$file" "$now_epoch" "$lock_dir"; then
             _walter_session_release_lock "$lock_dir"
             _walter_session_result "error" "state-write" "$file"
             return 12

@@ -110,6 +110,31 @@ _mode() {
   [ ! -d "$lock_dir" ]
 }
 
+@test "session start removes orphan material from stale startup lock" {
+  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_SESSION_LOCK_STALE_SEC=30
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  state_dir="$(dirname "$state_file")"
+  lock_dir="${state_file}.lock"
+  orphan_id="orphan-session"
+  mkdir -p "$lock_dir" "$state_dir/caps-${orphan_id}"
+  printf '1767220000\n' > "$lock_dir/created_epoch"
+  printf '%s\n' "$$" > "$lock_dir/pid"
+  printf '%s\n' "$orphan_id" > "$lock_dir/session_id"
+  printf 'orphan-private\n' > "$state_dir/session-${orphan_id}.key"
+  printf 'orphan-public\n' > "$state_dir/session-${orphan_id}.pub"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ -f "$state_file" ]
+  [ ! -f "$state_dir/session-${orphan_id}.key" ]
+  [ ! -f "$state_dir/session-${orphan_id}.pub" ]
+  [ ! -d "$state_dir/caps-${orphan_id}" ]
+  [ ! -d "$lock_dir" ]
+}
+
 @test "clock override is ignored outside explicit test mode" {
   unset WALTER_SESSION_TEST_CLOCK
   export WALTER_SESSION_NOW_EPOCH=1767225600
