@@ -124,10 +124,28 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: command-substitution walter-os cap mint is blocked" {
+  run "$HOOK" check 'token=$(walter-os cap mint Bash --patterns ".*" --duration 5m)'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution cap.sh mint is blocked" {
+  run "$HOOK" check 'token=$(scripts/walter/subcommands/cap.sh mint Bash --patterns ".*" --duration 5m)'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: direct capability signing helper is blocked for operator approval" {
   run "$HOOK" check "source scripts/walter/lib/capability-token.sh; walter_cap_sign_claims state.json '{}'"
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
+@test "CLI: command-substitution capability signing helper is blocked" {
+  run "$HOOK" check 'token=$(walter_cap_sign_claims state.json "{}")'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
 @test "CLI: capability private key path lookup is blocked" {
@@ -142,9 +160,10 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
-@test "CLI: session public key access is allowed" {
+@test "CLI: session public key access is blocked with state directory access" {
   run "$HOOK" check "cat ~/.config/walter-os/state/session-abc.pub"
-  [[ "$status" -eq 0 ]]
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
 @test "CLI: Read tool on capability private key is blocked" {
@@ -161,6 +180,18 @@ teardown() {
 
 @test "CLI: Write tool on session state JSON is blocked" {
   run "$HOOK" check "$WALTER_CONFIG/state/session-abc.json" --tool Write
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: archive of Walter state directory is blocked" {
+  run "$HOOK" check "tar -czf /tmp/state.tgz ~/.config/walter-os/state"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: glob read of Walter state keys is blocked" {
+  run "$HOOK" check 'cat "$WALTER_CONFIG"/state/*.key'
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }

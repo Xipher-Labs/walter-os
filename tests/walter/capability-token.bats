@@ -48,11 +48,46 @@ _state_file() {
     --arg session_id "$(jq -r '.session_id' "$state_file")" \
     '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Write", scope:{paths:["README.md"], network:[], patterns:[]}, iat:"2026-01-01T00:00:00Z", exp:"2026-01-01T00:30:00Z", nonce:"cap-test"}')"
   token="$(bash -c "source '$CAP_LIB'; walter_cap_sign_claims '$state_file' '$claims'")"
-  tampered="${token%?}A"
+  last_char="${token##${token%?}}"
+  replacement="A"
+  [[ "$last_char" == "A" ]] && replacement="B"
+  tampered="${token%?}${replacement}"
 
   run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$tampered'"
 
   [ "$status" -ne 0 ]
+}
+
+@test "capability helper rejects non-canonical base64url tokens" {
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Bash", scope:{paths:[], network:[], patterns:[".*"]}, iat:"2026-01-01T00:00:00Z", exp:"2026-01-01T00:30:00Z", nonce:"bad-b64"}')"
+  token="$(bash -c "source '$CAP_LIB'; walter_cap_sign_claims '$state_file' '$claims'")"
+  malformed="${token}!bad"
+
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$malformed'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid token shape"* || "$output" == *"base64url decode failed"* ]]
+}
+
+@test "capability helper rejects mutated state capability paths" {
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Bash", scope:{paths:[], network:[], patterns:[".*"]}, iat:"2026-01-01T00:00:00Z", exp:"2026-01-01T00:30:00Z", nonce:"mutated-state"}')"
+  token="$(bash -c "source '$CAP_LIB'; walter_cap_sign_claims '$state_file' '$claims'")"
+  tmp_state="${state_file}.mutated"
+  jq --arg pub "$TMP_HOME/attacker.pub" '.capability_public_key_path = $pub' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$token'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"capability paths do not match session id"* ]]
 }
 
 @test "capability helper rejects tokens after session idle expiry" {

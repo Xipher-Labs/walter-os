@@ -43,14 +43,20 @@ _walter_cap_b64url_decode_to_file() {
   local value="$1" out="$2"
   python3 - "$value" "$out" <<'PY'
 import base64
+import binascii
 import pathlib
+import re
 import sys
 
 value = sys.argv[1]
+if not re.fullmatch(r"[A-Za-z0-9_-]*", value):
+    raise SystemExit("base64url decode failed: non-canonical alphabet")
+if len(value) % 4 == 1:
+    raise SystemExit("base64url decode failed: invalid length")
 padding = "=" * (-len(value) % 4)
 try:
-    data = base64.urlsafe_b64decode((value + padding).encode("ascii"))
-except Exception as exc:
+    data = base64.b64decode((value + padding).encode("ascii"), altchars=b"-_", validate=True)
+except (binascii.Error, ValueError) as exc:
     raise SystemExit(f"base64url decode failed: {exc}")
 pathlib.Path(sys.argv[2]).write_bytes(data)
 PY
@@ -112,6 +118,7 @@ _walter_cap_state_field() {
 
 _walter_cap_validate_state() {
   local state_file="$1"
+  local session_id stored_private stored_public stored_caps expected_private expected_public expected_caps
   [[ -f "$state_file" ]] || {
     echo "walter-cap: session state missing: $state_file" >&2
     return 1
@@ -121,7 +128,22 @@ _walter_cap_validate_state() {
     (.capability_private_key_path | type == "string" and length > 0) and
     (.capability_public_key_path | type == "string" and length > 0) and
     (.capability_tokens_dir | type == "string" and length > 0)
-  ' "$state_file" >/dev/null
+  ' "$state_file" >/dev/null || return 1
+  session_id="$(jq -r '.session_id' "$state_file")"
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "walter-cap: unsafe session id" >&2
+    return 1
+  }
+  stored_private="$(jq -r '.capability_private_key_path' "$state_file")"
+  stored_public="$(jq -r '.capability_public_key_path' "$state_file")"
+  stored_caps="$(jq -r '.capability_tokens_dir' "$state_file")"
+  expected_private="$(_walter_session_private_key_file "$session_id")"
+  expected_public="$(_walter_session_public_key_file "$session_id")"
+  expected_caps="$(_walter_session_caps_dir "$session_id")"
+  if [[ "$stored_private" != "$expected_private" || "$stored_public" != "$expected_public" || "$stored_caps" != "$expected_caps" ]]; then
+    echo "walter-cap: capability paths do not match session id" >&2
+    return 1
+  fi
 }
 
 _walter_cap_session_end_epoch() {
@@ -181,7 +203,7 @@ walter_cap_sign_claims() {
   fi
 
   session_id="$(_walter_cap_state_field "$state_file" session_id)"
-  private_key="$(_walter_cap_state_field "$state_file" capability_private_key_path)"
+  private_key="$(_walter_session_private_key_file "$session_id")"
   [[ -f "$private_key" ]] || {
     echo "walter-cap: session private key missing" >&2
     return 1
@@ -250,7 +272,7 @@ walter_cap_verify_token() {
   fi
 
   session_id="$(_walter_cap_state_field "$state_file" session_id)"
-  public_key="$(_walter_cap_state_field "$state_file" capability_public_key_path)"
+  public_key="$(_walter_session_public_key_file "$session_id")"
   [[ -f "$public_key" ]] || {
     echo "walter-cap: session public key missing" >&2
     return 1

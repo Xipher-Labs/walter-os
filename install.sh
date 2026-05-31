@@ -1536,6 +1536,11 @@ _install_deps_linux() {
       err "  Install OpenSSL for your distro or launch with WALTER_OPENSSL_BIN=/path/to/openssl."
       exit 1
     fi
+    if ! command -v python3 >/dev/null 2>&1; then
+      err "python3 is REQUIRED at runtime for capability token operations and not installed."
+      err "  Install Python 3 for your distro before re-running."
+      exit 1
+    fi
     # If yq is missing entirely on a non-Debian Linux, surface that
     # explicitly so the operator doesn't think the warn-and-return
     # means everything's OK. Codex R4 #125.

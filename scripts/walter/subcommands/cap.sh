@@ -156,6 +156,10 @@ cmd_cap_mint() {
   if (( exp_epoch > session_exp )); then
     exp_epoch="$session_exp"
   fi
+  if (( exp_epoch <= now_epoch )); then
+    echo "walter-os cap mint: active session has no remaining lifetime for a capability token" >&2
+    return 1
+  fi
   exp_iso="$(_walter_session_iso "$exp_epoch")"
   nonce="$(_walter_session_uuid)"
   session_id="$(jq -r '.session_id' "$state_file")"

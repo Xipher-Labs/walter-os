@@ -86,6 +86,19 @@ teardown() {
   [[ "$output" == *"missing value for --duration"* ]]
 }
 
+@test "walter-os cap mint rejects exact session-end boundary" {
+  cd "$REPO_UNDER_TEST"
+  export WALTER_SESSION_MAX_HOURS=8
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_UNDER_TEST'" >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767254400
+
+  run "$CLI" cap mint Bash --patterns '.*' --duration 5m
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no remaining lifetime"* ]]
+}
+
 @test "walter-os cap mint is blocked inside subagent context" {
   cd "$REPO_UNDER_TEST"
   export WALTER_AGENT_CONTEXT=reviewer

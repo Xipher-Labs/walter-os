@@ -94,11 +94,6 @@ declare -a BLOCK_BASH_PATTERNS=(
   # Disable hooks
   'git[[:space:]]+(commit|push).*--no-verify'
   '--no-gpg-sign'
-  # Capability minting must be operator-approved; otherwise an agent can mint
-  # the token that later satisfies capability enforcement.
-  '(^|[[:space:];|&])([^[:space:];|&]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
-  '(^|[[:space:];|&])([^[:space:];|&]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
-  '(^|[[:space:];|&])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 )
 
 # Edit / Write paths that require approval. POSIX-glob style; we shell-match.
@@ -172,9 +167,9 @@ _tier_rank() {
 _is_capability_token_mint_payload() {
   local payload="$1"
   local normalized="${payload//\"/}"
-  local walter_cli='(^|[[:space:];|&])([^[:space:];|&]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
-  local cap_script='(^|[[:space:];|&])([^[:space:];|&]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
-  local cap_function='(^|[[:space:];|&])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
+  local walter_cli='(^|[[:space:];|&()])([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
+  local cap_script='(^|[[:space:];|&()])([^[:space:];|&()]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
+  local cap_function='(^|[[:space:];|&()])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 
   normalized="${normalized//\'/}"
 
@@ -183,19 +178,24 @@ _is_capability_token_mint_payload() {
 
 _is_capability_private_key_payload() {
   local payload="$1"
+  local normalized="${payload//\"/}"
   local config_state_dir="${WALTER_CONFIG:-$HOME/.config/walter-os}/state"
   local literal_config_state="\$WALTER_CONFIG/state"
   local literal_braced_config_state="\${WALTER_CONFIG}/state"
+  local literal_home_state="\$HOME/.config/walter-os/state"
+  local literal_braced_home_state="\${HOME}/.config/walter-os/state"
 
-  [[ "$payload" == *"capability_private_key_path"* ]] && return 0
+  normalized="${normalized//\'/}"
 
-  if [[ "$payload" == *"$config_state_dir"* ]] || \
-     [[ "$payload" == *".config/walter-os/state"* ]] || \
-     [[ "$payload" == *"$literal_config_state"* ]] || \
-     [[ "$payload" == *"$literal_braced_config_state"* ]]; then
-    case "$payload" in
-      *session-*.key*|*session-*.json*) return 0 ;;
-    esac
+  [[ "$normalized" == *"capability_private_key_path"* ]] && return 0
+
+  if [[ "$normalized" == *"$config_state_dir"* ]] || \
+     [[ "$normalized" == *".config/walter-os/state"* ]] || \
+     [[ "$normalized" == *"$literal_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_home_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_home_state"* ]]; then
+    return 0
   fi
 
   return 1
@@ -466,7 +466,7 @@ analyze() {
       if matches_any_regex "$payload" "${BLOCK_BASH_PATTERNS[@]}"; then
         block "Bash command matches blocked pattern: ${payload:0:120}"
       elif _is_capability_token_mint_payload "$payload"; then
-        block "Bash command mints capability token: ${payload:0:120}"
+        block "capability-token-mint: Bash command mints capability token: ${payload:0:120}"
       elif _is_capability_private_key_payload "$payload"; then
         block "Bash command accesses capability private key material: ${payload:0:120}"
       fi
