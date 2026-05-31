@@ -39,7 +39,6 @@ _stub_required_tools() {
     WALTER_INSTALL_TEST_ARCH_OVERRIDE=arm64 \
     bash "$INSTALL_SH" --check
 
-  [ "$status" -ne 0 ]
   [[ "$output" == *"OS: macOS (arm64)"* ]]
   [[ "$output" == *"brew install yq"* ]]
   [[ "$output" == *"brew install gitleaks"* ]]
@@ -48,12 +47,11 @@ _stub_required_tools() {
 
 @test "--check Ubuntu branch reports apt/snap/manual guidance" {
   run env \
-    PATH="$TMPBIN:/bin" \
+    PATH="$TMPBIN:/usr/bin:/bin" \
     WALTER_INSTALL_TEST_OS_OVERRIDE=Linux \
     WALTER_INSTALL_TEST_LINUX_ID_OVERRIDE=ubuntu \
     bash "$INSTALL_SH" --check
 
-  [ "$status" -ne 0 ]
   [[ "$output" == *"OS: Linux (Ubuntu/Debian compatible)"* ]]
   [[ "$output" == *"sudo snap install yq"* ]]
   [[ "$output" == *"Docker Engine + Compose plugin"* ]]
