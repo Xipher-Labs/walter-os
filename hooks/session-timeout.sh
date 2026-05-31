@@ -88,6 +88,7 @@ _repo_path="$(printf '%s' "$INPUT" | jq -r '.cwd // .workspace.current_dir // em
 if [[ -z "$_repo_path" ]]; then
   _repo_path="$PWD"
 fi
+_prompt_text="$(printf '%s' "$INPUT" | jq -r '.prompt // .message // empty')"
 
 _result="$(walter_session_touch "$_repo_path" 2>/dev/null)"
 _status=$?
@@ -100,6 +101,12 @@ _trigger="$(printf '%s' "$_result" | jq -r '.trigger // "unknown"' 2>/dev/null |
 _trigger="${_trigger:-unknown}"
 if [[ "$_status" -eq 12 && "$_trigger" == "unknown" ]]; then
   _trigger="state-write"
+fi
+if [[ "$_prompt_text" =~ ^[[:space:]]*/session[[:space:]]+restart([[:space:]]|$) ]]; then
+  if walter_session_end "$_repo_path" >/dev/null 2>&1; then
+    _allow
+  fi
+  _trigger="state-delete"
 fi
 case "$_trigger" in
   max-hours)

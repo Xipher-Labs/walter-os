@@ -30,6 +30,10 @@ _call_hook() {
   _event | bash "$HOOK"
 }
 
+_call_restart_hook() {
+  jq -nc --arg cwd "$REPO_UNDER_TEST" '{cwd:$cwd, prompt:"/session restart"}' | bash "$HOOK"
+}
+
 @test "UserPromptSubmit hook starts and allows a fresh session" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
@@ -136,4 +140,19 @@ EOF
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
   echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'state-write'
+}
+
+@test "UserPromptSubmit hook allows restart prompt after expiry" {
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  _call_hook >/dev/null
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  [ -f "$state_file" ]
+
+  export WALTER_SESSION_NOW_EPOCH=1767254401
+  run _call_restart_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+  [ ! -f "$state_file" ]
 }
