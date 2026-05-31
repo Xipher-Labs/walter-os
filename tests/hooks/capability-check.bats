@@ -14,6 +14,7 @@ setup() {
   export WALTER_OS_HOME="$REPO_ROOT"
   export WALTER_SESSION_TEST_CLOCK=1
   export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_CAP_MINT_TEST_ALLOW=1
   REPO_UNDER_TEST="$TMP_HOME/work/repo"
   mkdir -p "$WALTER_CONFIG" "$REPO_UNDER_TEST"
   bash -c "source '$SESSION_LIB'; _walter_session_openssl" >/dev/null \
