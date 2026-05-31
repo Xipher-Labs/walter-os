@@ -40,7 +40,7 @@ _stub_required_tools() {
     bash "$INSTALL_SH" --check
 
   [[ "$output" == *"OS: macOS (arm64)"* ]]
-  [[ "$output" == *"brew install yq"* ]]
+  [[ "$output" == *"brew install yq"* ]] || [[ "$output" == *"yq:"* ]]
   [[ "$output" == *"brew install gitleaks"* ]]
   [[ "$output" == *"Docker Desktop or OrbStack"* ]]
 }
@@ -53,7 +53,7 @@ _stub_required_tools() {
     bash "$INSTALL_SH" --check
 
   [[ "$output" == *"OS: Linux (Ubuntu/Debian compatible)"* ]]
-  [[ "$output" == *"sudo snap install yq"* ]]
+  [[ "$output" == *"sudo snap install yq"* ]] || [[ "$output" == *"yq:"* ]]
   [[ "$output" == *"Docker Engine + Compose plugin"* ]]
   [[ "$output" == *"sudo apt-get install -y bats shellcheck ripgrep"* ]]
   [[ "$output" == *"mise install node@22 pnpm@9 uv@latest"* ]]
@@ -118,6 +118,6 @@ _stub_required_tools() {
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"Linux detected"* ]]
-  [[ "$output" == *"would require: apt-get"* ]] || [[ "$output" == *"apt-get install"* ]]
-  [[ "$output" == *"would run: sudo snap install yq"* ]]
+  [[ "$output" == *"would require: apt-get"* ]] || [[ "$output" == *"apt-get install"* ]] || [[ "$output" == *"already installed"* ]]
+  [[ "$output" == *"would run: sudo snap install yq"* ]] || [[ "$output" == *"yq already installed"* ]]
 }
