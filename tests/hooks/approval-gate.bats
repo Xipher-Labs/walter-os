@@ -118,6 +118,23 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked ]]
 }
 
+@test "CLI: capability private key path lookup is blocked" {
+  run "$HOOK" check "jq -r .capability_private_key_path ~/.config/walter-os/state/current.json"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: raw openssl signing with session key is blocked" {
+  run "$HOOK" check "openssl pkeyutl -sign -inkey ~/.config/walter-os/state/session-abc.key -rawin -in payload -out sig"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: session public key access is allowed" {
+  run "$HOOK" check "cat ~/.config/walter-os/state/session-abc.pub"
+  [[ "$status" -eq 0 ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]

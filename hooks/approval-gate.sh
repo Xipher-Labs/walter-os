@@ -178,6 +178,20 @@ _is_capability_token_mint_payload() {
   [[ "$payload" =~ $walter_cli ]] || [[ "$payload" =~ $cap_script ]] || [[ "$payload" =~ $cap_function ]]
 }
 
+_is_capability_private_key_payload() {
+  local payload="$1"
+  local session_key='session-[^[:space:];|&]*\.key'
+  local state_key_path='state/[^[:space:];|&]*\.key'
+  local walter_state_key='\.config/walter-os/state[^;|&]*\.key'
+  local configured_state_key='WALTER_CONFIG[^;|&]*state[^;|&]*\.key'
+
+  [[ "$payload" == *"capability_private_key_path"* ]] || \
+    [[ "$payload" =~ $session_key ]] || \
+    [[ "$payload" =~ $state_key_path ]] || \
+    [[ "$payload" =~ $walter_state_key ]] || \
+    [[ "$payload" =~ $configured_state_key ]]
+}
+
 # classify_command <tool> <payload> → category name or empty string
 # Returns the category slug for a command, or empty if not categorizable.
 _classify_command() {
@@ -204,7 +218,7 @@ _classify_command() {
       # Capability minting is high risk and not trust-tier-overridable.
       # It must stay blocked until an explicit standing approval or Plane
       # operator approval is present.
-      if _is_capability_token_mint_payload "$payload"; then
+      if _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"; then
         echo "capability-token-mint"; return
       fi
       # Test / lint runners
@@ -442,6 +456,8 @@ analyze() {
     Bash)
       if matches_any_regex "$payload" "${BLOCK_BASH_PATTERNS[@]}"; then
         block "Bash command matches blocked pattern: ${payload:0:120}"
+      elif _is_capability_private_key_payload "$payload"; then
+        block "Bash command accesses capability private key material: ${payload:0:120}"
       fi
       ;;
     Edit|Write|MultiEdit|NotebookEdit)
