@@ -1093,7 +1093,7 @@ merge_claude_hooks() {
         ]
       },
       {
-        matcher: "Write|Edit",
+        matcher: "Write|Edit|MultiEdit|NotebookEdit",
         hooks: [
           { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
           { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },

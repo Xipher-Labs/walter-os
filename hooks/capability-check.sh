@@ -91,6 +91,10 @@ _cap_extract_hosts() {
         host="${token#*://}"
         host="${host%%/*}"
         ;;
+      ssh://*)
+        host="${token#ssh://}"
+        host="${host%%/*}"
+        ;;
       git@*:*)
         host="${token#git@}"
         host="${host%%:*}"

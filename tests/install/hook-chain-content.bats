@@ -84,6 +84,10 @@ setup() {
   [ "$cap_line" -lt "$network_line" ]
 }
 
+@test "AC-3 (#122 capability): edit hook matcher includes MultiEdit" {
+  grep -q 'matcher: "Write|Edit|MultiEdit|NotebookEdit"' "$REPO_ROOT/install.sh"
+}
+
 @test "AC-5 (#122 A-2): network-gate.sh appears BEFORE branch-flow-guard.sh" {
   # branch-flow-guard is about push-target policy, which only matters
   # for git pushes that ALREADY passed the network-gate host check.

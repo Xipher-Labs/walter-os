@@ -51,6 +51,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "git ssh URL with matching network capability is allowed" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "git clone ssh://git@github.com/org/repo")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress requires capability coverage for every destination" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
