@@ -27,6 +27,14 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+_mode_of() {
+  if stat -f %Lp "$1" >/dev/null 2>&1; then
+    stat -f %Lp "$1"
+  else
+    stat -c %a "$1"
+  fi
+}
+
 _sha256() {
   if command -v shasum >/dev/null 2>&1; then
     printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
@@ -49,11 +57,13 @@ _verify_chain() {
 }
 
 @test "B-1: first append creates chain with null prev_hash" {
-  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate 'standing approval'"
+  run bash -c "umask 022; source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate 'standing approval'"
 
   [ "$status" -eq 0 ]
   [ "$output" = "$(_chain_path)" ]
   [ -f "$(_chain_path)" ]
+  [ "$(_mode_of "$WALTER_CONFIG/audit")" = "700" ]
+  [ "$(_mode_of "$(_chain_path)")" = "600" ]
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
   jq -e '.prev_hash == "null"' "$(_chain_path)"
   jq -e '.tool == "Bash" and .decision == "allow" and .decision_source == "approval-gate"' "$(_chain_path)"

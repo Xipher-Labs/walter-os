@@ -358,12 +358,27 @@ walter_audit_append() {
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
+  chmod 700 "$audit_dir" || return 1
 
   _walter_audit_acquire_lock "$lock_path" || return 1
   timestamp="$(walter_audit_timestamp)"
   row_date="$(walter_audit_date_from_timestamp "$timestamp")"
   chain_path="$(walter_audit_chain_path "$row_date")"
 
+  if [[ ! -e "$chain_path" ]]; then
+    : > "$chain_path" || {
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
+  elif [[ ! -f "$chain_path" ]]; then
+    echo "walter-audit-chain: chain path is not a file: $chain_path" >&2
+    _walter_audit_release_lock "$lock_path"
+    return 1
+  fi
+  chmod 600 "$chain_path" || {
+    _walter_audit_release_lock "$lock_path"
+    return 1
+  }
   exec 9<>"$chain_path" || {
     _walter_audit_release_lock "$lock_path"
     return 1
@@ -475,10 +490,12 @@ walter_audit_verify_chain() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" chain_path lock_path row_count verify_status
+  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path lock_path row_count verify_status
+  audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
   lock_path="$(walter_audit_lock_path)"
-  mkdir -p "$(walter_audit_dir)" || return 1
+  mkdir -p "$audit_dir" || return 1
+  chmod 700 "$audit_dir" || return 1
   _walter_audit_acquire_lock "$lock_path" || return 1
   if [[ ! -f "$chain_path" ]]; then
     echo "walter-audit-chain: chain not found: $chain_path" >&2
