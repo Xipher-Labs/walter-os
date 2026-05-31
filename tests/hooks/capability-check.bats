@@ -82,6 +82,13 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash egress lowercases and trims URL shell punctuation" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl https://API.GITHUB.COM;")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress with IPv6 literal matches bracket capability" {
   _mint Bash --network '[::1]' --duration 30m >/dev/null
 
@@ -182,6 +189,14 @@ _mint() {
   _mint Bash --network github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "ssh -p 2222 git@github.com")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "ssh lowercases and trims positional host punctuation" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "ssh git@GitHub.com;")"
 
   echo "$output" | jq -e '.decision == "allow"'
 }
@@ -298,6 +313,12 @@ _mint() {
 
 @test "compound cap mint plus egress still requires capability" {
   output="$(_hook_json Bash command "walter-os cap mint Bash --network github.com --duration 30m; curl https://evil.example")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "newline cap mint plus egress still requires capability" {
+  output="$(_hook_json Bash command $'walter-os cap mint Bash --network github.com --duration 30m\ncurl https://evil.example')"
 
   echo "$output" | jq -e '.decision == "block"'
 }

@@ -116,6 +116,7 @@ _cap_normalize_host() {
   host="${host%%\?*}"
   host="${host%%#*}"
   host="${host%;}"
+  host="${host%&}"
   host="${host%,}"
   host="${host%)}"
 
@@ -125,6 +126,7 @@ _cap_normalize_host() {
     host="${host%%:*}"
   fi
 
+  host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
   printf '%s\n' "$host"
 }
 
@@ -169,8 +171,7 @@ _cap_extract_positional_network_hosts() {
             [[ "$candidate" == *@* || "$candidate" == *:* ]] || { j=$((j + 1)); continue; }
           fi
           host="${candidate#*@}"
-          host="${host%%:*}"
-          host="${host%%/*}"
+          host="$(_cap_normalize_host "$host")"
           [[ -n "$host" ]] && printf '%s\n' "$host"
           break
         done
@@ -273,8 +274,8 @@ _cap_is_network_command() {
 _cap_is_mint_command() {
   local command="$1"
   _cap_has_compound_separator "$command" && return 1
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ ^[[:space:]]*([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ ^[[:space:]]*([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
   return 1
 }
 
@@ -285,11 +286,12 @@ _cap_has_compound_separator() {
 import shlex
 import sys
 
-lexer = shlex.shlex(sys.argv[1], posix=True, punctuation_chars=";&|")
+lexer = shlex.shlex(sys.argv[1], posix=True, punctuation_chars=";&|\n")
+lexer.whitespace = " \t"
 lexer.whitespace_split = True
 try:
     for token in lexer:
-        if token in {";", "|", "&", "&&", "||"}:
+        if token in {";", "|", "&", "&&", "||", "\n"}:
             sys.exit(0)
 except ValueError:
     sys.exit(0)
