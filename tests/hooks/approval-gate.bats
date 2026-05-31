@@ -153,6 +153,11 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: ordinary repo state JSON is allowed" {
+  run "$HOOK" check "fixtures/state/session-export.json" --tool Read
+  [[ "$status" -eq 0 ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
@@ -266,6 +271,11 @@ teardown() {
   result=$(echo '{"tool_name":"Write","tool_input":{"file_path":"~/.config/walter-os/state/session-abc.json"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
   [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Read tool allows ordinary repo state fixtures" {
+  result=$(echo '{"tool_name":"Read","tool_input":{"file_path":"fixtures/state/session-export.json"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
 }
 
 @test "Hook: Edit on hooks/ returns block" {

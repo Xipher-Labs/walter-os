@@ -180,24 +180,22 @@ _is_capability_token_mint_payload() {
 
 _is_capability_private_key_payload() {
   local payload="$1"
-  local session_key='session-[^[:space:];|&]*\.key'
-  local session_state='session-[^[:space:];|&]*\.json'
-  local state_key_path='state/[^[:space:];|&]*\.key'
-  local state_json_path='state/[^[:space:];|&]*\.json'
-  local walter_state_key='\.config/walter-os/state[^;|&]*\.key'
-  local walter_state_json='\.config/walter-os/state[^;|&]*\.json'
-  local configured_state_key='WALTER_CONFIG[^;|&]*state[^;|&]*\.key'
-  local configured_state_json='WALTER_CONFIG[^;|&]*state[^;|&]*\.json'
+  local config_state_dir="${WALTER_CONFIG:-$HOME/.config/walter-os}/state"
+  local literal_config_state="\$WALTER_CONFIG/state"
+  local literal_braced_config_state="\${WALTER_CONFIG}/state"
 
-  [[ "$payload" == *"capability_private_key_path"* ]] || \
-    [[ "$payload" =~ $session_key ]] || \
-    [[ "$payload" =~ $session_state ]] || \
-    [[ "$payload" =~ $state_key_path ]] || \
-    [[ "$payload" =~ $state_json_path ]] || \
-    [[ "$payload" =~ $walter_state_key ]] || \
-    [[ "$payload" =~ $walter_state_json ]] || \
-    [[ "$payload" =~ $configured_state_key ]] || \
-    [[ "$payload" =~ $configured_state_json ]]
+  [[ "$payload" == *"capability_private_key_path"* ]] && return 0
+
+  if [[ "$payload" == *"$config_state_dir"* ]] || \
+     [[ "$payload" == *".config/walter-os/state"* ]] || \
+     [[ "$payload" == *"$literal_config_state"* ]] || \
+     [[ "$payload" == *"$literal_braced_config_state"* ]]; then
+    case "$payload" in
+      *session-*.key*|*session-*.json*) return 0 ;;
+    esac
+  fi
+
+  return 1
 }
 
 # classify_command <tool> <payload> → category name or empty string
