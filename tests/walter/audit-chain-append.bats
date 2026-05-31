@@ -249,6 +249,21 @@ SH
   jq -e '.decision == "block" and .decision_source == "approval-gate" and .decision_reason == "jq missing"' "$(_chain_path)"
 }
 
+@test "B-1: dependency failure rows escape JSON controls without jq" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin:/usr/bin:/bin' walter_audit_append Bash \$'escape\\e\\a\\b\\\\quote\"' block approval-gate \$'bad\\e\\a\\b reason'"
+
+  [ "$status" -eq 0 ]
+  [ -f "$(_chain_path)" ]
+  jq -e '.decision == "block" and .decision_reason == ("bad" + "\u001b" + "\u0007" + "\b" + " reason")' "$(_chain_path)"
+}
+
 @test "B-1: custom audit dir is honored" {
   custom="$TMP_HOME/custom-audit"
 

@@ -58,13 +58,29 @@ walter_audit_normalize_row() {
 }
 
 walter_audit_json_string() {
-  local value="$1"
-  value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
-  value="${value//$'\n'/\\n}"
-  value="${value//$'\r'/\\r}"
-  value="${value//$'\t'/\\t}"
-  printf '"%s"' "$value"
+  local value="$1" output="" char="" escaped="" ordinal i
+  for ((i = 0; i < ${#value}; i++)); do
+    char="${value:i:1}"
+    case "$char" in
+      \\) output="${output}\\\\" ;;
+      '"') output="${output}\\\"" ;;
+      $'\b') output="${output}\\b" ;;
+      $'\f') output="${output}\\f" ;;
+      $'\n') output="${output}\\n" ;;
+      $'\r') output="${output}\\r" ;;
+      $'\t') output="${output}\\t" ;;
+      *)
+        LC_CTYPE=C printf -v ordinal '%d' "'$char"
+        if [[ "$ordinal" -lt 32 ]]; then
+          printf -v escaped '\\u%04x' "$ordinal"
+          output="${output}${escaped}"
+        else
+          output="${output}${char}"
+        fi
+        ;;
+    esac
+  done
+  printf '"%s"' "$output"
 }
 
 walter_audit_input_summary() {
