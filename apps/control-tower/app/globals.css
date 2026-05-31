@@ -1,26 +1,227 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Control Tower design tokens.
+ *
+ * Dark-mode-first (D-1): the `.dark` class is applied on <html> by default in
+ * layout.tsx. The `:root` block below is the dark theme; `.light` is the
+ * opt-out. Tailwind v4's `dark:` variant is switched from the default
+ * media-query strategy to a class strategy via @custom-variant so existing
+ * `dark:` utilities keep working against the applied `.dark` class.
+ *
+ * Color is OKLCH (D-2): perceptually uniform, chroma reduced near the
+ * lightness extremes. Neutrals are tinted ~0.012 chroma toward the teal brand
+ * hue (220) so surfaces feel cohesive with the accent rather than dead grey.
+ * The accent is a committed teal (hue ~195) — deliberately not the AI-default
+ * blue (~250) or warm orange (~60), and it leaves green free to mean "ok".
+ *
+ * Status tokens are the primary visual language (D-4). Each has a -fg
+ * (text/dot foreground, AA on the elevated surface) and a -bg (subtle wash for
+ * badge backgrounds). Contrast verified in docs/specs/control-tower-redesign.md.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root,
+.dark {
+  /* Base surfaces — depth via lightness, not shadow (dark-mode rule). */
+  --background: oklch(0.165 0.012 220);     /* app canvas */
+  --surface-1: oklch(0.205 0.013 220);      /* card */
+  --surface-2: oklch(0.245 0.014 220);      /* elevated / hover */
+  --foreground: oklch(0.93 0.006 220);      /* primary text */
+  --muted: oklch(0.72 0.012 220);           /* secondary text */
+  --subtle: oklch(0.6 0.012 220);           /* tertiary / metadata */
+  --border: oklch(0.3 0.013 220);           /* hairlines */
+  --border-strong: oklch(0.38 0.014 220);
+
+  /* Committed teal accent. */
+  --accent: oklch(0.74 0.13 195);
+  --accent-strong: oklch(0.8 0.13 195);
+  --accent-bg: oklch(0.74 0.13 195 / 0.14);
+  --on-accent: oklch(0.17 0.02 220);
+
+  /* Semantic status tokens (D-2). -fg passes AA on --surface-2. */
+  --status-idle-fg: oklch(0.72 0.012 220);
+  --status-idle-bg: oklch(0.72 0.012 220 / 0.14);
+  --status-working-fg: oklch(0.8 0.14 168);
+  --status-working-bg: oklch(0.8 0.14 168 / 0.14);
+  --status-blocked-fg: oklch(0.81 0.13 75);
+  --status-blocked-bg: oklch(0.81 0.13 75 / 0.15);
+  --status-ok-fg: oklch(0.8 0.14 168);
+  --status-ok-bg: oklch(0.8 0.14 168 / 0.14);
+  --status-warn-fg: oklch(0.81 0.13 75);
+  --status-warn-bg: oklch(0.81 0.13 75 / 0.15);
+  --status-critical-fg: oklch(0.71 0.18 22);
+  --status-critical-bg: oklch(0.71 0.18 22 / 0.16);
+  --status-info-fg: oklch(0.72 0.012 220);
+  --status-info-bg: oklch(0.72 0.012 220 / 0.12);
+  /* Consensus / deliberation accent (distinct from the ops accent). */
+  --consensus-fg: oklch(0.78 0.13 290);
+  --consensus-bg: oklch(0.78 0.13 290 / 0.16);
+}
+
+.light {
+  --background: oklch(0.985 0.004 220);
+  --surface-1: oklch(1 0 0);
+  --surface-2: oklch(0.965 0.006 220);
+  --foreground: oklch(0.22 0.014 220);
+  --muted: oklch(0.46 0.014 220);
+  --subtle: oklch(0.56 0.012 220);
+  --border: oklch(0.9 0.008 220);
+  --border-strong: oklch(0.84 0.01 220);
+
+  --accent: oklch(0.55 0.12 195);
+  --accent-strong: oklch(0.48 0.12 195);
+  --accent-bg: oklch(0.55 0.12 195 / 0.12);
+  --on-accent: oklch(0.99 0.004 220);
+
+  --status-idle-fg: oklch(0.5 0.012 220);
+  --status-idle-bg: oklch(0.5 0.012 220 / 0.1);
+  --status-working-fg: oklch(0.48 0.13 168);
+  --status-working-bg: oklch(0.48 0.13 168 / 0.12);
+  --status-blocked-fg: oklch(0.55 0.13 70);
+  --status-blocked-bg: oklch(0.55 0.13 70 / 0.13);
+  --status-ok-fg: oklch(0.48 0.13 168);
+  --status-ok-bg: oklch(0.48 0.13 168 / 0.12);
+  --status-warn-fg: oklch(0.55 0.13 70);
+  --status-warn-bg: oklch(0.55 0.13 70 / 0.13);
+  --status-critical-fg: oklch(0.52 0.2 25);
+  --status-critical-bg: oklch(0.52 0.2 25 / 0.12);
+  --status-info-fg: oklch(0.5 0.012 220);
+  --status-info-bg: oklch(0.5 0.012 220 / 0.1);
+  --consensus-fg: oklch(0.5 0.16 290);
+  --consensus-bg: oklch(0.5 0.16 290 / 0.12);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-bg: var(--accent-bg);
+  --color-on-accent: var(--on-accent);
+
+  --color-status-idle-fg: var(--status-idle-fg);
+  --color-status-idle-bg: var(--status-idle-bg);
+  --color-status-working-fg: var(--status-working-fg);
+  --color-status-working-bg: var(--status-working-bg);
+  --color-status-blocked-fg: var(--status-blocked-fg);
+  --color-status-blocked-bg: var(--status-blocked-bg);
+  --color-status-ok-fg: var(--status-ok-fg);
+  --color-status-ok-bg: var(--status-ok-bg);
+  --color-status-warn-fg: var(--status-warn-fg);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-critical-fg: var(--status-critical-fg);
+  --color-status-critical-bg: var(--status-critical-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-consensus-fg: var(--consensus-fg);
+  --color-consensus-bg: var(--consensus-bg);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Spacing scale — 4px base (D-2). gap/padding via spacing-N utilities. */
+  --spacing: 0.25rem;
+
+  /* Fixed rem type ramp (app UI — no fluid type). 1.2 ratio, then jumps. */
+  --text-2xs: 0.6875rem;   /* 11px metadata */
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;      /* 12px secondary UI */
+  --text-xs--line-height: 1.05rem;
+  --text-sm: 0.875rem;     /* 14px dense body */
+  --text-sm--line-height: 1.3rem;
+  --text-base: 1rem;       /* 16px body */
+  --text-base--line-height: 1.55rem;
+  --text-lg: 1.25rem;      /* 20px subheading */
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.5rem;       /* 24px section title */
+  --text-xl--line-height: 1.85rem;
+  --text-2xl: 1.95rem;     /* 31px page title */
+  --text-2xl--line-height: 2.2rem;
+
+  /* Motion (D-8 / impeccable animate): ease-out, no bounce. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    /* Light-on-dark compensation: nudge weight/tracking (typeset rule). */
+    font-weight: 350;
+    letter-spacing: 0.005em;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Tabular figures for all the dense numeric data (latency, tokens, cost). */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Keyboard-only focus ring on every interactive element (D-5 / a11y). */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Headings read heavier than body even at weight 350 on dark. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 600;
+    letter-spacing: -0.011em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Working/critical pulse — gated behind reduced-motion (a11y). */
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.status-pulse {
+  animation: status-pulse 2s var(--ease-out-quart) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
