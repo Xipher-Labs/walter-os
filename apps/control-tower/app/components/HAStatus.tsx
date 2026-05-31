@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { ServiceStatus } from "@/app/api/ha-status/route";
 import StatusDot from "@/app/components/ui/StatusDot";
 import { SectionTitle, Panel } from "@/app/components/ui/Panel";
@@ -41,6 +41,11 @@ export default function HAStatus() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  // hasDataRef is read inside the stable fetchStatus closure so the interval
+  // (which captures fetchStatus once at mount) sees the *current* data state,
+  // not the mount-time empty one. Without it, any transient error after the
+  // first successful load would flip the surface to "unavailable".
+  const hasDataRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -53,20 +58,21 @@ export default function HAStatus() {
     } catch {
       // Surface the error only when we have nothing to show; otherwise keep
       // the last good data and let the next refresh recover silently.
-      setError((prev) => (services.length === 0 ? "Status unavailable." : prev));
+      setError((prev) => (hasDataRef.current ? prev : "Status unavailable."));
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    hasDataRef.current = services.length > 0;
   }, [services.length]);
 
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 60_000);
     return () => clearInterval(interval);
-    // fetchStatus intentionally excluded: re-creating it each render (it closes
-    // over services.length) would reset the 60s interval on every update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchStatus]);
 
   const skeleton = (
     <Panel padded={false}>

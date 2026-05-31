@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { TimelineEntry, AlertTier } from "@/lib/events-reader";
 import StatusDot from "@/app/components/ui/StatusDot";
 import { SectionTitle } from "@/app/components/ui/Panel";
@@ -94,6 +94,10 @@ export default function DecisionTimeline() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  // Read inside the stable fetchEntries closure so the interval (captured once
+  // at mount) sees the current data state; without it a transient error after
+  // the first load would flip the surface to "unavailable".
+  const hasDataRef = useRef(false);
 
   const fetchEntries = useCallback(async () => {
     try {
@@ -104,18 +108,21 @@ export default function DecisionTimeline() {
       setError(null);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
-      setError((prev) => (entries.length === 0 ? "Timeline unavailable." : prev));
+      setError((prev) => (hasDataRef.current ? prev : "Timeline unavailable."));
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    hasDataRef.current = entries.length > 0;
   }, [entries.length]);
 
   useEffect(() => {
     fetchEntries();
     const interval = setInterval(fetchEntries, 30_000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchEntries]);
 
   const emptyState = (
     <p className="text-sm text-muted">

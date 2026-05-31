@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { AgentSpend } from "@/app/api/spend/route";
 import { SectionTitle, Panel } from "@/app/components/ui/Panel";
 import AsyncSurface from "@/app/components/ui/AsyncSurface";
@@ -55,6 +55,11 @@ export default function CostDashboard() {
   const [days, setDays] = useState(7);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [source, setSource] = useState<string>("...");
+  // Read inside the stable fetchSpend closure so a transient error after the
+  // first successful load keeps stale data instead of flipping to the error
+  // state. fetchSpend depends only on `days`, so the closure no longer goes
+  // stale on the empty mount-time agents list.
+  const hasDataRef = useRef(false);
 
   const fetchSpend = useCallback(async () => {
     try {
@@ -70,19 +75,20 @@ export default function CostDashboard() {
       setError(null);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
-      setError((prev) => (agents.length === 0 ? "Spend data unavailable." : prev));
+      setError((prev) => (hasDataRef.current ? prev : "Spend data unavailable."));
     } finally {
       setLoading(false);
     }
-  }, [days, agents.length]);
+  }, [days]);
+
+  useEffect(() => {
+    hasDataRef.current = agents.length > 0;
+  }, [agents.length]);
 
   useEffect(() => {
     setLoading(true);
     fetchSpend();
-    // Re-fetch only when the day window changes (fetchSpend also closes over
-    // agents.length, which must not retrigger the request).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [fetchSpend]);
 
   const total = agents.reduce((s, a) => s + a.cost_usd, 0);
 
