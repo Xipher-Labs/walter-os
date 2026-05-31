@@ -167,9 +167,9 @@ _tier_rank() {
 _is_capability_token_mint_payload() {
   local payload="$1"
   local normalized="${payload//\"/}"
-  local walter_cli='(^|[[:space:];|&()])([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
-  local cap_script='(^|[[:space:];|&()])([^[:space:];|&()]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
-  local cap_function='(^|[[:space:];|&()])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
+  local walter_cli='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
+  local cap_script='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
+  local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 
   normalized="${normalized//\'/}"
 
