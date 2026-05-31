@@ -2,40 +2,24 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { TimelineEntry, AlertTier } from "@/lib/events-reader";
+import StatusDot from "@/app/components/ui/StatusDot";
+import { SectionTitle } from "@/app/components/ui/Panel";
+import AsyncSurface from "@/app/components/ui/AsyncSurface";
+import { tierToStatus } from "@/app/components/ui/status";
 
 /**
- * Decision Timeline — shows last N events from the Council audit log.
- * Refreshes every 30 seconds. Color-coded by alert tier.
+ * Decision Timeline — last N events from the Council audit log, refreshed
+ * every 30s. Re-skinned to the shared status language (D-4).
+ *
+ * The old version marked tier with a `border-left-2` accent stripe — an
+ * impeccable absolute ban. Replaced with a leading StatusDot on a rail formed
+ * by a 1px full hairline, which carries the same information without the
+ * side-stripe AI-slop signature.
  *
  * Refs: docs/specs/walter-council-v2.md (Part B, AC-3)
+ *       docs/specs/control-tower-redesign.md (AC-4)
  * Task: T-39
  */
-
-const TIER_STYLES: Record<
-  AlertTier,
-  { dot: string; badge: string; border: string }
-> = {
-  info: {
-    dot: "bg-zinc-400",
-    badge: "text-zinc-500",
-    border: "border-l-zinc-200 dark:border-l-zinc-700",
-  },
-  warn: {
-    dot: "bg-amber-400",
-    badge: "text-amber-600 dark:text-amber-400",
-    border: "border-l-amber-400",
-  },
-  critical: {
-    dot: "bg-red-500",
-    badge: "text-red-600 dark:text-red-400",
-    border: "border-l-red-500",
-  },
-  panic: {
-    dot: "bg-red-700 animate-pulse",
-    badge: "text-red-700 dark:text-red-300 font-bold",
-    border: "border-l-red-700",
-  },
-};
 
 function formatRelativeTime(ts: string): string {
   try {
@@ -53,54 +37,53 @@ function formatRelativeTime(ts: string): string {
 }
 
 function TimelineItem({ entry }: { entry: TimelineEntry }) {
-  const tier = entry.tier ?? "info";
-  const styles = TIER_STYLES[tier];
+  const tier: AlertTier = entry.tier ?? "info";
   const [expanded, setExpanded] = useState(false);
+  const hasDetail = Object.keys(entry.raw).length > 0;
 
   return (
-    <div
-      className={`border-l-2 pl-4 py-2 ${styles.border} flex flex-col gap-1`}
-    >
-      <div className="flex items-start gap-2">
-        <span
-          className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${styles.dot}`}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className={`text-xs font-medium uppercase ${styles.badge}`}>
-              {tier}
-            </span>
-            {entry.agent && (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                {entry.agent}
-              </span>
-            )}
-            {entry.issue_id && (
-              <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono">
-                {entry.issue_id}
-              </span>
-            )}
-            <span className="text-xs text-zinc-400 dark:text-zinc-500 ml-auto">
-              {formatRelativeTime(entry.ts)}
-            </span>
-          </div>
-          <p className="text-sm text-zinc-700 dark:text-zinc-300 mt-0.5 break-words">
-            {entry.message}
-          </p>
-          {Object.keys(entry.raw).length > 0 && (
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 mt-1"
-            >
-              {expanded ? "hide detail" : "show detail"}
-            </button>
+    <div className="flex gap-3 border-b border-border/50 py-2.5 last:border-0">
+      <div className="pt-1.5">
+        <StatusDot status={tierToStatus(tier)} label={tier} size="sm" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span
+            className={`text-2xs font-semibold uppercase tracking-wide ${
+              tier === "info" ? "text-subtle" : ""
+            }`}
+          >
+            <span className="sr-only">tier </span>
+            {tier}
+          </span>
+          {entry.agent && (
+            <span className="text-xs text-muted">{entry.agent}</span>
           )}
-          {expanded && (
-            <pre className="mt-2 text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2 overflow-x-auto text-zinc-600 dark:text-zinc-400">
-              {JSON.stringify(entry.raw, null, 2)}
-            </pre>
+          {entry.issue_id && (
+            <span className="tabular text-xs text-subtle">{entry.issue_id}</span>
           )}
+          <span className="tabular ml-auto text-xs text-subtle">
+            {formatRelativeTime(entry.ts)}
+          </span>
         </div>
+        <p className="mt-0.5 break-words text-sm text-foreground">
+          {entry.message}
+        </p>
+        {hasDetail && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1 rounded px-1 text-xs text-accent transition-colors hover:text-accent-strong"
+            aria-expanded={expanded}
+          >
+            {expanded ? "Hide detail" : "Show detail"}
+          </button>
+        )}
+        {expanded && (
+          <pre className="tabular mt-2 overflow-x-auto rounded-lg bg-surface-2 p-2 text-xs text-muted">
+            {JSON.stringify(entry.raw, null, 2)}
+          </pre>
+        )}
       </div>
     </div>
   );
@@ -109,6 +92,7 @@ function TimelineItem({ entry }: { entry: TimelineEntry }) {
 export default function DecisionTimeline() {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   const fetchEntries = useCallback(async () => {
@@ -117,53 +101,66 @@ export default function DecisionTimeline() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { entries: TimelineEntry[] };
       setEntries(data.entries);
+      setError(null);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
-      // Fail silently — keep stale data
+      setError((prev) => (entries.length === 0 ? "Timeline unavailable." : prev));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [entries.length]);
 
   useEffect(() => {
     fetchEntries();
     const interval = setInterval(fetchEntries, 30_000);
     return () => clearInterval(interval);
-  }, [fetchEntries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const emptyState = (
+    <p className="text-sm text-muted">
+      No events yet. Activity appears here once agents start running.
+    </p>
+  );
 
   return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-          Decision Timeline
-        </h2>
-        {lastUpdated && (
-          <span className="text-xs text-zinc-400 dark:text-zinc-500">
-            updated {lastUpdated}
-          </span>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="h-12 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse"
-            />
-          ))}
-        </div>
-      ) : entries.length === 0 ? (
-        <p className="text-sm text-zinc-400 dark:text-zinc-500 italic">
-          No events yet. Events appear here once agents start running.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-1 max-h-96 overflow-y-auto pr-1">
+    <section aria-label="Decision timeline">
+      <SectionTitle
+        meta={
+          lastUpdated && (
+            <span className="text-subtle">updated {lastUpdated}</span>
+          )
+        }
+      >
+        Decision timeline
+      </SectionTitle>
+      <AsyncSurface
+        loading={loading}
+        empty={entries.length === 0}
+        error={error}
+        emptyState={emptyState}
+        onRetry={() => {
+          setLoading(true);
+          setError(null);
+          fetchEntries();
+        }}
+        skeleton={
+          <div className="flex flex-col gap-3">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="h-12 animate-pulse rounded-lg bg-surface-2/60"
+              />
+            ))}
+          </div>
+        }
+      >
+        <div className="max-h-96 overflow-y-auto rounded-xl border border-border bg-surface-1 px-4">
           {entries.map((entry) => (
             <TimelineItem key={entry.id} entry={entry} />
           ))}
         </div>
-      )}
+      </AsyncSurface>
     </section>
   );
 }

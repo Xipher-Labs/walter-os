@@ -3,15 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import type { ModeState } from "@/app/api/mode/route";
 import type { ConsensusStatus } from "@/app/api/consensus-status/route";
+import { Panel } from "@/app/components/ui/Panel";
 
 /**
- * Mode Indicator — shows consensus mode status with toggle and live stats.
- * Reads from /api/mode + /api/consensus-status.
- * Refreshes every 60 seconds.
- *
- * When consensus mode is ON: shows mini-dashboard with approved/failed/pending.
+ * Mode Indicator — consensus mode status, toggle, and live stats. Reads
+ * /api/mode + /api/consensus-status, refreshes every 60s. Re-skinned to tokens
+ * (D-2); consensus uses its own --consensus token (distinct from the ops
+ * accent) so "deliberation" reads as its own concept.
  *
  * Refs: docs/specs/walter-council-v2.md (Part B, AC-6, Improvement 9 AC-6)
+ *       docs/specs/control-tower-redesign.md (AC-4)
  * Tasks: T-43, T-54
  */
 
@@ -57,7 +58,6 @@ export default function ModeIndicator() {
       if (res.ok) {
         const newMode = (await res.json()) as ModeState;
         setMode(newMode);
-        // Refresh stats after toggle
         setTimeout(fetchMode, 1000);
       }
     } finally {
@@ -67,78 +67,79 @@ export default function ModeIndicator() {
 
   if (!mode) {
     return (
-      <div className="h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl animate-pulse" />
+      <div className="h-full min-h-[5rem] animate-pulse rounded-xl border border-border bg-surface-1" />
     );
   }
 
+  const on = mode.consensus;
+
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+    <Panel tone="raised" className="flex h-full flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Consensus Mode
+          <span className="text-sm font-semibold text-foreground">
+            Consensus mode
           </span>
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-              mode.consensus
-                ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+              on
+                ? "bg-consensus-bg text-consensus-fg"
+                : "bg-status-idle-bg text-status-idle-fg"
             }`}
           >
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                mode.consensus
-                  ? "bg-violet-500 animate-pulse"
-                  : "bg-zinc-400"
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 rounded-full bg-current ${
+                on ? "status-pulse" : ""
               }`}
             />
-            {mode.consensus ? "ON" : "OFF"}
+            {on ? "on" : "off"}
           </span>
         </div>
 
         <button
+          type="button"
           onClick={handleToggle}
           disabled={toggling}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-            mode.consensus
-              ? "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300"
-              : "bg-violet-100 hover:bg-violet-200 text-violet-700 dark:bg-violet-900/40 dark:hover:bg-violet-900/60 dark:text-violet-300"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            on
+              ? "bg-surface-1 text-muted hover:bg-surface-2 hover:text-foreground"
+              : "bg-consensus-bg text-consensus-fg hover:brightness-110"
+          }`}
         >
-          {toggling ? "..." : mode.consensus ? "Turn off" : "Turn on"}
+          {toggling ? "…" : on ? "Turn off" : "Turn on"}
         </button>
       </div>
 
-      {mode.consensus && mode.since && (
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
-          Active since {new Date(mode.since).toLocaleString()}
-          {" · "}threshold: {mode.voting_threshold}
+      {on && mode.since && (
+        <p className="text-xs text-subtle">
+          Active since {new Date(mode.since).toLocaleString()} · threshold{" "}
+          {mode.voting_threshold}
         </p>
       )}
 
-      {/* Consensus stats mini-dashboard — only when mode is ON */}
-      {mode.consensus && stats && (
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+      {on && stats && (
+        <div className="mt-auto grid grid-cols-3 gap-2 border-t border-border pt-3">
           <div className="text-center">
-            <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+            <div className="tabular text-lg font-bold text-status-ok-fg">
               {stats.approved}
             </div>
-            <div className="text-xs text-zinc-400 dark:text-zinc-500">approved</div>
+            <div className="text-2xs text-subtle">approved</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
+            <div className="tabular text-lg font-bold text-status-warn-fg">
               {stats.pending}
             </div>
-            <div className="text-xs text-zinc-400 dark:text-zinc-500">pending</div>
+            <div className="text-2xs text-subtle">pending</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-bold text-red-500 dark:text-red-400">
+            <div className="tabular text-lg font-bold text-status-critical-fg">
               {stats.failed}
             </div>
-            <div className="text-xs text-zinc-400 dark:text-zinc-500">awaiting human</div>
+            <div className="text-2xs text-subtle">awaiting human</div>
           </div>
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
