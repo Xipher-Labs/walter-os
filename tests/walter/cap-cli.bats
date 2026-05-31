@@ -68,6 +68,25 @@ teardown() {
   [ "$output" = "[]" ]
 }
 
+@test "walter-os cap revoke rejects mutated capability paths" {
+  cd "$REPO_UNDER_TEST"
+  "$CLI" cap mint Write --paths README.md --duration 5m >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  nonce="$("$CLI" cap list | jq -r '.[0].nonce')"
+  victim_dir="$TMP_HOME/victim-caps"
+  mkdir -p "$victim_dir"
+  printf 'do not delete\n' > "$victim_dir/cap-${nonce}.paseto"
+  tmp_state="${state_file}.tmp"
+  jq --arg victim "$victim_dir" '.capability_tokens_dir = $victim' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run "$CLI" cap revoke "$nonce"
+
+  [ "$status" -ne 0 ]
+  [ -f "$victim_dir/cap-${nonce}.paseto" ]
+  [[ "$output" == *"capability paths do not match session id"* ]]
+}
+
 @test "walter-os cap mint rejects bare duration integers" {
   cd "$REPO_UNDER_TEST"
 

@@ -166,6 +166,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: sourcing capability token helper is blocked" {
+  run "$HOOK" check 'source scripts/walter/lib/capability-token.sh; f=walter_cap_sign_claims; $f state.json "{}"'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: capability private key path lookup is blocked" {
   run "$HOOK" check "jq -r .capability_private_key_path ~/.config/walter-os/state/current.json"
   [[ "$status" -eq 7 ]]
@@ -259,6 +265,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: positional walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'set -- mint; walter-os cap "$@" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: command-substitution cap.sh subcommand is blocked" {
   run "$HOOK" check 'scripts/walter/subcommands/cap.sh "$(printf mint)" Bash --duration 5m'
   [[ "$status" -eq 7 ]]
@@ -283,6 +295,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: indirect walter-os command with cap mint is blocked" {
+  run "$HOOK" check 'cmd=walter-os; $cmd cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: expanded cap word with dynamic subcommand is blocked" {
   run "$HOOK" check 'p=p; walter-os ca$p "$(printf mint)" Bash --duration 5m'
   [[ "$status" -eq 7 ]]
@@ -299,6 +317,16 @@ teardown() {
   run "$HOOK" check 'd="$HOME/.config/walter-os"; openssl pkeyutl -sign -inkey "$d/state/"*.key -rawin -in payload -out sig'
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: ordinary Walter state file is allowed" {
+  run "$HOOK" check '~/.config/walter-os/state/decision-journal.json' --tool Read
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: walter-os command with ordinary variable argument is allowed" {
+  run "$HOOK" check 'walter-os session status "$repo"'
+  [[ "$status" -eq 0 ]]
 }
 
 @test "CLI: dd if= is blocked" {
@@ -415,8 +443,8 @@ teardown() {
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
 }
 
-@test "Hook: Grep target path blocks capability state discovery" {
-  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"session","path":"~/.config/walter-os/state"}}' | "$HOOK")
+@test "Hook: Grep target path blocks capability session material" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"session","path":"~/.config/walter-os/state/session-abc.key"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
   [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
 }

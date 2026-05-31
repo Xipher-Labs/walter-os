@@ -180,24 +180,30 @@ _is_capability_token_mint_payload() {
   local normalized
   local walter_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
   local cap_script_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
-  local shell_expansion='([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)'
-  local walter_dynamic='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[^;|&]*([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)'
-  local cap_script_dynamic='(^|[[:space:];|&()])[^;|&]*cap[.]sh[^;|&]*([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)'
-  local dynamic_mint='(^|[[:space:];|&()])[^;|&]*([$][A-Za-z_]|[$][{][A-Za-z_][A-Za-z0-9_]*[}]|[$][(]|`)[^;|&]*[[:space:]]+[$]?mint([[:space:]]|$)'
+  local shell_expansion='([$][A-Za-z_][A-Za-z0-9_]*|[$][0-9]+|[$][@*#?$!-]|[$][{]([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])[}]|[$][(]|`)'
+  local walter_cap_mint_anywhere="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+[^;|&]*[[:space:]]+[$]?mint([[:space:]]|$)"
+  local walter_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+[^[:space:];|&]*${shell_expansion}"
+  local walter_cap_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[^[:space:];|&]*${shell_expansion}"
+  local command_indirect_cap_mint="(^|[[:space:];|&()])${shell_expansion}[[:space:]]+cap[[:space:]]+([^[:space:];|&]*${shell_expansion}|[$]?mint)([[:space:]]|$)"
+  local cap_script_dynamic="(^|[[:space:];|&()])[^;|&]*cap[.]sh[^;|&]*${shell_expansion}"
   local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_expansion}"
   local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_expansion}"
   local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
+  local cap_source='(^|[[:space:];|&()])(source|[.])[[:space:]]+[^;|&]*capability-token[.]sh([[:space:];|&()]|$)'
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
   [[ "$normalized" =~ $walter_mint ]] || \
     [[ "$normalized" =~ $cap_script_mint ]] || \
-    [[ "$normalized" =~ $walter_dynamic ]] || \
+    [[ "$normalized" =~ $walter_cap_mint_anywhere ]] || \
+    [[ "$normalized" =~ $walter_dynamic_subcommand ]] || \
+    [[ "$normalized" =~ $walter_cap_dynamic_subcommand ]] || \
+    [[ "$normalized" =~ $command_indirect_cap_mint ]] || \
     [[ "$normalized" =~ $cap_script_dynamic ]] || \
-    [[ "$normalized" =~ $dynamic_mint ]] || \
     [[ "$normalized" =~ $walter_ambiguous ]] || \
     [[ "$normalized" =~ $cap_script_ambiguous ]] || \
-    [[ "$normalized" =~ $cap_function ]]
+    [[ "$normalized" =~ $cap_function ]] || \
+    [[ "$normalized" =~ $cap_source ]]
 }
 
 _is_capability_private_key_payload() {
@@ -212,22 +218,30 @@ _is_capability_private_key_payload() {
   local literal_braced_home_root="\${HOME}/.config/walter-os/"
   local literal_home_state="\$HOME/.config/walter-os/state"
   local literal_braced_home_state="\${HOME}/.config/walter-os/state"
+  local session_artifact_re='session-[^[:space:];|&]*[.](key|json|pub)'
+  local session_metadata_re='session-[^[:space:];|&]*[.](json|pub)'
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
   [[ "$normalized" == *"capability_private_key_path"* ]] && return 0
 
-  if [[ "$normalized" == *"$config_state_dir"* ]] || \
-     [[ "$normalized" == *".config/walter-os/state"* ]] || \
-     [[ "$normalized" == *"$literal_config_state"* ]] || \
-     [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
-     [[ "$normalized" == *"$literal_home_state"* ]] || \
-     [[ "$normalized" == *"$literal_braced_home_state"* ]]; then
+  if [[ "$normalized" =~ (tar|zip|cp|rsync|ditto) ]] && \
+     { [[ "$normalized" == *"$config_state_dir"* ]] || \
+       [[ "$normalized" == *".config/walter-os/state"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; }; then
     return 0
   fi
 
   if [[ "$normalized" == *".config/walter-os/"* ]] && \
-     [[ "$normalized" =~ session-[A-Za-z0-9._-]+[.](key|json|pub) ]]; then
+     [[ "$normalized" =~ $session_artifact_re ]]; then
+    return 0
+  fi
+
+  if [[ "$normalized" == *"$config_state_dir/"* ]] && \
+     [[ "$normalized" =~ $session_artifact_re ]]; then
     return 0
   fi
 
@@ -237,7 +251,8 @@ _is_capability_private_key_payload() {
        [[ "$normalized" == *"\$HOME/.config/walter-os"* ]] || \
        [[ "$normalized" == *"\${HOME}/.config/walter-os"* ]]; } && \
      [[ "$normalized" == *"/state/"* ]] && \
-     [[ "$normalized" =~ [.](key|json|pub) ]]; then
+     { [[ "$normalized" =~ [.](key) ]] || \
+       [[ "$normalized" =~ $session_metadata_re ]]; }; then
     return 0
   fi
 
@@ -249,7 +264,7 @@ _is_capability_private_key_payload() {
        [[ "$normalized" == *"$literal_braced_home_root"* ]] || \
        [[ "$normalized" == *"$literal_home_state"* ]] || \
        [[ "$normalized" == *"$literal_braced_home_state"* ]]; } && \
-     [[ "$normalized" =~ session-[A-Za-z0-9._-]+[.](key|json|pub) ]]; then
+     [[ "$normalized" =~ $session_artifact_re ]]; then
     return 0
   fi
 

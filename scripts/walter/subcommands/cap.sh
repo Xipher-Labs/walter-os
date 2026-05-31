@@ -233,6 +233,7 @@ cmd_cap_revoke() {
     echo "walter-os cap revoke: active session required" >&2
     return 1
   }
+  _walter_cap_validate_state "$state_file" || return 1
   caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
   token_file="${caps_dir}/cap-${nonce}.paseto"
   rm -f "$token_file"
