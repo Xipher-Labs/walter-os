@@ -96,7 +96,9 @@ declare -a BLOCK_BASH_PATTERNS=(
   '--no-gpg-sign'
   # Capability minting must be operator-approved; otherwise an agent can mint
   # the token that later satisfies capability enforcement.
-  '(^|[[:space:]])([^[:space:]]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
+  '(^|[[:space:];|&])([^[:space:];|&]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
+  '(^|[[:space:];|&])([^[:space:];|&]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
+  '(^|[[:space:];|&])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 )
 
 # Edit / Write paths that require approval. POSIX-glob style; we shell-match.
@@ -167,6 +169,15 @@ _tier_rank() {
   esac
 }
 
+_is_capability_token_mint_payload() {
+  local payload="$1"
+  local walter_cli='(^|[[:space:];|&])([^[:space:];|&]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$)'
+  local cap_script='(^|[[:space:];|&])([^[:space:];|&]*/)?cap\.sh[[:space:]]+mint([[:space:]]|$)'
+  local cap_function='(^|[[:space:];|&])(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
+
+  [[ "$payload" =~ $walter_cli ]] || [[ "$payload" =~ $cap_script ]] || [[ "$payload" =~ $cap_function ]]
+}
+
 # classify_command <tool> <payload> → category name or empty string
 # Returns the category slug for a command, or empty if not categorizable.
 _classify_command() {
@@ -193,7 +204,7 @@ _classify_command() {
       # Capability minting is high risk and not trust-tier-overridable.
       # It must stay blocked until an explicit standing approval or Plane
       # operator approval is present.
-      if [[ "$payload" =~ (^|[[:space:]])([^[:space:]]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]]; then
+      if _is_capability_token_mint_payload "$payload"; then
         echo "capability-token-mint"; return
       fi
       # Test / lint runners

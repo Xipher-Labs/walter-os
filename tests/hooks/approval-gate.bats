@@ -106,6 +106,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked ]]
 }
 
+@test "CLI: direct cap.sh mint entrypoint is blocked for operator approval" {
+  run "$HOOK" check "bash scripts/walter/subcommands/cap.sh mint Bash --patterns '.*' --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
+@test "CLI: direct capability signing helper is blocked for operator approval" {
+  run "$HOOK" check "source scripts/walter/lib/capability-token.sh; walter_cap_sign_claims state.json '{}'"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
