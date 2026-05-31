@@ -43,6 +43,8 @@ _mode() {
   grep -q 'keep_caps: false' "$profile"
   grep -q 'dst: "/"' "$profile"
   grep -q 'fstype: "tmpfs"' "$profile"
+  grep -q 'src: "/dev/null"' "$profile"
+  grep -q 'dst: "/dev/null"' "$profile"
   grep -q 'iface_no_lo: true' "$profile"
   run grep -q 'cap: ""' "$profile"
   [ "$status" -ne 0 ]

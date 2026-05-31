@@ -78,6 +78,12 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
     is_bind: true
     rw: false
   }
+  mount {
+    src: "/dev/null"
+    dst: "/dev/null"
+    is_bind: true
+    rw: true
+  }
   
   envar: ["PATH", "HOME", "USER", "LANG", "WALTER_CONFIG", "WALTER_OS_HOME"]
   
