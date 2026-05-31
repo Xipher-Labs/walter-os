@@ -60,6 +60,7 @@ teardown() {
 }
 
 @test "session touch after max hours reports max-hours expiry" {
+  export WALTER_SESSION_MAX_IDLE_MIN=600
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
 
@@ -69,6 +70,21 @@ teardown() {
   [ "$status" -eq 10 ]
   [[ "$output" == *'"status":"expired"'* ]]
   [[ "$output" == *'"trigger":"max-hours"'* ]]
+}
+
+@test "session touch after both idle and max-hours windows rotates by idle" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  first_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
+
+  export WALTER_SESSION_NOW_EPOCH=1767315600
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"started"'* ]]
+  [[ "$output" == *'"trigger":"max-idle"'* ]]
+  second_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
+  [ "$first_id" != "$second_id" ]
 }
 
 @test "PHI mode caps effective limits" {
