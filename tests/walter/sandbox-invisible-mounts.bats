@@ -78,6 +78,17 @@ EOF
   grep -q '^~/.docker/config.json:file$' "$defaults"
 }
 
+@test "A-5: missing default invisible policy fails closed" {
+  tmp_repo="$TMP_HOME/repo-without-defaults"
+  mkdir -p "$tmp_repo/setup/sandbox-profiles" "$tmp_repo/scripts/walter/lib"
+  cp "$SANDBOX_LIB" "$tmp_repo/scripts/walter/lib/sandbox.sh"
+
+  run bash -c "source '$tmp_repo/scripts/walter/lib/sandbox.sh'; WALTER_OS_HOME='$tmp_repo' _walter_sandbox_invisible_paths"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"required invisible path policy missing"* ]]
+}
+
 @test "A-5: high-tier nsjail materialization adds dir and file invisible mounts" {
   run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail 1"
 

@@ -568,8 +568,12 @@ _walter_sandbox_invisible_remove_path() {
 }
 
 _walter_sandbox_invisible_apply_file() {
-  local file="$1" active="$2" raw line remove entry path type expanded
+  local file="$1" active="$2" required="${3:-0}" raw line remove entry path type expanded
   [[ -f "$file" ]] || {
+    if [[ "$required" == "1" ]]; then
+      echo "walter-sandbox: required invisible path policy missing: $file" >&2
+      return 1
+    fi
     printf '%s' "$active"
     return 0
   }
@@ -620,7 +624,7 @@ _walter_sandbox_invisible_paths() {
   defaults="${repo_root}/setup/sandbox-profiles/invisible-paths.default.txt"
   overlay="${config_dir}/overlay/sandbox-invisible-paths.txt"
   active=""
-  active="$(_walter_sandbox_invisible_apply_file "$defaults" "$active")" || return 1
+  active="$(_walter_sandbox_invisible_apply_file "$defaults" "$active" 1)" || return 1
   active="$(_walter_sandbox_invisible_apply_file "$overlay" "$active")" || return 1
   printf '%s\n' "$active"
 }
