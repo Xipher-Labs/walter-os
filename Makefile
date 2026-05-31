@@ -50,5 +50,5 @@ audit-deps:  ## Run osv-scanner on lockfiles (soft-warn if not installed)
 	fi
 
 audit-ci:  ## (CI only) Documents tools that require OIDC context (cosign, scorecard)
-	@echo "audit-ci runs in GitHub Actions only. See .github/workflows/release-security.yml and .github/workflows/scorecard.yml."
+	@echo "audit-ci runs in GitHub Actions only. See .github/workflows/release.yml and .github/workflows/scorecard.yml."
 	@echo "Local audit tools: run 'make audit'"

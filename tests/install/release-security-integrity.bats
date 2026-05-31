@@ -10,11 +10,14 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  WORKFLOW="$REPO_ROOT/.github/workflows/release-security.yml"
-  [ -f "$WORKFLOW" ] || skip "release-security.yml not found"
+  WORKFLOW="$REPO_ROOT/.github/workflows/release.yml"
 }
 
-@test "release-security workflow has no \`|| true\` after asset operations" {
+@test "release workflow exists" {
+  [ -f "$WORKFLOW" ]
+}
+
+@test "release workflow has no \`|| true\` after asset operations" {
   # `|| true` after gh release download / sha256sum / cosign / sbom would
   # swallow the failure and let a placeholder be signed. Regression for HIGH-1.
   # Strip comment lines (lines starting with optional whitespace + #) before
@@ -22,13 +25,13 @@ setup() {
   local offending
   offending=$(grep -nE '\|\|\s*true' "$WORKFLOW" | grep -vE '^[0-9]+:[[:space:]]*#' || true)
   if [ -n "$offending" ]; then
-    echo "Found '|| true' in release-security.yml (HIGH-1 regression):"
+    echo "Found '|| true' in release.yml (HIGH-1 regression):"
     echo "$offending"
     return 1
   fi
 }
 
-@test "release-security workflow downloads ALL assets (no \`--pattern\` filter)" {
+@test "release workflow downloads ALL assets (no \`--pattern\` filter)" {
   # `gh release download` must NOT be invoked with `--pattern` so archives
   # and binaries are pulled, not just JSON. Regression for HIGH-2.
   # We strip line continuations (\\\n) so multi-line gh invocations are
@@ -44,7 +47,7 @@ setup() {
   grep -E 'gh release download' "$WORKFLOW" >/dev/null
 }
 
-@test "release-security workflow checks SBOM exists with \`test -s\` before signing" {
+@test "release workflow checks SBOM exists with \`test -s\` before signing" {
   # After SBOM generation, the workflow must assert the SBOM file is
   # present and non-empty BEFORE signing — otherwise a missing SBOM would
   # produce an empty/placeholder checksum that still gets signed. HIGH-1.
@@ -78,10 +81,15 @@ setup() {
   grep -iE 'test -s .*(checksums|\$\{?CHECKSUMS)' "$WORKFLOW" >/dev/null
 }
 
-@test "release-security workflow pre-creates the asset directory deterministically" {
+@test "release workflow pre-creates the asset directory deterministically" {
   # mkdir -p for the asset directory must exist before any download /
   # sbom action that depends on it. HIGH-1. Accept either the literal
   # path `/tmp/release-assets` or an env-var reference like
   # `${ASSET_DIR}` / `"$ASSET_DIR"`.
   grep -E 'mkdir -p (.*/tmp/release-assets|.*ASSET_DIR)' "$WORKFLOW" >/dev/null
+}
+
+@test "release workflow sorts checksums with stable locale" {
+  # Checksum manifests must not vary with runner locale.
+  grep -E 'LC_ALL=C[[:space:]]+sort[[:space:]]*>[[:space:]]*"\$\{CHECKSUMS_FILE\}"' "$WORKFLOW" >/dev/null
 }
