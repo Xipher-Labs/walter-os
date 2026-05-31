@@ -98,9 +98,10 @@ _emit_allow_with_warn() {
   exit 0
 }
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Same posture as bash-denylist.sh: without jq we cannot parse the
   # hook event. Fail-closed.
+  _audit_decision block "network-gate: jq missing — failing closed for safety. Install jq to proceed." "$INPUT"
   printf '%s\n' '{"decision":"block","reason":"network-gate: jq missing — failing closed for safety. Install jq to proceed."}'
   exit 0
 fi

@@ -811,11 +811,12 @@ if [[ -z "$input" ]]; then
   exit 0
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Fail CLOSED — without jq we cannot parse the hook event or enforce policy.
   # Allowing all ops when jq is missing would let an attacker bypass the gate
   # by shadowing jq on PATH. See: docs/operational/security-audit-2026-05-11.md P0-03
   echo "approval-gate: jq missing — failing closed for safety. Install jq to proceed." >&2
+  audit_approval_decision unknown "$input" block "approval-gate: jq missing — failing closed for safety"
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: jq missing — failing closed for safety"}}\n'
   exit 0
 fi

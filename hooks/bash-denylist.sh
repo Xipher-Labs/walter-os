@@ -101,10 +101,11 @@ _emit_block() {
 }
 
 # Extract command (using jq if available, fail-closed otherwise)
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Fail CLOSED — without jq we cannot parse the hook event.
   # Allowing all ops when jq is missing would let an attacker bypass the hook
   # by shadowing jq on PATH. See approval-gate.sh P0-03 for the same pattern.
+  _audit_decision block "bash-denylist: jq missing — failing closed for safety. Install jq to proceed." "$INPUT"
   printf '{"decision":"block","reason":"bash-denylist: jq missing — failing closed for safety. Install jq to proceed."}\n'
   exit 0
 fi
