@@ -84,7 +84,6 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
   disable_no_new_privs: false
   cap: "" # drop all
   iface_no_lo: true
-  iface_own: "lo"
   # No internet — hooks shouldn't need to call out.
   ```
 - [ ] `setup/sandbox-profiles/walter-hook-default.sb` (macOS sandbox-exec profile, semantically equivalent).
