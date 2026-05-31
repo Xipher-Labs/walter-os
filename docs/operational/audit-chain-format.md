@@ -6,6 +6,12 @@ The B-1 foundation library writes tamper-evident audit rows to:
 ${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/chain-YYYY-MM-DD.jsonl
 ```
 
+It also writes the local daily root to:
+
+```text
+${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/root-YYYY-MM-DD.txt
+```
+
 Each line is canonical JSON (`jq -cS`) with these unsigned B-1 foundation fields:
 
 ```json
@@ -35,4 +41,4 @@ Verify a day with:
 walter-os audit verify-chain 2026-05-31
 ```
 
-This B-1 foundation detects accidental or unrepaired edits to linked rows. It is not post-hoc tamper-proof by itself: an actor who can rewrite the JSONL file can modify a row and recompute every following `prev_hash` until signed receipts, daily root files, and external anchoring land in later B-2/B-4 slices. Treat this PR as the deterministic chain foundation, not the final non-repudiation layer.
+This B-1 foundation protects the local chain with linked rows plus the daily root. Linked `prev_hash` values detect accidental or repaired edits inside the chain, and `root-YYYY-MM-DD.txt` detects final-row tampering because it must match the hash of the day's last row. An attacker who can rewrite both `chain-YYYY-MM-DD.jsonl` and the local `root-YYYY-MM-DD.txt` can still fabricate a consistent local history. Signed receipts and external anchoring remain future stronger non-repudiation layers.
