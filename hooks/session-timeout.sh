@@ -52,17 +52,39 @@ _allow() {
   exit 0
 }
 
+_escape_glob_pattern() {
+  local pattern="$1"
+  pattern="${pattern//\\/\\\\}"
+  pattern="${pattern//\*/\\*}"
+  pattern="${pattern//\?/\\?}"
+  pattern="${pattern//\[/\\[}"
+  pattern="${pattern//\]/\\]}"
+  printf '%s' "$pattern"
+}
+
+_replace_literal() {
+  local detail="$1" needle="$2" replacement="$3" pattern
+  [[ -n "$needle" ]] || {
+    printf '%s' "$detail"
+    return 0
+  }
+  pattern="$(_escape_glob_pattern "$needle")"
+  printf '%s' "${detail//$pattern/$replacement}"
+}
+
 _sanitize_hook_detail() {
-  local detail="$1"
+  local detail="$1" config_label
+  config_label="~"
+  config_label+="/.config/walter-os"
   detail="${detail//$'\r'/ }"
   detail="${detail//$'\n'/; }"
   if [[ -n "${HOME:-}" ]]; then
-    detail="${detail//${HOME}/~}"
+    detail="$(_replace_literal "$detail" "$HOME" "~")"
   fi
   if [[ -n "${WALTER_CONFIG:-}" ]]; then
-    detail="${detail//${WALTER_CONFIG}/~/.config/walter-os}"
+    detail="$(_replace_literal "$detail" "$WALTER_CONFIG" "$config_label")"
   fi
-  detail="${detail//${WALTER_OS_HOME:-$REPO_ROOT}/<walter-os>}"
+  detail="$(_replace_literal "$detail" "${WALTER_OS_HOME:-$REPO_ROOT}" "<walter-os>")"
   printf '%.300s' "$detail"
 }
 
