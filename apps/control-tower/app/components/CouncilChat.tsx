@@ -44,18 +44,18 @@ function AgentCard({
   const hasR2 = !!response?.r2;
 
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4 flex flex-col gap-2">
+    <div className="rounded-xl border border-border bg-surface-1 p-4 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100 capitalize">
+        <span className="font-medium text-sm text-foreground capitalize">
           {persona.id}
         </span>
         <span
           className={`text-xs rounded-full px-2 py-0.5 ${
             persona.trustTier === "high"
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
+              ? "bg-status-ok-bg text-status-ok-fg"
               : persona.trustTier === "medium"
-              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
-              : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+              ? "bg-accent-bg text-accent"
+              : "bg-status-idle-bg text-status-idle-fg"
           }`}
         >
           {persona.trustTier}
@@ -66,15 +66,17 @@ function AgentCard({
       {(phase === "round1" || phase === "round2" || phase === "synthesis" || phase === "done") && (
         <div>
           <button
+            type="button"
             onClick={() => setExpanded(expanded === "r1" ? null : "r1")}
             disabled={!hasR1}
-            className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 disabled:opacity-40"
+            aria-expanded={expanded === "r1"}
+            className="text-xs text-muted hover:text-foreground disabled:opacity-40"
           >
             Round 1
-            {isLoading && phase === "round1" ? " ..." : hasR1 ? " ▾" : " —"}
+            {isLoading && phase === "round1" ? " …" : hasR1 ? " ▾" : " —"}
           </button>
           {expanded === "r1" && hasR1 && (
-            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap">
+            <p className="mt-1 text-sm text-muted leading-relaxed whitespace-pre-wrap">
               {response?.r1}
             </p>
           )}
@@ -85,29 +87,31 @@ function AgentCard({
       {(phase === "round2" || phase === "synthesis" || phase === "done") && (
         <div>
           <button
+            type="button"
             onClick={() => setExpanded(expanded === "r2" ? null : "r2")}
             disabled={!hasR2}
-            className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 disabled:opacity-40"
+            aria-expanded={expanded === "r2"}
+            className="text-xs text-muted hover:text-foreground disabled:opacity-40"
           >
             Round 2
-            {isLoading && phase === "round2" ? " ..." : hasR2 ? " ▾" : " —"}
+            {isLoading && phase === "round2" ? " …" : hasR2 ? " ▾" : " —"}
           </button>
           {expanded === "r2" && hasR2 && (
-            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap">
+            <p className="mt-1 text-sm text-muted leading-relaxed whitespace-pre-wrap">
               {response?.r2}
             </p>
           )}
         </div>
       )}
 
-      {/* Loading indicator */}
+      {/* Loading indicator — staggered pulse (reduced-motion safe via globals) */}
       {isLoading && (
-        <div className="flex gap-1 mt-1">
+        <div className="flex gap-1 mt-1" role="status" aria-label="thinking">
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce"
-              style={{ animationDelay: `${i * 150}ms` }}
+              className="h-1.5 w-1.5 rounded-full bg-accent status-pulse"
+              style={{ animationDelay: `${i * 200}ms` }}
             />
           ))}
         </div>
@@ -124,25 +128,21 @@ interface SynthesisCardProps {
 
 function SynthesisCard({ synthesis, onSpinSpec, spinning }: SynthesisCardProps) {
   return (
-    <div className="rounded-xl border-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/20 p-5 flex flex-col gap-4">
+    <div className="rounded-xl border border-consensus-fg/40 bg-consensus-bg p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-violet-800 dark:text-violet-300">
-          Liaison Synthesis
-        </h3>
+        <h3 className="font-semibold text-consensus-fg">Liaison synthesis</h3>
       </div>
 
-      <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      <p className="text-sm text-foreground leading-relaxed">
         {synthesis.summary}
       </p>
 
       {synthesis.convergences.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-            Convergences
-          </h4>
+          <h4 className="text-xs font-semibold text-muted mb-1">Convergences</h4>
           <ul className="list-disc list-inside space-y-0.5">
             {synthesis.convergences.map((c, i) => (
-              <li key={i} className="text-sm text-zinc-600 dark:text-zinc-400">
+              <li key={i} className="text-sm text-muted">
                 {c}
               </li>
             ))}
@@ -152,12 +152,12 @@ function SynthesisCard({ synthesis, onSpinSpec, spinning }: SynthesisCardProps) 
 
       {synthesis.disagreements.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-            Open Disagreements
+          <h4 className="text-xs font-semibold text-muted mb-1">
+            Open disagreements
           </h4>
           <ul className="list-disc list-inside space-y-0.5">
             {synthesis.disagreements.map((d, i) => (
-              <li key={i} className="text-sm text-zinc-600 dark:text-zinc-400">
+              <li key={i} className="text-sm text-muted">
                 {d}
               </li>
             ))}
@@ -166,22 +166,18 @@ function SynthesisCard({ synthesis, onSpinSpec, spinning }: SynthesisCardProps) 
       )}
 
       <div>
-        <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-          Recommended Path
+        <h4 className="text-xs font-semibold text-muted mb-1">
+          Recommended path
         </h4>
-        <p className="text-sm text-zinc-700 dark:text-zinc-300">
-          {synthesis.recommended_path}
-        </p>
+        <p className="text-sm text-foreground">{synthesis.recommended_path}</p>
       </div>
 
       {synthesis.next_steps.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-            Next Steps
-          </h4>
+          <h4 className="text-xs font-semibold text-muted mb-1">Next steps</h4>
           <ol className="list-decimal list-inside space-y-0.5">
             {synthesis.next_steps.map((s, i) => (
-              <li key={i} className="text-sm text-zinc-600 dark:text-zinc-400">
+              <li key={i} className="text-sm text-muted">
                 {s}
               </li>
             ))}
@@ -190,11 +186,12 @@ function SynthesisCard({ synthesis, onSpinSpec, spinning }: SynthesisCardProps) 
       )}
 
       <button
+        type="button"
         onClick={onSpinSpec}
         disabled={spinning}
-        className="mt-2 self-start rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 transition-colors disabled:opacity-50"
+        className="mt-2 self-start rounded-lg bg-consensus-fg px-4 py-2 text-sm font-medium text-background transition-colors hover:brightness-110 disabled:opacity-50"
       >
-        {spinning ? "Creating spec..." : "Spin as spec + plan"}
+        {spinning ? "Creating spec…" : "Spin as spec + plan"}
       </button>
     </div>
   );
@@ -429,26 +426,28 @@ export default function CouncilChat({
   return (
     <div className="flex flex-col gap-6">
       {guidedHeader && (
-        <div className="rounded-xl bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 p-4">
-          <p className="text-sm text-violet-700 dark:text-violet-300">
-            {guidedHeader}
-          </p>
+        <div className="rounded-xl border border-consensus-fg/40 bg-consensus-bg p-4">
+          <p className="text-sm text-consensus-fg">{guidedHeader}</p>
         </div>
       )}
 
       {/* Input */}
       <div className="flex flex-col gap-3">
+        <label className="sr-only" htmlFor="council-message">
+          Message for the Council
+        </label>
         <textarea
+          id="council-message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={phase !== "idle" && phase !== "done"}
           placeholder={
             sessionType === "ideation"
-              ? "Describe your idea..."
-              : "Ask the Council a question or describe a decision to deliberate..."
+              ? "Describe your idea…"
+              : "Ask the Council a question or describe a decision to deliberate…"
           }
           rows={3}
-          className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50"
+          className="w-full resize-none rounded-xl border border-border bg-surface-1 p-3 text-sm text-foreground placeholder:text-subtle transition-colors hover:border-border-strong disabled:opacity-50"
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && phase === "idle") {
               runChat();
@@ -457,17 +456,18 @@ export default function CouncilChat({
         />
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={runChat}
             disabled={!message.trim() || (phase !== "idle" && phase !== "done")}
-            className="rounded-lg bg-zinc-900 hover:bg-zinc-700 text-white text-sm font-medium px-5 py-2 transition-colors disabled:opacity-40"
+            className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-40"
           >
             {phase === "done" ? "Ask again" : "Send to Council"}
           </button>
           {phase !== "idle" && (
-            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            <span className="text-sm text-muted">
               {phaseLabel[phase]}
               {phase !== "done" && (
-                <span className="ml-2 font-mono text-zinc-400">{elapsed}s</span>
+                <span className="tabular ml-2 text-subtle">{elapsed}s</span>
               )}
             </span>
           )}
@@ -475,8 +475,8 @@ export default function CouncilChat({
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-3">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <div role="alert" className="rounded-xl border border-status-critical-fg/40 bg-status-critical-bg p-3">
+          <p className="text-sm text-status-critical-fg">{error}</p>
         </div>
       )}
 
@@ -504,8 +504,8 @@ export default function CouncilChat({
       )}
 
       {spinResult && (
-        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-3">
-          <p className="text-sm text-emerald-700 dark:text-emerald-400">
+        <div role="status" className="rounded-xl border border-status-ok-fg/40 bg-status-ok-bg p-3">
+          <p className="text-sm text-status-ok-fg">
             Spec created: {spinResult}
           </p>
         </div>
