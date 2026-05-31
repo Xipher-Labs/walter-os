@@ -574,9 +574,9 @@ _walter_sandbox_invisible_apply_file() {
     return 0
   }
   while IFS= read -r raw || [[ -n "$raw" ]]; do
-    line="${raw%%#*}"
+    line="$raw"
     line="$(_walter_sandbox_trim "$line")"
-    [[ -n "$line" ]] || continue
+    [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
     remove=0
     if [[ "$line" == !* ]]; then
       remove=1
@@ -639,12 +639,20 @@ _walter_sandbox_invisible_placeholder_root() {
 }
 
 _walter_sandbox_invisible_placeholder_hash() {
-  local value="$1"
+  local value="$1" digest
   if command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$value" | shasum -a 256 | awk '{print substr($1,1,16)}'
+    digest="$(printf '%s' "$value" | shasum -a 256 | awk '{print substr($1,1,16)}')" || return 1
+  elif command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | sha256sum | awk '{print substr($1,1,16)}')" || return 1
   else
-    printf '%s' "$value" | sha256sum | awk '{print substr($1,1,16)}'
+    echo "walter-sandbox: sha256sum or shasum is required for invisible placeholder hashes" >&2
+    return 1
   fi
+  [[ -n "$digest" ]] || {
+    echo "walter-sandbox: failed to derive invisible placeholder hash" >&2
+    return 1
+  }
+  printf '%s\n' "$digest"
 }
 
 _walter_sandbox_invisible_placeholder() {

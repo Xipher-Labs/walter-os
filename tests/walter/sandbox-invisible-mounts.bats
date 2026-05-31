@@ -257,6 +257,34 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+@test "A-5: invisible overlay preserves hash characters in paths" {
+  extra="$HOME/secrets/secret#1.env"
+  mkdir -p "$(dirname "$extra")"
+  printf 'custom\n' > "$extra"
+  printf '%s:file\n' "$extra" > "$WALTER_CONFIG/overlay/sandbox-invisible-paths.txt"
+
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail 1"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -q "dst: \"$extra\"" "$profile"
+}
+
+@test "A-5: invisible placeholder hashing fails closed without a hasher" {
+  no_hash_bin="$TMP_HOME/no-hash-bin"
+  mkdir -p "$no_hash_bin"
+  for tool in dirname mkdir chmod mktemp mkfifo rm sed grep awk head tail tr stat cat bash; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      ln -s "$(command -v "$tool")" "$no_hash_bin/$tool"
+    fi
+  done
+
+  run bash -c "source '$SANDBOX_LIB'; PATH='$no_hash_bin' _walter_sandbox_invisible_placeholder_hash 'file|$HOME/.ssh/id_rsa'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"sha256sum or shasum is required"* ]]
+}
+
 @test "A-5: invisible path entries require explicit type tags" {
   printf '%s\n' "$HOME/secrets/no-type" > "$WALTER_CONFIG/overlay/sandbox-invisible-paths.txt"
 
