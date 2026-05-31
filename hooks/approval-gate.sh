@@ -169,6 +169,8 @@ _shellish_normalize_payload() {
   backslash_newline=$'\\\n'
   value="${value//$backslash_newline/ }"
   value="${value//$'\n'/ }"
+  value="${value//\$\{IFS\}/ }"
+  value="${value//\$IFS/ }"
   value="${value//\\/}"
   value="${value//\"/}"
   value="${value//\'/}"

@@ -148,6 +148,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: IFS-separated walter-os cap mint is blocked" {
+  run "$HOOK" check 'walter-os${IFS}cap${IFS}mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: IFS-separated cap.sh mint is blocked" {
+  run "$HOOK" check 'scripts/walter/subcommands/cap.sh${IFS}mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: command-substitution cap.sh mint is blocked" {
   run "$HOOK" check 'token=$(scripts/walter/subcommands/cap.sh mint Bash --patterns ".*" --duration 5m)'
   [[ "$status" -eq 7 ]]
