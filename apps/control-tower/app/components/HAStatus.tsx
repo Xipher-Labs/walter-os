@@ -109,7 +109,7 @@ export default function HAStatus() {
         <Panel padded={false} className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-surface-2/50 text-2xs uppercase tracking-wide text-subtle">
+              <tr className="border-b border-border bg-surface-2/50 text-2xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-2 text-left font-medium">Service</th>
                 <th className="px-4 py-2 text-center font-medium">Primary</th>
                 <th className="px-4 py-2 text-center font-medium">Standby</th>

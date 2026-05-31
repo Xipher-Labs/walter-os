@@ -151,7 +151,7 @@ export default function CostDashboard() {
         <Panel padded={false} className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-surface-2/50 text-2xs uppercase tracking-wide text-subtle">
+              <tr className="border-b border-border bg-surface-2/50 text-2xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-2 text-left font-medium">Agent</th>
                 <th className="px-4 py-2 text-right font-medium">Tokens in</th>
                 <th className="px-4 py-2 text-right font-medium">Tokens out</th>

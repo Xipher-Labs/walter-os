@@ -50,7 +50,7 @@ function TimelineItem({ entry }: { entry: TimelineEntry }) {
         <div className="flex flex-wrap items-baseline gap-2">
           <span
             className={`text-2xs font-semibold uppercase tracking-wide ${
-              tier === "info" ? "text-subtle" : ""
+              tier === "info" ? "text-muted" : ""
             }`}
           >
             <span className="sr-only">tier </span>
