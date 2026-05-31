@@ -262,17 +262,18 @@ _mode() {
   # shellcheck disable=SC2016
   grep -q 'find "$root" -mindepth 1 -maxdepth "$scan_depth" -print0 > "$fifo"' "$SANDBOX_LIB"
   # shellcheck disable=SC2016
-  grep -q 'wait "$find_pid"' "$SANDBOX_LIB"
+  grep -q 'if wait "$find_pid"; then' "$SANDBOX_LIB"
 }
 
 @test "AC-3: key scan creates traversal FIFO with private umask" {
   wrapper_dir="$TMP_HOME/bin"
   umask_file="$TMP_HOME/mkfifo.umask"
+  real_mkfifo="$(command -v mkfifo)"
   mkdir -p "$wrapper_dir"
   cat > "$wrapper_dir/mkfifo" <<EOF
 #!/usr/bin/env bash
 umask > "$umask_file"
-exec "$(command -v mkfifo)" "\$@"
+exec "$real_mkfifo" "\$@"
 EOF
   chmod +x "$wrapper_dir/mkfifo"
 

@@ -384,8 +384,11 @@ _walter_sandbox_key_scan() {
     rm -f -- "$fifo" "$find_stderr"
     return 1
   fi
-  wait "$find_pid"
-  find_status="$?"
+  if wait "$find_pid"; then
+    find_status=0
+  else
+    find_status="$?"
+  fi
   rm -f -- "$fifo"
   if [[ "$find_status" -ne 0 ]]; then
     cat "$find_stderr" >&2
