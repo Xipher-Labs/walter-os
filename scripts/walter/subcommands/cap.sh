@@ -195,6 +195,7 @@ cmd_cap_list() {
     echo "[]"
     return 0
   fi
+  _walter_cap_validate_state "$state_file" || return 1
   caps_dir="$(jq -r '.capability_tokens_dir // empty' "$state_file")"
   if [[ ! -d "$caps_dir" ]]; then
     echo "[]"

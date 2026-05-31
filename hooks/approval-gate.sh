@@ -184,6 +184,8 @@ _is_capability_token_mint_payload() {
   local walter_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+[^[:space:];|&]*${shell_expansion}"
   local walter_cap_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[^[:space:];|&]*${shell_expansion}"
   local command_indirect_cap_mint="(^|[[:space:];|&()])${shell_expansion}[[:space:]]+cap[[:space:]]+([^[:space:];|&]*${shell_expansion}|[$]?mint)([[:space:]]|$)"
+  # shellcheck disable=SC2016 # Literal $() and backticks are part of the regex.
+  local command_substitution_walter_mint='(^|[[:space:];|&()])([$][(][^;|&)]*walter-os[^;|&)]*[)]|`[^;|&`]*walter-os[^;|&`]*`)[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
   local cap_script_dynamic="(^|[[:space:];|&()])[^;|&]*cap[.]sh[^;|&]*${shell_expansion}"
   local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_expansion}"
   local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_expansion}"
@@ -197,6 +199,7 @@ _is_capability_token_mint_payload() {
     [[ "$normalized" =~ $walter_dynamic_subcommand ]] || \
     [[ "$normalized" =~ $walter_cap_dynamic_subcommand ]] || \
     [[ "$normalized" =~ $command_indirect_cap_mint ]] || \
+    [[ "$normalized" =~ $command_substitution_walter_mint ]] || \
     [[ "$normalized" =~ $cap_script_dynamic ]] || \
     [[ "$normalized" =~ $walter_ambiguous ]] || \
     [[ "$normalized" =~ $cap_script_ambiguous ]] || \

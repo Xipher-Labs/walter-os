@@ -87,6 +87,24 @@ teardown() {
   [[ "$output" == *"capability paths do not match session id"* ]]
 }
 
+@test "walter-os cap list rejects mutated capability paths" {
+  cd "$REPO_UNDER_TEST"
+  "$CLI" cap mint Write --paths README.md --duration 5m >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  victim_dir="$TMP_HOME/victim-caps-list"
+  mkdir -p "$victim_dir"
+  printf 'do not read\n' > "$victim_dir/cap-victim.paseto"
+  tmp_state="${state_file}.tmp"
+  jq --arg victim "$victim_dir" '.capability_tokens_dir = $victim' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run "$CLI" cap list
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"capability paths do not match session id"* ]]
+  [[ "$output" != *"do not read"* ]]
+}
+
 @test "walter-os cap mint rejects bare duration integers" {
   cd "$REPO_UNDER_TEST"
 
