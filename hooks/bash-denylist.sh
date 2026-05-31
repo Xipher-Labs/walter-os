@@ -14,11 +14,27 @@
 # PreToolUse chain treats that as fail-open. Codex caught this in
 # the bash-3.2-related fixes already shipped for approval-gate.sh
 # (P1-05 side fix); same class of bug here.
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+_audit_early_decision() {
+  local decision="$1" reason="${2:-}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
 if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   # One-shot guard: if we already attempted a re-exec and ended up back in
   # bash < 4, stop. Without this, a candidate path that itself resolves to
   # bash 3.2 (e.g., symlink chain) would loop forever. Codex review of #81.
   if [[ "${WALTER_BASH_DENYLIST_REEXEC:-0}" == "1" ]]; then
+    _reason="bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 at /opt/homebrew/bin/bash or /usr/local/bin/bash (the two paths this hook probes)."
+    _audit_early_decision block "$_reason"
     printf '%s\n' '{"decision":"block","reason":"bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 at /opt/homebrew/bin/bash or /usr/local/bin/bash (the two paths this hook probes)."}'
     exit 0
   fi
@@ -34,6 +50,8 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   # No newer bash available — emit fail-CLOSED block so the hook does
   # not silently fail-open. Use printf to stay consistent with the rest
   # of the hook's JSON-output convention.
+  _reason="bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."
+  _audit_early_decision block "$_reason"
   printf '%s\n' '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
@@ -54,13 +72,6 @@ set -uo pipefail
 
 # Read the tool call from stdin
 INPUT="$(cat)"
-
-WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
-if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
-fi
 
 _audit_decision() {
   local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"

