@@ -232,6 +232,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "curl header URL is not treated as network destination" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl -H 'Referer: https://example.com/x' https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "curl data URL is not treated as network destination" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "curl --data-raw '{\"callback\":\"https://app.example/hook\"}' https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "git ssh URL with matching network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 

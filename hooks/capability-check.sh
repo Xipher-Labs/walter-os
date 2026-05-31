@@ -130,9 +130,17 @@ _cap_extract_literal_hosts() {
         idx=$((idx + 1))
         continue
         ;;
+      -H|--header|-d|--data|--data-raw|--data-binary|--data-urlencode|--form|--form-string|--url-query|--cookie|--user-agent|-A|--referer|-e|--request-target)
+        idx=$((idx + 1))
+        continue
+        ;;
     esac
     case "$token" in
       --body=*|-b*|--message=*|-m*|--title=*|--field=*|-f*|--raw-field=*|-F*|--jq=*|-q*)
+        idx=$((idx + 1))
+        continue
+        ;;
+      -H*|--header=*|-d*|--data=*|--data-raw=*|--data-binary=*|--data-urlencode=*|--form=*|--form-string=*|--url-query=*|--cookie=*|--user-agent=*|-A*|--referer=*|-e*|--request-target=*)
         idx=$((idx + 1))
         continue
         ;;
