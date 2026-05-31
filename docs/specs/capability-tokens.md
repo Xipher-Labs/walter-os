@@ -79,11 +79,12 @@ renderer mangles multi-line fenced code blocks inside table cells.
 - [x] bats coverage in `tests/walter/cap-cli.bats`.
 
 ### AC-3 — `hooks/capability-check.sh` PreToolUse hook
-- [x] Hook runs in the PreToolUse chain after `approval-gate.sh` (so a category is already classified).
+- [x] Hook runs in the PreToolUse chain after `approval-gate.sh`.
 - [x] For `Edit`/`Write`: extracts `file_path`; checks every cap in the session's `caps-<session>/` dir for `tool` matching AND `scope.paths` glob matching.
 - [x] For `Bash`: extracts `command`; checks every cap for `tool=Bash` AND (a) `scope.patterns` regex matching OR (b) network destination in `scope.network` (parsed from curl/git/etc. like A-1 egress hook does).
+- [x] Capability high-tier classification is hook-local, not a direct lookup into `approval-gate.sh`'s `CATEGORY_MIN_TIER`: protected paths, network-capable Bash commands, `gh pr review --approve`, and capability-system artifacts are always high-tier for capability enforcement.
 - [x] If a high-tier op has NO matching cap → block with `"capability-check: no valid token for <tool> on <target>; mint with: walter-os cap mint <tool> ..."`.
-- [x] If a low-tier op has no cap → passthrough allow (existing approval-gate is the only check).
+- [x] If an op is outside `capability-check.sh`'s high-tier classifier → passthrough allow (existing approval-gate remains the policy check).
 - [x] bats coverage in `tests/hooks/capability-check.bats`:
   - High-tier op with no cap → block
   - High-tier op with matching cap → allow
