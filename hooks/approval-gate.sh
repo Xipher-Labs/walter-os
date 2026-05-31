@@ -241,6 +241,15 @@ _is_capability_private_key_payload() {
   [[ "$normalized" =~ $relative_session_secret_re ]] && return 0
   [[ "$normalized" =~ $relative_caps_token_re ]] && return 0
 
+  if [[ "$normalized" == *"$config_state_dir"* ]] || \
+     [[ "$normalized" == *".config/walter-os/state"* ]] || \
+     [[ "$normalized" == *"$literal_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_home_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_home_state"* ]]; then
+    return 0
+  fi
+
   if [[ "$normalized" =~ (tar|zip|cp|rsync|ditto) ]] && \
      { [[ "$normalized" == *"$config_state_dir"* ]] || \
        [[ "$normalized" == *".config/walter-os/state"* ]] || \
