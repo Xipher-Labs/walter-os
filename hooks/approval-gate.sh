@@ -181,15 +181,23 @@ _is_capability_token_mint_payload() {
 _is_capability_private_key_payload() {
   local payload="$1"
   local session_key='session-[^[:space:];|&]*\.key'
+  local session_state='session-[^[:space:];|&]*\.json'
   local state_key_path='state/[^[:space:];|&]*\.key'
+  local state_json_path='state/[^[:space:];|&]*\.json'
   local walter_state_key='\.config/walter-os/state[^;|&]*\.key'
+  local walter_state_json='\.config/walter-os/state[^;|&]*\.json'
   local configured_state_key='WALTER_CONFIG[^;|&]*state[^;|&]*\.key'
+  local configured_state_json='WALTER_CONFIG[^;|&]*state[^;|&]*\.json'
 
   [[ "$payload" == *"capability_private_key_path"* ]] || \
     [[ "$payload" =~ $session_key ]] || \
+    [[ "$payload" =~ $session_state ]] || \
     [[ "$payload" =~ $state_key_path ]] || \
+    [[ "$payload" =~ $state_json_path ]] || \
     [[ "$payload" =~ $walter_state_key ]] || \
-    [[ "$payload" =~ $configured_state_key ]]
+    [[ "$payload" =~ $walter_state_json ]] || \
+    [[ "$payload" =~ $configured_state_key ]] || \
+    [[ "$payload" =~ $configured_state_json ]]
 }
 
 # classify_command <tool> <payload> → category name or empty string
@@ -460,6 +468,11 @@ analyze() {
         block "Bash command accesses capability private key material: ${payload:0:120}"
       fi
       ;;
+    Read|Grep|Glob|LS)
+      if _is_capability_private_key_payload "$payload"; then
+        block "${tool} accesses capability private key material: ${payload:0:120}"
+      fi
+      ;;
     Edit|Write|MultiEdit|NotebookEdit)
       if matches_any_glob "$payload" "${BLOCK_PATH_PATTERNS[@]}"; then
         block "Edit/Write to protected path: $payload"
@@ -659,6 +672,18 @@ tool=$(echo "$input" | jq -r '.tool_name // ""')
 case "$tool" in
   Bash)
     payload=$(echo "$input" | jq -r '.tool_input.command // ""')
+    ;;
+  Read)
+    payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
+    ;;
+  Grep)
+    payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.glob, .tool_input.pattern] | map(select(. != null)) | join(" ")')
+    ;;
+  Glob)
+    payload=$(echo "$input" | jq -r '[.tool_input.path, .tool_input.pattern] | map(select(. != null)) | join(" ")')
+    ;;
+  LS)
+    payload=$(echo "$input" | jq -r '.tool_input.path // ""')
     ;;
   Edit|MultiEdit)
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')

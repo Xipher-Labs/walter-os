@@ -135,6 +135,18 @@ teardown() {
   [[ "$status" -eq 0 ]]
 }
 
+@test "CLI: Read tool on capability private key is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/session-abc.key" --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: Read tool on session state JSON is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/session-abc.json" --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]
@@ -227,9 +239,21 @@ teardown() {
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
 }
 
-@test "Hook: Read tool returns allow regardless of path" {
+@test "Hook: Read tool returns allow for non-sensitive path" {
   result=$(echo '{"tool_name":"Read","tool_input":{"file_path":"hooks/branch-flow-guard.sh"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: Read tool blocks capability private key material" {
+  result=$(echo '{"tool_name":"Read","tool_input":{"file_path":"~/.config/walter-os/state/session-abc.key"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Glob tool blocks capability state discovery" {
+  result=$(echo '{"tool_name":"Glob","tool_input":{"pattern":"~/.config/walter-os/state/session-*.json"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
 }
 
 @test "Hook: Edit on hooks/ returns block" {
