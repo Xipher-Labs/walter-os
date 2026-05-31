@@ -5,6 +5,8 @@ nonewprivs
 noroot
 net none
 caps.drop all
+private-tmp
+read-only /
 read-only @WALTER_OS_HOME@
 read-only @WALTER_CONFIG@
 blacklist @HOME@/.ssh

@@ -32,6 +32,8 @@ teardown() {
   grep -q 'clone_newnet: true' "$profile"
   grep -q 'clone_newpid: true' "$profile"
   grep -q 'keep_caps: false' "$profile"
+  grep -q 'dst: "/"' "$profile"
+  grep -q 'fstype: "tmpfs"' "$profile"
   grep -q 'iface_no_lo: true' "$profile"
   grep -q 'cap: ""' "$profile"
 }
@@ -60,6 +62,8 @@ teardown() {
   profile="$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.firejail.profile"
 
   grep -q '^net none$' "$profile"
+  grep -q '^private-tmp$' "$profile"
+  grep -q '^read-only /$' "$profile"
   grep -q '^read-only @WALTER_OS_HOME@$' "$profile"
   grep -q '^read-only @WALTER_CONFIG@$' "$profile"
   grep -q '^blacklist @HOME@/.ssh$' "$profile"
