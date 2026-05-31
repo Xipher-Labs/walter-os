@@ -226,19 +226,19 @@ _walter_audit_release_lock() {
 
 _walter_audit_path_identity() {
   local path="$1" identity=""
-  identity="$(stat -Lc '%i' "$path" 2>/dev/null || true)"
+  identity="$(stat -Lc '%d:%i' "$path" 2>/dev/null || true)"
   if [[ -n "$identity" ]]; then
     printf '%s\n' "$identity"
     return 0
   fi
 
-  identity="$(stat -c '%i' "$path" 2>/dev/null || true)"
+  identity="$(stat -c '%d:%i' "$path" 2>/dev/null || true)"
   if [[ -n "$identity" ]]; then
     printf '%s\n' "$identity"
     return 0
   fi
 
-  identity="$(stat -f '%i' "$path" 2>/dev/null || true)"
+  identity="$(stat -f '%d:%i' "$path" 2>/dev/null || true)"
   if [[ -n "$identity" ]]; then
     printf '%s\n' "$identity"
     return 0
@@ -249,9 +249,28 @@ _walter_audit_path_identity() {
 
 _walter_audit_fd_matches_path() {
   local fd="$1" path="$2" fd_identity path_identity
-  fd_identity="$(_walter_audit_path_identity "/dev/fd/${fd}")" || return 1
+  fd_identity="$(_walter_audit_fd_identity "$fd")" || return 1
   path_identity="$(_walter_audit_path_identity "$path")" || return 1
   [[ "$fd_identity" == "$path_identity" ]]
+}
+
+_walter_audit_fd_identity() {
+  local fd="$1" identity=""
+  if command -v perl >/dev/null 2>&1; then
+    identity="$(perl -e '
+      my $fd = shift;
+      open my $fh, "+<&=", $fd or exit 1;
+      my @stat = stat($fh);
+      @stat or exit 1;
+      print "$stat[0]:$stat[1]\n";
+    ' "$fd" 2>/dev/null || true)"
+    if [[ -n "$identity" ]]; then
+      printf '%s\n' "$identity"
+      return 0
+    fi
+  fi
+
+  _walter_audit_path_identity "/dev/fd/${fd}"
 }
 
 _walter_audit_fd_size() {
