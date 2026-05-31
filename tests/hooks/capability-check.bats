@@ -362,6 +362,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "wrapped network commands behind wrapper options are high-tier" {
+  output="$(_hook_json Bash command "env -u GH_HOST curl https://api.github.com/repos/x/y")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "command -p curl https://api.github.com/repos/x/y")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh api with github.com network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 

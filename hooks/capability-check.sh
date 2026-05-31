@@ -555,6 +555,14 @@ _cap_is_network_command() {
       while [[ "$j" -lt "${#tokens[@]}" ]]; do
         sub="${tokens[$j]}"
         case "$sub" in
+          -u|-C|-S|--unset|--chdir|--split-string)
+            j=$((j + 2))
+            continue
+            ;;
+          --unset=*|--chdir=*|--split-string=*)
+            j=$((j + 1))
+            continue
+            ;;
           -*) j=$((j + 1)); continue ;;
           [A-Za-z_][A-Za-z0-9_]*=*) j=$((j + 1)); continue ;;
         esac
@@ -565,7 +573,16 @@ _cap_is_network_command() {
       continue
     fi
     if [[ "$cli" == "command" || "$cli" == "builtin" || "$cli" == "exec" || "$cli" == "nohup" ]]; then
-      idx=$((idx + 1))
+      j=$((idx + 1))
+      while [[ "$j" -lt "${#tokens[@]}" ]]; do
+        sub="${tokens[$j]}"
+        case "$sub" in
+          --) j=$((j + 1)); break ;;
+          -*) j=$((j + 1)); continue ;;
+        esac
+        break
+      done
+      idx="$j"
       command_position=1
       continue
     fi
