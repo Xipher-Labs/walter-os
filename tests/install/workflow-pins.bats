@@ -24,7 +24,7 @@ _check_workflow_pins() {
   # upstream requires release tags so slsa-verifier can validate the trusted
   # builder identity embedded in provenance.
   local unpinned
-  unpinned=$(grep -E '^\s+uses:' "$REPO_ROOT/$workflow" \
+  unpinned=$(grep -E '^[[:space:]]+uses:' "$REPO_ROOT/$workflow" \
     | grep -vE '@[0-9a-f]{40}' \
     | grep -vE 'slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v2\.1\.0' \
     || true)

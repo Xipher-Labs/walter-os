@@ -56,7 +56,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 ### AC-1 — SLSA L3 attestation in `release.yml` (C-1)
 - [ ] `release.yml` gains a SLSA provenance job that calls `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0` with a base64 subject list covering tarball + SBOM + `checksums.sha256` + its bundle.
 - [ ] The generator emits one release-level `.intoto.jsonl` covering every subject digest.
-- [ ] The release uploads ALSO include the `.intoto.jsonl` files as release assets (operator-friendly: one place to download).
+- [ ] The release uploads ALSO include the `.intoto.jsonl` file as a release asset (operator-friendly: one place to download).
 
 ### AC-2 — Provenance generation enforcement (C-1)
 - [ ] New provenance job depends on the existing `release` job + the existing `security` job.

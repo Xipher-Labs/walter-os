@@ -75,7 +75,7 @@ do
 done
 ```
 
-The attestation check complements, but does not replace, cosign verification and
+The provenance check complements, but does not replace, cosign verification and
 `sha256sum --check`. Use all three when validating a release from scratch.
 
 ## Note on workflow file name and org/repo slug
