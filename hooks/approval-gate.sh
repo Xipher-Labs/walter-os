@@ -38,6 +38,8 @@
 
 set -uo pipefail
 
+REPO_ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
+PROTECTED_PATHS_LIB="${REPO_ROOT}/scripts/walter/lib/protected-paths.sh"
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
 
 # Standing-approvals config path is HARDCODED (audit P1-06). The env var
@@ -64,6 +66,14 @@ fi
 TRUST_TIERS="${WALTER_TRUST_TIERS:-$WALTER_CONFIG/trust-tiers.yml}"
 
 # ---------- block patterns (keep in lockstep with §7.1 of the spec) ----------
+
+if [[ ! -f "$PROTECTED_PATHS_LIB" ]]; then
+  echo "approval-gate: BLOCK — missing Walter-OS protected path policy" >&2
+  exit 7
+fi
+
+# shellcheck source=/dev/null
+source "$PROTECTED_PATHS_LIB"
 
 # Bash command patterns that match destructive ops. Each line: regex.
 # These are extended regex (grep -E). Whitespace at start of pattern allowed.
@@ -97,37 +107,7 @@ declare -a BLOCK_BASH_PATTERNS=(
 )
 
 # Edit / Write paths that require approval. POSIX-glob style; we shell-match.
-declare -a BLOCK_PATH_PATTERNS=(
-  # Walter-OS contract files
-  'hooks/*.sh'
-  '.claude/settings.json'
-  '.github/workflows/*'
-  'install.sh'
-  'bin/walter-os'
-  'AGENTS.md'
-  'CLAUDE.md'
-  'mcp/servers.json'
-  'scripts/walter/lib/capability-token.sh'
-  'scripts/walter/lib/skill-cap-loader.sh'
-  'scripts/walter/lib/session-state.sh'
-  'scripts/walter/subcommands/cap.sh'
-  # Self-modification
-  'agents/*.md'
-  'skills/*/SKILL.md'
-  # Auth / crypto / PHI
-  # Operators: extend this list for project-specific PHI / sensitive paths.
-  'auth/*'
-  'crypto/*'
-  'personal/health/*'
-  '*.key'
-  '*.pem'
-  '*.crt'
-  '.ssh/*'
-  '*/.ssh/*'
-  # Secrets
-  '*.env'
-  '*.env.*'
-)
+declare -a BLOCK_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 
 # ---------- trust tier matrix ----------
 # Maps operation categories to minimum tier required.
@@ -247,6 +227,15 @@ _is_capability_private_key_payload() {
   [[ "$normalized" == *"capability_private_key_path"* ]] && return 0
   [[ "$normalized" =~ $relative_session_secret_re ]] && return 0
   [[ "$normalized" =~ $relative_caps_token_re ]] && return 0
+
+  if [[ "$normalized" == *"$config_state_dir"* ]] || \
+     [[ "$normalized" == *".config/walter-os/state"* ]] || \
+     [[ "$normalized" == *"$literal_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_home_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_home_state"* ]]; then
+    return 0
+  fi
 
   if [[ "$normalized" =~ (tar|zip|cp|rsync|ditto) ]] && \
      { [[ "$normalized" == *"$config_state_dir"* ]] || \
