@@ -361,6 +361,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: split command-substitution walter-os command name is blocked" {
+  run "$HOOK" check 'walt$(printf er-os) cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: split variable walter-os command name is blocked" {
+  run "$HOOK" check 'part=er-os; walt$part cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: expanded cap word with dynamic subcommand is blocked" {
   run "$HOOK" check 'p=p; walter-os ca$p "$(printf mint)" Bash --duration 5m'
   [[ "$status" -eq 7 ]]
