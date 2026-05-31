@@ -25,6 +25,9 @@ audit_precommit_decision() {
       printf '%s\n' '{"decision":"block","reason":"pre-commit-tests: audit-chain append failed; refusing unaudited decision"}'
       exit 0
     }
+  else
+    printf '%s\n' '{"decision":"block","reason":"pre-commit-tests: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
   fi
 }
 

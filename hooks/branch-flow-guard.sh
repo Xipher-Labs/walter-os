@@ -46,6 +46,9 @@ audit_branch_flow_decision() {
       printf '%s\n' '{"decision":"block","reason":"branch-flow-guard: audit-chain append failed; refusing unaudited decision"}'
       exit 0
     }
+  else
+    printf '%s\n' '{"decision":"block","reason":"branch-flow-guard: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
   fi
 }
 

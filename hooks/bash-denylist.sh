@@ -28,6 +28,9 @@ _audit_early_decision() {
       printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain append failed; refusing unaudited decision"}'
       exit 0
     }
+  else
+    printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
   fi
 }
 
@@ -85,6 +88,9 @@ _audit_decision() {
       printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain append failed; refusing unaudited decision"}'
       exit 0
     }
+  else
+    printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
   fi
 }
 

@@ -56,6 +56,9 @@ audit_approval_decision() {
       printf '%s\n' '{"decision":"block","reason":"approval-gate: audit-chain append failed; refusing unaudited decision"}'
       exit 0
     }
+  else
+    printf '%s\n' '{"decision":"block","reason":"approval-gate: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
   fi
 }
 
