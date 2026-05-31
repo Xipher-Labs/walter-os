@@ -982,6 +982,12 @@ _cap_is_high_tier_path() {
   return 1
 }
 
+_cap_bash_mentions_high_tier_path() {
+  local command="$1"
+  local protected_path_re='(^|[^A-Za-z0-9_./-])(hooks/[^[:space:];|&"'\''`]+[.]sh|[.][/]hooks/[^[:space:];|&"'\''`]+[.]sh|install[.]sh|[.][/]install[.]sh|bin/walter-os|[.][/]bin/walter-os|AGENTS[.]md|CLAUDE[.]md|mcp/servers[.]json|scripts/walter/(lib/(capability-token|session-state)[.]sh|subcommands/cap[.]sh)|[.]env([^[:space:];|&"'\''`]*)?)([^A-Za-z0-9_./-]|$)'
+  [[ "$command" =~ $protected_path_re ]]
+}
+
 _cap_is_high_tier() {
   local tool="$1" target="$2" repo="$3"
   local sensitive_bash_re='capability-token[.]sh|walter_cap_sign_claims|session-[^[:space:];|&]*[.]key|caps-[^[:space:];|&/]+/cap-[^/[:space:];|&]*[.]paseto'
@@ -994,6 +1000,7 @@ _cap_is_high_tier() {
       _cap_is_mint_like_command "$target" && return 0
       _cap_is_network_command "$target" && return 0
       _cap_is_gh_pr_approve "$target" && return 0
+      _cap_bash_mentions_high_tier_path "$target" && return 0
       [[ "$target" =~ $sensitive_bash_re ]] && return 0
       return 1
       ;;

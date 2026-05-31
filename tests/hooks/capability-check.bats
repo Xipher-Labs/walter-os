@@ -842,6 +842,26 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash write touching protected hook path requires capability" {
+  output="$(_hook_json Bash command "sed -i.bak 's/foo/bar/' hooks/approval-gate.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash write touching protected install path requires capability" {
+  output="$(_hook_json Bash command "python3 -c 'open(\"install.sh\",\"w\").write(\"x\")'")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash write touching protected path allows matching pattern capability" {
+  _mint Bash --patterns '^sed[[:space:]].*hooks/approval-gate[.]sh$' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "sed -i.bak 's/foo/bar/' hooks/approval-gate.sh")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "expired capability is ignored and high-tier Bash blocks" {
   _mint Bash --network api.github.com --duration 5m >/dev/null
   export WALTER_SESSION_NOW_EPOCH=1767225961
