@@ -96,6 +96,12 @@ _pre_commit_tests() {
   (cd "$TEST_REPO" && _hook_event Bash "$1" | "$REPO_ROOT/hooks/pre-commit-tests.sh")
 }
 
+_wiki_validator_write() {
+  local file_path="$1"
+  jq -n --arg path "$file_path" '{"tool_name":"Write","tool_input":{"file_path":$path}}' \
+    | "$REPO_ROOT/hooks/wiki-validator-hook.sh"
+}
+
 _rows() {
   wc -l < "$(_chain_path)" | tr -d ' '
 }
@@ -253,4 +259,24 @@ SH
   echo "$output" | jq -e '.decision == "block"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "pre-commit-tests" and .decision == "block"' "$(_chain_path)"
+}
+
+@test "wiki-validator-hook non-wiki passthrough appends exactly one audit row" {
+  run _wiki_validator_write "$TEST_REPO/README.md"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  [ "$(_rows)" = "1" ]
+  jq -e '.decision_source == "wiki-validator-hook" and .decision == "allow" and .tool == "Write"' "$(_chain_path)"
+}
+
+@test "wiki-validator-hook blocks when audit append fails" {
+  mkdir -p "$(dirname "$(_chain_path)")"
+  printf '\n' > "$(_chain_path)"
+
+  run _wiki_validator_write "$TEST_REPO/README.md"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("audit-chain append failed"))'
+  [ "$(_rows)" = "1" ]
 }

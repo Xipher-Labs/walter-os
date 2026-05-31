@@ -42,6 +42,7 @@ Hook-integration rows currently use these `decision_source` values:
 - `network-gate`
 - `branch-flow-guard`
 - `pre-commit-tests`
+- `wiki-validator-hook`
 
 Audit append failures fail closed for hook decisions. If a hook cannot append its row, it emits a block decision instead of allowing an unaudited tool invocation.
 
