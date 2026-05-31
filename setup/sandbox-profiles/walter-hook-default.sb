@@ -5,7 +5,9 @@
 (allow default)
 
 (deny network*)
-(deny file-write*)
+(deny file-write* (subpath "@HOME@"))
+(deny file-write* (subpath "@WALTER_OS_HOME@"))
+(deny file-write* (subpath "@WALTER_CONFIG@"))
 (deny file-read* (subpath "@HOME@/.ssh"))
 (deny file-read* (subpath "@HOME@/.aws"))
 (deny file-read* (subpath "@HOME@/.gnupg"))

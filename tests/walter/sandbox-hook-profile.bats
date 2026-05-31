@@ -61,7 +61,9 @@ _mode() {
   profile="$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.sb"
 
   grep -q '(deny network\*)' "$profile"
-  grep -q '(deny file-write\*)' "$profile"
+  grep -q '(deny file-write\* (subpath "@HOME@"))' "$profile"
+  grep -q '(deny file-write\* (subpath "@WALTER_OS_HOME@"))' "$profile"
+  grep -q '(deny file-write\* (subpath "@WALTER_CONFIG@"))' "$profile"
   grep -q '@HOME@/.ssh' "$profile"
   grep -q '@HOME@/.gnupg' "$profile"
   grep -q '@HOME@/.aws' "$profile"
@@ -126,6 +128,10 @@ _mode() {
   run sandbox-exec -f "$profile" /bin/sh -c "printf x > '$WALTER_OS_HOME/.sandbox-write-test'"
   [ "$status" -ne 0 ]
   [ ! -e "$WALTER_OS_HOME/.sandbox-write-test" ]
+
+  run sandbox-exec -f "$profile" /bin/sh -c 'tmp="$(mktemp)"; printf ok > "$tmp"; cat "$tmp"; : >/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$output" = "ok" ]
 
   run sandbox-exec -f "$profile" /bin/cat "$HOME/.ssh/id_rsa"
   [ "$status" -ne 0 ]
