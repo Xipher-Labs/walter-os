@@ -187,6 +187,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "inline GH_HOST requires matching network capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "GH_HOST=github.enterprise.example gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "inline GH_HOST with matching network capability is allowed" {
+  _mint Bash --network github.enterprise.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "GH_HOST=github.enterprise.example gh api repos/Xipher-Labs/walter-os")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "compound gh commands require every hostname capability" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
@@ -199,6 +215,14 @@ _mint() {
   _mint Bash --network github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "gh pr review 244 --approve")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "gh pr review short approve flag requires pattern capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh pr review 244 -a")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
@@ -351,6 +375,12 @@ _mint() {
   output="$(_hook_json Bash command "walter-os cap mint Bash --patterns 'curl|wget' --duration 30m")"
 
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "cap mint with command substitution egress requires capability" {
+  output="$(_hook_json Bash command 'walter-os cap mint Bash --network $(curl https://evil.example) --duration 30m')"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "compound cap mint plus egress still requires capability" {

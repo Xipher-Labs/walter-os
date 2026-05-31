@@ -154,6 +154,19 @@ _cap_normalize_host() {
   printf '%s\n' "$host"
 }
 
+_cap_normalize_cli_token() {
+  local cli="$1"
+  cli="${cli##*/}"
+  cli="${cli#\`}"
+  cli="${cli%\`}"
+  cli="${cli#\$\(}"
+  cli="${cli#<\(}"
+  cli="${cli#>\(}"
+  cli="${cli%)}"
+  cli="${cli%\`}"
+  printf '%s\n' "$cli"
+}
+
 _cap_emit_split_hosts() {
   local hosts="$1" host
   local -a split_hosts=()
@@ -165,7 +178,7 @@ _cap_emit_split_hosts() {
 }
 
 _cap_extract_gh_host() {
-  local command="$1" tokfile token cli idx j candidate host
+  local command="$1" tokfile token cli idx j candidate host inline_gh_host=""
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
@@ -182,13 +195,19 @@ _cap_extract_gh_host() {
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
-    cli="${tokens[$idx]##*/}"
+    token="${tokens[$idx]}"
+    case "$token" in
+      ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') inline_gh_host="" ;;
+      GH_HOST=*) inline_gh_host="${token#GH_HOST=}"; idx=$((idx + 1)); continue ;;
+    esac
+    cli="$(_cap_normalize_cli_token "$token")"
     if [[ "$cli" != "gh" ]]; then
       idx=$((idx + 1))
       continue
     fi
 
-    host="${GH_HOST:-github.com}"
+    host="${inline_gh_host:-${GH_HOST:-github.com}}"
+    inline_gh_host=""
     j=$((idx + 1))
     while [[ "$j" -lt "${#tokens[@]}" ]]; do
       candidate="${tokens[$j]}"
@@ -226,7 +245,7 @@ _cap_extract_positional_network_hosts() {
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
-    cli="${token##*/}"
+    cli="$(_cap_normalize_cli_token "$token")"
     case "$cli" in
       ssh|scp|rsync|nc|ncat|telnet)
         j=$((idx + 1))
@@ -293,9 +312,7 @@ _cap_is_network_command() {
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
-    cli="${token##*/}"
-    cli="${cli#\`}"
-    cli="${cli%\`}"
+    cli="$(_cap_normalize_cli_token "$token")"
     case "$cli" in
       curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
         return 0
@@ -373,9 +390,16 @@ _cap_is_network_command() {
 _cap_is_mint_command() {
   local command="$1"
   _cap_has_compound_separator "$command" && return 1
+  _cap_has_shell_substitution "$command" && return 1
   [[ "$command" =~ ^[[:space:]]*([^[:space:];|&()]*/)?walter-os[[:space:]]+cap[[:space:]]+mint([[:space:]]|$) ]] && return 0
   [[ "$command" =~ ^[[:space:]]*([^[:space:];|&()]*/)?cap[.]sh[[:space:]]+mint([[:space:]]|$) ]] && return 0
   return 1
+}
+
+_cap_has_shell_substitution() {
+  local command="$1"
+  # shellcheck disable=SC2016 # Literal shell substitution markers are intended.
+  [[ "$command" == *'$('* || "$command" == *'`'* || "$command" == *'<('* || "$command" == *'>('* ]]
 }
 
 _cap_has_compound_separator() {
@@ -421,7 +445,7 @@ _cap_is_gh_pr_approve() {
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
-    cli="${tokens[$idx]##*/}"
+    cli="$(_cap_normalize_cli_token "${tokens[$idx]}")"
     if [[ "$cli" != "gh" ]]; then
       idx=$((idx + 1))
       continue
@@ -446,7 +470,7 @@ _cap_is_gh_pr_approve() {
     if [[ "${tokens[$j]:-}" == "pr" && "${tokens[$((j + 1))]:-}" == "review" ]]; then
       j=$((j + 2))
       while [[ "$j" -lt "${#tokens[@]}" ]]; do
-        [[ "${tokens[$j]}" == "--approve" ]] && return 0
+        [[ "${tokens[$j]}" == "--approve" || "${tokens[$j]}" == "-a" ]] && return 0
         j=$((j + 1))
       done
     fi
