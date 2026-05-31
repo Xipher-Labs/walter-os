@@ -6,8 +6,8 @@ This plan turns the remaining OSS Trust runtime specs into mergeable, reviewable
 PR slices. The order is dependency-driven: session state is already in the open
 #218/#219 stack, capability tokens consume that session state, sandbox consumes
 capabilities, invisible mounts refine the sandbox, audit integrity consumes the
-session signing keys, telemetry consumes the audit chain, and SLSA Build L3 is
-independent release hardening.
+session signing keys, telemetry consumes the audit chain, and planned SLSA Build
+L3 provenance work is independent release hardening.
 
 ## Merge Preconditions
 
@@ -37,7 +37,7 @@ The six requested runtime tracks map to this implementation order:
    signatures, verifier, daily roots, optional Rekor upload.
 5. **Audit telemetry to Grafana/Loki** — Promtail tail config, Grafana
    dashboard, Loki verification path, opt-out/retention controls.
-6. **SLSA Build L3 + reproducible builds** — provenance, deterministic
+6. **Planned SLSA Build L3 provenance + reproducible builds** — provenance, deterministic
    artifacts, reproducibility verifier, operator-facing verification docs.
 
 ## Current Stack State
@@ -125,7 +125,7 @@ The six requested runtime tracks map to this implementation order:
    - Files: `scripts/walter/lib/sandbox.sh`,
      `tests/walter/sandbox-shim.bats`.
    - Deliverable: `walter_sandbox_provider`, `walter_sandbox_check`, and
-     `walter_sandbox_run` for macOS `sandbox-exec`, Linux/WSL `nsjail`, and
+     `walter_sandbox_run` for macOS `sandbox-exec`, Linux `nsjail`, and
      optional Linux `firejail`.
    - Current status: implemented in #246. AC-2/AC-3 are the first PRs that
      claim actual filesystem/network/signal isolation semantics.
@@ -160,13 +160,13 @@ The six requested runtime tracks map to this implementation order:
 
 ### Read-Only / Hidden Secret Mounts
 
-9. **Invisible mount mechanism**.
+10. **Invisible mount mechanism**.
    - Files: `scripts/walter/lib/sandbox.sh`,
      `setup/sandbox-profiles/invisible-paths.default.txt`,
      `tests/walter/sandbox-invisible-*.bats`.
    - Deliverable: high-tier sandbox runs hide default and overlay-configured
      secret-bearing paths with type-correct placeholders.
-10. **High-tier integration, bypass, and audit**.
+11. **High-tier integration, bypass, and audit**.
     - Files: `hooks/approval-gate.sh`, sandbox wrapper call sites,
       daily audit script, `docs/operational/sandbox-invisible-mounts.md`.
     - Deliverable: high-tier operations activate invisible mounts; two-factor
@@ -174,18 +174,18 @@ The six requested runtime tracks map to this implementation order:
 
 ### Audit Chain And Receipts
 
-11. **Audit chain writer**.
+12. **Audit chain writer**.
     - Files: `scripts/walter/lib/audit-chain.sh`,
       `tests/walter/audit-chain-append.bats`.
     - Deliverable: atomic JSONL append with sorted-key normalization,
       per-day chain files, and `prev_hash`.
-12. **Signing and verification**.
+13. **Signing and verification**.
     - Files: `scripts/walter/lib/audit-chain.sh`,
       `scripts/walter/subcommands/audit.sh` or existing audit dispatcher,
       `bin/walter-os`, `tests/walter/audit-chain-verify.bats`.
     - Deliverable: row signatures using session keys, public-key archive, and
       `walter-os audit verify-chain`.
-13. **Hook integration and daily roots**.
+14. **Hook integration and daily roots**.
     - Files: `hooks/approval-gate.sh`, `hooks/bash-denylist.sh`,
       `hooks/network-gate.sh`, `hooks/capability-check.sh`,
       `tests/hooks/audit-chain-hook-integration.bats`.
@@ -194,21 +194,21 @@ The six requested runtime tracks map to this implementation order:
 
 ### Audit Telemetry
 
-14. **Promtail and dashboard provisioning**.
+15. **Promtail and dashboard provisioning**.
     - Files: `setup/walter-host/services/observability/promtail/*`,
       `setup/walter-host/services/observability/grafana/provisioning/dashboards/walter-audit.json`,
       `tests/services/*audit*`.
     - Deliverable: local Loki ingestion of audit-chain JSONL with dashboard
       panels and default retention.
-15. **Loki verification and opt-out**.
+16. **Loki verification and opt-out**.
     - Files: audit CLI, `docs/operational/audit-telemetry.md`,
       `tests/walter/audit-chain-verify-from-loki.bats`.
     - Deliverable: `verify-chain --from-loki`, `WALTER_AUDIT_LOKI_DISABLE=1`,
       and status visibility.
 
-### SLSA Build L3 And Reproducible Builds
+### Planned SLSA Build L3 Provenance And Reproducible Builds
 
-16. **SLSA Build L3 provenance**.
+17. **SLSA Build L3 provenance**.
     - Files: `.github/workflows/release.yml`,
       `tests/release/attestation-verify.bats`,
       `docs/security/verification.md`.
@@ -216,7 +216,7 @@ The six requested runtime tracks map to this implementation order:
       attestations, and release-time attestation verification aligned with SLSA
       v1.2 Build Track L3 requirements: provenance exists, is authentic,
       is unforgeable by the build, and is produced on a hosted isolated builder.
-17. **Deterministic artifacts**.
+18. **Deterministic artifacts**.
     - Files: `.github/workflows/release.yml`,
       `scripts/release/reproduce.sh`,
       `tests/release/reproducibility.bats`,
