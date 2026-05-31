@@ -200,6 +200,19 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+@test "A-5: firejail invisible blacklists escape spaces" {
+  secret_path="$HOME/Secret Store/token:file"
+  mkdir -p "$(dirname "$secret_path")"
+  printf 'token\n' > "$secret_path"
+  printf '%s:file\n' "$secret_path" > "$WALTER_CONFIG/overlay/sandbox-invisible-paths.txt"
+
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default firejail 1"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -Fq "blacklist $HOME/Secret\\ Store/token:file" "$profile"
+}
+
 @test "A-5: sandbox run passes high-tier through materialization" {
   _mock_uname
   _mock_provider

@@ -722,13 +722,13 @@ _walter_sandbox_exec_invisible_denies() {
 }
 
 _walter_sandbox_firejail_invisible_blacklists() {
-  local active="$1" line path
+  local active="$1" line path escaped_path
   [[ -n "$active" ]] || return 0
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     path="${line#*|}"
-    _walter_sandbox_firejail_validate_path "$path" || return 1
-    printf 'blacklist %s\n' "$path"
+    escaped_path="$(_walter_sandbox_firejail_path_escape "$path")" || return 1
+    printf 'blacklist %s\n' "$escaped_path"
   done <<< "$active"
 }
 
