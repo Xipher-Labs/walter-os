@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { TimelineEntry, AlertTier } from "@/lib/events-reader";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import { SectionTitle } from "@/app/components/ui/Panel";
@@ -21,19 +21,31 @@ export default function AlertFeed() {
   const [alerts, setAlerts] = useState<TimelineEntry[]>([]);
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Tracks whether we have ever loaded data, read inside the interval-captured
+  // closure so a transient error after the first success keeps stale data
+  // instead of flipping the surface to an error state.
+  const hasDataRef = useRef(false);
 
   const fetchAlerts = useCallback(async () => {
     try {
       const res = await fetch("/api/alerts");
-      if (!res.ok) return;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { alerts: TimelineEntry[] };
       setAlerts(data.alerts);
+      setError(null);
     } catch {
-      // keep stale
+      // Surface the error only when we have nothing to show; otherwise keep
+      // the last good data and let the next refresh recover silently.
+      setError((prev) => (hasDataRef.current ? prev : "Alerts unavailable."));
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    hasDataRef.current = alerts.length > 0;
+  }, [alerts.length]);
 
   useEffect(() => {
     fetchAlerts();
@@ -67,7 +79,13 @@ export default function AlertFeed() {
       <AsyncSurface
         loading={loading}
         empty={visible.length === 0}
+        error={error}
         emptyState={emptyState}
+        onRetry={() => {
+          setLoading(true);
+          setError(null);
+          fetchAlerts();
+        }}
         skeleton={
           <div className="h-16 animate-pulse rounded-xl bg-surface-2/60" />
         }

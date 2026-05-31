@@ -70,8 +70,19 @@ interface BoardProps {
 export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Read inside the SSE callbacks (which are created once per connect) so an
+  // error never overwrites an already-rendered board with the error state —
+  // the live/disconnected dot carries transient drops once we have data.
+  const hasDataRef = useRef(false);
+  // Nonce: bumping it re-runs the effect to force a fresh connect on Retry.
+  const [retryNonce, setRetryNonce] = useState(0);
+
+  useEffect(() => {
+    hasDataRef.current = snapshot !== null;
+  }, [snapshot]);
 
   useEffect(() => {
     // `mounted` guards every async callback so a reconnect timer or a late
@@ -94,6 +105,7 @@ export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
           const data = JSON.parse(event.data) as MetricsSnapshot;
           setSnapshot(data);
           setConnected(true);
+          setError(null);
         } catch {
           // ignore malformed events
         }
@@ -103,6 +115,12 @@ export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
         es.close();
         if (!mounted) return;
         setConnected(false);
+        // Surface an error (clearing the perpetual skeleton) only before the
+        // first snapshot arrives; once we have data the "disconnected" dot
+        // signals the drop while stale data stays on screen.
+        setError((prev) =>
+          hasDataRef.current ? prev : "Live connection lost. Reconnecting…",
+        );
         // Reconnect after 5s; the handle is tracked so cleanup can cancel a
         // pending reconnect on unmount.
         reconnectRef.current = setTimeout(connect, 5000);
@@ -120,7 +138,7 @@ export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
       esRef.current?.close();
       esRef.current = null;
     };
-  }, [sseUrl]);
+  }, [sseUrl, retryNonce]);
 
   const skeleton = (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -148,7 +166,16 @@ export default function AgentStatusBoard({ sseUrl = "/api/sse" }: BoardProps) {
       >
         Agents
       </SectionTitle>
-      <AsyncSurface loading={!snapshot} skeleton={skeleton}>
+      <AsyncSurface
+        loading={!snapshot}
+        error={error}
+        onRetry={() => {
+          setError(null);
+          // Force the effect to tear down the dead EventSource and reconnect.
+          setRetryNonce((n) => n + 1);
+        }}
+        skeleton={skeleton}
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {snapshot?.agents.map((agent) => (
             <AgentCard key={agent.agent} agent={agent} />
