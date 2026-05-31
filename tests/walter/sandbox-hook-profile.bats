@@ -45,9 +45,18 @@ _mode() {
   grep -q 'fstype: "tmpfs"' "$profile"
   grep -q 'src: "/dev/null"' "$profile"
   grep -q 'dst: "/dev/null"' "$profile"
+  grep -q 'src: "/dev/urandom"' "$profile"
+  grep -q 'dst: "/dev/urandom"' "$profile"
   grep -q 'iface_no_lo: true' "$profile"
   run grep -q 'cap: ""' "$profile"
   [ "$status" -ne 0 ]
+}
+
+@test "AC-2: sed replacement escaping preserves backslashes" {
+  run bash -c "source '$SANDBOX_LIB'; _walter_sandbox_sed_escape 'path\\name&/x'"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = 'path\\name\&\/x' ]
 }
 
 @test "AC-2: nsjail hook profile mounts Walter roots read-only" {

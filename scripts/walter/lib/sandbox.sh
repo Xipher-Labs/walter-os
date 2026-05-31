@@ -103,7 +103,7 @@ walter_sandbox_runtime_dir() {
 }
 
 _walter_sandbox_sed_escape() {
-  printf '%s' "$1" | sed 's/[\/&]/\\&/g'
+  printf '%s' "$1" | sed 's/[\\\/&]/\\&/g'
 }
 
 _walter_sandbox_profile_has_placeholders() {
@@ -148,7 +148,7 @@ walter_sandbox_materialize_profile() {
     return 2
   }
   local profile="$1" provider="$2" src runtime_dir dest tmp_dest
-  local repo_root config_dir home_value
+  local repo_root repo_root_raw config_dir home_value
   src="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
   if [[ ! -f "$src" ]]; then
     echo "walter-sandbox: profile missing: $src" >&2
@@ -177,7 +177,12 @@ walter_sandbox_materialize_profile() {
   else
     scratch_value=""
   fi
-  repo_root="$(_walter_sandbox_sed_escape "$(walter_sandbox_repo_root)")" || return 1
+  repo_root_raw="$(walter_sandbox_repo_root)" || {
+    [[ -z "${scratch_dir:-}" ]] || rmdir "$scratch_dir" 2>/dev/null || true
+    rm -f "$dest" "$tmp_dest"
+    return 1
+  }
+  repo_root="$(_walter_sandbox_sed_escape "$repo_root_raw")"
   config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")"
   home_value="$(_walter_sandbox_sed_escape "${HOME}")"
   sed \
