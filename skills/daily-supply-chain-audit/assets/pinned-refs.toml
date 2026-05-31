@@ -1,0 +1,15 @@
+# Pinning manifest for daily-supply-chain-audit (check-pinning.py).
+#
+# Maps every vendored skill and MCP server to its pinned 40-char commit hash.
+# check-pinning.py reads this file (default path) and exits non-zero if any
+# entry is not a 40-char lowercase hex commit hash.
+#
+# When you vendor a new skill or add an MCP server, add its pinned ref here.
+
+[skills]
+# Vendored third-party design skills (see docs/specs/ux-skills-adoption.md).
+impeccable = "b913668ba4d25b95c4a62278d3637837e9d2c6d9"
+ui-ux-pro-max = "b7e3af80f6e331f6fb456667b82b12cade7c9d35"
+
+[mcp]
+# (none pinned here yet)
