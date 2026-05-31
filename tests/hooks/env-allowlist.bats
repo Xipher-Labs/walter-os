@@ -50,13 +50,14 @@ ENV
   [[ "$output" == *"8|60"* ]]
 }
 
-@test "A-2: OpenSSL override is exported for session capability keys" {
+@test "A-2: OpenSSL executable override is not loaded from data env" {
   echo 'WALTER_OPENSSL_BIN=/opt/homebrew/opt/openssl@3/bin/openssl' > "$TMP_CFG/env"
 
-  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; echo \"\${WALTER_OPENSSL_BIN:-UNSET}\""
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; echo \"\${WALTER_OPENSSL_BIN:-UNSET}\""
 
   [ "$status" -eq 0 ]
-  [[ "$output" == "/opt/homebrew/opt/openssl@3/bin/openssl" ]]
+  [[ "$output" == *"UNSET"* ]]
+  [[ "$output" == *"not in the env allowlist"* ]]
 }
 
 @test "A-4: operator env cannot override active PHI mode" {
