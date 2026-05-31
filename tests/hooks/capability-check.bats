@@ -74,6 +74,13 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "backtick Bash egress without capability is blocked" {
+  output="$(_hook_json Bash command 'echo `curl https://api.github.com/repos/x/y`')"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'no valid token'
+}
+
 @test "Bash tokenization failure is treated as high-tier" {
   output="$(_hook_json Bash command "curl 'https://api.github.com/repos/x/y")"
 
@@ -84,6 +91,13 @@ _mint() {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "backtick Bash egress with matching network capability is allowed" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command 'echo `curl https://api.github.com/repos/x/y`')"
   echo "$output" | jq -e '.decision == "allow"'
 }
 

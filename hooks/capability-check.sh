@@ -133,6 +133,8 @@ _cap_extract_hosts() {
 _cap_normalize_host() {
   local host="$1"
   [[ -n "$host" ]] || return 0
+  host="${host#\`}"
+  host="${host%\`}"
   host="${host#*@}"
   host="${host%%/*}"
   host="${host%%\?*}"
@@ -292,6 +294,8 @@ _cap_is_network_command() {
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
     cli="${token##*/}"
+    cli="${cli#\`}"
+    cli="${cli%\`}"
     case "$cli" in
       curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
         return 0
