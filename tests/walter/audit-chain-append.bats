@@ -213,6 +213,17 @@ SH
   [ -f "$custom/chain-2026-05-31.jsonl" ]
 }
 
+@test "B-1: append rejects chain with blank final row" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
+  printf '\n' >> "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after blank row' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"blank final row"* ]]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
+}
+
 @test "B-1: chain path date follows captured row timestamp" {
   run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_DATE='2026-05-30' WALTER_AUDIT_NOW='2026-05-31T00:00:01Z' walter_audit_append Bash midnight allow approval-gate ok"
 

@@ -295,14 +295,20 @@ walter_audit_append() {
 
   previous_hash="null"
   previous_line="$(tail -n 1 <&9)"
-  if [[ -n "$previous_line" ]] && command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
-    _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || {
+  if [[ -s "$chain_path" ]]; then
+    if [[ -z "$previous_line" ]]; then
+      echo "walter-audit-chain: blank final row: $chain_path" >&2
       exec 9>&-
       _walter_audit_release_lock "$lock_path"
       return 1
-    }
-  fi
-  if [[ -n "$previous_line" ]]; then
+    fi
+    if command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
+      _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || {
+        exec 9>&-
+        _walter_audit_release_lock "$lock_path"
+        return 1
+      }
+    fi
     previous_hash="$(walter_audit_hash_string "$previous_line")"
   fi
 
