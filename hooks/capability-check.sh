@@ -512,7 +512,7 @@ _cap_extract_positional_network_hosts() {
 }
 
 _cap_is_network_command() {
-  local command="$1" tokfile token cli idx j k sub prev command_position
+  local command="$1" tokfile token cli idx j sub command_position=1
   local -a tokens=()
 
   tokfile="$(_cap_mktemp_file)"
@@ -530,34 +530,40 @@ _cap_is_network_command() {
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
+    case "$token" in
+      ''|';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n')
+        command_position=1
+        idx=$((idx + 1))
+        continue
+        ;;
+    esac
     if _cap_token_has_shell_expansion "$token"; then
       _cap_token_contains_network_expansion "$token" && return 0
-      case "$token" in
-        curl*|wget*|gh*|ssh*|scp*|rsync*|ncat*|nc*|telnet*|git*)
-          return 0
-          ;;
-      esac
-      if ! _cap_token_is_assignment "$token"; then
-        command_position=1
-        k=$((idx - 1))
-        while [[ "$k" -ge 0 ]]; do
-          prev="${tokens[$k]}"
-          case "$prev" in
-            ';'|'|'|'&'|'&&'|'||'|'(') break ;;
-          esac
-          if _cap_token_is_assignment "$prev"; then
-            k=$((k - 1))
-            continue
-          fi
-          command_position=0
-          break
-        done
-        if [[ "$command_position" -eq 1 ]]; then
-          return 0
-        fi
-      fi
+      [[ "$command_position" -eq 1 ]] && ! _cap_token_is_assignment "$token" && return 0
+    fi
+    if [[ "$command_position" -eq 1 ]] && _cap_token_is_assignment "$token"; then
+      idx=$((idx + 1))
+      continue
     fi
     cli="$(_cap_normalize_cli_token "$token")"
+    if [[ "$command_position" -ne 1 ]]; then
+      idx=$((idx + 1))
+      continue
+    fi
+    if [[ "$cli" == "env" ]]; then
+      j=$((idx + 1))
+      while [[ "$j" -lt "${#tokens[@]}" ]]; do
+        sub="${tokens[$j]}"
+        case "$sub" in
+          -*) j=$((j + 1)); continue ;;
+          [A-Za-z_][A-Za-z0-9_]*=*) j=$((j + 1)); continue ;;
+        esac
+        break
+      done
+      idx="$j"
+      command_position=1
+      continue
+    fi
     case "$cli" in
       curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
         return 0
@@ -692,6 +698,7 @@ _cap_is_network_command() {
         esac
         ;;
     esac
+    command_position=0
     idx=$((idx + 1))
   done
 

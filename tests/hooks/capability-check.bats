@@ -592,6 +592,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "network CLI names as arguments remain low-tier" {
+  output="$(_hook_json Bash command "echo curl && printf '%s\n' gh")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress requires capability coverage for every destination" {
   _mint Bash --network api.github.com --duration 30m >/dev/null
 
