@@ -662,6 +662,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "scp bracketed IPv6 remote path matches network capability" {
+  _mint Bash --network '[::1]' --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "scp file.txt '[::1]:/tmp/file.txt'")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "nc with github.com network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 

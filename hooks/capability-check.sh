@@ -12,6 +12,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SESSION_LIB="${REPO_ROOT}/scripts/walter/lib/session-state.sh"
 CAP_LIB="${REPO_ROOT}/scripts/walter/lib/capability-token.sh"
 
+# Keep this security-critical surface in sync with approval-gate.sh
+# BLOCK_PATH_PATTERNS until both hooks share a single policy library.
 CAP_HIGH_TIER_PATH_PATTERNS=(
   'hooks/*.sh'
   '.claude/settings.json'
@@ -189,6 +191,12 @@ _cap_normalize_host() {
     *://*) host="${host#*://}" ;;
   esac
   host="${host#*@}"
+  if [[ "$host" =~ ^(\[[^]]+\]) ]]; then
+    host="${BASH_REMATCH[1]}"
+    host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+    printf '%s\n' "$host"
+    return 0
+  fi
   host="${host%%/*}"
   host="${host%%\?*}"
   host="${host%%#*}"
