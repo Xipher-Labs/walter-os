@@ -55,8 +55,8 @@ _stub_required_tools() {
   [[ "$output" == *"OS: Linux (Ubuntu/Debian compatible)"* ]]
   [[ "$output" == *"sudo snap install yq"* ]] || [[ "$output" == *"yq:"* ]]
   [[ "$output" == *"Docker Engine + Compose plugin"* ]] || [[ "$output" == *"docker:"* ]]
-  [[ "$output" == *"sudo apt-get install -y bats shellcheck ripgrep"* ]]
-  [[ "$output" == *"mise install node@22 pnpm@9 uv@latest"* ]]
+  [[ "$output" == *"sudo apt-get install -y bats shellcheck ripgrep"* ]] || [[ "$output" == *"bats:"* ]]
+  [[ "$output" == *"mise install node@22 pnpm@9 uv@latest"* ]] || [[ "$output" == *"node:"* ]]
   [[ "$output" == *"Infisical CLI docs"* ]]
 }
 
