@@ -124,11 +124,47 @@ _walter_cap_validate_state() {
   ' "$state_file" >/dev/null
 }
 
+_walter_cap_validate_active_session() {
+  local state_file="$1" started_at last_activity_at started_epoch last_epoch now_epoch max_hours max_idle expired_trigger=""
+  started_at="$(jq -r '.started_at // empty' "$state_file")"
+  last_activity_at="$(jq -r '.last_activity_at // empty' "$state_file")"
+  max_hours="$(jq -r '.max_hours_at_start // empty' "$state_file")"
+  max_idle="$(jq -r '.max_idle_min_at_start // empty' "$state_file")"
+  [[ "$max_hours" =~ ^[1-9][0-9]*$ && "$max_idle" =~ ^[1-9][0-9]*$ ]] || {
+    echo "walter-cap: malformed session limits" >&2
+    return 1
+  }
+  if ! started_epoch="$(_walter_session_epoch "$started_at")" || [[ ! "$started_epoch" =~ ^[0-9]+$ ]]; then
+    echo "walter-cap: malformed session start" >&2
+    return 1
+  fi
+  if ! last_epoch="$(_walter_session_epoch "$last_activity_at")" || [[ ! "$last_epoch" =~ ^[0-9]+$ ]]; then
+    echo "walter-cap: malformed session activity" >&2
+    return 1
+  fi
+  now_epoch="$(_walter_session_now_epoch)"
+  if (( now_epoch < started_epoch || now_epoch < last_epoch )); then
+    echo "walter-cap: session clock rewind" >&2
+    return 1
+  fi
+  if (( now_epoch - last_epoch > max_idle * 60 )); then
+    expired_trigger="max-idle"
+  elif (( now_epoch - started_epoch > max_hours * 3600 )); then
+    expired_trigger="max-hours"
+  fi
+  if [[ -n "$expired_trigger" ]]; then
+    _walter_session_revoke_capability_material "$state_file" || true
+    echo "walter-cap: session expired ($expired_trigger)" >&2
+    return 1
+  fi
+}
+
 walter_cap_sign_claims() {
   local state_file="$1" claims_json="$2"
   local session_id private_key tmp_dir payload_file footer_file pae_file sig_file body_file token_body token_footer openssl_bin
   _walter_cap_require_runtime || return 1
   _walter_cap_validate_state "$state_file" || return 1
+  _walter_cap_validate_active_session "$state_file" || return 1
   if ! openssl_bin="$(_walter_session_openssl)"; then
     echo "walter-cap: ED25519-capable openssl missing" >&2
     return 1
@@ -175,6 +211,7 @@ walter_cap_verify_token() {
   local prefix purpose body footer extra session_id public_key tmp_dir body_file payload_file footer_file sig_file pae_file openssl_bin exp exp_epoch now_epoch
   _walter_cap_require_runtime || return 1
   _walter_cap_validate_state "$state_file" || return 1
+  _walter_cap_validate_active_session "$state_file" || return 1
   if ! openssl_bin="$(_walter_session_openssl)"; then
     echo "walter-cap: ED25519-capable openssl missing" >&2
     return 1

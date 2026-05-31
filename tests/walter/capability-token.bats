@@ -55,6 +55,26 @@ _state_file() {
   [ "$status" -ne 0 ]
 }
 
+@test "capability helper rejects tokens after session idle expiry" {
+  export WALTER_SESSION_MAX_IDLE_MIN=60
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(_state_file)"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  claims="$(jq -nc \
+    --arg session_id "$(jq -r '.session_id' "$state_file")" \
+    '{iss:"walter-os", sub:"operator", session_id:$session_id, tool:"Bash", scope:{paths:[], network:[], patterns:[".*"]}, iat:"2026-01-01T00:00:00Z", exp:"2026-01-01T04:00:00Z", nonce:"idle-expiry"}')"
+  token="$(bash -c "source '$CAP_LIB'; walter_cap_sign_claims '$state_file' '$claims'")"
+
+  export WALTER_SESSION_NOW_EPOCH=1767229261
+  run bash -c "source '$CAP_LIB'; walter_cap_verify_token '$state_file' '$token'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"session expired"* ]]
+  [ ! -f "$private_key" ]
+  [ ! -d "$caps_dir" ]
+}
+
 @test "duration parser rejects bare integers" {
   run bash -c "source '$CAP_LIB'; walter_cap_duration_to_seconds 4"
 
