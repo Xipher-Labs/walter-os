@@ -455,6 +455,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "ssh host extraction stops at shell separator" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "ssh -i key; curl https://api.github.com/repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "ssh jump host requires its own network capability" {
   _mint Bash --network github.com --duration 30m >/dev/null
 

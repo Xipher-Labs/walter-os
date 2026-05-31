@@ -451,6 +451,7 @@ _cap_extract_positional_network_hosts() {
         while [[ "$j" -lt "${#tokens[@]}" ]]; do
           candidate="${tokens[$j]}"
           case "$candidate" in
+            ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') break ;;
             -J)
               _cap_emit_split_hosts "${tokens[$((j + 1))]:-}"
               j=$((j + 2))
