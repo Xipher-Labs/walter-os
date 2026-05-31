@@ -295,6 +295,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: variable Walter root with state key glob is blocked" {
+  run "$HOOK" check 'd="$HOME/.config/walter-os"; openssl pkeyutl -sign -inkey "$d/state/"*.key -rawin -in payload -out sig'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: dd if= is blocked" {
   run "$HOOK" check "dd if=/dev/zero of=/tmp/zeros bs=1M"
   [[ "$status" -eq 7 ]]

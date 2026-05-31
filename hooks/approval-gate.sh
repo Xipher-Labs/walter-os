@@ -231,6 +231,16 @@ _is_capability_private_key_payload() {
     return 0
   fi
 
+  if { [[ "$normalized" == *".config/walter-os"* ]] || \
+       [[ "$normalized" == *"\$WALTER_CONFIG"* ]] || \
+       [[ "$normalized" == *"\${WALTER_CONFIG}"* ]] || \
+       [[ "$normalized" == *"\$HOME/.config/walter-os"* ]] || \
+       [[ "$normalized" == *"\${HOME}/.config/walter-os"* ]]; } && \
+     [[ "$normalized" == *"/state/"* ]] && \
+     [[ "$normalized" =~ [.](key|json|pub) ]]; then
+    return 0
+  fi
+
   if { [[ "$normalized" == *"$literal_config_root"* ]] || \
        [[ "$normalized" == *"$literal_braced_config_root"* ]] || \
        [[ "$normalized" == *"$literal_config_state"* ]] || \
