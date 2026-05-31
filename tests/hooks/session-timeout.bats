@@ -65,6 +65,32 @@ YAML
   [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "1" ]
 }
 
+@test "UserPromptSubmit hook removes fresh session when default skill minting fails" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope: {}
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'default skill capability minting failed'
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  [ ! -f "$state_file" ]
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  [ ! -f "$state_file" ]
+}
+
 @test "UserPromptSubmit hook allows active session within limits" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   _call_hook >/dev/null

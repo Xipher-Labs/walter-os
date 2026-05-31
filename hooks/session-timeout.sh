@@ -103,6 +103,7 @@ if [[ "$_status" -eq 0 ]]; then
     # shellcheck source=/dev/null
     source "$_skill_cap_loader"
     if ! walter_skill_caps_mint_defaults "$_repo_path" >/dev/null 2>&1; then
+      walter_session_end "$_repo_path" >/dev/null 2>&1 || true
       _block "Walter-OS session timeout: default skill capability minting failed - failing closed for safety."
     fi
   fi
