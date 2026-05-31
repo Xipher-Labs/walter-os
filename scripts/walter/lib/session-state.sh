@@ -211,6 +211,9 @@ walter_session_end() {
   local repo="${1:-${PWD}}"
   local file
   file="$(walter_session_state_file "$repo")"
-  rm -f "$file"
+  if ! rm -f "$file"; then
+    _walter_session_result "error" "state-delete" "$file"
+    return 12
+  fi
   _walter_session_result "ended" "" "$file"
 }

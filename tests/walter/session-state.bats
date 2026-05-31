@@ -15,6 +15,7 @@ setup() {
 }
 
 teardown() {
+  chmod -R u+w "$TMP_HOME" 2>/dev/null || true
   case "$TMP_HOME" in
     /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac
@@ -188,4 +189,17 @@ teardown() {
 
   [ "$status" -eq 0 ]
   [ ! -f "$state_file" ]
+}
+
+@test "session end reports delete failures" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  chmod u-w "$(dirname "$state_file")"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-delete"'* ]]
 }
