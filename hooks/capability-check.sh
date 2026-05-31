@@ -108,7 +108,92 @@ _cap_extract_hosts() {
 }
 
 _cap_is_network_command() {
-  local command="$1"
+  local command="$1" tokfile token cli idx j sub
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    token="${tokens[$idx]}"
+    cli="${token##*/}"
+    case "$cli" in
+      curl|wget|gh|ssh|scp|rsync|nc|ncat|telnet)
+        return 0
+        ;;
+      git)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          sub="${tokens[$j]}"
+          case "$sub" in
+            -C|-c|--git-dir|--work-tree) j=$((j + 2)); continue ;;
+            -C*|--git-dir=*|--work-tree=*|--namespace=*|-*) j=$((j + 1)); continue ;;
+          esac
+          case "$sub" in
+            clone|fetch|pull|push|ls-remote) return 0 ;;
+          esac
+          break
+        done
+        ;;
+      pip|pip3|uv|uvx)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          sub="${tokens[$j]}"
+          case "$sub" in
+            -*) j=$((j + 1)); continue ;;
+            pip) j=$((j + 1)); continue ;;
+            install|download|sync) return 0 ;;
+          esac
+          break
+        done
+        ;;
+      npm|pnpm|yarn)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          sub="${tokens[$j]}"
+          case "$sub" in
+            --prefix|--cwd|-C) j=$((j + 2)); continue ;;
+            --prefix=*|--cwd=*|-*) j=$((j + 1)); continue ;;
+            install|add|update|upgrade|dlx|exec) return 0 ;;
+            test|run|lint|build) break ;;
+          esac
+          j=$((j + 1))
+        done
+        ;;
+      cargo|brew|gem)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          sub="${tokens[$j]}"
+          case "$sub" in
+            -*) j=$((j + 1)); continue ;;
+            install|search|update|upgrade) return 0 ;;
+          esac
+          break
+        done
+        ;;
+      go)
+        j=$((idx + 1))
+        sub="${tokens[$j]:-}"
+        case "$sub" in
+          get|install) return 0 ;;
+          mod)
+            sub="${tokens[$((j + 1))]:-}"
+            case "$sub" in
+              download|tidy|why) return 0 ;;
+            esac
+            ;;
+        esac
+        ;;
+    esac
+    idx=$((idx + 1))
+  done
+
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(curl|wget)([[:space:]]|$) ]] && return 0
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?gh([[:space:]]|$) ]] && return 0
   [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?(ssh|scp|rsync|nc|ncat|telnet)([[:space:]]|$) ]] && return 0
@@ -277,6 +362,9 @@ _cap_main_json() {
   if ! command -v jq >/dev/null 2>&1; then
     printf '%s\n' '{"decision":"block","reason":"capability-check: jq missing — failing closed"}'
     exit 0
+  fi
+  if ! jq -e type >/dev/null 2>&1 <<< "$input"; then
+    _cap_emit_block "capability-check: malformed hook JSON — failing closed"
   fi
   tool="$(jq -r '.tool_name // ""' <<< "$input")"
   target="$(_cap_target_from_json "$tool" "$input")"

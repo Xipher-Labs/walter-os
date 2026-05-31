@@ -38,6 +38,12 @@ _mint() {
   (cd "$REPO_UNDER_TEST" && "$CLI" cap mint "$@")
 }
 
+@test "malformed hook JSON fails closed" {
+  output="$(printf '{"tool_name":"Bash"' | WALTER_SESSION_REPO="$REPO_UNDER_TEST" bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "high-tier Bash egress without capability is blocked" {
   output="$(_hook_json Bash command "curl https://api.github.com/repos/x/y")"
   echo "$output" | jq -e '.decision == "block"'
@@ -79,6 +85,12 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "git fetch behind global flags is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "git -C /tmp/repo fetch origin")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh api is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "gh api repos/Xipher-Labs/walter-os")"
 
@@ -87,6 +99,12 @@ _mint() {
 
 @test "npm install is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "npm install left-pad")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "npm install behind global flags is high-tier and blocked without capability" {
+  output="$(_hook_json Bash command "npm --prefix ui install left-pad")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
