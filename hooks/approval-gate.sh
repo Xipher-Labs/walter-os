@@ -822,7 +822,9 @@ if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Allowing all ops when jq is missing would let an attacker bypass the gate
   # by shadowing jq on PATH. See: docs/operational/security-audit-2026-05-11.md P0-03
   echo "approval-gate: jq missing — failing closed for safety. Install jq to proceed." >&2
-  audit_approval_decision unknown "$input" block "approval-gate: jq missing — failing closed for safety"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append unknown "$input" block "approval-gate" "approval-gate: jq missing — failing closed for safety" >/dev/null 2>&1 || true
+  fi
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: jq missing — failing closed for safety"}}\n'
   exit 0
 fi
@@ -835,7 +837,9 @@ if ! command -v yq >/dev/null 2>&1; then
   # hard dependency, same as jq.
   # See: docs/operational/security-audit-2026-05-11.md P1-05
   echo "approval-gate: yq missing — failing closed for safety. Install yq to proceed." >&2
-  audit_approval_decision unknown "$input" block "approval-gate: yq missing — failing closed for safety"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append unknown "$input" block "approval-gate" "approval-gate: yq missing — failing closed for safety" >/dev/null 2>&1 || true
+  fi
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: yq missing — failing closed for safety"}}\n'
   exit 0
 fi

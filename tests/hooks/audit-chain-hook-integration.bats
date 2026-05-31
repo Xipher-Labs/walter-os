@@ -6,6 +6,7 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  command -v jq >/dev/null 2>&1 || skip "jq required"
   TMP_HOME="$(mktemp -d)"
   TMP_CFG="$TMP_HOME/.config/walter-os"
   TEST_REPO="$TMP_HOME/repo"
@@ -79,13 +80,13 @@ _bash_denylist() {
 }
 
 _network_gate_bash() {
-  _hook_event Bash "$1" | "$REPO_ROOT/hooks/network-gate.sh"
+  _hook_event Bash "$1" | bash "$REPO_ROOT/hooks/network-gate.sh"
 }
 
 _network_gate_tool() {
   local tool="$1"
   jq -n --arg tool "$tool" '{"tool_name":$tool,"tool_input":{}}' \
-    | "$REPO_ROOT/hooks/network-gate.sh"
+    | bash "$REPO_ROOT/hooks/network-gate.sh"
 }
 
 _branch_flow_guard() {

@@ -6,6 +6,9 @@ setup() {
   HOOK="$REPO_ROOT/hooks/pre-commit-tests.sh"
 
   TMPDIR_TEST="$(mktemp -d)"
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  mkdir -p "$WALTER_CONFIG"
   cd "$TMPDIR_TEST"
   git init -q -b feature/test
   git config user.email "test@test.com"
@@ -14,6 +17,7 @@ setup() {
 }
 
 teardown() {
+  unset WALTER_CONFIG
   rm -rf "$TMPDIR_TEST"
 }
 

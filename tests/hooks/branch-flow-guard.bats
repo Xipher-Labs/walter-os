@@ -15,6 +15,9 @@ setup() {
 
   # Create a temp git repo so the hook has a branch context
   TMPDIR_TEST="$(mktemp -d)"
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  mkdir -p "$WALTER_CONFIG"
   cd "$TMPDIR_TEST"
   git init -q -b feature/test
   git config user.email "test@test.com"
@@ -24,7 +27,7 @@ setup() {
 }
 
 teardown() {
-  unset WALTER_BRANCH_FLOW WALTER_MANUAL_PR_REMOTE_PATTERN
+  unset WALTER_BRANCH_FLOW WALTER_MANUAL_PR_REMOTE_PATTERN WALTER_CONFIG
   rm -rf "$TMPDIR_TEST"
 }
 
