@@ -172,6 +172,29 @@ _verify_chain() {
   [ ! -d "$lock_dir" ]
 }
 
+@test "B-1: nonnumeric stat output does not break stale lock checks" {
+  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
+  mkdir -p "$lock_dir"
+  printf '%s\n%s\n' "$$" "Mon Jan  1 00:00:00 2001" > "$lock_dir/pid"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    stat() {
+      case \"\$1\" in
+        -c) return 1 ;;
+        -f) printf '/\\n'; return 0 ;;
+      esac
+      command stat \"\$@\"
+    }
+    WALTER_AUDIT_STALE_LOCK_SECONDS=0 walter_audit_append Bash 'after nonnumeric stat' allow approval-gate ok
+  "
+
+  [ "$status" -eq 0 ]
+  [ -f "$(_chain_path)" ]
+  jq -e '.input_summary == "after nonnumeric stat"' "$(_chain_path)"
+  [ ! -d "$lock_dir" ]
+}
+
 @test "B-1: input summaries are single-line and capped" {
   long_input="$(printf 'x%.0s' {1..240})"
 

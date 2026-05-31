@@ -102,6 +102,23 @@ _walter_audit_process_identity() {
   ps -p "$pid" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//'
 }
 
+_walter_audit_mtime_epoch() {
+  local path="$1" fallback="$2" mtime=""
+  mtime="$(stat -c %Y "$path" 2>/dev/null || true)"
+  if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$mtime"
+    return 0
+  fi
+
+  mtime="$(stat -f %m "$path" 2>/dev/null || true)"
+  if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$mtime"
+    return 0
+  fi
+
+  printf '%s\n' "$fallback"
+}
+
 _walter_audit_acquire_lock() {
   local lock_path="$1" wait_seconds="${WALTER_AUDIT_LOCK_WAIT_SECONDS:-10}" start pid_file owner_pid owner_identity current_identity now lock_mtime stale_after
   start="$(date +%s)"
@@ -114,7 +131,7 @@ _walter_audit_acquire_lock() {
       owner_pid="$(sed -n '1p' "$pid_file" 2>/dev/null || true)"
       owner_identity="$(sed -n '2p' "$pid_file" 2>/dev/null || true)"
     fi
-    lock_mtime="$(stat -f %m "$lock_path" 2>/dev/null || stat -c %Y "$lock_path" 2>/dev/null || printf '%s' "$now")"
+    lock_mtime="$(_walter_audit_mtime_epoch "$lock_path" "$now")"
     stale_after="${WALTER_AUDIT_STALE_LOCK_SECONDS:-300}"
     if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
       if ! kill -0 "$owner_pid" 2>/dev/null; then
