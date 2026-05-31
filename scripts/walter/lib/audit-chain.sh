@@ -96,8 +96,28 @@ walter_audit_input_summary() {
   fi
   if [[ -n "$redactor" ]]; then
     input="$(printf '%s' "$input" | "$redactor" 2>/dev/null)" || input="<REDACTED:redactor-error>"
+  else
+    input="<REDACTED:redactor-unavailable>"
   fi
   printf '%s' "$input" | tr '\n\r\t' '   ' | cut -c 1-200
+}
+
+_walter_audit_acquire_lock() {
+  local lock_path="$1" wait_seconds="${WALTER_AUDIT_LOCK_WAIT_SECONDS:-10}"
+  WALTER_AUDIT_LOCK_KIND=""
+  if command -v flock >/dev/null 2>&1; then
+    exec 8>"$lock_path" || return 1
+    flock -x -w "$wait_seconds" 8 || {
+      exec 8>&-
+      echo "walter-audit-chain: timed out acquiring lock: $lock_path" >&2
+      return 1
+    }
+    WALTER_AUDIT_LOCK_KIND="flock"
+    return 0
+  fi
+
+  _walter_audit_acquire_lock_dir "$lock_path" "$wait_seconds" || return 1
+  WALTER_AUDIT_LOCK_KIND="dir"
 }
 
 _walter_audit_reclaim_lock() {
@@ -145,8 +165,8 @@ _walter_audit_mtime_epoch() {
   printf '%s\n' "$fallback"
 }
 
-_walter_audit_acquire_lock() {
-  local lock_path="$1" wait_seconds="${WALTER_AUDIT_LOCK_WAIT_SECONDS:-10}" start pid_file owner_pid owner_identity current_identity now lock_mtime stale_after
+_walter_audit_acquire_lock_dir() {
+  local lock_path="$1" wait_seconds="$2" start pid_file owner_pid owner_identity current_identity now lock_mtime stale_after
   start="$(date +%s)"
   while ! mkdir "$lock_path" 2>/dev/null; do
     now="$(date +%s)"
@@ -193,9 +213,56 @@ _walter_audit_acquire_lock() {
 }
 
 _walter_audit_release_lock() {
-  local lock_path="$1"
-  rm -f -- "${lock_path}/pid" 2>/dev/null || true
-  rmdir "$lock_path" 2>/dev/null || true
+  local lock_path="${1:-}"
+  if [[ "${WALTER_AUDIT_LOCK_KIND:-}" == "flock" ]]; then
+    flock -u 8 2>/dev/null || true
+    exec 8>&- 2>/dev/null || true
+  elif [[ -n "$lock_path" ]]; then
+    rm -f -- "${lock_path}/pid" 2>/dev/null || true
+    rmdir "$lock_path" 2>/dev/null || true
+  fi
+  WALTER_AUDIT_LOCK_KIND=""
+}
+
+_walter_audit_verify_chain_file_unlocked() {
+  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical
+  row_number=0
+  expected_hash="null"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    row_number=$((row_number + 1))
+    canonical="$(printf '%s\n' "$line" | jq -cS . 2>/dev/null)" || {
+      echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
+      return 1
+    }
+    if [[ "$canonical" != "$line" ]]; then
+      echo "walter-audit-chain: row ${row_number}: non-canonical JSON" >&2
+      return 1
+    fi
+    if ! printf '%s\n' "$line" | jq -e 'type == "object"' >/dev/null 2>&1; then
+      echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
+      return 1
+    fi
+    prev_hash="$(printf '%s\n' "$line" | jq -r '.prev_hash // empty')"
+    if [[ -z "$prev_hash" ]]; then
+      echo "walter-audit-chain: row ${row_number}: missing prev_hash" >&2
+      return 1
+    fi
+    if [[ "$prev_hash" != "$expected_hash" ]]; then
+      echo "walter-audit-chain: row ${row_number}: prev_hash mismatch" >&2
+      echo "  expected: $expected_hash" >&2
+      echo "  actual:   $prev_hash" >&2
+      return 1
+    fi
+    actual_hash="$(walter_audit_hash_string "$line")"
+    expected_hash="$actual_hash"
+  done < "$chain_path"
+
+  if [[ "$row_number" -eq 0 ]]; then
+    echo "walter-audit-chain: empty chain: $chain_path" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$row_number"
 }
 
 walter_audit_append() {
@@ -221,6 +288,13 @@ walter_audit_append() {
 
   previous_hash="null"
   previous_line="$(tail -n 1 <&9)"
+  if [[ -n "$previous_line" ]] && command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
+    _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || {
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
+  fi
   if [[ -n "$previous_line" ]]; then
     previous_hash="$(walter_audit_hash_string "$previous_line")"
   fi
@@ -267,42 +341,21 @@ walter_audit_verify_chain() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" chain_path line row_number prev_hash actual_hash expected_hash row_count
+  local date_value="${1:-$(walter_audit_date)}" chain_path lock_path row_count verify_status
   chain_path="$(walter_audit_chain_path "$date_value")"
+  lock_path="$(walter_audit_lock_path)"
+  mkdir -p "$(walter_audit_dir)" || return 1
+  _walter_audit_acquire_lock "$lock_path" || return 1
   if [[ ! -f "$chain_path" ]]; then
     echo "walter-audit-chain: chain not found: $chain_path" >&2
+    _walter_audit_release_lock "$lock_path"
     return 1
   fi
 
-  row_number=0
-  row_count=0
-  expected_hash="null"
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    row_number=$((row_number + 1))
-    if ! printf '%s\n' "$line" | jq -e 'type == "object"' >/dev/null 2>&1; then
-      echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
-      return 1
-    fi
-    prev_hash="$(printf '%s\n' "$line" | jq -r '.prev_hash // empty')"
-    if [[ -z "$prev_hash" ]]; then
-      echo "walter-audit-chain: row ${row_number}: missing prev_hash" >&2
-      return 1
-    fi
-    if [[ "$prev_hash" != "$expected_hash" ]]; then
-      echo "walter-audit-chain: row ${row_number}: prev_hash mismatch" >&2
-      echo "  expected: $expected_hash" >&2
-      echo "  actual:   $prev_hash" >&2
-      return 1
-    fi
-    actual_hash="$(walter_audit_hash_string "$line")"
-    expected_hash="$actual_hash"
-    row_count="$row_number"
-  done < "$chain_path"
-
-  if [[ "$row_count" -eq 0 ]]; then
-    echo "walter-audit-chain: empty chain: $chain_path" >&2
-    return 1
-  fi
+  row_count="$(_walter_audit_verify_chain_file_unlocked "$chain_path")"
+  verify_status="$?"
+  _walter_audit_release_lock "$lock_path"
+  [[ "$verify_status" -eq 0 ]] || return "$verify_status"
 
   printf 'ok: verified %s row(s): %s\n' "$row_count" "$chain_path"
 }

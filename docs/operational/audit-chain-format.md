@@ -35,4 +35,4 @@ Verify a day with:
 walter-os audit verify-chain 2026-05-31
 ```
 
-This B-1 foundation detects edits to earlier rows once a later row exists. Hook integration, signed receipts, daily root files, and cross-day verification land in later B-2/B-4 slices.
+This B-1 foundation detects accidental or unrepaired edits to linked rows. It is not post-hoc tamper-proof by itself: an actor who can rewrite the JSONL file can modify a row and recompute every following `prev_hash` until signed receipts, daily root files, and external anchoring land in later B-2/B-4 slices. Treat this PR as the deterministic chain foundation, not the final non-repudiation layer.

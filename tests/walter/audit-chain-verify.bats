@@ -76,6 +76,30 @@ _make_chain() {
   [[ "$output" == *"row 3: invalid JSON object"* ]]
 }
 
+@test "B-1: non-canonical JSON fails with row number" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)" | jq -c '{ts:.ts,tool:.tool,event:.event,prev_hash:.prev_hash,decision:.decision,operator:.operator,session_id:.session_id,input_summary:.input_summary,decision_source:.decision_source,decision_reason:.decision_reason}')"
+  second="$(sed -n '2p' "$(_chain_path)")"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 1: non-canonical JSON"* ]]
+}
+
+@test "B-1: append rejects existing tampered chain before adding row" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered"')"
+  second="$(sed -n '2p' "$(_chain_path)")"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after tamper' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
+}
+
 @test "B-1: missing chain returns non-zero" {
   run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
 

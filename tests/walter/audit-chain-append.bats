@@ -35,11 +35,6 @@ _sha256() {
   fi
 }
 
-_pid_identity() {
-  local pid="$1"
-  ps -p "$pid" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//'
-}
-
 _verify_chain() {
   local file="$1" prev="null" line actual row=0
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -109,90 +104,20 @@ _verify_chain() {
   jq -e '.prev_hash == "null" and .input_summary == "after rotation"' "$(_chain_path)"
 }
 
-@test "B-1: stale lock from dead process is reclaimed" {
-  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
-  mkdir -p "$lock_dir"
-  printf '999999\n' > "$lock_dir/pid"
-
-  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after stale lock' allow approval-gate ok"
-
-  [ "$status" -eq 0 ]
-  [ -f "$(_chain_path)" ]
-  jq -e '.input_summary == "after stale lock"' "$(_chain_path)"
-  [ ! -d "$lock_dir" ]
-}
-
-@test "B-1: concurrent appenders reclaim one stale lock safely" {
-  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
-  mkdir -p "$lock_dir"
-  printf '999999\n' > "$lock_dir/pid"
+@test "B-1: active flock lock blocks competing append until timeout" {
+  command -v flock >/dev/null 2>&1 || skip "flock not installed"
+  mkdir -p "$WALTER_CONFIG/audit"
+  lock_file="$WALTER_CONFIG/audit/.chain.lock"
 
   run bash -c "
+    exec 7>'$lock_file'
+    flock -x 7
     source '$AUDIT_LIB'
-    pids=()
-    for i in \$(seq 1 12); do
-      WALTER_AUDIT_NOW=\"2026-05-31T12:30:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=30 walter_audit_append Bash \"after-stale-\${i}\" allow approval-gate ok >/dev/null &
-      pids+=(\"\$!\")
-    done
-    status=0
-    for pid in \"\${pids[@]}\"; do
-      wait \"\$pid\" || status=1
-    done
-    exit \"\$status\"
+    WALTER_AUDIT_LOCK_WAIT_SECONDS=0 walter_audit_append Bash 'after active lock' allow approval-gate ok
   "
-
-  [ "$status" -eq 0 ]
-  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "12" ]
-  _verify_chain "$(_chain_path)"
-  [ ! -d "$lock_dir" ]
-}
-
-@test "B-1: old lock with live pid is not reclaimed" {
-  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
-  mkdir -p "$lock_dir"
-  printf '%s\n%s\n' "$$" "$(_pid_identity "$$")" > "$lock_dir/pid"
-
-  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_STALE_LOCK_SECONDS=0 WALTER_AUDIT_LOCK_WAIT_SECONDS=0 walter_audit_append Bash 'after old lock' allow approval-gate ok"
 
   [ "$status" -ne 0 ]
   [ ! -f "$(_chain_path)" ]
-  [ -d "$lock_dir" ]
-}
-
-@test "B-1: stale lock with reused pid identity is reclaimed" {
-  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
-  mkdir -p "$lock_dir"
-  printf '%s\n%s\n' "$$" "Mon Jan  1 00:00:00 2001" > "$lock_dir/pid"
-
-  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_STALE_LOCK_SECONDS=0 walter_audit_append Bash 'after reused pid' allow approval-gate ok"
-
-  [ "$status" -eq 0 ]
-  [ -f "$(_chain_path)" ]
-  jq -e '.input_summary == "after reused pid"' "$(_chain_path)"
-  [ ! -d "$lock_dir" ]
-}
-
-@test "B-1: nonnumeric stat output does not break stale lock checks" {
-  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
-  mkdir -p "$lock_dir"
-  printf '%s\n%s\n' "$$" "Mon Jan  1 00:00:00 2001" > "$lock_dir/pid"
-
-  run bash -c "
-    source '$AUDIT_LIB'
-    stat() {
-      case \"\$1\" in
-        -c) return 1 ;;
-        -f) printf '/\\n'; return 0 ;;
-      esac
-      command stat \"\$@\"
-    }
-    WALTER_AUDIT_STALE_LOCK_SECONDS=0 walter_audit_append Bash 'after nonnumeric stat' allow approval-gate ok
-  "
-
-  [ "$status" -eq 0 ]
-  [ -f "$(_chain_path)" ]
-  jq -e '.input_summary == "after nonnumeric stat"' "$(_chain_path)"
-  [ ! -d "$lock_dir" ]
 }
 
 @test "B-1: input summaries are single-line and capped" {
@@ -231,6 +156,20 @@ SH
   [ "$status" -eq 0 ]
   summary="$(jq -r '.input_summary' "$(_chain_path)")"
   [ "$summary" = "<REDACTED:redactor-error>" ]
+  [[ "$summary" != *"abcdefghijklmnopqrstuvwxyz1234567890"* ]]
+}
+
+@test "B-1: missing redactor does not log raw input" {
+  mkdir -p "$TMP_HOME/no-redactor/scripts/walter/lib"
+  cp "$AUDIT_LIB" "$TMP_HOME/no-redactor/scripts/walter/lib/audit-chain.sh"
+  local isolated_lib="$TMP_HOME/no-redactor/scripts/walter/lib/audit-chain.sh"
+  secret="Authorization: Bearer abcdefghijklmnopqrstuvwxyz1234567890"
+
+  run bash -c "source '$isolated_lib'; WALTER_OS_HOME='$TMP_HOME/no-redactor' walter_audit_append Bash '$secret' allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+  summary="$(jq -r '.input_summary' "$(_chain_path)")"
+  [ "$summary" = "<REDACTED:redactor-unavailable>" ]
   [[ "$summary" != *"abcdefghijklmnopqrstuvwxyz1234567890"* ]]
 }
 
