@@ -105,6 +105,22 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "ssh with github.com network capability is allowed" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "ssh git@github.com")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "nc with github.com network capability is allowed" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "nc github.com 443")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "npm install is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "npm install left-pad")"
 

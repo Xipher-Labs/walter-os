@@ -107,6 +107,7 @@ _cap_extract_hosts() {
       [[ -n "$host" ]] && printf '%s\n' "$host"
     done
     _cap_extract_gh_host "$command"
+    _cap_extract_positional_network_hosts "$command"
   } | awk 'NF && !seen[$0]++'
 }
 
@@ -120,6 +121,42 @@ _cap_extract_gh_host() {
     host="${GH_HOST:-github.com}"
   fi
   [[ -n "$host" ]] && printf '%s\n' "$host"
+}
+
+_cap_extract_positional_network_hosts() {
+  local command="$1" tokfile token cli idx j candidate host
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && printf '%s' "$command" | xargs -n1 > "$tokfile" 2>/dev/null; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    token="${tokens[$idx]}"
+    cli="${token##*/}"
+    case "$cli" in
+      ssh|scp|rsync|nc|ncat|telnet)
+        j=$((idx + 1))
+        while [[ "$j" -lt "${#tokens[@]}" ]]; do
+          candidate="${tokens[$j]}"
+          case "$candidate" in
+            -*) j=$((j + 1)); continue ;;
+          esac
+          host="${candidate#*@}"
+          host="${host%%:*}"
+          host="${host%%/*}"
+          [[ -n "$host" ]] && printf '%s\n' "$host"
+          break
+        done
+        ;;
+    esac
+    idx=$((idx + 1))
+  done
 }
 
 _cap_is_network_command() {
