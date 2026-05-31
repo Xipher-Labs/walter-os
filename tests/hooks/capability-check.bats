@@ -320,6 +320,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "git extension network subcommands are high-tier" {
+  output="$(_hook_json Bash command "git lfs pull")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "git svn fetch")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "git remote update is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "git remote update")"
 
@@ -533,6 +541,20 @@ _mint() {
 @test "npm install is high-tier and blocked without capability" {
   output="$(_hook_json Bash command "npm install left-pad")"
 
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "package manager network subcommands are high-tier" {
+  output="$(_hook_json Bash command "npm ci")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "npm audit")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "pnpm fetch")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "yarn info react")"
   echo "$output" | jq -e '.decision == "block"'
 }
 

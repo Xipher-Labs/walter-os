@@ -600,7 +600,7 @@ _cap_is_network_command() {
             -C*|--git-dir=*|--work-tree=*|--namespace=*|-*) j=$((j + 1)); continue ;;
           esac
           case "$sub" in
-            clone|fetch|pull|push|ls-remote|submodule|send-email) return 0 ;;
+            clone|fetch|pull|push|ls-remote|fetch-pack|send-pack|http-fetch|http-push|imap-send|upload-pack|upload-archive|receive-pack|bundle|send-email|submodule|lfs|svn|annex|p4|cvsimport|cvsexportcommit) return 0 ;;
             remote)
               [[ "${tokens[$((j + 1))]:-}" == "update" ]] && return 0
               ;;
@@ -667,7 +667,7 @@ _cap_is_network_command() {
           case "$sub" in
             --prefix|--cwd|-C|--registry|--cache|--userconfig|--globalconfig|--workspace|-w) j=$((j + 2)); continue ;;
             --prefix=*|--cwd=*|--registry=*|--cache=*|--userconfig=*|--globalconfig=*|--workspace=*|-*) j=$((j + 1)); continue ;;
-            install|add|update|upgrade|dlx|exec) return 0 ;;
+            install|i|add|update|up|upgrade|fetch|publish|ci|audit|search|view|info|outdated|deprecate|access|owner|adduser|login|logout|whoami|hook|org|profile|star|stars|team|token|unpublish|dist-tag|sb|version|dlx|exec) return 0 ;;
             test|run|lint|build) break ;;
           esac
           j=$((j + 1))
