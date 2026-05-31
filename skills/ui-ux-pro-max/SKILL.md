@@ -16,8 +16,8 @@ not a quality gate, and not a second design opinion. It is lookup data.
   patterns, named visual styles, components/patterns/layouts, anti-patterns,
   WCAG-cited UX guidelines, and per-framework UI rules. You grep it to ground
   design decisions in concrete prior art.
-- **IS NOT** a review or quality gate — that is `frontend-quality` (WCAG 2.2 AA
-  + Core Web Vitals).
+- **IS NOT** a review or quality gate — that is `frontend-quality`
+  (WCAG 2.2 AA, Core Web Vitals).
 - **IS NOT** the design-craft authority — that is `impeccable` (taste,
   anti-AI-slop principles, the working method).
 - Think of it as the data layer that `impeccable` and `ui-ux-polish` consult
