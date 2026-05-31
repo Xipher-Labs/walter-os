@@ -37,8 +37,7 @@ setup() {
   # Every canonical page must render <TopNav/> so the operator always has the
   # full nav. This replaces the pre-redesign per-page inline-nav check.
   for page in page.tsx council/page.tsx ideation/page.tsx history/page.tsx content/page.tsx; do
-    run grep -L 'TopNav' "$CT/$page"
-    # grep -L prints files WITHOUT the match; expect empty (all render TopNav)
-    [ "$status" -eq 1 ]
+    run grep -q 'TopNav' "$CT/$page"
+    [ "$status" -eq 0 ]
   done
 }
