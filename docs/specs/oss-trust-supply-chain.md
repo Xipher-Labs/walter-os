@@ -1,4 +1,4 @@
-# Supply-chain hardening — SLSA L3 + reproducible builds (OSS Trust C-1 + C-2) — spec
+# Supply-chain hardening — planned SLSA Build L3 provenance + reproducible builds (OSS Trust C-1 + C-2) — spec
 
 **Status**: ready for `/write-plan` after operator approval
 **Parent**: OSS Trust roadmap Layer C items C-1 + C-2 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83) (post-merge in-tree path: `docs/specs/oss-trust-roadmap.md`). This spec assumes the parent merges first or in the same release cycle.

@@ -6,8 +6,8 @@ This plan turns the remaining OSS Trust runtime specs into mergeable, reviewable
 PR slices. The order is dependency-driven: session state is already in the open
 #218/#219 stack, capability tokens consume that session state, sandbox consumes
 capabilities, invisible mounts refine the sandbox, audit integrity consumes the
-session signing keys, telemetry consumes the audit chain, and SLSA Build L3 is
-independent release hardening.
+session signing keys, telemetry consumes the audit chain, and planned SLSA Build
+L3 provenance work is independent release hardening.
 
 ## Merge Preconditions
 
@@ -37,7 +37,7 @@ The six requested runtime tracks map to this implementation order:
    signatures, verifier, daily roots, optional Rekor upload.
 5. **Audit telemetry to Grafana/Loki** — Promtail tail config, Grafana
    dashboard, Loki verification path, opt-out/retention controls.
-6. **SLSA Build L3 + reproducible builds** — provenance, deterministic
+6. **Planned SLSA Build L3 provenance + reproducible builds** — provenance, deterministic
    artifacts, reproducibility verifier, operator-facing verification docs.
 
 ## Current Stack State
@@ -125,7 +125,7 @@ The six requested runtime tracks map to this implementation order:
    - Files: `scripts/walter/lib/sandbox.sh`,
      `tests/walter/sandbox-shim.bats`.
    - Deliverable: `walter_sandbox_provider`, `walter_sandbox_check`, and
-     `walter_sandbox_run` for macOS `sandbox-exec`, Linux/WSL `nsjail`, and
+     `walter_sandbox_run` for macOS `sandbox-exec`, Linux `nsjail`, and
      optional Linux `firejail`.
    - Current status: implemented in #246. AC-2/AC-3 are the first PRs that
      claim actual filesystem/network/signal isolation semantics.
@@ -199,7 +199,7 @@ The six requested runtime tracks map to this implementation order:
     - Deliverable: `verify-chain --from-loki`, `WALTER_AUDIT_LOKI_DISABLE=1`,
       and status visibility.
 
-### SLSA Build L3 And Reproducible Builds
+### Planned SLSA Build L3 Provenance And Reproducible Builds
 
 17. **SLSA Build L3 provenance**.
     - Files: `.github/workflows/release.yml`,
