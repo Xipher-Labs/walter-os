@@ -1012,6 +1012,18 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "Write default skill capability loader without capability is blocked" {
+  output="$(_hook_json Write file_path "scripts/walter/lib/skill-cap-loader.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash default skill capability loader without capability is blocked" {
+  output="$(_hook_json Bash command "source scripts/walter/lib/skill-cap-loader.sh; walter_skill_caps_mint_defaults .")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Write absolute home ssh path is blocked as high-tier" {
   output="$(_hook_json Write file_path "$TMP_HOME/.ssh/id_ed25519")"
 

@@ -108,6 +108,7 @@ declare -a BLOCK_PATH_PATTERNS=(
   'CLAUDE.md'
   'mcp/servers.json'
   'scripts/walter/lib/capability-token.sh'
+  'scripts/walter/lib/skill-cap-loader.sh'
   'scripts/walter/lib/session-state.sh'
   'scripts/walter/subcommands/cap.sh'
   # Self-modification
@@ -200,8 +201,9 @@ _is_capability_token_mint_payload() {
   local cap_script_dynamic="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap[.]sh[[:space:]]+[^[:space:];|&]*${shell_expansion}"
   local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_expansion}"
   local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_expansion}"
-  local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
+  local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims|walter_skill_caps_mint_defaults)([[:space:]]|$)'
   local cap_source='(^|[[:space:];|&()])(source|[.])[[:space:]]+[^;|&]*capability-token[.]sh([[:space:];|&()]|$)'
+  local skill_cap_source='(^|[[:space:];|&()])(source|[.])[[:space:]]+[^;|&]*skill-cap-loader[.]sh([[:space:];|&()]|$)'
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
@@ -217,7 +219,8 @@ _is_capability_token_mint_payload() {
     [[ "$normalized" =~ $walter_ambiguous ]] || \
     [[ "$normalized" =~ $cap_script_ambiguous ]] || \
     [[ "$normalized" =~ $cap_function ]] || \
-    [[ "$normalized" =~ $cap_source ]]
+    [[ "$normalized" =~ $cap_source ]] || \
+    [[ "$normalized" =~ $skill_cap_source ]]
 }
 
 _is_capability_private_key_payload() {

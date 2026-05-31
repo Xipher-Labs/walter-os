@@ -105,6 +105,11 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: Edit on default skill capability loader is blocked" {
+  run "$HOOK" check "scripts/walter/lib/skill-cap-loader.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
 @test "CLI: Edit on capability minting entrypoint is blocked" {
   run "$HOOK" check "scripts/walter/subcommands/cap.sh" --tool Edit
   [[ "$status" -eq 7 ]]
@@ -186,6 +191,12 @@ teardown() {
   run "$HOOK" check "source scripts/walter/lib/capability-token.sh; walter_cap_sign_claims state.json '{}'"
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
+@test "CLI: default skill capability loader is blocked for operator approval" {
+  run "$HOOK" check "source scripts/walter/lib/skill-cap-loader.sh; walter_skill_caps_mint_defaults ."
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
 @test "CLI: command-substitution capability signing helper is blocked" {
