@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { ModeState } from "@/app/api/mode/route";
 import type { ConsensusStatus } from "@/app/api/consensus-status/route";
 import { Panel } from "@/app/components/ui/Panel";
+import AsyncSurface from "@/app/components/ui/AsyncSurface";
 
 /**
  * Mode Indicator — consensus mode status, toggle, and live stats. Reads
@@ -20,6 +21,11 @@ export default function ModeIndicator() {
   const [mode, setMode] = useState<ModeState | null>(null);
   const [stats, setStats] = useState<ConsensusStatus | null>(null);
   const [toggling, setToggling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Read inside fetchMode so a transient failure after the first successful
+  // load keeps the last good mode on screen instead of flipping to the error
+  // state (the surface only shows the error before we ever have data).
+  const hasDataRef = useRef(false);
 
   const fetchMode = useCallback(async () => {
     try {
@@ -27,18 +33,22 @@ export default function ModeIndicator() {
         fetch("/api/mode"),
         fetch("/api/consensus-status"),
       ]);
-      if (modeRes.ok) {
-        const data = (await modeRes.json()) as ModeState;
-        setMode(data);
-      }
+      if (!modeRes.ok) throw new Error(`HTTP ${modeRes.status}`);
+      const data = (await modeRes.json()) as ModeState;
+      setMode(data);
+      setError(null);
       if (statsRes.ok) {
-        const data = (await statsRes.json()) as ConsensusStatus;
-        setStats(data);
+        const statsData = (await statsRes.json()) as ConsensusStatus;
+        setStats(statsData);
       }
     } catch {
-      // keep stale
+      setError((prev) => (hasDataRef.current ? prev : "Mode unavailable."));
     }
   }, []);
+
+  useEffect(() => {
+    hasDataRef.current = mode !== null;
+  }, [mode]);
 
   useEffect(() => {
     fetchMode();
@@ -65,15 +75,22 @@ export default function ModeIndicator() {
     }
   };
 
-  if (!mode) {
-    return (
-      <div className="h-full min-h-[5rem] animate-pulse rounded-xl border border-border bg-surface-1" />
-    );
-  }
+  const on = mode?.consensus ?? false;
 
-  const on = mode.consensus;
+  const skeleton = (
+    <div className="h-full min-h-[5rem] animate-pulse rounded-xl border border-border bg-surface-1" />
+  );
 
   return (
+    <AsyncSurface
+      loading={!mode}
+      error={error}
+      onRetry={() => {
+        setError(null);
+        fetchMode();
+      }}
+      skeleton={skeleton}
+    >
     <Panel tone="raised" className="flex h-full flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -111,7 +128,7 @@ export default function ModeIndicator() {
         </button>
       </div>
 
-      {on && mode.since && (
+      {on && mode?.since && (
         <p className="text-xs text-subtle">
           Active since {new Date(mode.since).toLocaleString()} · threshold{" "}
           {mode.voting_threshold}
@@ -141,5 +158,6 @@ export default function ModeIndicator() {
         </div>
       )}
     </Panel>
+    </AsyncSurface>
   );
 }
