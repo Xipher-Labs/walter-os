@@ -571,7 +571,7 @@ _cap_is_network_command() {
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
     token="${tokens[$idx]}"
     case "$token" in
-      ''|';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n')
+      ''|';'|'|'|'&'|'&&'|'||'|'('|')'|'{'|'}'|'if'|'then'|'elif'|'else'|'while'|'until'|'do'|'done'|'for'|'select'|'case'|'esac'|'coproc'|'function'|'time'|'!'|$'\n')
         command_position=1
         idx=$((idx + 1))
         continue

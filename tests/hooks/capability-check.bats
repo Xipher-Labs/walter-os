@@ -106,6 +106,27 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash egress inside control-flow bodies without capability is blocked" {
+  output="$(_hook_json Bash command "{ curl https://api.github.com/repos/x/y; }")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "if curl https://api.github.com/repos/x/y; then :; fi")"
+  echo "$output" | jq -e '.decision == "block"'
+
+  output="$(_hook_json Bash command "while curl https://api.github.com/repos/x/y; do break; done")"
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash egress inside control-flow bodies allows matching capability" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "{ curl https://api.github.com/repos/x/y; }")"
+  echo "$output" | jq -e '.decision == "allow"'
+
+  output="$(_hook_json Bash command "if curl https://api.github.com/repos/x/y; then :; fi")"
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "Bash egress matches normalized network capability values" {
   _mint Bash --network HTTPS://API.GITHUB.COM/repos/example --duration 30m >/dev/null
 
