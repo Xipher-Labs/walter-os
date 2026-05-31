@@ -555,11 +555,21 @@ _cap_is_network_command() {
       while [[ "$j" -lt "${#tokens[@]}" ]]; do
         sub="${tokens[$j]}"
         case "$sub" in
-          -u|-C|-S|--unset|--chdir|--split-string)
+          -S|--split-string)
+            _cap_is_network_command "${tokens[$((j + 1))]:-}" && return 0
             j=$((j + 2))
             continue
             ;;
-          --unset=*|--chdir=*|--split-string=*)
+          --split-string=*)
+            _cap_is_network_command "${sub#*=}" && return 0
+            j=$((j + 1))
+            continue
+            ;;
+          -u|-C|--unset|--chdir)
+            j=$((j + 2))
+            continue
+            ;;
+          --unset=*|--chdir=*)
             j=$((j + 1))
             continue
             ;;
@@ -573,16 +583,26 @@ _cap_is_network_command() {
       continue
     fi
     if [[ "$cli" == "command" || "$cli" == "builtin" || "$cli" == "exec" || "$cli" == "nohup" ]]; then
+      local command_probe=0
       j=$((idx + 1))
       while [[ "$j" -lt "${#tokens[@]}" ]]; do
         sub="${tokens[$j]}"
         case "$sub" in
           --) j=$((j + 1)); break ;;
+          -v|-V)
+            command_probe=1
+            j=$((j + 1))
+            continue
+            ;;
           -*) j=$((j + 1)); continue ;;
         esac
         break
       done
       idx="$j"
+      if [[ "$command_probe" -eq 1 ]]; then
+        command_position=0
+        continue
+      fi
       command_position=1
       continue
     fi

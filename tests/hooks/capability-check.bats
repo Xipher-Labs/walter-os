@@ -370,6 +370,18 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "env split-string network payload is high-tier" {
+  output="$(_hook_json Bash command "env -S 'curl https://api.github.com/repos/x/y'")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "command lookup probes remain low-tier" {
+  output="$(_hook_json Bash command "command -v curl && command -V gh")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "gh api with github.com network capability is allowed" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
