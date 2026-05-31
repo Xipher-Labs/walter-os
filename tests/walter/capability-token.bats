@@ -73,6 +73,15 @@ _state_file() {
   [[ "$output" == *"invalid token shape"* || "$output" == *"base64url decode failed"* ]]
 }
 
+@test "capability helper rejects non-canonical base64url pad bits" {
+  out_file="$TMP_HOME/decoded.bin"
+
+  run bash -c "source '$CAP_LIB'; _walter_cap_b64url_decode_to_file AB '$out_file'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"non-canonical encoding"* ]]
+}
+
 @test "capability helper rejects mutated state capability paths" {
   bash -c "source '$SESSION_LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   state_file="$(_state_file)"

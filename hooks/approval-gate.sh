@@ -164,28 +164,39 @@ _tier_rank() {
   esac
 }
 
+_shellish_normalize_payload() {
+  local value="$1" backslash_newline
+  backslash_newline=$'\\\n'
+  value="${value//$backslash_newline/ }"
+  value="${value//$'\n'/ }"
+  value="${value//\\/}"
+  value="${value//\"/}"
+  value="${value//\'/}"
+  printf '%s' "$value"
+}
+
 _is_capability_token_mint_payload() {
   local payload="$1"
-  local normalized="${payload//\"/}"
-  local walter_cli='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
-  local cap_script='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
+  local normalized
+  local walter_cli='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap([[:space:]]|$)'
+  local cap_script='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh([[:space:]]|$)'
   local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
 
-  normalized="${normalized//\'/}"
+  normalized="$(_shellish_normalize_payload "$payload")"
 
   [[ "$normalized" =~ $walter_cli ]] || [[ "$normalized" =~ $cap_script ]] || [[ "$normalized" =~ $cap_function ]]
 }
 
 _is_capability_private_key_payload() {
   local payload="$1"
-  local normalized="${payload//\"/}"
+  local normalized
   local config_state_dir="${WALTER_CONFIG:-$HOME/.config/walter-os}/state"
   local literal_config_state="\$WALTER_CONFIG/state"
   local literal_braced_config_state="\${WALTER_CONFIG}/state"
   local literal_home_state="\$HOME/.config/walter-os/state"
   local literal_braced_home_state="\${HOME}/.config/walter-os/state"
 
-  normalized="${normalized//\'/}"
+  normalized="$(_shellish_normalize_payload "$payload")"
 
   [[ "$normalized" == *"capability_private_key_path"* ]] && return 0
 

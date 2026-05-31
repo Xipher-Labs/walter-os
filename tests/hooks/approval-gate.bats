@@ -136,6 +136,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: line-continuation walter-os cap mint is blocked" {
+  run "$HOOK" check $'walter-os cap \\\nmint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: ANSI-C quoted walter-os cap mint is blocked" {
   run "$HOOK" check "walter-os cap \$'mint' Bash --patterns '.*' --duration 5m"
   [[ "$status" -eq 7 ]]
@@ -204,6 +210,12 @@ teardown() {
 
 @test "CLI: glob read of Walter state keys is blocked" {
   run "$HOOK" check 'cat "$WALTER_CONFIG"/state/*.key'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: escaped Walter state directory is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/st\ate/*.key'
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }

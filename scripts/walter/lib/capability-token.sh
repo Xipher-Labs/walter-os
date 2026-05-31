@@ -58,6 +58,9 @@ try:
     data = base64.b64decode((value + padding).encode("ascii"), altchars=b"-_", validate=True)
 except (binascii.Error, ValueError) as exc:
     raise SystemExit(f"base64url decode failed: {exc}")
+canonical = base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+if canonical != value:
+    raise SystemExit("base64url decode failed: non-canonical encoding")
 pathlib.Path(sys.argv[2]).write_bytes(data)
 PY
 }
