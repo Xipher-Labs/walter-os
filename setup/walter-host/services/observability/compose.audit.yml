@@ -10,7 +10,7 @@ services:
   promtail:
     command: -config.file=/etc/promtail/promtail.audit.yml -config.expand-env=true
     environment:
-      WALTER_AUDIT_HOST: ${WALTER_AUDIT_HOST:-walter-vm}
+      WALTER_AUDIT_HOST: ${WALTER_AUDIT_HOST:-walter-os}
     volumes:
       - ./promtail/promtail.audit.yml:/etc/promtail/promtail.audit.yml:ro
       - type: bind

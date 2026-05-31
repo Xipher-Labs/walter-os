@@ -57,7 +57,7 @@ scrape_configs:
           job: walter-audit-chain
           app: walter-os
           kind: audit-chain
-          host: ${WALTER_AUDIT_HOST:-walter-vm}
+          host: ${WALTER_AUDIT_HOST:-walter-os}
           __path__: /var/log/walter-audit/chain-*.jsonl
 
   - job_name: restic

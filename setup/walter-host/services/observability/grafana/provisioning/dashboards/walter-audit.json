@@ -32,7 +32,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(({app=\"walter-os\", kind=\"audit-chain\"} | json | __error__=\"\")[5m]))",
+          "expr": "sum(rate({app=\"walter-os\", kind=\"audit-chain\"}[5m]))",
           "legendFormat": "audit rows",
           "refId": "A",
           "datasource": {

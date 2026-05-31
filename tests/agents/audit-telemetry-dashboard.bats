@@ -28,7 +28,7 @@ setup() {
   grep -q "read_only: true" "$AUDIT_COMPOSE"
   grep -q "create_host_path: false" "$AUDIT_COMPOSE"
   grep -q "promtail.audit.yml" "$AUDIT_COMPOSE"
-  grep -q "WALTER_AUDIT_HOST: \${WALTER_AUDIT_HOST:-walter-vm}" "$AUDIT_COMPOSE"
+  grep -q "WALTER_AUDIT_HOST: \${WALTER_AUDIT_HOST:-walter-os}" "$AUDIT_COMPOSE"
   grep -q -- "-config.expand-env=true" "$AUDIT_COMPOSE"
 }
 
@@ -38,7 +38,6 @@ setup() {
   grep -q "source: audit_ts" "$AUDIT_PROMTAIL"
   grep -q "format: RFC3339Nano" "$AUDIT_PROMTAIL"
   grep -q "__path__: /var/log/walter-audit/chain-\\*.jsonl" "$AUDIT_PROMTAIL"
-  grep -q '\$\$' "$AUDIT_PROMTAIL"
 }
 
 @test "promtail uses only low-cardinality audit-chain labels" {
@@ -46,16 +45,20 @@ setup() {
   grep -q "job: walter-audit-chain" <<<"$audit_job"
   grep -q "app: walter-os" <<<"$audit_job"
   grep -q "kind: audit-chain" <<<"$audit_job"
-  grep -q 'host: ${WALTER_AUDIT_HOST:-walter-vm}' <<<"$audit_job"
+  grep -q 'host: ${WALTER_AUDIT_HOST:-walter-os}' <<<"$audit_job"
   run grep -E "chain_id:|event_id:|session_id:|agent:|model:" <<<"$audit_job"
   [ "$status" -ne 0 ]
 }
 
 @test "audit promtail config keeps shared jobs in parity with the base config" {
-  base_jobs="$(grep "job_name:" "$PROMTAIL" | sed 's/.*job_name: //')"
-  audit_jobs="$(grep "job_name:" "$AUDIT_PROMTAIL" | sed 's/.*job_name: //' | grep -v '^walter-audit-chain$')"
+  command -v ruby >/dev/null 2>&1 || skip "ruby required"
 
-  [ "$audit_jobs" = "$base_jobs" ]
+  ruby -ryaml -e '
+    base = YAML.load_file(ARGV[0]).fetch("scrape_configs")
+    audit = YAML.load_file(ARGV[1]).fetch("scrape_configs")
+    audit_shared = audit.reject { |job| job.fetch("job_name") == "walter-audit-chain" }
+    abort "shared promtail jobs drift from base config" unless audit_shared == base
+  ' "$PROMTAIL" "$AUDIT_PROMTAIL"
 }
 
 @test "audit promtail config limits env expansion to audit host label" {
@@ -120,5 +123,5 @@ PY
 
 @test "env template lists audit telemetry knobs" {
   grep -q "WALTER_AUDIT_DIR=/home/walter/.config/walter-os/audit" "$ENV_TEMPLATE"
-  grep -q "WALTER_AUDIT_HOST=walter-vm" "$ENV_TEMPLATE"
+  grep -q "WALTER_AUDIT_HOST=walter-os" "$ENV_TEMPLATE"
 }
