@@ -125,6 +125,32 @@ SH
   jq -e '.prev_hash == "null" and .input_summary == "after active rotation"' "$(_chain_path)"
 }
 
+@test "B-1: append truncates stale fd before retrying post-write rotation" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'before rotation' allow approval-gate ok >/dev/null"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    check_count=0
+    _walter_audit_fd_matches_path() {
+      check_count=\$((check_count + 1))
+      if [[ \"\$check_count\" -eq 2 ]]; then
+        mv '$(_chain_path)' '$(_chain_path).rotated-after-write'
+        return 1
+      fi
+      return 0
+    }
+    walter_audit_append Bash 'after post-write rotation' allow approval-gate ok
+  "
+
+  [ "$status" -eq 0 ]
+  [ -f "$(_chain_path)" ]
+  [ -f "$(_chain_path).rotated-after-write" ]
+  [ "$(wc -l < "$(_chain_path).rotated-after-write" | tr -d ' ')" = "1" ]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+  jq -e '.input_summary == "before rotation"' "$(_chain_path).rotated-after-write"
+  jq -e '.prev_hash == "null" and .input_summary == "after post-write rotation"' "$(_chain_path)"
+}
+
 @test "B-1: active flock lock blocks competing append until timeout" {
   command -v flock >/dev/null 2>&1 || skip "flock not installed"
   mkdir -p "$WALTER_CONFIG/audit"

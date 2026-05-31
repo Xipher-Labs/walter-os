@@ -254,6 +254,33 @@ _walter_audit_fd_matches_path() {
   [[ "$fd_identity" == "$path_identity" ]]
 }
 
+_walter_audit_fd_size() {
+  local fd="$1" size=""
+  size="$(stat -Lc '%s' "/dev/fd/${fd}" 2>/dev/null || true)"
+  if [[ -n "$size" ]]; then
+    printf '%s\n' "$size"
+    return 0
+  fi
+
+  size="$(stat -f '%z' "/dev/fd/${fd}" 2>/dev/null || true)"
+  if [[ -n "$size" ]]; then
+    printf '%s\n' "$size"
+    return 0
+  fi
+
+  return 1
+}
+
+_walter_audit_truncate_fd() {
+  local fd="$1" size="$2"
+  command -v perl >/dev/null 2>&1 || return 1
+  perl -e '
+    my ($fd, $size) = @ARGV;
+    open my $fh, "+<&=", $fd or exit 1;
+    truncate($fh, $size) or exit 1;
+  ' "$fd" "$size"
+}
+
 _walter_audit_verify_chain_file_unlocked() {
   local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex
   if [[ -s "$chain_path" ]]; then
@@ -308,7 +335,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path lock_path previous_line previous_hash retry_count row summary timestamp row_date
+  local audit_dir chain_path lock_path previous_line previous_hash pre_write_size retry_count row summary timestamp row_date
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -376,12 +403,23 @@ walter_audit_append() {
     return "$?"
   fi
 
+  pre_write_size="$(_walter_audit_fd_size 9)" || {
+    exec 9>&-
+    _walter_audit_release_lock "$lock_path"
+    return 1
+  }
   printf '%s\n' "$row" >&9 || {
     exec 9>&-
     _walter_audit_release_lock "$lock_path"
     return 1
   }
   if ! _walter_audit_fd_matches_path 9 "$chain_path"; then
+    _walter_audit_truncate_fd 9 "$pre_write_size" || {
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      echo "walter-audit-chain: chain path changed after append: $chain_path" >&2
+      return 1
+    }
     exec 9>&-
     _walter_audit_release_lock "$lock_path"
     retry_count="${WALTER_AUDIT_APPEND_RETRY:-0}"
