@@ -5,7 +5,7 @@ import { join } from "node:path";
 /**
  * Static-analysis coverage for the redesign layout acceptance criteria that
  * previously had no test (DoD gate). Mirrors the readFileSync pattern of the
- * other redesign unit tests.
+ * other unit tests (e.g. status-tokens.test.ts).
  *
  * AC-1: dark default applied on <html> + status tokens defined in both theme
  *       blocks of globals.css.
@@ -15,7 +15,8 @@ import { join } from "node:path";
  * Refs: docs/specs/control-tower-redesign.md (AC-1, AC-3)
  */
 
-const root = join(__dirname, "..");
+// This file lives in tests/unit/, so the app root is two levels up.
+const root = join(__dirname, "..", "..");
 
 describe("redesign layout — AC-1 (dark default + themed tokens)", () => {
   it("applies the dark theme class on <html> in the root layout", () => {
