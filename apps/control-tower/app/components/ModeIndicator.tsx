@@ -82,6 +82,7 @@ export default function ModeIndicator() {
   );
 
   return (
+    <section aria-label="Consensus mode">
     <AsyncSurface
       loading={!mode}
       error={error}
@@ -159,5 +160,6 @@ export default function ModeIndicator() {
       )}
     </Panel>
     </AsyncSurface>
+    </section>
   );
 }
