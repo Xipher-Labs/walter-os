@@ -59,8 +59,16 @@ _walter_sandbox_path_uid() {
   fi
 }
 
+_walter_sandbox_path_mode() {
+  if stat -f %Lp "$1" >/dev/null 2>&1; then
+    stat -f %Lp "$1"
+  else
+    stat -c %a "$1"
+  fi
+}
+
 _walter_sandbox_validate_owned_dir() {
-  local path="$1" owner uid
+  local path="$1" owner uid mode
   if [[ -L "$path" || ! -d "$path" ]]; then
     echo "walter-sandbox: unsafe runtime path: $path" >&2
     return 1
@@ -69,6 +77,11 @@ _walter_sandbox_validate_owned_dir() {
   owner="$(_walter_sandbox_path_uid "$path")" || return 1
   if [[ -n "$uid" && "$owner" != "$uid" ]]; then
     echo "walter-sandbox: runtime path not owned by current user: $path" >&2
+    return 1
+  fi
+  mode="$(_walter_sandbox_path_mode "$path")" || return 1
+  if (( (8#${mode} & 0022) != 0 )); then
+    echo "walter-sandbox: runtime path is group/other-writable: $path" >&2
     return 1
   fi
 }
@@ -86,6 +99,9 @@ walter_sandbox_runtime_dir() {
     return 1
   fi
   mkdir -p "$base" || return 1
+  if [[ -z "${WALTER_RUNTIME_DIR:-}" ]]; then
+    chmod 700 "$base" || return 1
+  fi
   _walter_sandbox_validate_owned_dir "$base" || return 1
 
   dir="${base}/sandbox"
@@ -94,11 +110,8 @@ walter_sandbox_runtime_dir() {
     return 1
   fi
   mkdir -p "$dir" || return 1
+  chmod 700 "$dir" || return 1
   _walter_sandbox_validate_owned_dir "$dir" || return 1
-  if [[ -z "${WALTER_RUNTIME_DIR:-}" ]]; then
-    chmod 700 "$base" 2>/dev/null || true
-  fi
-  chmod 700 "$dir" 2>/dev/null || true
   printf '%s\n' "$dir"
 }
 
@@ -110,6 +123,31 @@ _walter_sandbox_sed_escape() {
       ;;
   esac
   printf '%s' "$1" | sed 's/[\\\/&]/\\&/g'
+}
+
+_walter_sandbox_firejail_path_escape() {
+  local path="$1"
+  case "$path" in
+    *$'\n'*|*$'\r'*)
+      echo "walter-sandbox: path contains newline characters" >&2
+      return 1
+      ;;
+    *$'\t'*)
+      echo "walter-sandbox: firejail path contains tab characters" >&2
+      return 1
+      ;;
+  esac
+  path="${path//\\/\\\\}"
+  path="${path// /\\ }"
+  printf '%s' "$path"
+}
+
+_walter_sandbox_profile_escape() {
+  local provider="$1" value="$2"
+  if [[ "$provider" == "firejail" ]]; then
+    value="$(_walter_sandbox_firejail_path_escape "$value")" || return 1
+  fi
+  _walter_sandbox_sed_escape "$value"
 }
 
 _walter_sandbox_cleanup_materialized() {
@@ -192,15 +230,15 @@ walter_sandbox_materialize_profile() {
     _walter_sandbox_cleanup_materialized "$dest"
     return 1
   }
-  repo_root="$(_walter_sandbox_sed_escape "$repo_root_raw")" || {
+  repo_root="$(_walter_sandbox_profile_escape "$provider" "$repo_root_raw")" || {
     _walter_sandbox_cleanup_materialized "$dest"
     return 1
   }
-  config_dir="$(_walter_sandbox_sed_escape "${WALTER_CONFIG:-${HOME}/.config/walter-os}")" || {
+  config_dir="$(_walter_sandbox_profile_escape "$provider" "${WALTER_CONFIG:-${HOME}/.config/walter-os}")" || {
     _walter_sandbox_cleanup_materialized "$dest"
     return 1
   }
-  home_value="$(_walter_sandbox_sed_escape "${HOME}")" || {
+  home_value="$(_walter_sandbox_profile_escape "$provider" "${HOME}")" || {
     _walter_sandbox_cleanup_materialized "$dest"
     return 1
   }

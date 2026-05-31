@@ -165,6 +165,15 @@ _mode() {
   [ "$(_mode "$WALTER_RUNTIME_DIR/sandbox")" = "700" ]
 }
 
+@test "AC-2: runtime dir rejects group-writable roots" {
+  chmod 775 "$WALTER_RUNTIME_DIR"
+
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default nsjail"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"runtime path is group/other-writable"* ]]
+}
+
 @test "AC-2: runtime dir rejects symlink roots" {
   target="$TMP_HOME/runtime-target"
   link="$TMP_HOME/runtime-link"
@@ -175,6 +184,27 @@ _mode() {
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"unsafe runtime path"* ]]
+}
+
+@test "AC-2: firejail materialization escapes spaces in paths" {
+  overlay_dir="$WALTER_CONFIG/overlay/sandbox-profiles"
+  mkdir -p "$overlay_dir"
+  cat > "$overlay_dir/space-test.firejail.profile" <<'EOF'
+whitelist @WALTER_OS_HOME@
+read-only @WALTER_OS_HOME@
+blacklist @HOME@/.ssh
+EOF
+  spaced_home="$TMP_HOME/Walter OS"
+  mkdir -p "$spaced_home"
+
+  run bash -c "source '$SANDBOX_LIB'; WALTER_OS_HOME='$spaced_home' walter_sandbox_materialize_profile space-test firejail"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -q '^whitelist .*/Walter\\ OS$' "$profile"
+  grep -q '^read-only .*/Walter\\ OS$' "$profile"
+  run grep -q 'Walter OS' "$profile"
+  [ "$status" -ne 0 ]
 }
 
 @test "AC-2: sandbox-exec hook profile enforces read/write/network boundaries when available" {
