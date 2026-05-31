@@ -207,6 +207,13 @@ _classify_command() {
   local tool="$1" payload="$2"
   case "$tool" in
     Bash)
+      # Capability operations must preempt lower-risk categories below. A
+      # compound command such as `gh pr comment ... "$(walter-os cap mint ...)"`
+      # is still a capability-token mint and must not be tier-overridden as a
+      # comment operation.
+      if _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"; then
+        echo "capability-token-mint"; return
+      fi
       # git push to feature/* — but NOT force push (force-push is blocked-all)
       if [[ "$payload" =~ git[[:space:]]+push.*feature/ ]] && \
          ! [[ "$payload" =~ --force([^-]|$)|--force-with-lease ]]; then
@@ -223,12 +230,6 @@ _classify_command() {
       # gh pr review --approve
       if [[ "$payload" =~ gh[[:space:]]+pr[[:space:]]+review.*--approve ]]; then
         echo "gh-pr-review-approve"; return
-      fi
-      # Capability minting is high risk and not trust-tier-overridable.
-      # It must stay blocked until an explicit standing approval or Plane
-      # operator approval is present.
-      if _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"; then
-        echo "capability-token-mint"; return
       fi
       # Test / lint runners
       if [[ "$payload" =~ (bats|pytest|cargo[[:space:]]+test|pnpm[[:space:]]+test|npm[[:space:]]+test|eslint|shellcheck|ruff|clippy) ]]; then

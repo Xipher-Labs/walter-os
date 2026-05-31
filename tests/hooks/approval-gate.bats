@@ -130,6 +130,12 @@ teardown() {
   [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
 }
 
+@test "CLI: capability mint inside gh pr comment is not tier-overridden" {
+  run "$HOOK" check 'gh pr comment 1 --body "$(walter-os cap mint Bash --duration 5m)"'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
 @test "CLI: ANSI-C quoted walter-os cap mint is blocked" {
   run "$HOOK" check "walter-os cap \$'mint' Bash --patterns '.*' --duration 5m"
   [[ "$status" -eq 7 ]]
