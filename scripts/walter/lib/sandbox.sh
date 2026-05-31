@@ -232,20 +232,32 @@ walter_sandbox_run() {
   case "$provider" in
     sandbox-exec)
       if [[ -d "${profile_path}.scratch" ]]; then
-        TMPDIR="${profile_path}.scratch/" "$provider" -f "$profile_path" -- "$@"
-        status=$?
+        if TMPDIR="${profile_path}.scratch/" "$provider" -f "$profile_path" -- "$@"; then
+          status=0
+        else
+          status=$?
+        fi
       else
-        "$provider" -f "$profile_path" -- "$@"
-        status=$?
+        if "$provider" -f "$profile_path" -- "$@"; then
+          status=0
+        else
+          status=$?
+        fi
       fi
       ;;
     nsjail)
-      "$provider" --config "$profile_path" -- "$@"
-      status=$?
+      if "$provider" --config "$profile_path" -- "$@"; then
+        status=0
+      else
+        status=$?
+      fi
       ;;
     firejail)
-      "$provider" --profile="$profile_path" -- "$@"
-      status=$?
+      if "$provider" --profile="$profile_path" -- "$@"; then
+        status=0
+      else
+        status=$?
+      fi
       ;;
     *)
       echo "walter-sandbox: unsupported provider: $provider" >&2

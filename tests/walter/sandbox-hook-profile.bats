@@ -189,3 +189,16 @@ _mode() {
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
+
+@test "AC-2: sandbox run cleans profiles after failures under errexit" {
+  command -v sandbox-exec >/dev/null || skip "sandbox-exec not installed"
+  sandbox-exec -p '(version 1) (allow default)' /usr/bin/true >/dev/null 2>&1 \
+    || skip "sandbox-exec cannot apply profiles in this environment"
+
+  run bash -c "set -e; source '$SANDBOX_LIB'; if walter_sandbox_run walter-hook-default /bin/sh -c 'exit 42'; then exit 99; else rc=\"\$?\"; fi; [ \"\$rc\" -eq 42 ]"
+
+  [ "$status" -eq 0 ]
+  run find "$WALTER_RUNTIME_DIR/sandbox" -maxdepth 1 -name 'walter-hook-default.sandbox-exec.*' -print
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
