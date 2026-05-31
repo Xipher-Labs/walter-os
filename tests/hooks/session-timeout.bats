@@ -108,3 +108,32 @@ _call_hook() {
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
   echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'malformed-state'
 }
+
+@test "UserPromptSubmit hook fails closed on non-object JSON input" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "printf '[]' | '$HOOK'"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'non-object hook input'
+}
+
+@test "UserPromptSubmit hook maps status 12 without JSON to state-write" {
+  fake_home="$TMP_HOME/fake-walter"
+  mkdir -p "$fake_home/scripts/walter/lib"
+  cat > "$fake_home/scripts/walter/lib/session-state.sh" <<'EOF'
+walter_session_touch() {
+  return 12
+}
+EOF
+
+  export WALTER_OS_HOME="$fake_home"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'state-write'
+}

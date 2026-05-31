@@ -63,11 +63,15 @@ fi
 if ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
   _block "Walter-OS session timeout: malformed hook input — failing closed for safety."
 fi
+if ! printf '%s' "$INPUT" | jq -e 'type == "object"' >/dev/null 2>&1; then
+  _block "Walter-OS session timeout: non-object hook input — failing closed for safety."
+fi
 
 _env_loader="${WALTER_OS_HOME:-$REPO_ROOT}/scripts/walter/lib/env-loader.sh"
 if [[ -f "$_env_loader" ]]; then
   # shellcheck source=/dev/null
   source "$_env_loader"
+  walter_env_load_allowlist "${HOME}/.config/walter-os/overlay/personal.env"
   walter_env_load_allowlist "${WALTER_CONFIG}/env"
 fi
 unset _env_loader
@@ -93,14 +97,18 @@ if [[ "$_status" -eq 0 ]]; then
 fi
 
 _trigger="$(printf '%s' "$_result" | jq -r '.trigger // "unknown"' 2>/dev/null || printf 'unknown')"
+_trigger="${_trigger:-unknown}"
+if [[ "$_status" -eq 12 && "$_trigger" == "unknown" ]]; then
+  _trigger="state-write"
+fi
 case "$_trigger" in
   max-hours)
     _limit="$(_walter_session_effective_max_hours)h"
-    _block "Walter-OS session expired at $(date -u +%H:%M) (max-hours=${_limit}). Type /session restart to begin a new session."
+    _block "Walter-OS session expired at $(date -u +%H:%M) (max-hours=${_limit}). Type /session restart to begin a new session, or close this terminal."
     ;;
   max-idle)
     _limit="$(_walter_session_effective_idle_min)m"
-    _block "Walter-OS session expired at $(date -u +%H:%M) (max-idle=${_limit}). Type /session restart to begin a new session."
+    _block "Walter-OS session expired at $(date -u +%H:%M) (max-idle=${_limit}). Type /session restart to begin a new session, or close this terminal."
     ;;
   malformed-state|clock-rewind)
     _block "Walter-OS session invalid (${_trigger}). Type /session restart to begin a new session."
