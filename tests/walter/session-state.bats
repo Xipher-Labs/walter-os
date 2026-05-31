@@ -351,6 +351,21 @@ _mode() {
   [ ! -f "$state_file" ]
 }
 
+@test "session end clears state with unsafe session id" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  mkdir -p "$(dirname "$state_file")"
+  jq -n \
+    --arg started_at "2026-01-01T00:00:00Z" \
+    --arg last_activity_at "2026-01-01T00:00:00Z" \
+    '{session_id:"../../bad", started_at:$started_at, last_activity_at:$last_activity_at}' > "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ ! -f "$state_file" ]
+}
+
 @test "session end reports delete failures" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null

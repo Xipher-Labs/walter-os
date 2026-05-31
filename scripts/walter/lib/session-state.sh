@@ -147,7 +147,7 @@ _walter_session_revoke_capability_material() {
   [[ -f "$file" ]] || return 0
   session_id="$(jq -r '.session_id // empty' "$file" 2>/dev/null || true)"
   [[ -n "$session_id" ]] || return 0
-  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 0
   private_key="$(_walter_session_private_key_file "$session_id")"
   caps_dir="$(_walter_session_caps_dir "$session_id")"
 
