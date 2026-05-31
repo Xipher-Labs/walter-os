@@ -554,9 +554,14 @@ check_preflight() {
     exit 4
   fi
   if ! _openssl_bin="$(resolve_openssl_bin)"; then
-    err "openssl with ED25519 key generation is required for session capability keys. ${_pkg_hint_openssl}"
-    err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
-    exit 4
+    if [[ $DRY_RUN -eq 1 ]]; then
+      warn "openssl with ED25519 key generation missing. Install before runtime: ${_pkg_hint_openssl}"
+      warn "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
+    else
+      err "openssl with ED25519 key generation is required for session capability keys. ${_pkg_hint_openssl}"
+      err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
+      exit 4
+    fi
   fi
 
   # yq presence handling (Codex R2-R6 #125 — flavor check + ordering):
@@ -1392,6 +1397,7 @@ _install_deps_macos() {
   # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
   local required_deps=(git curl jq openssl yq docker bats)
   local optional_deps=(python3)
+  local _openssl_bin
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1418,6 +1424,24 @@ _install_deps_macos() {
 
   for dep in "${required_deps[@]}"; do
     [[ "$dep" == "docker" ]] && continue
+    if [[ "$dep" == "openssl" ]]; then
+      if _openssl_bin="$(resolve_openssl_bin)"; then
+        ok "openssl already installed (${_openssl_bin})"
+      elif [[ $DRY_RUN -eq 1 ]]; then
+        dry "would run: brew install openssl"
+      else
+        say "Installing openssl via Homebrew..."
+        brew install openssl
+        hash -r 2>/dev/null || true
+        if ! _openssl_bin="$(resolve_openssl_bin)"; then
+          err "OpenSSL installed, but no ED25519-capable binary was found."
+          err "Set WALTER_OPENSSL_BIN=/path/to/openssl if Homebrew installed it outside PATH."
+          exit 1
+        fi
+        ok "Installed openssl (${_openssl_bin})"
+      fi
+      continue
+    fi
     if command -v "$dep" >/dev/null 2>&1; then
       # Codex R3 #125: --step 1 bypasses check_preflight, so the macOS
       # branch must also flavor-check yq when already-installed. Without
@@ -1461,6 +1485,7 @@ _install_deps_linux() {
   # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
   local required_deps=(git curl jq openssl yq bats)
   local optional_deps=(python3)
+  local _openssl_bin
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1518,6 +1543,24 @@ _install_deps_linux() {
   fi
 
   for dep in "${required_deps[@]}"; do
+    if [[ "$dep" == "openssl" ]]; then
+      if _openssl_bin="$(resolve_openssl_bin)"; then
+        ok "openssl already installed (${_openssl_bin})"
+      elif [[ $DRY_RUN -eq 1 ]]; then
+        dry "would run: sudo apt-get install -y openssl"
+      else
+        say "Installing openssl via apt-get..."
+        sudo apt-get install -y openssl
+        hash -r 2>/dev/null || true
+        if ! _openssl_bin="$(resolve_openssl_bin)"; then
+          err "OpenSSL installed, but ED25519 key generation is still unavailable."
+          err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your supported binary is outside PATH."
+          exit 1
+        fi
+        ok "Installed openssl (${_openssl_bin})"
+      fi
+      continue
+    fi
     if command -v "$dep" >/dev/null 2>&1; then
       # yq pre-installed flavor check — see _yq_is_mikefarah above.
       if [[ "$dep" == "yq" ]] && ! _yq_is_mikefarah; then

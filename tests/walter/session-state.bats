@@ -76,6 +76,22 @@ _mode() {
   [ "$caps_count" = "1" ]
 }
 
+@test "session start reclaims a stale lock with a dead pid" {
+  command -v openssl >/dev/null 2>&1 || skip "openssl required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  lock_dir="${state_file}.lock"
+  mkdir -p "$lock_dir"
+  printf '999999999\n' > "$lock_dir/pid"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"started"'* ]]
+  [ -f "$state_file" ]
+  [ ! -d "$lock_dir" ]
+}
+
 @test "clock override is ignored outside explicit test mode" {
   unset WALTER_SESSION_TEST_CLOCK
   export WALTER_SESSION_NOW_EPOCH=1767225600

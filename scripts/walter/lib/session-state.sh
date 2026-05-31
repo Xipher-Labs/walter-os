@@ -160,6 +160,25 @@ _walter_session_revoke_capability_material() {
   fi
 }
 
+_walter_session_release_lock() {
+  local lock_dir="$1"
+  rm -f "$lock_dir/pid" 2>/dev/null || true
+  rmdir "$lock_dir" 2>/dev/null || true
+}
+
+_walter_session_reclaim_stale_lock() {
+  local lock_dir="$1" pid
+  [[ -d "$lock_dir" ]] || return 0
+  [[ -f "$lock_dir/pid" ]] || return 1
+  pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  if kill -0 "$pid" 2>/dev/null; then
+    return 1
+  fi
+  rm -f "$lock_dir/pid" 2>/dev/null || return 1
+  rmdir "$lock_dir" 2>/dev/null
+}
+
 _walter_session_write_new() {
   local repo="$1" file="$2" now_epoch="$3"
   local state_dir now_iso max_hours max_idle tmp_file session_id private_key public_key caps_dir tmp_key tmp_pub openssl_bin
@@ -276,22 +295,44 @@ walter_session_touch() {
       return 12
     }
     if mkdir "$lock_dir" 2>/dev/null; then
+      if ! printf '%s\n' "$$" > "$lock_dir/pid" 2>/dev/null; then
+        _walter_session_release_lock "$lock_dir"
+        _walter_session_result "error" "state-write" "$file"
+        return 12
+      fi
       if [[ ! -f "$file" ]]; then
         if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
-          rmdir "$lock_dir" 2>/dev/null || true
+          _walter_session_release_lock "$lock_dir"
           _walter_session_result "error" "state-write" "$file"
           return 12
         fi
-        rmdir "$lock_dir" 2>/dev/null || true
+        _walter_session_release_lock "$lock_dir"
         _walter_session_result "started" "" "$file"
         return 0
       fi
-      rmdir "$lock_dir" 2>/dev/null || true
+      _walter_session_release_lock "$lock_dir"
     else
       while [[ ! -f "$file" && "$lock_attempts" -lt 50 ]]; do
         sleep 0.1
         lock_attempts=$((lock_attempts + 1))
       done
+      if [[ ! -f "$file" ]] && _walter_session_reclaim_stale_lock "$lock_dir"; then
+        if mkdir "$lock_dir" 2>/dev/null; then
+          if ! printf '%s\n' "$$" > "$lock_dir/pid" 2>/dev/null; then
+            _walter_session_release_lock "$lock_dir"
+            _walter_session_result "error" "state-write" "$file"
+            return 12
+          fi
+          if ! _walter_session_write_new "$repo" "$file" "$now_epoch"; then
+            _walter_session_release_lock "$lock_dir"
+            _walter_session_result "error" "state-write" "$file"
+            return 12
+          fi
+          _walter_session_release_lock "$lock_dir"
+          _walter_session_result "started" "" "$file"
+          return 0
+        fi
+      fi
       if [[ ! -f "$file" ]]; then
         _walter_session_result "error" "state-write" "$file"
         return 12
