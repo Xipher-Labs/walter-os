@@ -55,6 +55,39 @@ set -uo pipefail
 # Read the tool call from stdin
 INPUT="$(cat)"
 
+WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+_audit_decision() {
+  local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$input_summary" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
+_emit_allow() {
+  _audit_decision allow "${1:-}"
+  printf '{"decision":"allow"}\n'
+  exit 0
+}
+
+_emit_allow_with_warn() {
+  local message="$1"
+  _audit_decision allow "$message"
+  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$message" '$m')"
+  exit 0
+}
+
+_emit_block() {
+  local reason="$1" input_summary="${2:-${CMD:-}}"
+  _audit_decision block "$reason" "$input_summary"
+  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
+  exit 0
+}
+
 # Extract command (using jq if available, fail-closed otherwise)
 if ! command -v jq >/dev/null 2>&1; then
   # Fail CLOSED — without jq we cannot parse the hook event.
@@ -70,12 +103,10 @@ fi
 # jq parse failure was silently coerced to CMD="" via `// ""`, causing the
 # hook to fall through to "allow".
 if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
-  printf '{"decision":"block","reason":"bash-denylist: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety."}\n'
-  exit 0
+  _emit_block "bash-denylist: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety." "$INPUT"
 fi
 if [[ -z "$CMD" ]]; then
-  printf '{"decision":"block","reason":"bash-denylist: empty command in hook input — failing closed for safety."}\n'
-  exit 0
+  _emit_block "bash-denylist: empty command in hook input — failing closed for safety."
 fi
 
 # Two-factor bypass: requires WALTER_DENYLIST_BYPASS=1 (operator opt-in via env)
@@ -83,8 +114,7 @@ fi
 # Either alone does NOT bypass. See header comment for rationale (Codex R2 M1).
 if [[ "${WALTER_DENYLIST_BYPASS:-0}" == "1" ]] \
   && echo "$CMD" | grep -qF -- '--allow-denylist-pattern'; then
-  printf '{"decision":"allow","systemMessage":"bash-denylist: two-factor bypass used (WALTER_DENYLIST_BYPASS=1 + --allow-denylist-pattern). Command allowed with operator acknowledgment."}\n'
-  exit 0
+  _emit_allow_with_warn "bash-denylist: two-factor bypass used (WALTER_DENYLIST_BYPASS=1 + --allow-denylist-pattern). Command allowed with operator acknowledgment."
 fi
 
 # ---------- denylist patterns ----------
@@ -186,11 +216,9 @@ for pattern_name in "${!DENYLIST_PATTERNS[@]}"; do
     truncated="${CMD:0:120}"
     # Use jq to safely construct the JSON reason (handles special chars)
     reason="bash-denylist: command matches blocked pattern '${pattern_name}': ${truncated}"
-    printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
-    exit 0
+    _emit_block "$reason"
   fi
 done
 
 # No pattern matched — allow
-printf '{"decision":"allow"}\n'
-exit 0
+_emit_allow

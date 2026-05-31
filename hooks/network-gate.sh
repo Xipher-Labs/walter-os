@@ -55,6 +55,39 @@ fi
 
 INPUT="$(cat)"
 
+WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+_audit_decision() {
+  local audit_tool="${TOOL_NAME:-unknown}" decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append "$audit_tool" "$input_summary" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
+_emit_allow() {
+  _audit_decision allow "${1:-}"
+  printf '%s\n' '{"decision":"allow"}'
+  exit 0
+}
+
+_emit_block() {
+  local reason="$1" input_summary="${2:-${CMD:-}}"
+  _audit_decision block "$reason" "$input_summary"
+  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
+  exit 0
+}
+
+_emit_allow_with_warn() {
+  local msg="$1"
+  _audit_decision allow "$msg"
+  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$msg" '$m')"
+  exit 0
+}
+
 if ! command -v jq >/dev/null 2>&1; then
   # Same posture as bash-denylist.sh: without jq we cannot parse the
   # hook event. Fail-closed.
@@ -63,28 +96,23 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 if [[ -z "$INPUT" ]]; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: empty hook input — failing closed for safety."}'
-  exit 0
+  _emit_block "network-gate: empty hook input — failing closed for safety." "$INPUT"
 fi
 
 if ! TOOL_NAME="$(printf '%s' "$INPUT" | jq -er '.tool_name // empty' 2>/dev/null)"; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: malformed JSON or missing tool_name — failing closed for safety."}'
-  exit 0
+  _emit_block "network-gate: malformed JSON or missing tool_name — failing closed for safety." "$INPUT"
 fi
 
 # Pass through every tool that isn't Bash. We only inspect command strings.
 if [[ "$TOOL_NAME" != "Bash" ]]; then
-  printf '%s\n' '{"decision":"allow"}'
-  exit 0
+  _emit_allow
 fi
 
 if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety."}'
-  exit 0
+  _emit_block "network-gate: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety." "$INPUT"
 fi
 if [[ -z "$CMD" ]]; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: empty Bash command — failing closed for safety."}'
-  exit 0
+  _emit_block "network-gate: empty Bash command — failing closed for safety."
 fi
 
 # ---------- bypass detection ----------
@@ -138,22 +166,6 @@ _two_factor_bypass_active() {
 # only when `--remote=URL` or `--remote URL` is present). All other subcommands — including
 # status/log/diff/add/commit/rev-parse/config/branch/cherry/remote/
 # submodule/archive (no --remote=) — are LOCAL and pass through.
-
-# Output helper.
-_emit_allow() {
-  printf '%s\n' '{"decision":"allow"}'
-  exit 0
-}
-_emit_block() {
-  local reason="$1"
-  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
-  exit 0
-}
-_emit_allow_with_warn() {
-  local msg="$1"
-  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$msg" '$m')"
-  exit 0
-}
 
 # Split the command into segments by shell separators (`;`, `&&`, `||`,
 # `|`, `&`). We then inspect each segment as if it were its own command.
