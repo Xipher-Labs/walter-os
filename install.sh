@@ -172,6 +172,11 @@ check_required_tool() {
   fi
 }
 
+openssl_supports_ed25519() {
+  command -v openssl >/dev/null 2>&1 || return 1
+  openssl genpkey -algorithm ED25519 >/dev/null 2>&1
+}
+
 check_optional_tool() {
   local tool="$1" install_hint="$2"
   if command -v "$tool" >/dev/null 2>&1; then
@@ -207,6 +212,12 @@ check_requirements() {
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
   check_required_tool openssl "brew install openssl  # or: sudo apt-get install -y openssl"
+  if command -v openssl >/dev/null 2>&1 && ! openssl_supports_ed25519; then
+    err "openssl is installed but does not support ED25519 key generation"
+    say "  Detected: $(openssl version 2>&1 | head -1)" >&2
+    say "  Fix: brew install openssl  # or: sudo apt-get install -y openssl" >&2
+    _requirement_failures=$((_requirement_failures + 1))
+  fi
   # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
@@ -516,6 +527,10 @@ check_preflight() {
   fi
   if ! command -v openssl >/dev/null 2>&1; then
     err "openssl required for session capability keys. ${_pkg_hint_openssl}"
+    exit 4
+  fi
+  if ! openssl_supports_ed25519; then
+    err "openssl found but ED25519 key generation is unavailable. ${_pkg_hint_openssl}"
     exit 4
   fi
 

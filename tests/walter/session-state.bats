@@ -246,7 +246,7 @@ _mode() {
   [ ! -f "$private_key" ]
 }
 
-@test "session end rejects private key paths outside the state directory" {
+@test "session end ignores private key paths outside the state directory" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
@@ -258,10 +258,28 @@ _mode() {
 
   run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
 
-  [ "$status" -eq 12 ]
-  [[ "$output" == *'"trigger":"state-delete"'* ]]
+  [ "$status" -eq 0 ]
   [ -f "$victim" ]
-  [ -f "$state_file" ]
+  [ ! -f "$state_file" ]
+}
+
+@test "session end ignores stored caps dir traversal paths" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  real_caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  victim_dir="$TMP_HOME/victim-dir"
+  mkdir -p "$victim_dir"
+  tmp_state="${state_file}.tmp"
+  jq --arg caps_dir "${real_caps_dir}/../../victim-dir" '.capability_tokens_dir = $caps_dir' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ -d "$victim_dir" ]
+  [ ! -d "$real_caps_dir" ]
+  [ ! -f "$state_file" ]
 }
 
 @test "session end reports delete failures" {

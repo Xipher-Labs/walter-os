@@ -112,30 +112,20 @@ walter_session_get() {
 }
 
 _walter_session_revoke_capability_material() {
-  local file="$1" private_key caps_dir state_dir
+  local file="$1" session_id private_key caps_dir
   [[ -f "$file" ]] || return 0
-  state_dir="$(_walter_session_state_dir)"
-  private_key="$(jq -r '.capability_private_key_path // empty' "$file" 2>/dev/null || true)"
-  caps_dir="$(jq -r '.capability_tokens_dir // empty' "$file" 2>/dev/null || true)"
+  session_id="$(jq -r '.session_id // empty' "$file" 2>/dev/null || true)"
+  [[ -n "$session_id" ]] || return 0
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  private_key="$(_walter_session_private_key_file "$session_id")"
+  caps_dir="$(_walter_session_caps_dir "$session_id")"
 
-  if [[ -n "${private_key:-}" ]]; then
-    case "$private_key" in
-      "$state_dir"/session-*.key) ;;
-      *) return 1 ;;
-    esac
-    if [[ -e "$private_key" ]] && ! rm -f "$private_key"; then
-      return 1
-    fi
+  if [[ -e "$private_key" ]] && ! rm -f "$private_key"; then
+    return 1
   fi
 
-  if [[ -n "${caps_dir:-}" ]]; then
-    case "$caps_dir" in
-      "$state_dir"/caps-*) ;;
-      *) return 1 ;;
-    esac
-    if [[ -d "$caps_dir" ]] && ! rm -r "$caps_dir"; then
-      return 1
-    fi
+  if [[ -d "$caps_dir" ]] && ! rm -r "$caps_dir"; then
+    return 1
   fi
 }
 
