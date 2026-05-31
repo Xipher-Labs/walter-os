@@ -44,7 +44,7 @@ Hook-integration rows currently use these `decision_source` values:
 - `pre-commit-tests`
 - `wiki-validator-hook`
 
-Audit append failures fail closed for hook decisions. If a hook cannot append its row, it emits a block decision instead of allowing an unaudited tool invocation.
+Audit append failures fail closed for allow decisions and ordinary policy decisions. Dependency-failure block paths still return the actionable dependency reason (for example missing `jq` or `yq`) and attempt a best-effort audit row first, because the tool invocation is already blocked.
 
 Verify a day with:
 

@@ -70,17 +70,15 @@ emit_block() {
   exit 0
 }
 
-# Read stdin JSON (may be empty if not invoked as hook)
-input="$(cat 2>/dev/null || echo '')"
-
-# Fast-path: no input → allow
-if [[ -z "$input" ]]; then
-  echo '{"decision":"allow"}'
-  exit 0
-fi
-
 tool_name="unknown"
 file_path=""
+
+# Read stdin JSON (may be empty if not invoked as hook)
+input="$(cat 2>/dev/null || echo '')"
+# Fast-path: no input → allow
+if [[ -z "$input" ]]; then
+  emit_allow "empty hook input"
+fi
 
 # Extract file_path from hook JSON
 if ! command -v jq >/dev/null 2>&1; then

@@ -100,7 +100,7 @@ _pre_commit_tests() {
 _wiki_validator_write() {
   local file_path="$1"
   jq -n --arg path "$file_path" '{"tool_name":"Write","tool_input":{"file_path":$path}}' \
-    | "$REPO_ROOT/hooks/wiki-validator-hook.sh"
+    | bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
 }
 
 _rows() {
