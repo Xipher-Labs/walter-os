@@ -57,7 +57,10 @@ walter_sandbox_runtime_dir() {
   base="${WALTER_RUNTIME_DIR:-${TMPDIR:-/tmp}/walter-os-${uid}}"
   dir="${base}/sandbox"
   mkdir -p "$dir" || return 1
-  chmod 700 "$base" "$dir" 2>/dev/null || true
+  if [[ -z "${WALTER_RUNTIME_DIR:-}" ]]; then
+    chmod 700 "$base" 2>/dev/null || true
+  fi
+  chmod 700 "$dir" 2>/dev/null || true
   printf '%s\n' "$dir"
 }
 

@@ -22,6 +22,14 @@ teardown() {
   esac
 }
 
+_mode() {
+  if stat -f %Lp "$1" >/dev/null 2>&1; then
+    stat -f %Lp "$1"
+  else
+    stat -c %a "$1"
+  fi
+}
+
 @test "AC-2: nsjail hook profile declares resource limits and no-network posture" {
   profile="$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.nsjail.conf"
 
@@ -86,6 +94,16 @@ teardown() {
   run bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default nsjail"
   [ "$status" -eq 0 ]
   [ "$output" != "$first_profile" ]
+}
+
+@test "AC-2: runtime dir materialization preserves caller-provided root mode" {
+  chmod 755 "$WALTER_RUNTIME_DIR"
+
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default nsjail"
+
+  [ "$status" -eq 0 ]
+  [ "$(_mode "$WALTER_RUNTIME_DIR")" = "755" ]
+  [ "$(_mode "$WALTER_RUNTIME_DIR/sandbox")" = "700" ]
 }
 
 @test "AC-2: sandbox-exec hook profile enforces read/write/network boundaries when available" {
