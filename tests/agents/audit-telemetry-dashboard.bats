@@ -45,7 +45,7 @@ setup() {
   grep -q "job: walter-audit-chain" <<<"$audit_job"
   grep -q "app: walter-os" <<<"$audit_job"
   grep -q "kind: audit-chain" <<<"$audit_job"
-  grep -q 'host: ${WALTER_AUDIT_HOST:-walter-os}' <<<"$audit_job"
+  grep -q "host: \${WALTER_AUDIT_HOST:-walter-os}" <<<"$audit_job"
   run grep -E "chain_id:|event_id:|session_id:|agent:|model:" <<<"$audit_job"
   [ "$status" -ne 0 ]
 }
@@ -79,7 +79,7 @@ assert len(dashboard.get("panels", [])) >= 6
 PY
 }
 
-@test "Grafana audit dashboard queries Loki and parses JSON at query time" {
+@test "Grafana audit dashboard queries Loki and limits JSON parsing" {
   command -v python3 >/dev/null 2>&1 || skip "python3 required"
   python3 - "$DASHBOARD" <<'PY'
 import json
@@ -103,7 +103,29 @@ for panel in panels:
     if panel_uses_json:
         json_panels += 1
 
-assert json_panels >= 6
+assert json_panels >= 5
+PY
+}
+
+@test "Distinct Sessions Seen avoids query-time JSON extraction" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 required"
+  python3 - "$DASHBOARD" <<'PY'
+import json
+import sys
+
+dashboard = json.load(open(sys.argv[1], encoding="utf-8"))
+panel = next(
+    panel
+    for panel in dashboard.get("panels", [])
+    if panel.get("title") == "Distinct Sessions Seen"
+)
+expr = panel["targets"][0]["expr"]
+assert '{app="walter-os", kind="audit-chain"}' in expr
+assert '| json' not in expr
+assert '|= "\\"session_id\\":"' in expr
+assert '| pattern ' in expr
+assert '<session_id>' in expr
+assert 'session_id != ""' in expr
 PY
 }
 

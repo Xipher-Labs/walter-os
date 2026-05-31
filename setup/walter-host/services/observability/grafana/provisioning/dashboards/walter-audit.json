@@ -1,7 +1,7 @@
 {
   "uid": "walter-audit",
   "title": "Walter Audit Chain",
-  "description": "Audit-chain telemetry from Promtail into Loki. Loki stores each JSONL row verbatim; panels parse JSON at query time.",
+  "description": "Audit-chain telemetry from Promtail into Loki. Loki stores each JSONL row verbatim; panels use low-cardinality Loki labels and targeted LogQL parsers for derived fields.",
   "tags": [
     "walter-os",
     "audit",
@@ -162,7 +162,7 @@
       },
       "targets": [
         {
-          "expr": "count(count by (session_id) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json | session_id != \"\" | __error__=\"\")[$__range])))",
+          "expr": "count(count by (session_id) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} |= \"\\\"session_id\\\":\" | pattern \"<_>\\\"session_id\\\":\\\"<session_id>\\\"<_>\" | session_id != \"\" | __error__=\"\")[$__range])))",
           "legendFormat": "sessions",
           "refId": "A",
           "datasource": {
