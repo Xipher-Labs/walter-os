@@ -167,6 +167,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "compound gh commands require every hostname capability" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh --hostname github.com api repos/Xipher-Labs/walter-os && gh --hostname evil.example api repos/x/y")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh pr approve requires pattern capability beyond github.com network" {
   _mint Bash --network github.com --duration 30m >/dev/null
 

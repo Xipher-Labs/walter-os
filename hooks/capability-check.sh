@@ -153,15 +153,46 @@ _cap_normalize_host() {
 }
 
 _cap_extract_gh_host() {
-  local command="$1" host=""
-  if [[ "$command" =~ (^|[[:space:]])--hostname=([^[:space:];|&()]+) ]]; then
-    host="${BASH_REMATCH[2]}"
-  elif [[ "$command" =~ (^|[[:space:]])(--hostname|-h)[[:space:]]+([^[:space:];|&()]+) ]]; then
-    host="${BASH_REMATCH[3]}"
-  elif [[ "$command" =~ (^|[[:space:];|&()])([^[:space:];|&()]*/)?gh([[:space:]]|$) ]]; then
-    host="${GH_HOST:-github.com}"
+  local command="$1" tokfile token cli idx j candidate host
+  local -a tokens=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      tokens+=("$token")
+    done < "$tokfile"
   fi
-  [[ -n "$host" ]] && printf '%s\n' "$host"
+  rm -f "$tokfile" 2>/dev/null || true
+
+  idx=0
+  while [[ "$idx" -lt "${#tokens[@]}" ]]; do
+    cli="${tokens[$idx]##*/}"
+    if [[ "$cli" != "gh" ]]; then
+      idx=$((idx + 1))
+      continue
+    fi
+
+    host="${GH_HOST:-github.com}"
+    j=$((idx + 1))
+    while [[ "$j" -lt "${#tokens[@]}" ]]; do
+      candidate="${tokens[$j]}"
+      case "$candidate" in
+        ';'|'|'|'&'|'&&'|'||'|'('|')'|$'\n') break ;;
+        --hostname=*) host="${candidate#--hostname=}" ;;
+        --hostname|-h)
+          host="${tokens[$((j + 1))]:-$host}"
+          j=$((j + 1))
+          ;;
+        --*) ;;
+        -*) ;;
+        *) break ;;
+      esac
+      j=$((j + 1))
+    done
+
+    _cap_normalize_host "$host"
+    idx=$((idx + 1))
+  done
 }
 
 _cap_extract_positional_network_hosts() {
