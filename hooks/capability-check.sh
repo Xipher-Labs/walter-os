@@ -26,6 +26,10 @@ source "$CAP_LIB"
 source "$PROTECTED_PATHS_LIB"
 
 declare -a CAP_HIGH_TIER_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
+declare -a CAP_PREPARED_SHELL_TOKENS=()
+declare -a CAP_LOADED_SHELL_TOKENS=()
+CAP_PREPARED_SHELL_COMMAND=""
+CAP_PREPARED_SHELL_STATUS=2
 
 _cap_emit_allow() {
   printf '%s\n' '{"decision":"allow"}'
@@ -60,13 +64,15 @@ _cap_mktemp_file() {
 }
 
 _cap_has_bypass_flag() {
-  local command="$1" tokfile hit=1
-  tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
-    grep -qxF -- '--allow-no-cap' "$tokfile" && hit=0
+  local command="$1" token
+  local -a tokens=()
+  if _cap_load_shell_tokens "$command"; then
+    tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
+    for token in "${tokens[@]}"; do
+      [[ "$token" == "--allow-no-cap" ]] && return 0
+    done
   fi
-  rm -f "$tokfile" 2>/dev/null || true
-  return "$hit"
+  return 1
 }
 
 _cap_write_shell_tokens() {
@@ -88,6 +94,44 @@ PY
     return $?
   fi
 
+  return 1
+}
+
+_cap_prepare_shell_tokens() {
+  local command="$1" tokfile token
+  CAP_PREPARED_SHELL_COMMAND="$command"
+  CAP_PREPARED_SHELL_STATUS=1
+  CAP_PREPARED_SHELL_TOKENS=()
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      CAP_PREPARED_SHELL_TOKENS+=("$token")
+    done < "$tokfile"
+    CAP_PREPARED_SHELL_STATUS=0
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
+  return "$CAP_PREPARED_SHELL_STATUS"
+}
+
+_cap_load_shell_tokens() {
+  local command="$1" tokfile token
+  CAP_LOADED_SHELL_TOKENS=()
+
+  if [[ "$CAP_PREPARED_SHELL_STATUS" != "2" && "$command" == "$CAP_PREPARED_SHELL_COMMAND" ]]; then
+    CAP_LOADED_SHELL_TOKENS=("${CAP_PREPARED_SHELL_TOKENS[@]}")
+    return "$CAP_PREPARED_SHELL_STATUS"
+  fi
+
+  tokfile="$(_cap_mktemp_file)"
+  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
+    while IFS= read -r token; do
+      CAP_LOADED_SHELL_TOKENS+=("$token")
+    done < "$tokfile"
+    rm -f "$tokfile" 2>/dev/null || true
+    return 0
+  fi
+  rm -f "$tokfile" 2>/dev/null || true
   return 1
 }
 
@@ -128,16 +172,11 @@ _cap_curl_connect_to_target_host() {
 }
 
 _cap_extract_literal_hosts() {
-  local command="$1" tokfile token prev host idx
+  local command="$1" token prev host idx
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
-  fi
-  rm -f "$tokfile" 2>/dev/null || true
+  _cap_load_shell_tokens "$command" || return 0
+  tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -291,20 +330,11 @@ _cap_emit_proxy_command_hosts() {
 }
 
 _cap_extract_gh_host() {
-  local command="$1" tokfile token cli idx j candidate host inline_gh_host="" shell_gh_host=""
+  local command="$1" token cli idx j candidate host inline_gh_host="" shell_gh_host=""
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  [[ -n "$tokfile" ]] || return 0
-  if _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
-  else
-    rm -f "$tokfile" 2>/dev/null || true
-    return 0
-  fi
-  rm -f "$tokfile" 2>/dev/null || true
+  _cap_load_shell_tokens "$command" || return 0
+  tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -367,16 +397,11 @@ _cap_extract_gh_host() {
 }
 
 _cap_extract_curl_hosts() {
-  local command="$1" tokfile token cli idx j candidate value host
+  local command="$1" cli idx j candidate value host
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
-  fi
-  rm -f "$tokfile" 2>/dev/null || true
+  _cap_load_shell_tokens "$command" || return 0
+  tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -440,16 +465,11 @@ _cap_extract_curl_hosts() {
 }
 
 _cap_extract_shell_c_hosts() {
-  local command="$1" tokfile token cli idx j candidate body
+  local command="$1" cli idx j candidate body
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
-  fi
-  rm -f "$tokfile" 2>/dev/null || true
+  _cap_load_shell_tokens "$command" || return 0
+  tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -477,16 +497,11 @@ _cap_extract_shell_c_hosts() {
 }
 
 _cap_extract_positional_network_hosts() {
-  local command="$1" tokfile token cli idx j candidate host
+  local command="$1" token cli idx j candidate host
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
-  fi
-  rm -f "$tokfile" 2>/dev/null || true
+  _cap_load_shell_tokens "$command" || return 0
+  tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -553,16 +568,11 @@ _cap_extract_positional_network_hosts() {
 }
 
 _cap_extract_git_ssh_override_hosts() {
-  local command="$1" tokfile token next override idx
+  local command="$1" token next override idx
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  if [[ -n "$tokfile" ]] && _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
-  fi
-  rm -f "$tokfile" 2>/dev/null || true
+  _cap_load_shell_tokens "$command" || return 0
+  tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -592,24 +602,18 @@ _cap_extract_git_ssh_override_hosts() {
 }
 
 _cap_is_network_command() {
-  local command="$1" tokfile token cli idx j sub command_position=1
+  local command="$1" token cli idx j sub command_position=1
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  [[ -n "$tokfile" ]] || return 0
-  if _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
+  if _cap_load_shell_tokens "$command"; then
+    tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
   else
-    rm -f "$tokfile" 2>/dev/null || true
     if ! command -v python3 >/dev/null 2>&1; then
       _cap_command_has_obvious_network_cli "$command" && return 0
       return 1
     fi
     return 0
   fi
-  rm -f "$tokfile" 2>/dev/null || true
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -879,7 +883,17 @@ _cap_is_mint_like_command() {
 }
 
 _cap_has_compound_separator() {
-  local command="$1"
+  local command="$1" token
+  local -a tokens=()
+  if _cap_load_shell_tokens "$command"; then
+    tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
+    for token in "${tokens[@]}"; do
+      case "$token" in
+        ''|';'|'|'|'&'|'&&'|'||'|$'\n') return 0 ;;
+      esac
+    done
+    return 1
+  fi
   if command -v python3 >/dev/null 2>&1; then
     python3 - "$command" <<'PY'
 import shlex
@@ -904,24 +918,18 @@ PY
 }
 
 _cap_is_gh_pr_approve() {
-  local command="$1" tokfile token cli idx j sub
+  local command="$1" cli idx j sub
   local -a tokens=()
 
-  tokfile="$(_cap_mktemp_file)"
-  [[ -n "$tokfile" ]] || return 0
-  if _cap_write_shell_tokens "$command" "$tokfile"; then
-    while IFS= read -r token; do
-      tokens+=("$token")
-    done < "$tokfile"
+  if _cap_load_shell_tokens "$command"; then
+    tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
   else
-    rm -f "$tokfile" 2>/dev/null || true
     if ! command -v python3 >/dev/null 2>&1; then
       [[ "$command" =~ (^|[[:space:];|&({])([^[:space:];|&()]*/)?gh[[:space:]]+pr[[:space:]]+review([^;|&]*)--approve([[:space:];|&)}]|$) ]] && return 0
       return 1
     fi
     return 0
   fi
-  rm -f "$tokfile" 2>/dev/null || true
 
   idx=0
   while [[ "$idx" -lt "${#tokens[@]}" ]]; do
@@ -984,8 +992,15 @@ _cap_is_high_tier_path() {
 }
 
 _cap_bash_mentions_high_tier_path() {
-  local command="$1"
+  local command="$1" token
+  local -a tokens=()
   local protected_path_re='(^|[^A-Za-z0-9_./-])(hooks/[^[:space:];|&"'\''`]+[.]sh|[.][/]hooks/[^[:space:];|&"'\''`]+[.]sh|[.]claude/settings[.]json|[.]github/workflows/[^[:space:];|&"'\''`]+|install[.]sh|[.][/]install[.]sh|bin/walter-os|[.][/]bin/walter-os|AGENTS[.]md|CLAUDE[.]md|mcp/servers[.]json|scripts/walter/(lib/(capability-token|session-state|protected-paths)[.]sh|subcommands/cap[.]sh)|agents/[^[:space:];|&"'\''`]+[.]md|skills/[^[:space:];|&"'\''`]+/SKILL[.]md|auth/[^[:space:];|&"'\''`]+|crypto/[^[:space:];|&"'\''`]+|personal/health/[^[:space:];|&"'\''`]+|[.]ssh/[^[:space:];|&"'\''`]+|[^[:space:];|&"'\''`]+/[.]ssh/[^[:space:];|&"'\''`]+|[^[:space:];|&"'\''`]+[.](key|pem|crt)|[^[:space:];|&"'\''`]+[.]env([.][^[:space:];|&"'\''`]*)?|[.]env([.][^[:space:];|&"'\''`]*)?)([^A-Za-z0-9_./-]|$)'
+  if _cap_load_shell_tokens "$command"; then
+    tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
+    for token in "${tokens[@]}"; do
+      [[ "$token" =~ $protected_path_re ]] && return 0
+    done
+  fi
   [[ "$command" =~ $protected_path_re ]]
 }
 
@@ -1239,6 +1254,9 @@ _cap_main_json() {
 
   if [[ "$tool" == "Bash" ]] && ! command -v python3 >/dev/null 2>&1; then
     _cap_emit_block "capability-check: python3 is required for Bash capability inspection - failing closed"
+  fi
+  if [[ "$tool" == "Bash" ]]; then
+    _cap_prepare_shell_tokens "$target" || true
   fi
   _cap_is_high_tier "$tool" "$target" "$repo" || _cap_emit_allow
   if ! command -v python3 >/dev/null 2>&1; then
