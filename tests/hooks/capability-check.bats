@@ -73,11 +73,25 @@ SH
   printf '%s\n' "$bin_dir"
 }
 
+_real_python3_or_skip() {
+  local real_python
+  real_python="/opt/homebrew/bin/python3"
+  if [[ -x "$real_python" ]]; then
+    printf '%s\n' "$real_python"
+    return 0
+  fi
+  real_python="$(command -v python3 || true)"
+  if [[ -n "$real_python" && -x "$real_python" ]]; then
+    printf '%s\n' "$real_python"
+    return 0
+  fi
+  skip "python3 required for counting tokenizer tests"
+}
+
 _hook_json_with_counting_python() {
   local tool="$1" key="$2" value="$3" count_file="$4" python_bin input real_python
   python_bin="$(_install_counting_python3)"
-  real_python="/opt/homebrew/bin/python3"
-  [[ -x "$real_python" ]] || real_python="$(command -v python3)"
+  real_python="$(_real_python3_or_skip)"
   input="$(printf '{"tool_name":"%s","tool_input":{"%s":%s}}' \
     "$tool" "$key" "$(printf '%s' "$value" | jq -Rs .)")"
   printf '%s' "$input" \
@@ -110,8 +124,7 @@ SH
 _hook_json_with_failing_counting_python() {
   local tool="$1" key="$2" value="$3" count_file="$4" python_bin input real_python
   python_bin="$(_install_failing_counting_python3)"
-  real_python="/opt/homebrew/bin/python3"
-  [[ -x "$real_python" ]] || real_python="$(command -v python3)"
+  real_python="$(_real_python3_or_skip)"
   input="$(printf '{"tool_name":"%s","tool_input":{"%s":%s}}' \
     "$tool" "$key" "$(printf '%s' "$value" | jq -Rs .)")"
   printf '%s' "$input" \
