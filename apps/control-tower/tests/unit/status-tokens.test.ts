@@ -11,6 +11,7 @@
 import { describe, it, expect } from "vitest";
 import {
   STATUS_TOKENS,
+  agentStateToStatus,
   tierToStatus,
   healthToStatus,
   type StatusKind,
@@ -67,6 +68,14 @@ describe("tierToStatus [AC-2]", () => {
 
   it("maps panic onto the critical token", () => {
     expect(tierToStatus("panic")).toBe("critical");
+  });
+});
+
+describe("agentStateToStatus [AC-2]", () => {
+  it("maps agent states exhaustively into status tokens", () => {
+    expect(agentStateToStatus("idle")).toBe("idle");
+    expect(agentStateToStatus("working")).toBe("working");
+    expect(agentStateToStatus("blocked")).toBe("blocked");
   });
 });
 

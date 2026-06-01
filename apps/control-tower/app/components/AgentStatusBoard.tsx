@@ -6,7 +6,7 @@ import StatusBadge from "@/app/components/ui/StatusBadge";
 import StatusDot from "@/app/components/ui/StatusDot";
 import { SectionTitle } from "@/app/components/ui/Panel";
 import AsyncSurface from "@/app/components/ui/AsyncSurface";
-import type { StatusKind } from "@/app/components/ui/status";
+import { agentStateToStatus } from "@/app/components/ui/status";
 
 /**
  * Agent Status Board — real-time state of the 6 Council agents over SSE.
@@ -21,7 +21,7 @@ const PLANE_BASE_URL =
   process.env.NEXT_PUBLIC_PLANE_URL ?? "http://localhost:8080";
 
 function AgentCard({ agent }: { agent: AgentState }) {
-  const status = agent.state as StatusKind;
+  const status = agentStateToStatus(agent.state);
   const issueURL = agent.current_issue
     ? `${PLANE_BASE_URL}/walter-os/issues/${agent.current_issue}`
     : null;

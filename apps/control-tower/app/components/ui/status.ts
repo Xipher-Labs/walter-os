@@ -94,6 +94,19 @@ export function tierToStatus(tier: AlertTierLike): StatusKind {
 /** Agent state from lib/metrics-reader.ts is already a StatusKind subset. */
 export type AgentStateLike = "idle" | "working" | "blocked";
 
+export function agentStateToStatus(state: AgentStateLike): StatusKind {
+  switch (state) {
+    case "idle":
+    case "working":
+    case "blocked":
+      return state;
+    default: {
+      const exhaustive: never = state;
+      return exhaustive;
+    }
+  }
+}
+
 /**
  * Service health → status. `null` means no standby configured (N/A), which is
  * neither healthy nor unhealthy and must not render green (HA route contract).

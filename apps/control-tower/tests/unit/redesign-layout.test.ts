@@ -21,8 +21,7 @@ const root = join(__dirname, "..", "..");
 describe("redesign layout — AC-1 (dark default + themed tokens)", () => {
   it("applies the dark theme class on <html> in the root layout", () => {
     const src = readFileSync(join(root, "app/layout.tsx"), "utf8");
-    expect(src).toContain("<html");
-    expect(src).toContain("dark");
+    expect(src).toMatch(/<html[\s\S]*?className=\{`[^`]*\bdark\b/);
   });
 
   it("defines status tokens in both the dark (:root) and light theme blocks", () => {
