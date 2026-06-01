@@ -4,7 +4,6 @@ set -euo pipefail
 
 SVC_DIR="${SVC_DIR:-/opt/walter-vm/services/observability}"
 ENV_FILE="$SVC_DIR/.env"
-DATA_DIR="/mnt/walter-vm-data/observability"
 
 cd "$SVC_DIR"
 
@@ -27,21 +26,35 @@ Save to Infisical workspace=walter-vm-internal env=prod key=GF_ADMIN_PASSWORD.
 EOF
 fi
 
+if [[ -z "${OBSERVABILITY_DATA_DIR:-}" ]]; then
+  OBSERVABILITY_DATA_DIR="$(sed -n 's/^OBSERVABILITY_DATA_DIR=//p' "$ENV_FILE" | tail -n 1)"
+fi
+export OBSERVABILITY_DATA_DIR="${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}"
+DATA_DIR="$OBSERVABILITY_DATA_DIR"
+
 # 2. Make sure data dirs exist on the volume + UID match
 sudo install -d -m 755 "$DATA_DIR" \
   "$DATA_DIR/prometheus" \
   "$DATA_DIR/loki" \
-  "$DATA_DIR/grafana" \
-  "$DATA_DIR/promtail"
+  "$DATA_DIR/grafana"
+sudo install -d -m 700 "$DATA_DIR/promtail"
 # Loki container runs as 10001:10001
 sudo chown -R 10001:10001 "$DATA_DIR/loki"
 # Grafana container runs as 472:472
 sudo chown -R 472:472 "$DATA_DIR/grafana"
 # Prometheus container runs as 65534:65534 (nobody)
 sudo chown -R 65534:65534 "$DATA_DIR/prometheus"
-# Promtail container runs as root by default; keep positions file off the
-# writable container layer while restricting host-side access.
-sudo chmod 700 "$DATA_DIR/promtail"
+# Promtail used /tmp/promtail-positions.yaml before the positions file moved
+# onto the host data volume. Preserve it once when upgrading an existing
+# container so redeploys do not re-tail already-scraped logs.
+if sudo test ! -f "$DATA_DIR/promtail/promtail-positions.yaml" \
+  && sudo docker container inspect promtail >/dev/null 2>&1; then
+  if sudo docker cp promtail:/tmp/promtail-positions.yaml "$DATA_DIR/promtail/promtail-positions.yaml" 2>/dev/null; then
+    echo "→ migrated promtail positions to $DATA_DIR/promtail/promtail-positions.yaml"
+  else
+    echo "→ no legacy /tmp/promtail-positions.yaml found; promtail will create a new positions file"
+  fi
+fi
 
 # 3. Bring up
 sudo docker compose --env-file "$ENV_FILE" up -d

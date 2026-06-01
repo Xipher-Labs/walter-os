@@ -23,10 +23,15 @@ setup() {
   [ "$status" -ne 0 ]
   run grep -q -- "-config.expand-env=true" "$COMPOSE"
   [ "$status" -ne 0 ]
-  grep -q "/mnt/walter-vm-data/observability/promtail:/promtail:rw" "$COMPOSE"
+  grep -q "\${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}/promtail:/promtail:rw" "$COMPOSE"
   grep -q "filename: /promtail/promtail-positions.yaml" "$PROMTAIL"
-  grep -q '"$DATA_DIR/promtail"' "$DEPLOY_SH"
-  grep -q 'chmod 700 "$DATA_DIR/promtail"' "$DEPLOY_SH"
+  grep -q 'OBSERVABILITY_DATA_DIR="${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}"' "$DEPLOY_SH"
+  grep -q 'DATA_DIR="$OBSERVABILITY_DATA_DIR"' "$DEPLOY_SH"
+  grep -q 'install -d -m 700 "$DATA_DIR/promtail"' "$DEPLOY_SH"
+  run grep -q 'chmod 700 "$DATA_DIR/promtail"' "$DEPLOY_SH"
+  [ "$status" -ne 0 ]
+  grep -q 'promtail:/tmp/promtail-positions.yaml' "$DEPLOY_SH"
+  grep -q "OBSERVABILITY_DATA_DIR=/mnt/walter-vm-data/observability" "$ENV_TEMPLATE"
 }
 
 @test "audit override mounts the Walter audit directory read-only" {
@@ -48,11 +53,17 @@ setup() {
 }
 
 @test "promtail uses only low-cardinality audit-chain labels" {
-  audit_job="$(sed -n '/job_name: walter-audit-chain/,/job_name: restic/p' "$AUDIT_PROMTAIL")"
+  audit_job="$(awk '
+    /job_name: walter-audit-chain/ { in_job = 1 }
+    in_job && /^  - job_name:/ && $0 !~ /walter-audit-chain/ { exit }
+    in_job { print }
+  ' "$AUDIT_PROMTAIL")"
   grep -q "job: walter-audit-chain" <<<"$audit_job"
   grep -q "app: walter-os" <<<"$audit_job"
   grep -q "kind: audit-chain" <<<"$audit_job"
   grep -q "host: \${WALTER_AUDIT_HOST:-walter-os}" <<<"$audit_job"
+  run grep -q "job_name: restic" <<<"$audit_job"
+  [ "$status" -ne 0 ]
   run grep -E "chain_id:|event_id:|session_id:|agent:|model:" <<<"$audit_job"
   [ "$status" -ne 0 ]
 }
@@ -112,6 +123,7 @@ PY
   python3 - "$DASHBOARD" "$loki_uid" <<'PY'
 import json
 import sys
+import urllib.parse
 
 dashboard = json.load(open(sys.argv[1], encoding="utf-8"))
 loki_uid = sys.argv[2]
@@ -124,7 +136,12 @@ for panel in dashboard.get("panels", []):
         target_ds = target.get("datasource") or {}
         if target_ds:
             assert target_ds.get("uid") == loki_uid
-assert f"%22uid%22%3A%22{loki_uid}%22" in dashboard.get("links", [{}])[0].get("url", "")
+link_url = dashboard.get("links", [{}])[0].get("url", "")
+left_values = urllib.parse.parse_qs(urllib.parse.urlparse(link_url).query).get("left")
+assert left_values, link_url
+left = json.loads(left_values[0])
+assert left["datasource"] == {"type": "loki", "uid": loki_uid}
+assert left["range"] == dashboard["time"]
 PY
 }
 
