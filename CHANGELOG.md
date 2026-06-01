@@ -1150,7 +1150,7 @@ See git log for details — no formal changelog was kept before 0.2.0.
 ---
 
 [Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/Xipher-Labs/walter-os/compare/v0.5.1...v0.6.0
+[0.6.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.6.0
 [0.5.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.1
 [0.5.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.0
 [0.4.5]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.5
