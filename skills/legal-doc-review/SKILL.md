@@ -1,6 +1,14 @@
 ---
 name: legal-doc-review
-description: Walk through a third-party contract (NDA / SaaS T&Cs / MSA / vendor agreement / DPA) and flag the clauses that matter for solo founders or small teams. Use when reviewing a NDA before signing, a SaaS vendor's terms before adopting their service, a customer's MSA before accepting, an investor's term sheet before responding, or any contract where you cannot afford a full lawyer review for every word. Produces a redline-shaped output: PROBLEM clauses (negotiate or walk), QUESTION clauses (ask the counterparty), and OK clauses (accept as-is).
+description: >-
+  Walk through a third-party contract (NDA / SaaS T&Cs / MSA / vendor
+  agreement / DPA) and flag the clauses that matter for solo founders or small
+  teams. Use when reviewing a NDA before signing, a SaaS vendor's terms before
+  adopting their service, a customer's MSA before accepting, an investor's term
+  sheet before responding, or any contract where you cannot afford a full
+  lawyer review for every word. Produces a redline-shaped output: PROBLEM
+  clauses (negotiate or walk), QUESTION clauses (ask the counterparty), and OK
+  clauses (accept as-is).
 ---
 
 # Legal-doc review (founder grade)

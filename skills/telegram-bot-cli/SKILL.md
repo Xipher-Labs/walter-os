@@ -1,6 +1,12 @@
 ---
 name: telegram-bot-cli
-description: Send messages, files, and notifications via the Telegram Bot API using `curl`. Use this skill whenever the user asks to "send a Telegram notification", "alert me on Telegram", "post to my Telegram channel from a script". Replaces the dropped community telegram MCP. SECURITY KEY POINT — bots only see chats they have been added to, NOT all your personal chats. This is a feature: bounded blast radius.
+description: >-
+  Send messages, files, and notifications via the Telegram Bot API using `curl`.
+  Use this skill whenever the user asks to "send a Telegram notification",
+  "alert me on Telegram", "post to my Telegram channel from a script". Replaces
+  the dropped community telegram MCP. SECURITY KEY POINT — bots only see chats
+  they have been added to, NOT all your personal chats. This is a feature:
+  bounded blast radius.
 ---
 
 # Telegram Bot API

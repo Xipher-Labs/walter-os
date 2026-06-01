@@ -1,6 +1,13 @@
 ---
 name: landing-page-fast
-description: Ship a high-quality landing page in 4-8 hours using Astro + Tailwind + shadcn-style components — opinionated defaults, proven section structures, performance and SEO baked in. Use when launching a new product ([Project A], [Project B]), validating a hackathon idea, refreshing a [Company] product page, or any time the user asks to "build a landing", "make a landing page", "set up a landing for X". Output: a deployed landing page on Vercel with form capture, analytics, and proper meta. Bakes in `frontend-quality` rules.
+description: >-
+  Ship a high-quality landing page in 4-8 hours using Astro + Tailwind +
+  shadcn-style components — opinionated defaults, proven section structures,
+  performance and SEO baked in. Use when launching a new product ([Project A],
+  [Project B]), validating a hackathon idea, refreshing a [Company] product
+  page, or any time the user asks to "build a landing", "make a landing page",
+  "set up a landing for X". Output: a deployed landing page on Vercel with form
+  capture, analytics, and proper meta. Bakes in `frontend-quality` rules.
 ---
 
 # Landing Page Fast
