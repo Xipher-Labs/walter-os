@@ -102,16 +102,17 @@ The profile should ship an `.env.template` documenting these values:
 - `OUTLINE_URL=https://outline.${WALTER_DOMAIN}`
 - `OUTLINE_SECRET_KEY`
 - `OUTLINE_UTILS_SECRET`
-- `OUTLINE_DATABASE_URL`
-- `OUTLINE_REDIS_URL`
+- `OUTLINE_DB_PASS`
 - `NEXTAUTH_URL=https://links.${WALTER_DOMAIN}`
 - `LINKWARDEN_NEXTAUTH_SECRET`
-- `LINKWARDEN_DATABASE_URL`
+- `LINKWARDEN_DB_PASS`
 - optional OIDC client IDs/secrets for Authentik integration
 
 Secrets must be loaded from the approved Walter-OS secrets flow. The template
 must not contain working defaults for signing secrets, database passwords, or
-OIDC client secrets.
+OIDC client secrets. Compose should construct database and Redis connection
+URLs from service-local hostnames and password variables instead of asking the
+operator to maintain full connection strings.
 
 ### Caddy and Access
 
