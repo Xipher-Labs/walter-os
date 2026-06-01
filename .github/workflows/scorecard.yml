@@ -16,18 +16,20 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  # Required for uploading SARIF results to code-scanning
-  security-events: write
-  # Required for Scorecard to read the repo
   contents: read
-  # Required for Scorecard's token analysis
-  actions: read
-  id-token: write   # for OIDC publish to public Scorecard API
 
 jobs:
   analyze:
     name: scorecard analysis
     runs-on: ubuntu-latest
+    permissions:
+      # Required for uploading SARIF results to code-scanning
+      security-events: write
+      # Required for Scorecard to read the repo
+      contents: read
+      # Required for Scorecard's token analysis
+      actions: read
+      id-token: write   # for OIDC publish to public Scorecard API
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         # actions/checkout v4
