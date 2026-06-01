@@ -103,14 +103,14 @@ renderer mangles multi-line fenced code blocks inside table cells.
     nuclei-cli:
       tool: Bash
       scope:
-        patterns: ["nuclei[[:space:]].*"]
+        patterns: ["^[[:space:]]*nuclei([[:space:]]|$)"]
         network: ["*"]  # nuclei talks to operator-specified targets
       duration: 4h
     
     hcloud-cli:
       tool: Bash
       scope:
-        patterns: ["^hcloud[[:space:]].*"]
+        patterns: ["^[[:space:]]*hcloud([[:space:]]|$)"]
         network: ["api.hetzner.cloud"]
       duration: 8h
   ```
