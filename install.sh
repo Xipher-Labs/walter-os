@@ -1040,6 +1040,11 @@ merge_claude_hooks() {
 
   local walter_hooks
   # PreToolUse Bash chain (order matters — first hook fires first):
+  #   bash-denylist.sh, capability-check.sh, and network-gate.sh route through
+  #   sandbox-hook-runner.sh under walter-hook-default by default (#260 AC-4).
+  #   approval-gate.sh remains direct for now because it writes audit/session
+  #   state; it will move behind a split profile in a later AC-4/AC-5 slice.
+  #
   #   1. bash-denylist.sh  → CHEAP regex match. Blocks RCE patterns
   #      (curl|bash, eval$VAR, bash -c "$(...)", etc.) before any
   #      heavier check. Fails fast; fails closed when jq is missing.
@@ -1085,10 +1090,10 @@ merge_claude_hooks() {
       {
         matcher: "Bash",
         hooks: [
-          { type: "command", command: ($repo + "/hooks/bash-denylist.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/network-gate.sh"),     _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/bash-denylist.sh") | @sh),    _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh), _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/network-gate.sh") | @sh),     _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
         ]
@@ -1102,8 +1107,8 @@ merge_claude_hooks() {
       {
         matcher: "Write|Edit|MultiEdit|NotebookEdit",
         hooks: [
-          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh), _walter_os: true },
           {
             type: "command",
             command: ($repo + "/hooks/wiki-validator-hook.sh"),

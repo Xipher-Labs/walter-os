@@ -54,8 +54,15 @@ The six requested runtime tracks map to this implementation order:
 - #246 is open, mergeable, and completes process-isolation sandbox AC-1:
   provider detection, profile path resolution, command wrapping, and scaffold
   profiles.
-- The next slice is **Process isolation sandbox AC-2 hook profile**, stacked on
-  #246.
+- #247 is open, mergeable, and completes process-isolation sandbox AC-2:
+  default hook profiles and profile materialization.
+- #249 is open, mergeable, and completes process-isolation sandbox AC-3:
+  default skill profiles.
+- #250 is open, mergeable, and adds the high-tier invisible mount layer on top
+  of the skill sandbox.
+- The next slice is **Process isolation sandbox AC-4 security gate wiring**,
+  stacked on #250. It routes pure decision hooks through the sandbox runtime
+  while keeping `approval-gate.sh` direct for this slice.
 
 ## Design Risks To Resolve Before Claiming Completion
 
@@ -152,6 +159,11 @@ The six requested runtime tracks map to this implementation order:
      `skills/daily-supply-chain-audit/scripts/audit.sh`.
    - Deliverable: runtime fail-closed sandbox use, install-time warning
      sentinel, provider/profile checksum baselines, and explicit bypass logging.
+   - Current slice: route the pure security decision gates
+     (`bash-denylist`, `capability-check`, `network-gate`) through a sandbox
+     hook runner from the installed Claude hook chain. `approval-gate.sh`
+     remains direct because it writes audit/session state until AC-5 adds
+     provider/sentinel checks and profile splits.
 9. **Capability-aware dynamic profiles**.
    - Files: `scripts/walter/lib/sandbox.sh`,
      `tests/walter/sandbox-cap-integration.bats`.
