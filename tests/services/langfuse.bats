@@ -15,6 +15,7 @@ service_stanza() {
   local service="$1"
   awk -v service="$service" '
     $0 ~ "^  " service ":" { in_service=1; print; next }
+    in_service && /^[^[:space:]]/ { exit }
     in_service && /^  [A-Za-z0-9_-]+:/ { exit }
     in_service { print }
   ' "$LANGFUSE_COMPOSE"

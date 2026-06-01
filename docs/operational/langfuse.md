@@ -41,6 +41,12 @@ internal service URL instead of the public Caddy route. Treat trace payloads as
 retained telemetry: prompts, completions, tool inputs, and metadata may include
 customer or operator data.
 
+Before enabling callbacks broadly, decide what must be masked or excluded.
+Redact secrets, auth headers, customer identifiers, and long tool payloads
+before they reach LiteLLM metadata. Disable Langfuse callbacks entirely for
+routes handling PHI, legal-privileged material, or any workflow the operator
+marks local-only.
+
 ## Operational fit
 
 Use Langfuse for startup and team workflows where trace review and eval history matter:
