@@ -1,0 +1,27 @@
+# Pinning manifest for vendored third-party skills + MCP servers.
+#
+# This file is enforced by daily-supply-chain-audit. Every vendored skill must:
+# - be listed in [skills] with a full 40-char upstream commit SHA;
+# - be listed in [skill_content_sha256] with the current local content hash.
+#
+# To refresh a content hash after reviewing an intentional vendored change:
+#
+#   python3 skills/daily-supply-chain-audit/scripts/check-pinning.py \
+#     --vendored-skills skills/daily-supply-chain-audit/assets/pinned-refs.toml \
+#     skills
+#
+# If the checker reports a content mismatch, review the diff and update the
+# corresponding hash below only after the upstream pin and local contents are
+# both intentional.
+
+[skills]
+# Vendored third-party design skills (see docs/specs/ux-skills-adoption.md).
+impeccable = "b913668ba4d25b95c4a62278d3637837e9d2c6d9"
+ui-ux-pro-max = "b7e3af80f6e331f6fb456667b82b12cade7c9d35"
+
+[skill_content_sha256]
+impeccable = "0a67347fc1dd574603d0fce6fb36349af2a9fd4d457b2c3f44c0988bc586a2ce"
+ui-ux-pro-max = "ed7723e4f8bf8197173bb72f163f5cb7e3093778e061f6721413978eae0c02c5"
+
+[mcp]
+# (none pinned here yet)

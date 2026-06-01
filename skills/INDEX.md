@@ -44,9 +44,11 @@ in your message.
 ## Product and Design
 
 - [brand-creation](brand-creation/SKILL.md)
+- [impeccable](impeccable/SKILL.md) — design-craft + anti-AI-slop vocabulary (color, type, layout, motion, interaction, copy); defers to frontend-quality for WCAG/CWV gating
 - [landing-page-fast](landing-page-fast/SKILL.md)
 - [nanobanana](nanobanana/SKILL.md)
 - [readme-craft](readme-craft/SKILL.md)
+- [ui-ux-pro-max](ui-ux-pro-max/SKILL.md) — design-system reference data corpus (palettes/fonts/patterns, per-stack rules), consulted by grep/Read; passive lookup, not a review gate
 
 ## Project and Knowledge Management
 

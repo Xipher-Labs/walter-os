@@ -167,6 +167,8 @@ setup() {
     | grep -v "$REPO_ROOT/docs/specs/founder-skills-bundle-extraction.md" \
     | grep -v "$REPO_ROOT/docs/specs/agents-md-cascade-spec.md" \
     | grep -v "$REPO_ROOT/docs/specs/antigravity-adapter.md" \
+    | grep -v "$REPO_ROOT/docs/specs/ux-skills-adoption.md" \
+    | grep -vE "$REPO_ROOT/skills/impeccable/.*" \
     | grep -vE "$REPO_ROOT/tests/oss/[a-zA-Z0-9_-]+\.bats" \
     | grep -vE "$REPO_ROOT/tests/github-actions/[a-zA-Z0-9_-]+\.bats" \
     | grep -vE "$REPO_ROOT/skills/[^/]+/SKILL\.md" \
