@@ -74,7 +74,9 @@ Expected service boundary:
 - `linkwarden` at `https://links.${WALTER_DOMAIN}`
 - Cloudflare Access remains the perimeter gate.
 - Authentik, when enabled, can provide app-level identity and OIDC.
-- Secrets are loaded from the approved Walter-OS secrets flow, not hardcoded.
+- Secrets are loaded from Infisical at runtime with `walter_secrets_load`,
+  following `docs/operational/operator-setup-runbook.md#1a-create-infisical-machine-identity-web-ui-2-min`;
+  they are not hardcoded.
 
 ## Implementation Scope
 
@@ -108,11 +110,12 @@ The profile should ship an `.env.template` documenting these values:
 - `LINKWARDEN_DB_PASS`
 - optional OIDC client IDs/secrets for Authentik integration
 
-Secrets must be loaded from the approved Walter-OS secrets flow. The template
-must not contain working defaults for signing secrets, database passwords, or
-OIDC client secrets. Compose should construct database and Redis connection
-URLs from service-local hostnames and password variables instead of asking the
-operator to maintain full connection strings.
+Secrets must be loaded from Infisical at runtime with `walter_secrets_load`,
+following `docs/operational/operator-setup-runbook.md#1a-create-infisical-machine-identity-web-ui-2-min`.
+The template must not contain working defaults for signing secrets, database
+passwords, or OIDC client secrets. Compose should construct database and Redis
+connection URLs from service-local hostnames and password variables instead of
+asking the operator to maintain full connection strings.
 
 ### Caddy and Access
 
