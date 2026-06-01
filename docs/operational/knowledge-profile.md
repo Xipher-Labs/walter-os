@@ -105,7 +105,7 @@ The profile should ship an `.env.template` documenting these values:
 - `OUTLINE_SECRET_KEY`
 - `OUTLINE_UTILS_SECRET`
 - `OUTLINE_DB_PASS`
-- `NEXTAUTH_URL=https://links.${WALTER_DOMAIN}`
+- `LINKWARDEN_NEXTAUTH_URL=https://links.${WALTER_DOMAIN}`
 - `LINKWARDEN_NEXTAUTH_SECRET`
 - `LINKWARDEN_DB_PASS`
 - optional OIDC client IDs/secrets for Authentik integration
@@ -116,6 +116,9 @@ The template must not contain working defaults for signing secrets, database
 passwords, or OIDC client secrets. Compose should construct database and Redis
 connection URLs from service-local hostnames and password variables instead of
 asking the operator to maintain full connection strings.
+Compose should map `LINKWARDEN_NEXTAUTH_URL` to Linkwarden's container-local
+`NEXTAUTH_URL` environment variable so Walter-OS does not introduce a generic
+host-level variable that can collide with other NextAuth apps.
 
 ### Caddy and Access
 
