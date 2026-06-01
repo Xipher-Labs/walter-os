@@ -63,13 +63,21 @@ _escape_glob_pattern() {
 }
 
 _replace_literal() {
-  local detail="$1" needle="$2" replacement="$3" pattern
+  local detail="$1" needle="$2" replacement="$3" pattern extglob_was_on=0 result
   [[ -n "$needle" ]] || {
     printf '%s' "$detail"
     return 0
   }
   pattern="$(_escape_glob_pattern "$needle")"
-  printf '%s' "${detail//$pattern/$replacement}"
+  if shopt -q extglob; then
+    extglob_was_on=1
+    shopt -u extglob
+  fi
+  result="${detail//$pattern/$replacement}"
+  if [[ "$extglob_was_on" -eq 1 ]]; then
+    shopt -s extglob
+  fi
+  printf '%s' "$result"
 }
 
 _sanitize_hook_detail() {

@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 # tests/hooks/session-timeout.bats
+# shellcheck disable=SC2030,SC2031
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -132,6 +133,26 @@ YAML
   [[ "$reason" == *"invalid YAML"* ]]
   [[ "$reason" != *"$glob_home"* ]]
   [[ "$reason" != *"$glob_config"* ]]
+}
+
+@test "UserPromptSubmit hook sanitizes extglob-like paths literally" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  extglob_home="$TMP_HOME/extglob-home-@(prod|dev)"
+  extglob_config="$extglob_home/.config/walter-os"
+  mkdir -p "$extglob_config/overlay" "$extglob_home/work/repo"
+  export HOME="$extglob_home"
+  export WALTER_CONFIG="$extglob_config"
+  REPO_UNDER_TEST="$extglob_home/work/repo"
+  printf 'skills: [\n' > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
+
+  run bash -O extglob -c 'jq -nc --arg cwd "$1" '\''{cwd:$cwd, prompt:"hello"}'\'' | bash "$2"' _ "$REPO_UNDER_TEST" "$HOOK"
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"invalid YAML"* ]]
+  [[ "$reason" != *"$extglob_home"* ]]
+  [[ "$reason" != *"$extglob_config"* ]]
 }
 
 @test "UserPromptSubmit hook allows active session within limits" {
