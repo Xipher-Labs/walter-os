@@ -15,6 +15,31 @@ Caddy should route `https://langfuse.${WALTER_DOMAIN}` to `localhost:3011`.
 The profile exposes only the Langfuse UI on loopback; Postgres, ClickHouse,
 Redis, and object storage stay service-local.
 
+## Emitting traces
+
+Starting the profile only creates the Langfuse app. To send Walter-Bridge /
+LiteLLM traffic into it, create a Langfuse project and load its keys into the
+LiteLLM environment:
+
+```text
+LANGFUSE_PUBLIC_KEY=<project public key>
+LANGFUSE_SECRET_KEY=<project secret key>
+LANGFUSE_HOST=https://langfuse.${WALTER_DOMAIN}
+```
+
+Then enable LiteLLM callbacks in the LiteLLM config:
+
+```yaml
+litellm_settings:
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+```
+
+For containers on the same Docker network, `LANGFUSE_HOST` may point at the
+internal service URL instead of the public Caddy route. Treat trace payloads as
+retained telemetry: prompts, completions, tool inputs, and metadata may include
+customer or operator data.
+
 ## Operational fit
 
 Use Langfuse for startup and team workflows where trace review and eval history matter:

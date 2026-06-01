@@ -39,7 +39,7 @@ service_stanza() {
 }
 
 @test "langfuse app images do not use latest or floating major tags" {
-  run grep -E "docker.io/langfuse/langfuse(-worker)?:(latest|3)([^0-9.]|$)" "$LANGFUSE_COMPOSE"
+  run grep -E "docker.io/langfuse/langfuse(-worker)?:(latest|[0-9]+)([^0-9.]|$)" "$LANGFUSE_COMPOSE"
   [ "$status" -ne 0 ]
 }
 
