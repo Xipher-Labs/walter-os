@@ -21,9 +21,9 @@ REQUIRED_FIELDS = {
 
 def frontmatter_from(path)
   text = File.read(path)
-  return [nil, "missing frontmatter"] unless text.start_with?("---\n")
+  return [nil, "missing frontmatter"] unless text.match?(/\A---\r?\n/)
 
-  parts = text.split(/^---\s*$/, 3)
+  parts = text.split(/^---\s*$/m, 3)
   return [nil, "missing frontmatter"] if parts.length < 3 || parts[1].strip.empty?
 
   [parts[1], nil]
