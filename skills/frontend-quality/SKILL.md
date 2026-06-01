@@ -1,6 +1,14 @@
 ---
 name: frontend-quality
-description: Enforce frontend quality bar — accessibility (WCAG 2.2 AA), performance (Core Web Vitals: LCP/INP/CLS), semantic HTML, image optimization, bundle size, mobile-first, loading/empty/error states. Use this skill on any PR that touches React/Next.js/Astro/Svelte/Vue components, CSS/Tailwind, layout files, or anything in `app/`, `components/`, `pages/`, `src/`. Critical for [Project A] (Argentine mobile users on slow 3G/4G) and [Company] docs site (developer audience expects fast). Auto-triggers on `*.tsx`, `*.jsx`, `*.svelte`, `*.vue`, `*.astro`, `*.css`.
+description: >-
+  Enforce frontend quality bar — accessibility (WCAG 2.2 AA), performance (Core
+  Web Vitals: LCP/INP/CLS), semantic HTML, image optimization, bundle size,
+  mobile-first, loading/empty/error states. Use this skill on any PR that
+  touches React/Next.js/Astro/Svelte/Vue components, CSS/Tailwind, layout files,
+  or anything in `app/`, `components/`, `pages/`, `src/`. Critical for [Project
+  A] (Argentine mobile users on slow 3G/4G) and [Company] docs site (developer
+  audience expects fast). Auto-triggers on `*.tsx`, `*.jsx`, `*.svelte`,
+  `*.vue`, `*.astro`, `*.css`.
 ---
 
 # Frontend Quality
