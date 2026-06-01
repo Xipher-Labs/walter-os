@@ -18,6 +18,7 @@ declare -a WALTER_PROTECTED_PATH_PATTERNS=(
   'scripts/walter/lib/capability-token.sh'
   'scripts/walter/lib/skill-cap-loader.sh'
   'scripts/walter/lib/session-state.sh'
+  'scripts/walter/lib/protected-paths.sh'
   'scripts/walter/subcommands/cap.sh'
   # Self-modification
   'agents/*.md'

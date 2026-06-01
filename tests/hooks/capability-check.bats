@@ -899,12 +899,30 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "Bash write touching protected policy path requires capability" {
+  output="$(_hook_json Bash command "sed -i.bak 's/foo/bar/' scripts/walter/lib/protected-paths.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Bash write touching protected path allows matching pattern capability" {
   _mint Bash --patterns '^sed[[:space:]].*hooks/approval-gate[.]sh$' --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "sed -i.bak 's/foo/bar/' hooks/approval-gate.sh")"
 
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash mention of envrc path remains low-tier" {
+  output="$(_hook_json Bash command "cat .envrc")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash mention of env file remains high-tier" {
+  output="$(_hook_json Bash command "cat .env.local")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "expired capability is ignored and high-tier Bash blocks" {
@@ -971,6 +989,12 @@ _mint() {
 
 @test "Write protected path without capability is blocked" {
   output="$(_hook_json Write file_path "hooks/example.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write protected policy path without capability is blocked" {
+  output="$(_hook_json Write file_path "scripts/walter/lib/protected-paths.sh")"
 
   echo "$output" | jq -e '.decision == "block"'
 }
