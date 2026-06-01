@@ -3,8 +3,8 @@
 # Disabled by default. Start explicitly with:
 #   docker compose --profile langfuse up -d
 #
-# Caddy should route https://langfuse.${WALTER_DOMAIN} to langfuse-web:3000.
-# No public host ports are exposed from this service-local stack.
+# Caddy should route https://langfuse.${WALTER_DOMAIN} to localhost:3011.
+# Only the UI is loopback-exposed; datastore ports remain service-local.
 
 x-langfuse-env: &langfuse-env
   NEXTAUTH_URL: https://langfuse.${WALTER_DOMAIN:?required}
@@ -76,6 +76,8 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
     expose:
       - "3000"
+    ports:
+      - "127.0.0.1:${LANGFUSE_HOST_PORT:-3011}:3000"
     networks:
       - langfuse_net
 
@@ -136,7 +138,7 @@ services:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      test: ["CMD-SHELL", "clickhouse-client --user langfuse --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -176,7 +178,7 @@ services:
     volumes:
       - langfuse_minio_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "mc ready local || curl -f http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "mc ready local 2>/dev/null || wget -qO- http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 10

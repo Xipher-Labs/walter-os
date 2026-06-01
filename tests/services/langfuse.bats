@@ -36,13 +36,13 @@ setup() {
 }
 
 @test "required secrets fail closed in compose" {
-  for var in NEXTAUTH_SECRET SALT ENCRYPTION_KEY LANGFUSE_DB_PASSWORD CLICKHOUSE_PASSWORD REDIS_AUTH MINIO_ROOT_PASSWORD; do
+  for var in NEXTAUTH_SECRET SALT ENCRYPTION_KEY LANGFUSE_DB_PASSWORD CLICKHOUSE_PASSWORD REDIS_AUTH MINIO_ROOT_USER MINIO_ROOT_PASSWORD; do
     grep -qE "\\$\\{${var}:\\?required" "$LANGFUSE_COMPOSE"
   done
 }
 
 @test "env template documents required variables without real secrets" {
-  for var in NEXTAUTH_SECRET SALT ENCRYPTION_KEY LANGFUSE_DB_PASSWORD CLICKHOUSE_PASSWORD REDIS_AUTH MINIO_ROOT_PASSWORD; do
+  for var in NEXTAUTH_SECRET SALT ENCRYPTION_KEY LANGFUSE_DB_PASSWORD CLICKHOUSE_PASSWORD REDIS_AUTH MINIO_ROOT_USER MINIO_ROOT_PASSWORD; do
     grep -q "^${var}=$" "$LANGFUSE_ENV_TEMPLATE"
   done
 
@@ -50,9 +50,11 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
-@test "compose avoids public host ports" {
-  run grep -E '(^|[[:space:]])-[[:space:]]*"?[0-9]+:[0-9]+' "$LANGFUSE_COMPOSE"
-  [ "$status" -ne 0 ]
+@test "compose publishes only Langfuse UI on loopback" {
+  grep -Fq '127.0.0.1:${LANGFUSE_HOST_PORT:-3011}:3000' "$LANGFUSE_COMPOSE"
+  port_lines="$(grep -E '^[[:space:]]+-[[:space:]]*"?[^"]*:[0-9]+(:[0-9]+)?' "$LANGFUSE_COMPOSE" || true)"
+  [ "$(printf '%s\n' "$port_lines" | sed '/^$/d' | wc -l | tr -d ' ')" = "1" ]
+  printf '%s\n' "$port_lines" | grep -Fq '127.0.0.1:${LANGFUSE_HOST_PORT:-3011}:3000'
 }
 
 @test "compose defines named volumes for service-local dependencies" {

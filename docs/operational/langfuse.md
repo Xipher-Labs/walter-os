@@ -11,7 +11,9 @@ $EDITOR .env
 docker compose --profile langfuse up -d
 ```
 
-Caddy should route `https://langfuse.${WALTER_DOMAIN}` to `langfuse-web:3000`. The profile intentionally avoids public host ports for Langfuse dependencies; Postgres, ClickHouse, Redis, and object storage are service-local.
+Caddy should route `https://langfuse.${WALTER_DOMAIN}` to `localhost:3011`.
+The profile exposes only the Langfuse UI on loopback; Postgres, ClickHouse,
+Redis, and object storage stay service-local.
 
 ## Operational fit
 

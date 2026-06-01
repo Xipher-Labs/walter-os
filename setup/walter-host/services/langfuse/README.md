@@ -17,7 +17,9 @@ The intended public route is:
 https://langfuse.${WALTER_DOMAIN}
 ```
 
-Do not publish the datastore ports. Caddy should proxy the route to `langfuse-web:3000` on the Docker network; the compose file exposes no public host ports.
+Do not publish the datastore ports. Caddy should proxy the route to
+`localhost:3011`; the compose file exposes only the Langfuse UI on loopback and
+keeps Postgres, ClickHouse, Redis, and MinIO service-local.
 
 ## Why optional
 
@@ -51,6 +53,7 @@ LANGFUSE_DB_PASSWORD
 CLICKHOUSE_PASSWORD
 REDIS_AUTH
 MINIO_ROOT_PASSWORD
+MINIO_ROOT_USER
 ```
 
 Generate secrets locally and keep them out of git. `ENCRYPTION_KEY` must be a 64-character hex string from `openssl rand -hex 32`; `NEXTAUTH_SECRET` and `SALT` should have at least 256 bits of entropy.
