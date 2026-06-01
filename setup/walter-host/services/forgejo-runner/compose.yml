@@ -1,0 +1,36 @@
+services:
+  forgejo-runner:
+    image: code.forgejo.org/forgejo/runner:12.10.2
+    container_name: forgejo-runner
+    profiles: ["forgejo-runner"]
+    restart: unless-stopped
+    environment:
+      FORGEJO_INSTANCE_URL: ${FORGEJO_INSTANCE_URL:?required - set your Forgejo base URL, for example https://git.example.com}
+      FORGEJO_RUNNER_REGISTRATION_TOKEN: ${FORGEJO_RUNNER_REGISTRATION_TOKEN:?required - create a runner registration token in Forgejo}
+      FORGEJO_RUNNER_NAME: ${FORGEJO_RUNNER_NAME:-walter-forgejo-runner-1}
+      FORGEJO_RUNNER_LABELS: ${FORGEJO_RUNNER_LABELS:-docker:docker://node:20-bullseye}
+    volumes:
+      - forgejo-runner-data:/data
+      - ./config.yml.template:/etc/forgejo-runner/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - sh
+      - -ec
+      - |
+        cd /data
+
+        if [ ! -f /data/.runner ]; then
+          forgejo-runner register \
+            --no-interactive \
+            --instance "$${FORGEJO_INSTANCE_URL}" \
+            --token "$${FORGEJO_RUNNER_REGISTRATION_TOKEN}" \
+            --name "$${FORGEJO_RUNNER_NAME}" \
+            --labels "$${FORGEJO_RUNNER_LABELS}"
+        fi
+
+        exec forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+
+volumes:
+  forgejo-runner-data:
