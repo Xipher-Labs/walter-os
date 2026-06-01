@@ -412,7 +412,7 @@ walter-os upgrade --dry-run
 For the Walter-VM host, update the remote Walter-OS checkout/config explicitly:
 
 ```bash
-walter-os upgrade --all --snapshot
+walter-os upgrade --all --snapshot --yes
 ```
 
 `--snapshot` is opt-in because VM snapshots may cost money, and non-dry-run

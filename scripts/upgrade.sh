@@ -154,7 +154,9 @@ run_vm_upgrade() {
   local remote_repo
   remote_repo="$(shell_quote "$vm_repo")"
 
-  run_cmd ssh "$vm_host" "cd ${remote_repo} && git status --porcelain && git fetch --quiet && git pull --ff-only --quiet && bash ./install.sh --upgrade && ./bin/walter-os audit && ./bin/walter-os doctor"
+  local remote_cmd
+  remote_cmd="cd ${remote_repo} && test -z \"\$(git status --porcelain)\" && git fetch --quiet && git pull --ff-only --quiet && bash ./install.sh --upgrade && ./bin/walter-os audit && ./bin/walter-os doctor"
+  run_cmd ssh "$vm_host" "$remote_cmd"
 
   local service
   for service in "${services[@]}"; do
@@ -188,6 +190,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$mode" == "local" && "${#services[@]}" -gt 0 ]]; then
+  err "--service requires --vm or --all."
+  exit 2
+fi
+
 if [[ "$mode" == "vm" && -n "$target" ]]; then
   err "--target applies only to local upgrades; use --local or --all."
   exit 2
@@ -195,6 +202,11 @@ fi
 
 if [[ "$mode" == "local" && "$snapshot" -eq 1 ]]; then
   err "--snapshot requires --vm or --all."
+  exit 2
+fi
+
+if [[ "$snapshot" -eq 1 && "$dry_run" -eq 0 && "$assume_yes" -ne 1 ]]; then
+  err "--snapshot requires --yes in non-dry-run mode."
   exit 2
 fi
 

@@ -7,4 +7,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 echo "walter-os sync: compatibility alias for 'walter-os upgrade --local'." >&2
-exec "${REPO_ROOT}/scripts/upgrade.sh" --local "$@"
+exec "${REPO_ROOT}/scripts/upgrade.sh" "$@" --local

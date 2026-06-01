@@ -149,7 +149,7 @@ Install walter-os on your workstation. Use SaaS for everything else.
 git clone https://github.com/xipher-labs/walter-os ~/Projects/walter-os
 cd ~/Projects/walter-os
 ./install.sh --check       # verify minimum local requirements
-walter-os upgrade          # install symlinks, hooks, MCP configs only
+./install.sh --upgrade     # install symlinks, hooks, MCP configs only
 
 # Configure
 cp contexts/_examples/personal.env.example ~/.config/walter-os/overlay/personal.env

@@ -60,3 +60,30 @@ setup() {
   [ "$status" -eq 2 ]
   echo "$output" | grep -q -- "--snapshot requires --yes"
 }
+
+@test "upgrade validates VM snapshot confirmation before local mutations" {
+  run bash "$UPGRADE_SH" --all --snapshot
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q -- "--snapshot requires --yes"
+  ! echo "$output" | grep -q "==> Local Walter-OS checkout"
+}
+
+@test "upgrade rejects service rollout in local mode" {
+  run bash "$UPGRADE_SH" --dry-run --service n8n
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q -- "--service requires --vm or --all"
+}
+
+@test "upgrade VM command checks remote checkout is clean" {
+  run bash "$UPGRADE_SH" --vm --dry-run
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'test\\ -z'
+  echo "$output" | grep -q 'git\\ status\\ --porcelain'
+}
+
+@test "sync alias remains local-only even when VM mode is passed" {
+  run bash "$REPO_ROOT/scripts/sync.sh" --dry-run --vm
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "mode: local"
+  ! echo "$output" | grep -q "ssh walter-vm"
+}
