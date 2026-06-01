@@ -82,7 +82,9 @@ if [[ ! -f "$PROTECTED_PATHS_LIB" ]]; then
 fi
 
 # shellcheck source=/dev/null
-source "$PROTECTED_PATHS_LIB"
+if ! source "$PROTECTED_PATHS_LIB" 2>/dev/null; then
+  protected_path_policy_missing "$@"
+fi
 
 # Bash command patterns that match destructive ops. Each line: regex.
 # These are extended regex (grep -E). Whitespace at start of pattern allowed.

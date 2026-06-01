@@ -1210,7 +1210,7 @@ walter_sandbox_provider_path() {
   }
   local provider="$1" provider_path provider_dir provider_base
   provider_path="$(command -v -- "$provider" 2>/dev/null || true)"
-  if [[ -z "$provider_path" ]]; then
+  if [[ -z "$provider_path" || "$provider_path" != */* || ! -f "$provider_path" || ! -x "$provider_path" ]]; then
     echo "walter-sandbox: provider missing: $provider" >&2
     return 1
   fi
@@ -1264,7 +1264,6 @@ walter_sandbox_run() {
 
   provider="$(walter_sandbox_provider)" || return 1
   provider_path="$(walter_sandbox_provider_path "$provider")" || return 1
-  walter_sandbox_check "$profile" || return 1
   profile_path="$(walter_sandbox_materialize_profile "$profile" "$provider" "$high_tier")" || return 1
   cleanup_profile=0
   case "$profile_path" in
