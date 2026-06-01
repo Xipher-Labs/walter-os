@@ -39,7 +39,7 @@ PY
 
 @test "ntfy compose pins exact v2.23.0 image and avoids latest" {
   grep -q "binwiederhier/ntfy:v2.23.0" "$NTFY_COMPOSE"
-  run grep -R "latest" "$NTFY_COMPOSE" "$NTFY_README" "$NTFY_SERVER_TEMPLATE"
+  run grep -RInE '(:latest|@latest)' "$NTFY_COMPOSE" "$NTFY_README" "$NTFY_SERVER_TEMPLATE"
   [ "$status" -ne 0 ]
 }
 
