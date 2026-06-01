@@ -1,6 +1,6 @@
 # Time-bounded sessions (OSS Trust A-4) — spec
 
-**Status**: ready for `/write-plan` after operator approval
+**Status**: Partially implemented (AC-1 foundation in progress)
 **Parent**: `docs/specs/oss-trust-roadmap.md` Layer A item A-4 (parent spec is in PR #83 — not yet on `main` at the time of this spec's writing).
 **Target release**: v0.5.0
 **Depends on**: env-allowlist parser (P1-09 — in PR #69, also not yet on `main`) for the new env vars.
@@ -23,7 +23,7 @@ A simple max-time + max-idle gate brings the cost-to-compromise down: even if ev
 |---|---|---|
 | D-1 | **Two limits**: `WALTER_SESSION_MAX_HOURS` (wall-clock, default 8) and `WALTER_SESSION_MAX_IDLE_MIN` (idle since last tool call, default 60). Either tripping → session end. | 8 hours = a workday; 60 minutes = forgot-to-close. Operator-overridable per personal.env. |
 | D-2 | **Implementation via `hooks/session-timeout.sh`** running on `UserPromptSubmit` (Claude Code). For Codex CLI, the timeout is enforced via a wrapper script invoked from the `walter-os` Codex entry point — Codex CLI has no native pre-prompt hook today, so we cannot wire this in `~/.codex/config.toml` directly. The plan revisits Codex integration once Codex ships a hook mechanism; until then, Codex sessions are bounded by the wrapper-script-injected check. Every turn, check the clock; if either limit hit → emit a `block` with reason "session expired". | No new daemon. Uses existing PreToolUse-style hook chain. AC-2 + AC-4 below cover the `UserPromptSubmit` registration in `install.sh`. |
-| D-3 | **Session start = first invocation in a working directory after a gap of `> WALTER_SESSION_MAX_IDLE_MIN`.** Tracked via `~/.config/walter-os/state/session-<repo-hash>.json` (start-time + last-activity timestamps). Limits (`max_hours`, `max_idle_min`) come from the env vars NOT the state file — the state file only carries the activity timestamps and per-session UUID. | "Session" is operator-implicit; we don't try to be smarter. A different repo or a gap longer than the idle threshold starts a new session. |
+| D-3 | **Session start = first invocation in a working directory with no existing state, or the first invocation after `/session restart`.** Tracked via `~/.config/walter-os/state/session-<repo-hash>.json` (start-time + last-activity timestamps). Limits (`max_hours`, `max_idle_min`) come from the env vars NOT the state file — the state file only carries the activity timestamps and per-session UUID. | "Session" is operator-implicit; we don't try to be smarter. A different repo starts a separate session; an idle gap expires the current session until the operator explicitly restarts it. |
 | D-4 | **End behavior**: hook emits a `block` with `permissionDecisionReason: "Walter-OS session expired at HH:MM (<trigger>=<limit>). Type /session restart to begin a new session, or close this terminal."`. `<trigger>` is `max-hours` or `max-idle`; `<limit>` is the **effective** limit at hook-fire time (the operator-configured value, or the PHI cap from D-6 when `WALTER_PHI_MODE=1` is in effect). | Clear, actionable, doesn't kill the terminal. Reflects which limit actually fired AND with which value — an operator who set `WALTER_SESSION_MAX_HOURS=4` doesn't get a misleading "max-hours=8" message. |
 | D-5 | **`/session` slash command** in `commands/session.md` exposes `status`, `restart`, `extend <hours>`. `extend` REQUIRES an explicit reason (logged), capped at +2 hours per extension. | Operator can override for a legitimate long-running task; the extension is auditable. |
 | D-6 | **PHI override**: when the `medical-data-compliance` skill is active, max-hours hard-cap at 4 and max-idle at 30 min, unmodifiable by `/session extend`. The skill signals PHI-mode via `WALTER_PHI_MODE=1` exported from its activation hook. **Both pieces are new in this spec / the medical-data-compliance skill's roll-out** (the signal is not in `scripts/agents/lib/llm.sh` today; earlier drafts of this spec implied the env var was already wired — that was wrong). When `medical-data-compliance` ships, BOTH this hook AND `scripts/agents/lib/llm.sh` read the same `WALTER_PHI_MODE` env var so PHI sessions get the limit AND route to local-LLM-only consistently. | PHI sessions need tighter blast-radius. Independent of operator-set defaults. A single canonical PHI-mode signal name prevents implementers from building against a different / non-existent flag like `WALTER_MODEL_PHI`. |
@@ -90,11 +90,12 @@ A-2 / capability-tokens).
     explicit. These exist so `walter-os session list` (AC-6) can
     display the limits that WERE in effect when the session started,
     even if the env vars have been changed since.
-- [ ] `scripts/walter/lib/session-state.sh` exposes `walter_session_get`, `walter_session_touch`, `walter_session_end`.
-- [ ] `bats` coverage in `tests/walter/session-state.bats`:
+- [x] `scripts/walter/lib/session-state.sh` exposes `walter_session_get`, `walter_session_touch`, `walter_session_end`.
+- [x] `bats` coverage in `tests/walter/session-state.bats`:
   - First invocation creates the state file with current ts
   - Subsequent invocations within idle window update `last_activity_at`
-  - Invocation after `max_idle_min` gap creates a NEW session
+  - Invocation after `max_idle_min` gap reports `expired/max-idle` and leaves
+    state unchanged until an explicit restart
   - Invocation after `max_hours` since start triggers end-of-session
 
 ### AC-2 — `hooks/session-timeout.sh` hook
