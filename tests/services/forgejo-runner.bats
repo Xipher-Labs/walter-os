@@ -34,8 +34,8 @@ setup() {
 }
 
 @test "entrypoint requires registration token only before .runner exists" {
-  grep -q 'if \[ ! -f /data/.runner \]; then' "$COMPOSE_FILE"
-  grep -q 'FORGEJO_RUNNER_REGISTRATION_TOKEN is required when /data/.runner is absent' "$COMPOSE_FILE"
+  grep -Fq 'if [ ! -f /data/.runner ]; then' "$COMPOSE_FILE"
+  grep -Fq 'FORGEJO_RUNNER_REGISTRATION_TOKEN is required when /data/.runner is absent' "$COMPOSE_FILE"
 }
 
 @test "env template does not contain a real registration token" {
@@ -49,14 +49,14 @@ setup() {
 }
 
 @test "default compose does not mount the Docker socket" {
-  ! grep -q "/var/run/docker.sock:/var/run/docker.sock" "$COMPOSE_FILE"
-  ! grep -q "/var/run/docker.sock" "$CONFIG_TEMPLATE"
+  ! grep -Fq "/var/run/docker.sock:/var/run/docker.sock" "$COMPOSE_FILE"
+  ! grep -Fq "/var/run/docker.sock" "$CONFIG_TEMPLATE"
 }
 
 @test "docker socket override is explicit and documented as high risk" {
   grep -q "profiles:" "$SOCKET_COMPOSE_FILE"
   grep -q "forgejo-runner-docker-socket" "$SOCKET_COMPOSE_FILE"
-  grep -q "/var/run/docker.sock:/var/run/docker.sock" "$SOCKET_COMPOSE_FILE"
+  grep -Fq "/var/run/docker.sock:/var/run/docker.sock" "$SOCKET_COMPOSE_FILE"
   grep -qi "docker socket" "$README_FILE"
   grep -qi "high-risk" "$README_FILE"
 }
@@ -70,6 +70,6 @@ setup() {
 }
 
 @test "readme mentions runner credentials and labels" {
-  grep -q ".runner" "$README_FILE"
-  grep -q "docker:docker://node:20-bullseye" "$README_FILE"
+  grep -Fq ".runner" "$README_FILE"
+  grep -Fq "docker:docker://node:20-bullseye" "$README_FILE"
 }
