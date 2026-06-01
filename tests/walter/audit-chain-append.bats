@@ -73,7 +73,39 @@ _verify_chain() {
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
   [ "$(cat "$(_root_path)")" = "$(_sha256 "$(sed -n '1p' "$(_chain_path)")")" ]
   jq -e '.prev_hash == "null"' "$(_chain_path)"
+  jq -e '.row_hash | test("^[0-9a-f]{64}$")' "$(_chain_path)"
   jq -e '.tool == "Bash" and .decision == "allow" and .decision_source == "approval-gate"' "$(_chain_path)"
+}
+
+@test "B-1: flock lock file is private when flock is available" {
+  command -v flock >/dev/null 2>&1 || skip "flock not installed"
+
+  run bash -c "umask 022; source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
+
+  [ "$status" -eq 0 ]
+  [ "$(_mode_of "$WALTER_CONFIG/audit/.chain.lock")" = "600" ]
+}
+
+@test "B-1: mkdir lock fallback creates private lock directory" {
+  lock_dir="$WALTER_CONFIG/audit/.chain.lock"
+  mkdir -p "$WALTER_CONFIG/audit"
+
+  run bash -c "
+    umask 022
+    source '$AUDIT_LIB'
+    _walter_audit_acquire_lock_dir '$lock_dir' 1
+    if stat -f %Lp '$lock_dir' >/dev/null 2>&1; then
+      mode=\"\$(stat -f %Lp '$lock_dir')\"
+    else
+      mode=\"\$(stat -c %a '$lock_dir')\"
+    fi
+    _walter_audit_release_lock '$lock_dir'
+    printf '%s' \"\$mode\"
+  "
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "700" ]
+  [ ! -d "$lock_dir" ]
 }
 
 @test "B-1: second append chains to first normalized row" {
@@ -250,6 +282,7 @@ SH
   [ "$status" -eq 0 ]
   [ -f "$(_chain_path)" ]
   jq -e '.decision == "block" and .decision_source == "approval-gate" and .decision_reason == "jq missing"' "$(_chain_path)"
+  bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
 }
 
 @test "B-1: dependency failure rows escape JSON controls without jq" {
@@ -265,6 +298,7 @@ SH
   [ "$status" -eq 0 ]
   [ -f "$(_chain_path)" ]
   jq -e '.decision == "block" and .decision_reason == ("bad" + "\u001b" + "\u0007" + "\b" + " reason")' "$(_chain_path)"
+  bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
 }
 
 @test "B-1: dependency failure rows without jq cannot extend existing chains" {

@@ -46,6 +46,13 @@ _sha256() {
   fi
 }
 
+_rehash_row() {
+  local row="$1" without_hash row_hash
+  without_hash="$(printf '%s' "$row" | jq -cS 'del(.row_hash)')"
+  row_hash="$(_sha256 "$without_hash")"
+  printf '%s' "$without_hash" | jq -cS --arg row_hash "$row_hash" '. + {row_hash:$row_hash}'
+}
+
 @test "B-1: clean chain verifies through library" {
   _make_chain
 
@@ -57,8 +64,9 @@ _sha256() {
 
 @test "B-1: tampered prev_hash fails with row number" {
   _make_chain
-  jq -cS '.prev_hash = "deadbeef"' "$(_chain_path)" > "$(_chain_path).tmp"
-  mv "$(_chain_path).tmp" "$(_chain_path)"
+  first="$(_rehash_row "$(sed -n '1p' "$(_chain_path)" | jq -cS '.prev_hash = "deadbeef"')")"
+  second="$(sed -n '2p' "$(_chain_path)")"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
 
   run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
 
@@ -68,7 +76,7 @@ _sha256() {
 
 @test "B-1: tampered first row breaks second-row chain" {
   _make_chain
-  first="$(sed -n '1p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered"')"
+  first="$(_rehash_row "$(sed -n '1p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered"')")"
   second="$(sed -n '2p' "$(_chain_path)")"
   printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
 
@@ -81,13 +89,40 @@ _sha256() {
 @test "B-1: tampered final row breaks root hash" {
   _make_chain
   first="$(sed -n '1p' "$(_chain_path)")"
-  second="$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')"
+  second="$(_rehash_row "$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')")"
   printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
 
   run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"root hash mismatch"* ]]
+}
+
+@test "B-1: tampered final row fails even if root is rewritten" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)")"
+  second="$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+  _sha256 "$second" > "$(_root_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 2: row_hash mismatch"* ]]
+}
+
+@test "B-1: append rejects tampered final row even if root is rewritten" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)")"
+  second="$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+  _sha256 "$second" > "$(_root_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after tail tamper' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 2: row_hash mismatch"* ]]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
 }
 
 @test "B-1: invalid JSON fails with row number" {
@@ -127,7 +162,7 @@ _sha256() {
 @test "B-1: append rejects tampered final row before adding row" {
   _make_chain
   first="$(sed -n '1p' "$(_chain_path)")"
-  second="$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')"
+  second="$(_rehash_row "$(sed -n '2p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered tail"')")"
   printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
 
   run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after tail tamper' allow approval-gate ok"
@@ -136,6 +171,17 @@ _sha256() {
   [[ "$output" == *"root hash mismatch"* ]]
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
   [ "$(cat "$(_root_path)")" != "$(_sha256 "$second")" ]
+}
+
+@test "B-1: verifier releases lock on failure under set -e" {
+  _make_chain
+  printf '%s' "deadbeef" > "$(_root_path)"
+
+  run bash -c "set -e; source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"root hash mismatch"* ]]
+  [ ! -d "$WALTER_CONFIG/audit/.chain.lock" ]
 }
 
 @test "B-1: unterminated final row fails verification" {
@@ -176,6 +222,21 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"unterminated final row"* ]]
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "1" ]
+}
+
+@test "B-1: verifier fails closed on non-empty chain when jq cannot run" {
+  _make_chain
+  mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
+  cat > "$BATS_TEST_TMPDIR/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$BATS_TEST_TMPDIR/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin:/usr/bin:/bin' walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"jq required"* ]]
 }
 
 @test "B-1: missing chain returns non-zero" {

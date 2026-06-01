@@ -54,8 +54,12 @@ walter_audit_hash_string() {
   printf '%s' "$1" | walter_audit_hash_bytes
 }
 
+_walter_audit_jq_available() {
+  command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1
+}
+
 walter_audit_normalize_row() {
-  if ! command -v jq >/dev/null 2>&1; then
+  if ! _walter_audit_jq_available; then
     echo "walter-audit-chain: jq required" >&2
     return 3
   fi
@@ -112,6 +116,10 @@ _walter_audit_acquire_lock() {
   WALTER_AUDIT_LOCK_KIND=""
   if command -v flock >/dev/null 2>&1; then
     exec 8>"$lock_path" || return 1
+    chmod 600 "$lock_path" || {
+      exec 8>&-
+      return 1
+    }
     flock -x -w "$wait_seconds" 8 || {
       exec 8>&-
       echo "walter-audit-chain: timed out acquiring lock: $lock_path" >&2
@@ -125,10 +133,20 @@ _walter_audit_acquire_lock() {
   WALTER_AUDIT_LOCK_KIND="dir"
 }
 
+_walter_audit_remove_lock_dir() {
+  local lock_path="$1"
+  rm -f -- "${lock_path}/pid" 2>/dev/null || return 1
+  rmdir "$lock_path" 2>/dev/null || return 1
+}
+
 _walter_audit_reclaim_lock() {
   local lock_path="$1" expected_pid="${2:-}" expected_identity="${3:-}" reaper_path stale_path current_pid current_identity reclaimed=1
   reaper_path="${lock_path}.reaper"
   mkdir "$reaper_path" 2>/dev/null || return 1
+  chmod 700 "$reaper_path" 2>/dev/null || {
+    rmdir "$reaper_path" 2>/dev/null || true
+    return 1
+  }
   current_pid=""
   current_identity=""
   if [[ -f "${lock_path}/pid" ]]; then
@@ -141,7 +159,7 @@ _walter_audit_reclaim_lock() {
   fi
   stale_path="${lock_path}.stale.${BASHPID:-$$}.${RANDOM:-0}"
   if mv "$lock_path" "$stale_path" 2>/dev/null; then
-    rm -rf -- "$stale_path"
+    _walter_audit_remove_lock_dir "$stale_path" || true
     reclaimed=0
   fi
   rmdir "$reaper_path" 2>/dev/null || true
@@ -211,7 +229,16 @@ _walter_audit_acquire_lock_dir() {
     fi
     sleep 0.05
   done
+  chmod 700 "$lock_path" || {
+    rmdir "$lock_path" 2>/dev/null || true
+    return 1
+  }
   printf '%s\n%s\n' "${BASHPID:-$$}" "$(_walter_audit_process_identity "${BASHPID:-$$}")" > "${lock_path}/pid" || {
+    rmdir "$lock_path" 2>/dev/null || true
+    return 1
+  }
+  chmod 600 "${lock_path}/pid" || {
+    rm -f -- "${lock_path}/pid" 2>/dev/null || true
     rmdir "$lock_path" 2>/dev/null || true
     return 1
   }
@@ -223,8 +250,7 @@ _walter_audit_release_lock() {
     flock -u 8 2>/dev/null || true
     exec 8>&- 2>/dev/null || true
   elif [[ -n "$lock_path" ]]; then
-    rm -f -- "${lock_path}/pid" 2>/dev/null || true
-    rmdir "$lock_path" 2>/dev/null || true
+    _walter_audit_remove_lock_dir "$lock_path" 2>/dev/null || true
   fi
   WALTER_AUDIT_LOCK_KIND=""
 }
@@ -305,8 +331,35 @@ _walter_audit_truncate_fd() {
   ' "$fd" "$size"
 }
 
+_walter_audit_verify_row_hash() {
+  local line="$1" row_number="$2" stored_row_hash row_without_hash computed_row_hash
+  stored_row_hash="$(printf '%s\n' "$line" | jq -r '.row_hash // empty')" || {
+    echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
+    return 1
+  }
+  if [[ ! "$stored_row_hash" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "walter-audit-chain: row ${row_number}: missing row_hash" >&2
+    return 1
+  fi
+  row_without_hash="$(printf '%s\n' "$line" | jq -cS 'del(.row_hash)' 2>/dev/null)" || {
+    echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
+    return 1
+  }
+  computed_row_hash="$(walter_audit_hash_string "$row_without_hash")"
+  if [[ "$stored_row_hash" != "$computed_row_hash" ]]; then
+    echo "walter-audit-chain: row ${row_number}: row_hash mismatch" >&2
+    echo "  expected: $computed_row_hash" >&2
+    echo "  actual:   $stored_row_hash" >&2
+    return 1
+  fi
+}
+
 _walter_audit_verify_chain_file_unlocked() {
   local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex
+  if ! _walter_audit_jq_available; then
+    echo "walter-audit-chain: jq required" >&2
+    return 3
+  fi
   if [[ -s "$chain_path" ]]; then
     last_hex="$(tail -c 1 "$chain_path" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
     if [[ "$last_hex" != "0a" ]]; then
@@ -330,6 +383,7 @@ _walter_audit_verify_chain_file_unlocked() {
       echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
       return 1
     fi
+    _walter_audit_verify_row_hash "$line" "$row_number" || return 1
     prev_hash="$(printf '%s\n' "$line" | jq -r '.prev_hash // empty')"
     if [[ -z "$prev_hash" ]]; then
       echo "walter-audit-chain: row ${row_number}: missing prev_hash" >&2
@@ -395,7 +449,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row summary timestamp row_date root_hash
+  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -442,7 +496,7 @@ walter_audit_append() {
       _walter_audit_release_lock "$lock_path"
       return 1
     fi
-    if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
+    if ! _walter_audit_jq_available; then
       echo "walter-audit-chain: jq required to append to existing chain: $chain_path" >&2
       exec 9>&-
       _walter_audit_release_lock "$lock_path"
@@ -462,8 +516,8 @@ walter_audit_append() {
   fi
 
   summary="$(walter_audit_input_summary "$input")"
-  if command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
-    row="$(jq -ncS \
+  if _walter_audit_jq_available; then
+    row_without_hash="$(jq -ncS \
       --arg ts "$timestamp" \
       --arg session_id "${WALTER_SESSION_ID:-unknown}" \
       --arg operator "${USER:-unknown}" \
@@ -479,8 +533,16 @@ walter_audit_append() {
         _walter_audit_release_lock "$lock_path"
         return 1
       }
+    row_hash="$(walter_audit_hash_string "$row_without_hash")"
+    row="$(printf '%s\n' "$row_without_hash" | jq -cS --arg row_hash "$row_hash" '. + {row_hash:$row_hash}')" || {
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
   else
-    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    row_without_hash="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    row_hash="$(walter_audit_hash_string "$row_without_hash")"
+    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
   fi
 
   if ! _walter_audit_fd_matches_path 9 "$chain_path"; then
@@ -539,7 +601,7 @@ walter_audit_verify_chain() {
     echo "walter-audit-chain: usage: walter_audit_verify_chain [date]" >&2
     return 2
   }
-  if ! command -v jq >/dev/null 2>&1; then
+  if ! _walter_audit_jq_available; then
     echo "walter-audit-chain: jq required" >&2
     return 3
   fi
