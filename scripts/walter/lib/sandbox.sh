@@ -183,10 +183,10 @@ _walter_sandbox_cleanup_materialized() {
 
 _walter_sandbox_profile_has_placeholders() {
   local path="$1"
-  grep -q '@WALTER_OS_HOME@' "$path" \
-    || grep -q '@WALTER_CONFIG@' "$path" \
-    || grep -q '@HOME@' "$path" \
-    || grep -q '@WALTER_SANDBOX_SCRATCH@' "$path"
+  grep -q -- '@WALTER_OS_HOME@' "$path" \
+    || grep -q -- '@WALTER_CONFIG@' "$path" \
+    || grep -q -- '@HOME@' "$path" \
+    || grep -q -- '@WALTER_SANDBOX_SCRATCH@' "$path"
 }
 
 walter_sandbox_profile_path() {
@@ -244,7 +244,7 @@ walter_sandbox_materialize_profile() {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
-    scratch_value="$(_walter_sandbox_sed_escape "$(cd "$scratch_dir" && pwd -P)")" || {
+    scratch_value="$(_walter_sandbox_profile_escape "$provider" "$(cd "$scratch_dir" && pwd -P)")" || {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
