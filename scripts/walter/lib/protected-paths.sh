@@ -17,6 +17,7 @@ declare -a WALTER_PROTECTED_PATH_PATTERNS=(
   'mcp/servers.json'
   'scripts/walter/lib/capability-token.sh'
   'scripts/walter/lib/session-state.sh'
+  'scripts/walter/lib/protected-paths.sh'
   'scripts/walter/subcommands/cap.sh'
   # Self-modification
   'agents/*.md'
