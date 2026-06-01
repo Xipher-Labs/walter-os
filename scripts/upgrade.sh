@@ -126,7 +126,7 @@ run_local_upgrade() {
   ensure_clean_tree
 
   if [[ -n "$target" ]]; then
-    run_cmd git -C "$REPO_ROOT" fetch --tags --quiet origin
+    run_cmd git -C "$REPO_ROOT" fetch --all --tags --quiet
     run_cmd git -C "$REPO_ROOT" checkout "$target"
   else
     fast_forward_checkout

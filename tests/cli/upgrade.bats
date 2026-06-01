@@ -36,6 +36,13 @@ setup() {
   ! echo "$output" | grep -q "walter-os doctor"
 }
 
+@test "upgrade target dry-run fetches tags from all remotes" {
+  run bash "$UPGRADE_SH" --dry-run --target v0.6.0
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "fetch --all --tags --quiet"
+  echo "$output" | grep -q "checkout v0.6.0"
+}
+
 @test "upgrade all dry-run with snapshot and service shows VM plan" {
   run bash "$UPGRADE_SH" --all --dry-run --snapshot --service n8n
   [ "$status" -eq 0 ]
