@@ -170,14 +170,14 @@ setup() {
   grep -qE "Apache" README.md
 }
 
-# ── v0.5.1 release-relevant content ────────────────────────────────────────
+# ── v0.6.0 release-relevant content ────────────────────────────────────────
 
-@test "README.md version badge reflects v0.5.1-alpha" {
-  grep -qF "v0.5.1--alpha" README.md
+@test "README.md version badge reflects v0.6.0-alpha" {
+  grep -qF "v0.6.0--alpha" README.md
 }
 
-@test "README.md status line names v0.5.1" {
-  grep -qE "v0\.5\.1" README.md
+@test "README.md status line names v0.6.0" {
+  grep -qE "v0\.6\.0" README.md
 }
 
 # ── README cross-links + pinned doc invariants ─────────────────────────────
