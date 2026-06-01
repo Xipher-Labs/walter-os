@@ -141,3 +141,20 @@ HOOK
   [[ "$output" == *"exit 17"* ]]
   [[ "$output" != *"exit 0"* ]]
 }
+
+@test "#260 AC-4: block reasons remain valid JSON with control characters" {
+  provider="$(_host_provider)"
+  _write_fake_provider "$provider"
+  failing_hook="$TMP_HOME/control-failing-hook.sh"
+  cat > "$failing_hook" <<'HOOK'
+#!/usr/bin/env bash
+printf 'bad\tvalue\fhere\vtoo\n' >&2
+exit 17
+HOOK
+  chmod +x "$failing_hook"
+
+  run env PATH="$FAKE_BIN:$PATH" "$BASH" "$RUNNER" "$failing_hook" <<< '{"tool_name":"Bash"}'
+
+  [ "$status" -eq 0 ]
+  jq -e '.decision == "block" and (.reason | contains("bad\tvalue\fhere too"))' <<< "$output"
+}
