@@ -48,7 +48,7 @@ The default label is the official Docker executor form:
 docker:docker://node:20-bullseye
 ```
 
-Use the same value in workflow jobs:
+Use the label name, which is the left side before the colon, in workflow jobs:
 
 ```yaml
 runs-on: docker
