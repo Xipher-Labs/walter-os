@@ -700,6 +700,9 @@ check_pinning() {
   fi
 
   local walter_home="${WALTER_OS_HOME:-}"
+  if [[ -z "$walter_home" ]]; then
+    walter_home="$(cd "${BASH_SOURCE[0]%/*}/../../.." && pwd)"
+  fi
   local manifest="${walter_home}/skills/daily-supply-chain-audit/assets/pinned-refs.toml"
   local skills_root="${walter_home}/skills"
   if [[ -n "$walter_home" && -f "$manifest" && -d "$skills_root" ]]; then

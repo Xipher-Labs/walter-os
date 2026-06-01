@@ -436,3 +436,40 @@ TOML
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "finding|high|vendored-skill-pin-drift|"
 }
+
+@test "daily audit derives Walter-OS home when WALTER_OS_HOME is unset" {
+  source_repo="${BATS_TEST_DIRNAME}/../.."
+  fake_home="$TMP/home"
+  fake_repo="$TMP/repo"
+  export HOME="$fake_home"
+  export WALTER_CONFIG="$TMP/config"
+  unset WALTER_OS_HOME
+  mkdir -p "$fake_repo/skills/daily-supply-chain-audit/scripts" \
+           "$fake_repo/skills/daily-supply-chain-audit/assets" \
+           "$fake_repo/skills/impeccable" \
+           "$fake_home/.claude"
+  cp "$source_repo/skills/daily-supply-chain-audit/scripts/audit.sh" \
+     "$fake_repo/skills/daily-supply-chain-audit/scripts/audit.sh"
+  cp "$source_repo/skills/daily-supply-chain-audit/scripts/check-pinning.py" \
+     "$fake_repo/skills/daily-supply-chain-audit/scripts/check-pinning.py"
+  printf 'changed\n' > "$fake_repo/skills/impeccable/SKILL.md"
+  printf 'notice\n' > "$fake_repo/skills/impeccable/NOTICE.md"
+  cat > "$fake_repo/skills/daily-supply-chain-audit/assets/pinned-refs.toml" <<'TOML'
+[skills]
+impeccable = "0123456789abcdef0123456789abcdef01234567"
+
+[skill_content_sha256]
+impeccable = "0000000000000000000000000000000000000000000000000000000000000000"
+TOML
+
+  run bash -c '
+    source "$1"
+    finding() {
+      printf "finding|%s|%s|%s|%s\n" "$1" "$2" "$3" "$4"
+    }
+    check_pinning
+  ' _ "$fake_repo/skills/daily-supply-chain-audit/scripts/audit.sh"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "finding|high|vendored-skill-pin-drift|"
+}
