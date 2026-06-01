@@ -1040,11 +1040,10 @@ merge_claude_hooks() {
 
   local walter_hooks
   # PreToolUse Bash chain (order matters — first hook fires first):
-  #   Security gates are routed through sandbox-hook-runner.sh so the pure
-  #   decision hooks run under walter-hook-default by default (#260 AC-4).
-  #   Hooks that intentionally run project commands or write audit/session
-  #   state stay direct until their profiles are split in a later AC-4/AC-5
-  #   slice.
+  #   bash-denylist.sh, capability-check.sh, and network-gate.sh route through
+  #   sandbox-hook-runner.sh under walter-hook-default by default (#260 AC-4).
+  #   approval-gate.sh remains direct for now because it writes audit/session
+  #   state; it will move behind a split profile in a later AC-4/AC-5 slice.
   #
   #   1. bash-denylist.sh  → CHEAP regex match. Blocks RCE patterns
   #      (curl|bash, eval$VAR, bash -c "$(...)", etc.) before any

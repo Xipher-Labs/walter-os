@@ -148,7 +148,7 @@ HOOK
   failing_hook="$TMP_HOME/control-failing-hook.sh"
   cat > "$failing_hook" <<'HOOK'
 #!/usr/bin/env bash
-printf 'bad\tvalue\fhere\vtoo\n' >&2
+printf 'bad\tvalue\fhere\vtoo\033escape\n' >&2
 exit 17
 HOOK
   chmod +x "$failing_hook"
@@ -157,4 +157,5 @@ HOOK
 
   [ "$status" -eq 0 ]
   jq -e '.decision == "block" and (.reason | contains("bad\tvalue\fhere too"))' <<< "$output"
+  jq -e '(.reason | contains("\u001b") | not)' <<< "$output"
 }

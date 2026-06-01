@@ -31,6 +31,7 @@ _json_escape() {
   value="${value//$'\v'/ }"
   value="${value//$'\n'/ }"
   value="${value//$'\r'/ }"
+  value="${value//[$'\001'-$'\010'$'\013'$'\016'-$'\037'$'\177']/}"
   printf '%s' "$value"
 }
 
