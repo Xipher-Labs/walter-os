@@ -15,6 +15,7 @@ setup() {
 
   export HOME="$TMP_HOME"
   export WALTER_CONFIG="$TMP_CFG"
+  export WALTER_AUDIT_DIR="$TMP_CFG/audit"
   export WALTER_OS_HOME="$REPO_ROOT"
   export WALTER_AUDIT_DATE="2026-05-31"
   export WALTER_AUDIT_NOW="2026-05-31T12:00:00Z"
@@ -88,6 +89,8 @@ _approval_gate_no_yq() {
   mkdir -p "$mock_bin"
   real_jq="$(command -v jq)"
   ln -sf "$real_jq" "$mock_bin/jq"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/yq"
+  chmod +x "$mock_bin/yq"
   _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$REPO_ROOT/hooks/approval-gate.sh"
 }
 
@@ -137,6 +140,15 @@ _wiki_validator_write() {
 
 _wiki_validator_empty() {
   printf '' | bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
+}
+
+_wiki_validator_no_jq() {
+  local file_path="$1" mock_bin="$TMP_HOME/wiki-no-jq-bin"
+  mkdir -p "$mock_bin"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
+  chmod +x "$mock_bin/jq"
+  jq -n --arg path "$file_path" '{"tool_name":"Write","tool_input":{"file_path":$path}}' \
+    | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
 }
 
 _rows() {
@@ -393,6 +405,18 @@ SH
   echo "$output" | jq -e '.decision == "allow"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "wiki-validator-hook" and .decision == "allow" and .tool == "unknown" and .decision_reason == "empty hook input"' "$(_chain_path)"
+}
+
+@test "wiki-validator-hook jq-missing block preserves dependency reason when chain already exists" {
+  run _wiki_validator_write "$TEST_REPO/README.md"
+  [ "$status" -eq 0 ]
+  [ "$(_rows)" = "1" ]
+
+  run _wiki_validator_no_jq "$TEST_REPO/wiki/page.md"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block" and (.reason | test("jq missing"))'
+  [ "$(_rows)" = "1" ]
 }
 
 @test "wiki-validator-hook blocks when audit append fails" {

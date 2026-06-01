@@ -23,6 +23,7 @@ setup() {
   mkdir -p "$TMP_CFG"
   export HOME="$TMP_HOME"
   export WALTER_CONFIG="$TMP_CFG"
+  export WALTER_AUDIT_DIR="$TMP_CFG/audit"
   export WALTER_OS_HOME="$REPO_ROOT"
   ALLOWLIST="$TMP_CFG/egress-allowlist.txt"
   # Clear bypass env between tests.
@@ -31,6 +32,7 @@ setup() {
 
 teardown() {
   cd "$BATS_TEST_DIRNAME"
+  unset WALTER_AUDIT_DIR
   case "$TMP_HOME" in
     /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac

@@ -9,11 +9,12 @@ setup() {
   WORK_DIR="$(mktemp -d -t wiki-hook-m13-XXXXXX)"
   export HOME="$WORK_DIR/home"
   export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
   mkdir -p "$WALTER_CONFIG"
 }
 
 teardown() {
-  unset WALTER_CONFIG
+  unset WALTER_CONFIG WALTER_AUDIT_DIR
   rm -rf "$WORK_DIR"
 }
 

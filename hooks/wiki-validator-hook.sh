@@ -57,6 +57,17 @@ audit_wiki_decision() {
   fi
 }
 
+audit_wiki_dependency_failure_best_effort() {
+  local audit_tool="${1:-unknown}" audit_input="${2:-}" audit_reason="$3"
+  # jq-missing blocks happen before normal JSON tooling is available. The
+  # audit-chain helper can create an initial dependency-failure row without jq,
+  # but refuses to extend an existing chain because it cannot verify canonical
+  # JSON/root integrity. Keep the wiki safety decision fail-closed either way.
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append "$audit_tool" "$audit_input" block "wiki-validator-hook" "$audit_reason" >/dev/null 2>&1 || true
+  fi
+}
+
 emit_allow() {
   audit_wiki_decision "${tool_name:-unknown}" "${file_path:-}" allow "${1:-}"
   echo '{"decision":"allow"}'
@@ -81,11 +92,14 @@ if [[ -z "$input" ]]; then
 fi
 
 # Extract file_path from hook JSON
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # No jq means we cannot determine whether the write targets ~/sync/wiki.
   # Fail closed so missing tooling cannot bypass the wiki integrity gate.
+  reason="wiki-validator-hook: jq missing, failing closed"
   file_path="$input"
-  emit_block "wiki-validator-hook: jq missing, failing closed"
+  audit_wiki_dependency_failure_best_effort "$tool_name" "$file_path" "$reason"
+  printf '{"decision":"block","reason":%s}\n' "$(json_string "$reason")"
+  exit 0
 fi
 
 tool_name="$(echo "$input" | jq -r '.tool_name // "unknown"' 2>/dev/null || echo "unknown")"

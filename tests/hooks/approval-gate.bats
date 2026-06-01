@@ -9,8 +9,12 @@ setup() {
   [[ -x "$HOOK" ]] || skip "approval-gate.sh not executable"
   command -v jq >/dev/null 2>&1 || skip "jq required"
 
-  # Isolate from operator's real config + Plane creds
-  export WALTER_CONFIG=/tmp/walter-os-test-$$
+  # Isolate from operator's real config, audit chain, and Plane creds.
+  TMPDIR_TEST="$(mktemp -d)"
+  export TMPDIR_TEST
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
   export WALTER_AGENT_PLANE_ISSUE=
   export WALTER_AGENT_NAME=test-agent
   unset PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT
@@ -65,7 +69,9 @@ YQ
 }
 
 teardown() {
+  unset WALTER_AUDIT_DIR
   rm -rf "$WALTER_CONFIG"
+  rm -rf "$TMPDIR_TEST"
 }
 
 # ---------- CLI mode: blocked ----------

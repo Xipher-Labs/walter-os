@@ -8,6 +8,7 @@ setup() {
   TMPDIR_TEST="$(mktemp -d)"
   export HOME="$TMPDIR_TEST/home"
   export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
   mkdir -p "$WALTER_CONFIG"
   cd "$TMPDIR_TEST"
   git init -q -b feature/test
@@ -17,7 +18,7 @@ setup() {
 }
 
 teardown() {
-  unset WALTER_CONFIG
+  unset WALTER_CONFIG WALTER_AUDIT_DIR
   rm -rf "$TMPDIR_TEST"
 }
 
