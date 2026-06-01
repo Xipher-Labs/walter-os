@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016,SC2030,SC2031,SC2088,SC2317
 # Tests for hooks/approval-gate.sh — both PreToolUse hook mode (JSON
 # stdin/stdout) and CLI mode (`check <command>`). Coverage targets the
 # 14 categories of §7.1 of the multi-agent-autonomy spec.
@@ -283,6 +284,18 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
+@test "CLI: broad Walter state wildcard read is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/state/*'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: Read tool on Walter state directory is blocked" {
+  run "$HOOK" check '~/.config/walter-os/state' --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
 @test "CLI: derived state directory relative session key is blocked" {
   run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; openssl pkeyutl -sign -inkey session-abc.key -rawin -in payload -out sig'
   [[ "$status" -eq 7 ]]
@@ -423,9 +436,10 @@ teardown() {
   [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
-@test "CLI: ordinary Walter state file is allowed" {
+@test "CLI: ordinary Walter state file is blocked conservatively" {
   run "$HOOK" check '~/.config/walter-os/state/decision-journal.json' --tool Read
-  [[ "$status" -eq 0 ]]
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
 }
 
 @test "CLI: walter-os command with ordinary variable argument is allowed" {
@@ -599,6 +613,19 @@ teardown() {
 @test "Hook: empty stdin allows" {
   result=$(echo '' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: missing protected-path policy emits JSON block" {
+  policy="$BATS_TEST_DIRNAME/../../scripts/walter/lib/protected-paths.sh"
+  backup="${policy}.bak.$$"
+  mv "$policy" "$backup"
+
+  run bash -c "printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo ok\"}}' | '$HOOK'"
+  mv "$backup" "$policy"
+
+  [[ "$status" -eq 0 ]]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("missing Walter-OS protected path policy")'
 }
 
 # ---------- Standing approvals ----------

@@ -114,6 +114,26 @@ YAML
   [[ "$reason" != *"$TMP_HOME"* ]]
 }
 
+@test "UserPromptSubmit hook sanitizes glob-like HOME and config paths literally" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  glob_home="$TMP_HOME/glob-home-[abc]"
+  glob_config="$glob_home/.config/walter-os"
+  mkdir -p "$glob_config/overlay" "$glob_home/work/repo"
+  export HOME="$glob_home"
+  export WALTER_CONFIG="$glob_config"
+  REPO_UNDER_TEST="$glob_home/work/repo"
+  printf 'skills: [\n' > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"invalid YAML"* ]]
+  [[ "$reason" != *"$glob_home"* ]]
+  [[ "$reason" != *"$glob_config"* ]]
+}
+
 @test "UserPromptSubmit hook allows active session within limits" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   _call_hook >/dev/null
@@ -186,7 +206,7 @@ YAML
 @test "UserPromptSubmit hook fails closed on non-object JSON input" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
-  run bash -c "printf '[]' | '$HOOK'"
+  run bash -c "printf '[]' | bash '$HOOK'"
 
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'

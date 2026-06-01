@@ -9,7 +9,7 @@ unset _walter_skill_cap_lib_dir
 
 walter_skill_cap_config_path() {
   local candidate
-  if [[ -n "${WALTER_SKILL_CAPABILITIES:-}" ]]; then
+  if [[ -n "${WALTER_SKILL_CAPABILITIES:-}" && "${WALTER_SKILL_CAPABILITIES_ALLOW_ENV:-}" == "1" ]]; then
     printf '%s\n' "$WALTER_SKILL_CAPABILITIES"
     return 0
   fi

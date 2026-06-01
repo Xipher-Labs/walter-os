@@ -147,13 +147,16 @@ _walter_sandbox_firejail_path_escape() {
 }
 
 _walter_sandbox_regex_escape() {
+  local escaped
   case "$1" in
     *$'\n'*|*$'\r'*)
       echo "walter-sandbox: path contains newline characters" >&2
       return 1
       ;;
   esac
-  printf '%s' "$1" | sed 's/[][\\.^$*+?{}()|]/\\&/g'
+  escaped="$(printf '%s' "$1" | sed 's/[][\\.^$*+?{}()|]/\\&/g')" || return 1
+  escaped="${escaped//\"/\\\"}"
+  printf '%s' "$escaped"
 }
 
 _walter_sandbox_quoted_path_escape() {
@@ -185,23 +188,23 @@ _walter_sandbox_cleanup_materialized() {
 
 _walter_sandbox_profile_has_placeholders() {
   local path="$1"
-  grep -q '@WALTER_OS_HOME@' "$path" \
-    || grep -q '@WALTER_CONFIG@' "$path" \
-    || grep -q '@WALTER_CONFIG_REGEX@' "$path" \
-    || grep -q '@HOME@' "$path" \
-    || grep -q '@WALTER_NSJAIL_ROOT@' "$path" \
-    || grep -q '@WALTER_SANDBOX_SCRATCH@' "$path" \
-    || grep -q '@WALTER_SANDBOX_CWD@' "$path" \
-    || grep -q '@WALTER_SANDBOX_PARENT@' "$path" \
-    || grep -q '@WALTER_NSJAIL_SESSION_KEY_MASKS@' "$path" \
-    || grep -q '@WALTER_NSJAIL_CONFIG_KEY_MASKS@' "$path" \
-    || grep -q '@WALTER_NSJAIL_SENSITIVE_KEY_MASKS@' "$path" \
-    || grep -q '@WALTER_NSJAIL_INVISIBLE_MOUNTS@' "$path" \
-    || grep -q '@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@' "$path" \
-    || grep -q '@WALTER_FIREJAIL_HOME_KEY_BLACKLISTS@' "$path" \
-    || grep -q '@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@' "$path" \
-    || grep -q '@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@' "$path" \
-    || grep -q '@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@' "$path"
+  grep -q -- '@WALTER_OS_HOME@' "$path" \
+    || grep -q -- '@WALTER_CONFIG@' "$path" \
+    || grep -q -- '@WALTER_CONFIG_REGEX@' "$path" \
+    || grep -q -- '@HOME@' "$path" \
+    || grep -q -- '@WALTER_NSJAIL_ROOT@' "$path" \
+    || grep -q -- '@WALTER_SANDBOX_SCRATCH@' "$path" \
+    || grep -q -- '@WALTER_SANDBOX_CWD@' "$path" \
+    || grep -q -- '@WALTER_SANDBOX_PARENT@' "$path" \
+    || grep -q -- '@WALTER_NSJAIL_SESSION_KEY_MASKS@' "$path" \
+    || grep -q -- '@WALTER_NSJAIL_CONFIG_KEY_MASKS@' "$path" \
+    || grep -q -- '@WALTER_NSJAIL_SENSITIVE_KEY_MASKS@' "$path" \
+    || grep -q -- '@WALTER_NSJAIL_INVISIBLE_MOUNTS@' "$path" \
+    || grep -q -- '@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@' "$path" \
+    || grep -q -- '@WALTER_FIREJAIL_HOME_KEY_BLACKLISTS@' "$path" \
+    || grep -q -- '@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@' "$path" \
+    || grep -q -- '@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@' "$path" \
+    || grep -q -- '@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@' "$path"
 }
 
 _walter_sandbox_workspace_root() {
@@ -447,9 +450,10 @@ _walter_sandbox_nsjail_key_mount_renderer() {
 }
 
 _walter_sandbox_nsjail_config_key_mount_renderer() {
-  local path="$1" deny_file="$2"
+  local path="$1" deny_file="$2" state_dir
+  state_dir="${WALTER_CONFIG:-${HOME}/.config/walter-os}/state"
   case "$path" in
-    */state/session-*.key|*/state/session-*.key.tmp)
+    "$state_dir"/session-*.key|"$state_dir"/session-*.key.tmp)
       return 0
       ;;
   esac
@@ -840,7 +844,7 @@ walter_sandbox_materialize_profile() {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
-    scratch_value="$(_walter_sandbox_sed_escape "$(cd "$scratch_dir" && pwd -P)")" || {
+    scratch_value="$(_walter_sandbox_profile_escape "$provider" "$(cd "$scratch_dir" && pwd -P)")" || {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
@@ -1205,7 +1209,7 @@ walter_sandbox_provider_path() {
     return 2
   }
   local provider="$1" provider_path provider_dir provider_base
-  provider_path="$(type -P -- "$provider" 2>/dev/null || true)"
+  provider_path="$(command -v -- "$provider" 2>/dev/null || true)"
   if [[ -z "$provider_path" ]]; then
     echo "walter-sandbox: provider missing: $provider" >&2
     return 1
