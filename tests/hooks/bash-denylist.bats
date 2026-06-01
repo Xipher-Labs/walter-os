@@ -406,9 +406,8 @@ _send_cmd_raw() {
   chmod +x "$MOCK_BIN/jq"
 
   # Run hook with mock jq on PATH; capture result
-  result=$(PATH="$MOCK_BIN" \
-    echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' \
-    | bash "$HOOK" 2>/dev/null || echo '{"decision":"block"}')
+  result=$(echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' \
+    | PATH="$MOCK_BIN:$PATH" bash "$HOOK" 2>/dev/null || echo '{"decision":"block"}')
 
   # The hook must NOT emit allow when jq is missing
   if echo "$result" | grep -q '"allow"'; then
