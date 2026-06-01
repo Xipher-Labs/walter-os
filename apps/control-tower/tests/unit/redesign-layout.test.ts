@@ -49,3 +49,20 @@ describe("redesign layout — AC-3 (responsive overview grid)", () => {
     expect(src).toContain("xl:col-span-12");
   });
 });
+
+describe("history page — server TopNav shell", () => {
+  it("keeps /history as a Server Component so VersionBadge is not bundled client-side", () => {
+    const page = readFileSync(join(root, "app/history/page.tsx"), "utf8");
+    const client = readFileSync(
+      join(root, "app/history/HistoryClient.tsx"),
+      "utf8"
+    );
+
+    expect(page).not.toMatch(/["']use client["']/);
+    expect(page).toContain("TopNav");
+    expect(page).toContain("HistoryClient");
+    expect(client).toMatch(/^["']use client["'];/);
+    expect(client).not.toContain("TopNav");
+    expect(client).not.toContain("VersionBadge");
+  });
+});
