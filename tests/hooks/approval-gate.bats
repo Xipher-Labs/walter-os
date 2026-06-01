@@ -617,6 +617,20 @@ teardown() {
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("missing Walter-OS protected path policy")'
 }
 
+@test "Hook: invalid protected-path policy emits JSON block" {
+  policy="$BATS_TEST_DIRNAME/../../scripts/walter/lib/protected-paths.sh"
+  backup="${policy}.bak.$$"
+  mv "$policy" "$backup"
+  printf '%s\n' 'if broken' > "$policy"
+
+  run bash -c "printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo ok\"}}' | '$HOOK'"
+  mv "$backup" "$policy"
+
+  [[ "$status" -eq 0 ]]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("protected path policy")'
+}
+
 # ---------- Standing approvals ----------
 
 @test "Standing approval: lint-fixes allows .ts edit when rule active" {
