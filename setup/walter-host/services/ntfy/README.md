@@ -30,10 +30,11 @@ cp server.yml.template server.yml
 sed -i.bak "s/\\${WALTER_DOMAIN}/example.com/g" server.yml
 ```
 
-Replace `example.com` with the real `WALTER_DOMAIN`. The resulting `base-url` should be:
+Replace `example.com` with the real `WALTER_DOMAIN`. For this example, the
+resulting `base-url` should be:
 
 ```yaml
-base-url: "https://ntfy.${WALTER_DOMAIN}"
+base-url: "https://ntfy.example.com"
 ```
 
 ## Security defaults
