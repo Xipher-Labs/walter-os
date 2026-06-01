@@ -110,7 +110,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
     hcloud-cli:
       tool: Bash
       scope:
-        patterns: ["hcloud[[:space:]].*"]
+        patterns: ["^hcloud[[:space:]].*"]
         network: ["api.hetzner.cloud"]
       duration: 8h
   ```
