@@ -78,6 +78,9 @@ done
 The provenance check complements, but does not replace, cosign verification and
 `sha256sum --check`. Use all three when validating a release from scratch.
 
+For independent rebuilds, see
+[`docs/security/reproducible-builds.md`](reproducible-builds.md).
+
 ## Note on workflow file name and org/repo slug
 
 `--certificate-identity-regexp` must reference the workflow that signed the
