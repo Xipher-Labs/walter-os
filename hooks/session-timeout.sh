@@ -117,7 +117,7 @@ case "$_trigger" in
     _limit="$(_walter_session_effective_idle_min)m"
     _block "Walter-OS session expired at $(date -u +%H:%M) (max-idle=${_limit}). Type /session restart to begin a new session, or close this terminal."
     ;;
-  malformed-state|clock-rewind)
+  malformed-state|clock-rewind|legacy-session)
     _block "Walter-OS session invalid (${_trigger}). Type /session restart to begin a new session."
     ;;
   state-write|state-delete)

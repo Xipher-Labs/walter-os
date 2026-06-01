@@ -1,6 +1,6 @@
 # Filesystem capability tokens (OSS Trust A-2) — spec
 
-**Status**: ready for `/write-plan` after operator approval
+**Status**: implementation in progress; see `oss-trust-runtime-implementation.plan.md`
 **Parent**: OSS Trust roadmap Layer A item A-2 — umbrella in [PR #83](https://github.com/Xipher-Labs/walter-os/pull/83) (post-merge in-tree path: `docs/specs/oss-trust-roadmap.md`).
 **Target release**: v0.5.0
 **Depends on**:
@@ -27,7 +27,7 @@ This is NOT a sandbox (that's A-3 — process isolation via nsjail/sandbox-exec)
 | # | Decision | Why |
 |---|---|---|
 | D-1 | **Token format: PASETO v4 (public)**. Per-session Ed25519 keypair signs claims. | Capability-token format is PASETO v4 (per the OSS Trust roadmap `DEC-2` cross-cutting decision in `docs/specs/oss-trust-roadmap.md`). PASETO v4 closes the JWT alg-confusion / kid-confusion footguns by design. |
-| D-2 | **Per-session keypair lifetime = session TTL** (from A-4 spec). Key generated at session start, deleted at session end. Capability tokens minted from this key. | Tying cap TTL to session TTL means session-end revokes everything. No long-lived secrets on disk. |
+| D-2 | **Per-session keypair lifetime = session TTL** (from A-4 spec). Key generated when `session-state.sh` starts a new lazy session, deleted at session end. Capability tokens minted from this key. | Tying cap TTL to session TTL means session-end revokes everything. No long-lived secrets on disk. The A-4 implementation does not have a standalone `session-start.sh`; session creation happens inside `walter_session_touch`. |
 | D-3 | **Token claims schema (PASETO v4 footer + payload)** — see `Token claims schema` block immediately below this table. | Minimum viable claim set. Operator can extend. |
 | D-4 | **Minting via `walter-os cap mint <tool> --paths <glob>... --duration <N>[smh]`**. Duration accepts a Go-style suffixed number — `30s`, `45m`, `4h`, `8h` — and parses to an absolute expiry. The CLI rejects bare integers (`--duration 4` → error: "specify unit, e.g. 4h or 4m"). The YAML examples elsewhere in this spec (`duration: 4h` / `8h`) use the SAME syntax. Tokens land in `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`. | Operator-controlled. Default agents don't mint; they consume tokens minted by the operator. Consistent duration syntax between CLI and YAML avoids the "minutes vs hours" implementer confusion. |
 | D-5 | **Enforcement via `hooks/capability-check.sh`** PreToolUse hook. Reads the relevant tool call (path + command), looks up the latest valid token for that tool in the session, verifies the cap covers the requested operation. | Same chain as the other gates. |
@@ -62,7 +62,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
 ### AC-1 — PASETO v4 dependency + key generation
 - [ ] `scripts/walter/lib/paseto.sh` (new) — wraps `paseto-cli` (uvx-installable Python package) for sign + verify. Pinned to exact version.
 - [ ] `install.sh` adds `paseto-cli` to required tools (`uv tool install paseto-cli==<pinned>`).
-- [ ] `hooks/session-start.sh` (extended from A-4 spec) generates Ed25519 keypair at session start; stores at `~/.config/walter-os/state/session-<uuid>.key` (mode 0600).
+- [x] `scripts/walter/lib/session-state.sh` generates an Ed25519 keypair when a new session starts; stores the private key at `~/.config/walter-os/state/session-<uuid>.key` (mode 0600), stores the public key beside it, and initializes `caps-<session>/` (mode 0700).
 - [ ] `bats` coverage in `tests/walter/paseto-roundtrip.bats` — sign + verify produces same claims.
 
 ### AC-2 — `walter-os cap` CLI

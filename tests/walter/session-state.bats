@@ -17,8 +17,19 @@ setup() {
 teardown() {
   chmod -R u+w "$TMP_HOME" 2>/dev/null || true
   case "$TMP_HOME" in
-    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
+    /tmp/*|/var/folders/*|/var/tmp/*) rm -r "$TMP_HOME" ;;
   esac
+}
+
+_mode() {
+  stat -f "%Lp" "$1" 2>/dev/null || stat -c "%a" "$1"
+}
+
+_openssl_or_skip() {
+  local openssl_bin
+  openssl_bin="$(bash -c "source '$LIB'; _walter_session_openssl")" \
+    || skip "ED25519-capable openssl required"
+  printf '%s' "$openssl_bin"
 }
 
 @test "session touch creates state file with current timestamps" {
@@ -32,6 +43,165 @@ teardown() {
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
   [ -f "$state_file" ]
   jq -e '.session_id and .started_at == "2026-01-01T00:00:00Z" and .last_activity_at == "2026-01-01T00:00:00Z"' "$state_file"
+}
+
+@test "session id fallback remains unique when uuidgen is unavailable" {
+  run bash -c "source '$LIB'; command() { if [[ \"\$1\" == \"-v\" && \"\$2\" == \"uuidgen\" ]]; then return 1; fi; builtin command \"\$@\"; }; first=\"\$(_walter_session_uuid)\"; second=\"\$(_walter_session_uuid)\"; [[ \"\$first\" != \"\$second\" ]] && [[ \"\$first\" =~ ^session-[a-f0-9]{32}$ ]] && [[ \"\$second\" =~ ^session-[a-f0-9]{32}$ ]]"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "session touch creates capability signing key material" {
+  openssl_bin="$(_openssl_or_skip)"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+
+  [ -f "$private_key" ]
+  [ -f "$public_key" ]
+  [ -d "$caps_dir" ]
+  [ "$(_mode "$private_key")" = "600" ]
+  [ "$(_mode "$caps_dir")" = "700" ]
+  "$openssl_bin" pkey -in "$private_key" -pubout 2>/dev/null | cmp -s - "$public_key"
+}
+
+@test "session touch fails closed when caps directory chmod fails" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  state_dir="$(dirname "$state_file")"
+
+  run bash -c "source '$LIB'; chmod() { if [[ \"\$1\" == \"700\" && \"\$2\" == */caps-* ]]; then return 1; fi; command chmod \"\$@\"; }; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+  [ ! -f "$state_file" ]
+  [ "$(find "$state_dir" -type d -name 'caps-*' | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "session touch fails closed when private key chmod fails" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  state_dir="$(dirname "$state_file")"
+
+  run bash -c "source '$LIB'; chmod() { if [[ \"\$1\" == \"600\" && \"\$2\" == */session-*.key.tmp ]]; then return 1; fi; command chmod \"\$@\"; }; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+  [ ! -f "$state_file" ]
+  [ "$(find "$state_dir" -type f -name 'session-*.key*' | wc -l | tr -d ' ')" = "0" ]
+  [ "$(find "$state_dir" -type d -name 'caps-*' | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "concurrent session starts leave one key and caps directory" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null &
+  pid_one=$!
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null &
+  pid_two=$!
+  wait "$pid_one"
+  wait "$pid_two"
+
+  state_dir="$WALTER_CONFIG/state"
+  key_count="$(find "$state_dir" -type f -name 'session-*.key' | wc -l | tr -d ' ')"
+  caps_count="$(find "$state_dir" -type d -name 'caps-*' | wc -l | tr -d ' ')"
+  [ "$key_count" = "1" ]
+  [ "$caps_count" = "1" ]
+}
+
+@test "session start reclaims a stale lock with a dead pid" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  lock_dir="${state_file}.lock"
+  mkdir -p "$lock_dir"
+  printf '999999999\n' > "$lock_dir/pid"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"started"'* ]]
+  [ -f "$state_file" ]
+  [ ! -d "$lock_dir" ]
+}
+
+@test "session start does not reclaim an old lock with a live pid" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_SESSION_LOCK_STALE_SEC=30
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  lock_dir="${state_file}.lock"
+  mkdir -p "$lock_dir"
+  printf '1767220000\n' > "$lock_dir/created_epoch"
+  printf '%s\n' "$$" > "$lock_dir/pid"
+
+  run bash -c "source '$LIB'; _walter_session_reclaim_stale_lock '$lock_dir'"
+
+  [ "$status" -ne 0 ]
+  [ -d "$lock_dir" ]
+}
+
+@test "session lock wait timeout is configurable in seconds" {
+  run bash -c "source '$LIB'; WALTER_SESSION_LOCK_WAIT_SEC=2; _walter_session_lock_wait_attempt_limit"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "20" ]
+}
+
+@test "session start respects live lock wait timeout before failing" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_SESSION_LOCK_WAIT_SEC=1
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  lock_dir="${state_file}.lock"
+  mkdir -p "$lock_dir"
+  printf '%s\n' "$$" > "$lock_dir/pid"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 12 ]
+  [[ "$output" == *'"status":"error"'* ]]
+  [[ "$output" == *'"trigger":"state-write"'* ]]
+  [ -d "$lock_dir" ]
+  [ ! -f "$state_file" ]
+}
+
+@test "session start removes orphan material from stale startup lock" {
+  _openssl_or_skip >/dev/null
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  export WALTER_SESSION_LOCK_STALE_SEC=30
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  state_dir="$(dirname "$state_file")"
+  lock_dir="${state_file}.lock"
+  orphan_id="orphan-session"
+  mkdir -p "$lock_dir" "$state_dir/caps-${orphan_id}"
+  printf '1767220000\n' > "$lock_dir/created_epoch"
+  printf '999999999\n' > "$lock_dir/pid"
+  printf '%s\n' "$orphan_id" > "$lock_dir/session_id"
+  printf 'orphan-private\n' > "$state_dir/session-${orphan_id}.key"
+  printf 'orphan-public\n' > "$state_dir/session-${orphan_id}.pub"
+  printf 'orphan-temp-private\n' > "$state_dir/session-${orphan_id}.key.tmp"
+  printf 'orphan-temp-public\n' > "$state_dir/session-${orphan_id}.pub.tmp"
+
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ -f "$state_file" ]
+  [ ! -f "$state_dir/session-${orphan_id}.key" ]
+  [ ! -f "$state_dir/session-${orphan_id}.pub" ]
+  [ ! -f "$state_dir/session-${orphan_id}.key.tmp" ]
+  [ ! -f "$state_dir/session-${orphan_id}.pub.tmp" ]
+  [ ! -d "$state_dir/caps-${orphan_id}" ]
+  [ ! -d "$lock_dir" ]
 }
 
 @test "clock override is ignored outside explicit test mode" {
@@ -62,6 +232,10 @@ teardown() {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   first_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
 
   export WALTER_SESSION_NOW_EPOCH=1767231001
   run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
@@ -71,6 +245,9 @@ teardown() {
   [[ "$output" == *'"trigger":"max-idle"'* ]]
   second_id="$(bash -c "source '$LIB'; walter_session_get '$WALTER_SESSION_REPO' | jq -r .session_id")"
   [ "$first_id" = "$second_id" ]
+  [ ! -f "$private_key" ]
+  [ ! -d "$caps_dir" ]
+  [ -f "$public_key" ]
 }
 
 @test "session touch after max hours reports max-hours expiry" {
@@ -167,8 +344,25 @@ teardown() {
   [[ "$output" == *'"trigger":"malformed-state"'* ]]
 }
 
+@test "session touch invalidates active legacy sessions without capability material" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  mkdir -p "$(dirname "$state_file")"
+  jq -n \
+    --arg started_at "2026-01-01T00:00:00Z" \
+    --arg last_activity_at "2026-01-01T00:30:00Z" \
+    '{session_id:"legacy-session", started_at:$started_at, last_activity_at:$last_activity_at}' > "$state_file"
+
+  export WALTER_SESSION_NOW_EPOCH=1767227401
+  run bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 11 ]
+  [[ "$output" == *'"status":"invalid"'* ]]
+  [[ "$output" == *'"trigger":"legacy-session"'* ]]
+}
+
 @test "session touch fails closed when state cannot be created" {
-  rm -rf "$WALTER_CONFIG"
+  rm -r "$WALTER_CONFIG"
   printf '%s\n' "not a directory" > "$WALTER_CONFIG"
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
@@ -183,7 +377,82 @@ teardown() {
   export WALTER_SESSION_NOW_EPOCH=1767225600
   bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
   state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
   [ -f "$state_file" ]
+  [ -f "$private_key" ]
+  [ -f "$public_key" ]
+  [ -d "$caps_dir" ]
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ ! -f "$state_file" ]
+  [ ! -f "$private_key" ]
+  [ ! -d "$caps_dir" ]
+  [ -f "$public_key" ]
+}
+
+@test "session end tolerates an already-missing capabilities directory" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  rm -r "$caps_dir"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ ! -f "$state_file" ]
+  [ ! -f "$private_key" ]
+}
+
+@test "session end ignores private key paths outside the state directory" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  victim="$TMP_HOME/victim.txt"
+  printf 'keep me\n' > "$victim"
+  tmp_state="${state_file}.tmp"
+  jq --arg victim "$victim" '.capability_private_key_path = $victim' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ -f "$victim" ]
+  [ ! -f "$state_file" ]
+}
+
+@test "session end ignores stored caps dir traversal paths" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  bash -c "source '$LIB'; walter_session_touch '$WALTER_SESSION_REPO'" >/dev/null
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  real_caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  victim_dir="$TMP_HOME/victim-dir"
+  mkdir -p "$victim_dir"
+  tmp_state="${state_file}.tmp"
+  jq --arg caps_dir "${real_caps_dir}/../../victim-dir" '.capability_tokens_dir = $caps_dir' "$state_file" > "$tmp_state"
+  mv "$tmp_state" "$state_file"
+
+  run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
+
+  [ "$status" -eq 0 ]
+  [ -d "$victim_dir" ]
+  [ ! -d "$real_caps_dir" ]
+  [ ! -f "$state_file" ]
+}
+
+@test "session end clears state with unsafe session id" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$LIB'; walter_session_state_file '$WALTER_SESSION_REPO'")"
+  mkdir -p "$(dirname "$state_file")"
+  jq -n \
+    --arg started_at "2026-01-01T00:00:00Z" \
+    --arg last_activity_at "2026-01-01T00:00:00Z" \
+    '{session_id:"../../bad", started_at:$started_at, last_activity_at:$last_activity_at}' > "$state_file"
 
   run bash -c "source '$LIB'; walter_session_end '$WALTER_SESSION_REPO'"
 

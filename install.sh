@@ -172,6 +172,37 @@ check_required_tool() {
   fi
 }
 
+openssl_supports_ed25519() {
+  local openssl_bin="$1"
+  "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1
+}
+
+resolve_openssl_bin() {
+  local candidate resolved
+  for candidate in \
+    "${WALTER_OPENSSL_BIN:-}" \
+    openssl \
+    /opt/homebrew/opt/openssl@3/bin/openssl \
+    /opt/homebrew/bin/openssl \
+    /usr/local/opt/openssl@3/bin/openssl \
+    /usr/local/bin/openssl \
+    /usr/bin/openssl; do
+    [[ -n "$candidate" ]] || continue
+    if [[ "$candidate" == */* ]]; then
+      [[ -x "$candidate" ]] || continue
+      resolved="$candidate"
+    else
+      resolved="$(command -v "$candidate" 2>/dev/null || true)"
+      [[ -n "$resolved" ]] || continue
+    fi
+    if openssl_supports_ed25519 "$resolved"; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
 check_optional_tool() {
   local tool="$1" install_hint="$2"
   if command -v "$tool" >/dev/null 2>&1; then
@@ -184,6 +215,7 @@ check_optional_tool() {
 
 check_requirements() {
   step "Requirements check"
+  local _openssl_bin
   _requirement_failures=0
 
   case "$(uname -s)" in
@@ -206,6 +238,14 @@ check_requirements() {
   check_required_tool git "brew install git  # or: sudo apt-get install -y git"
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
+  if _openssl_bin="$(resolve_openssl_bin)"; then
+    ok "openssl: ${_openssl_bin}"
+  else
+    err "openssl with ED25519 support missing"
+    say "  Install: brew install openssl  # or: sudo apt-get install -y openssl" >&2
+    say "  Optional override: WALTER_OPENSSL_BIN=/path/to/openssl" >&2
+    _requirement_failures=$((_requirement_failures + 1))
+  fi
   # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
@@ -490,25 +530,38 @@ check_preflight() {
   #
   # OS-specific install hints: pick brew vs apt/snap based on
   # `uname -s` so the hint matches the operator's machine.
-  local _pkg_hint_jq _pkg_hint_yq
+  local _pkg_hint_jq _pkg_hint_yq _pkg_hint_openssl _openssl_bin
   case "$(uname -s)" in
     Darwin)
       _pkg_hint_jq="brew install jq"
       _pkg_hint_yq="brew install yq"
+      _pkg_hint_openssl="brew install openssl"
       ;;
     Linux)
       _pkg_hint_jq="sudo apt install jq  # or: sudo dnf install jq"
       _pkg_hint_yq="sudo snap install yq  # or: see https://github.com/mikefarah/yq#install"
+      _pkg_hint_openssl="sudo apt install openssl  # or: sudo dnf install openssl"
       ;;
     *)
       _pkg_hint_jq="install jq via your OS package manager"
       _pkg_hint_yq="install yq via your OS package manager"
+      _pkg_hint_openssl="install openssl via your OS package manager"
       ;;
   esac
 
   if ! command -v jq >/dev/null 2>&1; then
     err "jq required. ${_pkg_hint_jq}"
     exit 4
+  fi
+  if ! _openssl_bin="$(resolve_openssl_bin)"; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      warn "openssl with ED25519 key generation missing. Install before runtime: ${_pkg_hint_openssl}"
+      warn "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
+    else
+      err "openssl with ED25519 key generation is required for session capability keys. ${_pkg_hint_openssl}"
+      err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
+      exit 4
+    fi
   fi
 
   # yq presence handling (Codex R2-R6 #125 — flavor check + ordering):
@@ -1342,8 +1395,9 @@ _install_deps_macos() {
   # in Step 1 and then trip on the missing tool the next time
   # approval-gate.sh ran on a hook event (the failure surfaces as a
   # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
-  local required_deps=(git curl jq yq docker bats)
+  local required_deps=(git curl jq openssl yq docker bats)
   local optional_deps=(python3)
+  local _openssl_bin
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1370,6 +1424,24 @@ _install_deps_macos() {
 
   for dep in "${required_deps[@]}"; do
     [[ "$dep" == "docker" ]] && continue
+    if [[ "$dep" == "openssl" ]]; then
+      if _openssl_bin="$(resolve_openssl_bin)"; then
+        ok "openssl already installed (${_openssl_bin})"
+      elif [[ $DRY_RUN -eq 1 ]]; then
+        dry "would run: brew install openssl"
+      else
+        say "Installing openssl via Homebrew..."
+        brew install openssl
+        hash -r 2>/dev/null || true
+        if ! _openssl_bin="$(resolve_openssl_bin)"; then
+          err "OpenSSL installed, but no ED25519-capable binary was found."
+          err "Set WALTER_OPENSSL_BIN=/path/to/openssl if Homebrew installed it outside PATH."
+          exit 1
+        fi
+        ok "Installed openssl (${_openssl_bin})"
+      fi
+      continue
+    fi
     if command -v "$dep" >/dev/null 2>&1; then
       # Codex R3 #125: --step 1 bypasses check_preflight, so the macOS
       # branch must also flavor-check yq when already-installed. Without
@@ -1411,8 +1483,9 @@ _install_deps_macos() {
 
 _install_deps_linux() {
   # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
-  local required_deps=(git curl jq yq bats)
+  local required_deps=(git curl jq openssl yq bats)
   local optional_deps=(python3)
+  local _openssl_bin
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1458,6 +1531,11 @@ _install_deps_linux() {
   if ! command -v apt-get >/dev/null 2>&1; then
     warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
     warn "Install manually: ${required_deps[*]}"
+    if ! resolve_openssl_bin >/dev/null 2>&1; then
+      err "openssl with ED25519 support is REQUIRED at runtime and not installed."
+      err "  Install OpenSSL for your distro or launch with WALTER_OPENSSL_BIN=/path/to/openssl."
+      exit 1
+    fi
     # If yq is missing entirely on a non-Debian Linux, surface that
     # explicitly so the operator doesn't think the warn-and-return
     # means everything's OK. Codex R4 #125.
@@ -1470,6 +1548,24 @@ _install_deps_linux() {
   fi
 
   for dep in "${required_deps[@]}"; do
+    if [[ "$dep" == "openssl" ]]; then
+      if _openssl_bin="$(resolve_openssl_bin)"; then
+        ok "openssl already installed (${_openssl_bin})"
+      elif [[ $DRY_RUN -eq 1 ]]; then
+        dry "would run: sudo apt-get install -y openssl"
+      else
+        say "Installing openssl via apt-get..."
+        sudo apt-get install -y openssl
+        hash -r 2>/dev/null || true
+        if ! _openssl_bin="$(resolve_openssl_bin)"; then
+          err "OpenSSL installed, but ED25519 key generation is still unavailable."
+          err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your supported binary is outside PATH."
+          exit 1
+        fi
+        ok "Installed openssl (${_openssl_bin})"
+      fi
+      continue
+    fi
     if command -v "$dep" >/dev/null 2>&1; then
       # yq pre-installed flavor check — see _yq_is_mikefarah above.
       if [[ "$dep" == "yq" ]] && ! _yq_is_mikefarah; then
