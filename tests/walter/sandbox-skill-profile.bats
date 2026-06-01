@@ -184,6 +184,18 @@ _mode() {
   grep -Fq '.config/walter-os\+\(test\)/state/session-' "$profile"
 }
 
+@test "AC-3: sandbox materializes quoted config regex placeholders safely" {
+  CONFIG_WITH_QUOTE="$TMP_HOME/home/.config/walter-os\"quoted"
+  mkdir -p "$CONFIG_WITH_QUOTE/state"
+  printf 'session-secret\n' > "$CONFIG_WITH_QUOTE/state/session-test.key"
+
+  run env WALTER_CONFIG="$CONFIG_WITH_QUOTE" bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default sandbox-exec"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -Fq '.config/walter-os\"quoted/state/session-' "$profile"
+}
+
 @test "AC-3: nsjail materialization hides session signing keys" {
   run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail"
 

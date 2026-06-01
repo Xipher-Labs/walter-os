@@ -147,13 +147,16 @@ _walter_sandbox_firejail_path_escape() {
 }
 
 _walter_sandbox_regex_escape() {
+  local escaped
   case "$1" in
     *$'\n'*|*$'\r'*)
       echo "walter-sandbox: path contains newline characters" >&2
       return 1
       ;;
   esac
-  printf '%s' "$1" | sed 's/[][\\.^$*+?{}()|]/\\&/g'
+  escaped="$(printf '%s' "$1" | sed 's/[][\\.^$*+?{}()|]/\\&/g')" || return 1
+  escaped="${escaped//\"/\\\"}"
+  printf '%s' "$escaped"
 }
 
 _walter_sandbox_quoted_path_escape() {
