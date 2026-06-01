@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 # tests/hooks/session-timeout.bats
+# shellcheck disable=SC2030,SC2031
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -42,6 +43,116 @@ _call_restart_hook() {
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"'
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+}
+
+@test "UserPromptSubmit hook auto-mints default skill capabilities on fresh session" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  docs-writer:
+    tool: Write
+    scope:
+      paths: ["docs/**"]
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "1" ]
+}
+
+@test "UserPromptSubmit hook removes fresh session when default skill minting fails" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope: {}
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'default skill capability minting failed'
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  [ ! -f "$state_file" ]
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  [ ! -f "$state_file" ]
+}
+
+@test "UserPromptSubmit hook surfaces sanitized default skill minting errors" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope: {}
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"default skill capability minting failed"* ]]
+  [[ "$reason" == *"invalid capability entry for skill: bad-skill"* ]]
+  [[ "$reason" != *"$TMP_HOME"* ]]
+}
+
+@test "UserPromptSubmit hook sanitizes glob-like HOME and config paths literally" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  glob_home="$TMP_HOME/glob-home-[abc]"
+  glob_config="$glob_home/.config/walter-os"
+  mkdir -p "$glob_config/overlay" "$glob_home/work/repo"
+  export HOME="$glob_home"
+  export WALTER_CONFIG="$glob_config"
+  REPO_UNDER_TEST="$glob_home/work/repo"
+  printf 'skills: [\n' > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"invalid YAML"* ]]
+  [[ "$reason" != *"$glob_home"* ]]
+  [[ "$reason" != *"$glob_config"* ]]
+}
+
+@test "UserPromptSubmit hook sanitizes extglob-like paths literally" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  extglob_home="$TMP_HOME/extglob-home-@(prod|dev)"
+  extglob_config="$extglob_home/.config/walter-os"
+  mkdir -p "$extglob_config/overlay" "$extglob_home/work/repo"
+  export HOME="$extglob_home"
+  export WALTER_CONFIG="$extglob_config"
+  REPO_UNDER_TEST="$extglob_home/work/repo"
+  printf 'skills: [\n' > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
+
+  run bash -O extglob -c 'jq -nc --arg cwd "$1" '\''{cwd:$cwd, prompt:"hello"}'\'' | bash "$2"' _ "$REPO_UNDER_TEST" "$HOOK"
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"invalid YAML"* ]]
+  [[ "$reason" != *"$extglob_home"* ]]
+  [[ "$reason" != *"$extglob_config"* ]]
 }
 
 @test "UserPromptSubmit hook allows active session within limits" {
@@ -116,7 +227,7 @@ _call_restart_hook() {
 @test "UserPromptSubmit hook fails closed on non-object JSON input" {
   export WALTER_SESSION_NOW_EPOCH=1767225600
 
-  run bash -c "printf '[]' | '$HOOK'"
+  run bash -c "printf '[]' | bash '$HOOK'"
 
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'

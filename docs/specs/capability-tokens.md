@@ -98,8 +98,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
   - Two-factor bypass (`WALTER_CAP_BYPASS=1` + `--allow-no-cap`) → allow with WARN
 
 ### AC-4 — Default skill capabilities
-
-- [ ] `contexts/_examples/skill-capabilities.example.yml`:
+- [x] `contexts/_examples/skill-capabilities.example.yml`:
   ```yaml
   # When these skills are autoloaded at session start, walter-os
   # auto-mints a default capability so the skill works without operator
@@ -109,18 +108,18 @@ renderer mangles multi-line fenced code blocks inside table cells.
     nuclei-cli:
       tool: Bash
       scope:
-        patterns: ["nuclei[[:space:]].*"]
+        patterns: ["^[[:space:]]*nuclei([[:space:]]|$)"]
         network: ["*"]  # nuclei talks to operator-specified targets
       duration: 4h
     
     hcloud-cli:
       tool: Bash
       scope:
-        patterns: ["hcloud[[:space:]].*"]
+        patterns: ["^[[:space:]]*hcloud([[:space:]]|$)"]
         network: ["api.hetzner.cloud"]
       duration: 8h
   ```
-- [ ] `scripts/walter/lib/skill-cap-loader.sh` reads the YAML at session start and mints matching tokens.
+- [x] `scripts/walter/lib/skill-cap-loader.sh` reads the YAML at session start and mints matching tokens.
 
 ### AC-5 — Daily-audit integration
 

@@ -1012,7 +1012,7 @@ _cap_bash_mentions_high_tier_path() {
 
 _cap_is_high_tier() {
   local tool="$1" target="$2" repo="$3"
-  local sensitive_bash_re='capability-token[.]sh|walter_cap_sign_claims|session-[^[:space:];|&]*[.]key|caps-[^[:space:];|&/]+/cap-[^/[:space:];|&]*[.]paseto'
+  local sensitive_bash_re='capability-token[.]sh|skill-cap-loader[.]sh|walter_cap_sign_claims|walter_skill_caps_mint_defaults|session-[^[:space:];|&]*[.]key|caps-[^[:space:];|&/]+/cap-[^/[:space:];|&]*[.]paseto'
   case "$tool" in
     Edit|Write|MultiEdit|NotebookEdit)
       [[ -n "$target" ]] && _cap_is_high_tier_path "$target" "$repo"
