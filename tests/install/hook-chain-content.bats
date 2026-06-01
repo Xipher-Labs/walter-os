@@ -122,3 +122,25 @@ setup() {
   grep -q 'UserPromptSubmit' "$REPO_ROOT/install.sh"
   grep -q 'hooks/session-timeout.sh' "$REPO_ROOT/install.sh"
 }
+
+@test "#260 AC-4: install.sh registers sandbox hook runner for security gates" {
+  grep -q 'scripts/walter/sandbox-hook-runner.sh' "$REPO_ROOT/install.sh"
+}
+
+@test "#260 AC-4: Bash security gates route through sandbox hook runner" {
+  bash_chain="$(sed -n '/matcher: "Bash"/,/matcher: "Read|Grep|Glob|LS"/p' "$REPO_ROOT/install.sh")"
+
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/bash-denylist.sh' <<< "$bash_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/approval-gate.sh' <<< "$bash_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/capability-check.sh' <<< "$bash_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/network-gate.sh' <<< "$bash_chain"
+}
+
+@test "#260 AC-4: read and edit security gates route through sandbox hook runner" {
+  read_chain="$(sed -n '/matcher: "Read|Grep|Glob|LS"/,/matcher: "Write|Edit|MultiEdit|NotebookEdit"/p' "$REPO_ROOT/install.sh")"
+  edit_chain="$(sed -n '/matcher: "Write|Edit|MultiEdit|NotebookEdit"/,/wiki-validator-hook[.]sh/p' "$REPO_ROOT/install.sh")"
+
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/approval-gate.sh' <<< "$read_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/approval-gate.sh' <<< "$edit_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/capability-check.sh' <<< "$edit_chain"
+}

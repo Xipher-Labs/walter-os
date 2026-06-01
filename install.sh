@@ -1040,6 +1040,12 @@ merge_claude_hooks() {
 
   local walter_hooks
   # PreToolUse Bash chain (order matters — first hook fires first):
+  #   Security gates are routed through sandbox-hook-runner.sh so the pure
+  #   decision hooks run under walter-hook-default by default (#260 AC-4).
+  #   Hooks that intentionally run project commands or write audit/session
+  #   state stay direct until their profiles are split in a later AC-4/AC-5
+  #   slice.
+  #
   #   1. bash-denylist.sh  → CHEAP regex match. Blocks RCE patterns
   #      (curl|bash, eval$VAR, bash -c "$(...)", etc.) before any
   #      heavier check. Fails fast; fails closed when jq is missing.
@@ -1085,10 +1091,10 @@ merge_claude_hooks() {
       {
         matcher: "Bash",
         hooks: [
-          { type: "command", command: ($repo + "/hooks/bash-denylist.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/network-gate.sh"),     _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/bash-denylist.sh") | @sh),    _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/approval-gate.sh") | @sh),    _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh), _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/network-gate.sh") | @sh),     _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
         ]
@@ -1096,14 +1102,14 @@ merge_claude_hooks() {
       {
         matcher: "Read|Grep|Glob|LS",
         hooks: [
-          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true }
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/approval-gate.sh") | @sh), _walter_os: true }
         ]
       },
       {
         matcher: "Write|Edit|MultiEdit|NotebookEdit",
         hooks: [
-          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/capability-check.sh"), _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/approval-gate.sh") | @sh),    _walter_os: true },
+          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh), _walter_os: true },
           {
             type: "command",
             command: ($repo + "/hooks/wiki-validator-hook.sh"),
