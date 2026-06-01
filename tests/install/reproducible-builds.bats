@@ -44,6 +44,8 @@ setup() {
   grep -Fq 'walter-os-<tag>.source.tar.gz' "$DOC"
   grep -Fq 'walter-os-<tag>.sbom.cdx.json' "$DOC"
   grep -Fq 'checksums.sha256.cosign.bundle' "$DOC"
+  grep -Fq 'cosign verify-blob' "$DOC"
+  grep -Fq 'treating the checksums as authoritative' "$DOC"
   grep -Fq 'What if my SHA' "$DOC" || grep -Fq 'Troubleshooting' "$DOC"
 }
 
@@ -60,4 +62,9 @@ setup() {
 @test "local and CI shellcheck include reproduce script" {
   grep -Fq 'scripts/release/reproduce.sh' "$MAKEFILE"
   grep -Fq 'scripts/release/reproduce.sh' "$CI"
+}
+
+@test "CI runs reproducible build regression tests" {
+  grep -Fq 'tests/install/workflow-pins.bats' "$CI"
+  grep -Fq 'tests/install/reproducible-builds.bats' "$CI"
 }
