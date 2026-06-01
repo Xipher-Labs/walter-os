@@ -44,8 +44,8 @@ workflow to another repo without writing anything to `~/.claude`,
 auditing Walter-OS before trusting it or only want the operating model.
 
 **Client install** is the right start for most operators. You install Walter-OS
-(client-only refresh: `walter-os upgrade` — this installs the symlinks, hooks,
-and MCP configs without running the walter-host bootstrap steps), scaffold
+(initial bootstrap: `./install.sh --upgrade`; later refreshes:
+`walter-os upgrade`), scaffold
 `~/.config/walter-os/overlay/`, set
 `WALTER_GITHUB_ORG` and any provider-specific values, and have a working agent
 framework in minutes. You keep using GitHub, Linear, and the Anthropic API

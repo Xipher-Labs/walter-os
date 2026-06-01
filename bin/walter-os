@@ -515,11 +515,11 @@ cmd_disable_hook() {
 # ---------- sync ----------
 
 cmd_sync() {
-  exec "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
+  exec bash "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
 }
 
 cmd_upgrade() {
-  exec "${WALTER_OS_HOME}/scripts/upgrade.sh" "$@"
+  exec bash "${WALTER_OS_HOME}/scripts/upgrade.sh" "$@"
 }
 
 cmd_sync_repos() {

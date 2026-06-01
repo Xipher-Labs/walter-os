@@ -15,7 +15,7 @@ snapshot=0
 skip_audit=0
 skip_doctor=0
 assume_yes=0
-vm_host="${WALTER_VM_HOST:-walter-vm}"
+vm_host="walter-vm"
 vm_repo="${WALTER_VM_REPO:-/opt/walter-os}"
 services=()
 
@@ -56,6 +56,11 @@ print_cmd() {
 
 shell_quote() {
   printf "%q" "$1"
+}
+
+validate_service_name() {
+  local service="$1"
+  [[ "$service" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
 }
 
 run_cmd() {
@@ -181,6 +186,7 @@ while [[ $# -gt 0 ]]; do
     --yes|-y) assume_yes=1; shift ;;
     --service)
       [[ $# -ge 2 ]] || { err "--service requires a service name"; exit 2; }
+      validate_service_name "$2" || { err "unsafe service name: $2"; exit 2; }
       services+=("$2"); shift 2
       ;;
     --skip-audit|--no-audit) skip_audit=1; shift ;;

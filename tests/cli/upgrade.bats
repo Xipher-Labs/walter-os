@@ -14,6 +14,8 @@ setup() {
 @test "walter-os help lists upgrade" {
   grep -q "#   upgrade" "$WALTER_OS_BIN"
   grep -q "upgrade) *cmd_upgrade" "$WALTER_OS_BIN"
+  grep -q 'exec bash.*scripts/upgrade.sh' "$WALTER_OS_BIN"
+  grep -q 'exec bash.*scripts/sync.sh' "$WALTER_OS_BIN"
 }
 
 @test "upgrade dry-run defaults to local plan" {
@@ -74,11 +76,24 @@ setup() {
   echo "$output" | grep -q -- "--service requires --vm or --all"
 }
 
+@test "upgrade rejects unsafe service names" {
+  run bash "$UPGRADE_SH" --all --dry-run --service 'n8n;touch /tmp/pwned'
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q -- "unsafe service name"
+}
+
 @test "upgrade VM command checks remote checkout is clean" {
   run bash "$UPGRADE_SH" --vm --dry-run
   [ "$status" -eq 0 ]
   echo "$output" | grep -q 'test\\ -z'
   echo "$output" | grep -q 'git\\ status\\ --porcelain'
+}
+
+@test "upgrade does not expose partial VM host override" {
+  WALTER_VM_HOST=other-vm run bash "$UPGRADE_SH" --vm --dry-run
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "vm host: walter-vm"
+  ! echo "$output" | grep -q "other-vm"
 }
 
 @test "sync alias remains local-only even when VM mode is passed" {
