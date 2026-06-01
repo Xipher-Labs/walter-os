@@ -399,6 +399,49 @@ impeccable = \"$hash\"
   [ -z "$output" ]
 }
 
+@test "vendored skill manifest skips symlinked directories before hashing" {
+  write_notice_skill "impeccable"
+  mkdir -p "$TMP/external-dir"
+  printf 'first\n' > "$TMP/external-dir/through-link.txt"
+  ln -s "$TMP/external-dir" "$TMP/skills/impeccable/external-dir-link"
+  hash="$(skill_hash impeccable)"
+  printf 'second\n' > "$TMP/external-dir/through-link.txt"
+  write_manifest "[skills]
+impeccable = \"0123456789abcdef0123456789abcdef01234567\"
+
+[skill_content_sha256]
+impeccable = \"$hash\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "vendored skill manifest rejects unsafe skill names before path resolution" {
+  write_notice_skill "impeccable"
+  write_manifest "[skills]
+\"../outside\" = \"0123456789abcdef0123456789abcdef01234567\"
+\"nested/skill\" = \"0123456789abcdef0123456789abcdef01234567\"
+\"windows\\\\skill\" = \"0123456789abcdef0123456789abcdef01234567\"
+\".\" = \"0123456789abcdef0123456789abcdef01234567\"
+\"..\" = \"0123456789abcdef0123456789abcdef01234567\"
+impeccable = \"0123456789abcdef0123456789abcdef01234567\"
+
+[skill_content_sha256]
+impeccable = \"0000000000000000000000000000000000000000000000000000000000000000\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -Fq "manifest: invalid skill name '../outside'"
+  echo "$output" | grep -Fq "manifest: invalid skill name 'nested/skill'"
+  echo "$output" | grep -Fq "manifest: invalid skill name 'windows\\\\skill'"
+  echo "$output" | grep -Fq "manifest: invalid skill name '.'"
+  echo "$output" | grep -Fq "manifest: invalid skill name '..'"
+  echo "$output" | grep -q "impeccable: content hash mismatch"
+  ! echo "$output" | grep -q "../outside: skill directory missing"
+  ! echo "$output" | grep -q "nested/skill: skill directory missing"
+}
+
 @test "vendored skill manifest detects local content drift" {
   write_notice_skill "impeccable" "first"
   hash="$(skill_hash impeccable)"

@@ -172,11 +172,32 @@ def unpinned_servers(settings: dict) -> list[str]:
 _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
+def _safe_skill_name(name: object) -> bool:
+    """Return True iff a manifest key is one relative path component."""
+    if not isinstance(name, str):
+        return False
+    if not name or name in (".", ".."):
+        return False
+    return "/" not in name and "\\" not in name and "\0" not in name
+
+
+def _skill_files(skill_dir: Path) -> list[Path]:
+    """List regular files without recursing into symlinked directories."""
+    files: list[Path] = []
+    for child in skill_dir.iterdir():
+        if child.is_symlink():
+            continue
+        if child.is_dir():
+            files.extend(_skill_files(child))
+        elif child.is_file():
+            files.append(child)
+    return files
+
+
 def _tree_hash(skill_dir: Path) -> str:
     """Deterministic hash of file paths + bytes under a vendored skill dir."""
     digest = hashlib.sha256()
-    files = sorted(p for p in skill_dir.rglob("*") if p.is_file() and not p.is_symlink())
-    for path in files:
+    for path in sorted(_skill_files(skill_dir)):
         rel = path.relative_to(skill_dir).as_posix()
         digest.update(rel.encode("utf-8"))
         digest.update(b"\0")
@@ -208,6 +229,12 @@ def vendored_skill_pin_findings(manifest_path: Path, skills_root: Path) -> list[
         return ["manifest: [skill_content_sha256] must be a TOML table"]
 
     for name, pin in sorted(skills.items()):
+        if not _safe_skill_name(name):
+            findings.append(
+                f"manifest: invalid skill name {name!r}; "
+                "must be one safe path component"
+            )
+            continue
         if not isinstance(pin, str) or not _FULL_SHA.match(pin):
             findings.append(f"{name}: pin must be a full 40-char commit sha")
             continue
