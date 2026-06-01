@@ -45,6 +45,7 @@ Yearly (Jan)
 gh pr list --repo "${WALTER_OS_UPDATE_REPO:-<your-fork>/walter-os}" --label "major-review-needed"
 
 # 2. Audit current versions
+walter-os upgrade --dry-run  # preview local + config refresh commands
 walter doctor                # should be all green
 walter status                # all services healthy?
 
@@ -58,7 +59,8 @@ Low-risk: minor + patch versions of well-known images.
 
 ```bash
 # Update walter-os repo's compose files via Renovate-merged PRs
-# Then push + redeploy:
+# Then refresh the framework and redeploy named services explicitly:
+walter-os upgrade            # local checkout + install.sh --upgrade + audit + doctor
 walter deploy observability   # Grafana, Loki, Prometheus, etc.
 walter deploy litellm
 walter deploy n8n
