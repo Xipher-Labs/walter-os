@@ -22,6 +22,42 @@ run_check() {
   run python3 "$CHECK" "$TMP/settings.json"
 }
 
+write_skill() {
+  local name="$1"
+  local body="${2:-skill body}"
+  mkdir -p "$TMP/skills/$name"
+  printf '%s\n' "$body" > "$TMP/skills/$name/SKILL.md"
+}
+
+write_notice_skill() {
+  local name="$1"
+  write_skill "$name"
+  printf 'third-party notice\n' > "$TMP/skills/$name/NOTICE.md"
+}
+
+skill_hash() {
+  python3 - "$CHECK" "$TMP/skills/$1" <<'PY'
+import importlib.util
+import pathlib
+import sys
+
+script = pathlib.Path(sys.argv[1])
+skill_dir = pathlib.Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("check_pinning", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(module._tree_hash(skill_dir))
+PY
+}
+
+write_manifest() {
+  printf '%s\n' "$1" > "$TMP/pinned-refs.toml"
+}
+
+run_vendored_check() {
+  run python3 "$CHECK" --vendored-skills "$TMP/pinned-refs.toml" "$TMP/skills"
+}
+
 # ---------- false-positive regression (the bug we're fixing) ----------
 
 @test "npx -y @scope/pkg@x.y.z is recognised as pinned (regression: -y flag matched the old regex)" {
@@ -301,4 +337,102 @@ run_check() {
   run_check
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+# ---------- vendored skill pin manifest ----------
+
+@test "vendored skill manifest accepts 40-char SHA and matching content hash" {
+  write_notice_skill "impeccable"
+  hash="$(skill_hash impeccable)"
+  write_manifest "[skills]
+impeccable = \"0123456789abcdef0123456789abcdef01234567\"
+
+[skill_content_sha256]
+impeccable = \"$hash\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "vendored skill manifest rejects non-SHA pins" {
+  write_notice_skill "impeccable"
+  hash="$(skill_hash impeccable)"
+  write_manifest "[skills]
+impeccable = \"main\"
+
+[skill_content_sha256]
+impeccable = \"$hash\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "impeccable: pin must be a full 40-char commit sha"
+}
+
+@test "vendored skill manifest requires content hash entries" {
+  write_notice_skill "impeccable"
+  write_manifest "[skills]
+impeccable = \"0123456789abcdef0123456789abcdef01234567\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "impeccable: missing or invalid skill_content_sha256"
+}
+
+@test "vendored skill manifest detects local content drift" {
+  write_notice_skill "impeccable" "first"
+  hash="$(skill_hash impeccable)"
+  printf 'second\n' > "$TMP/skills/impeccable/SKILL.md"
+  write_manifest "[skills]
+impeccable = \"0123456789abcdef0123456789abcdef01234567\"
+
+[skill_content_sha256]
+impeccable = \"$hash\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "impeccable: content hash mismatch"
+}
+
+@test "vendored skill manifest flags NOTICE-bearing unlisted skills" {
+  write_notice_skill "unlisted-third-party"
+  write_manifest "[skills]
+
+[skill_content_sha256]
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "unlisted-third-party: NOTICE.md present but skill missing from \\[skills\\]"
+}
+
+@test "daily audit emits high finding for vendored skill pin drift" {
+  AUDIT="${BATS_TEST_DIRNAME}/../../skills/daily-supply-chain-audit/scripts/audit.sh"
+  fake_home="$TMP/home"
+  fake_repo="$TMP/repo"
+  export HOME="$fake_home"
+  export WALTER_CONFIG="$TMP/config"
+  export WALTER_OS_HOME="$fake_repo"
+  mkdir -p "$fake_repo/skills/daily-supply-chain-audit/assets" \
+           "$fake_repo/skills/impeccable" \
+           "$fake_home/.claude"
+  printf 'changed\n' > "$fake_repo/skills/impeccable/SKILL.md"
+  printf 'notice\n' > "$fake_repo/skills/impeccable/NOTICE.md"
+  cat > "$fake_repo/skills/daily-supply-chain-audit/assets/pinned-refs.toml" <<'TOML'
+[skills]
+impeccable = "0123456789abcdef0123456789abcdef01234567"
+
+[skill_content_sha256]
+impeccable = "0000000000000000000000000000000000000000000000000000000000000000"
+TOML
+
+  run bash -c '
+    source "$1"
+    finding() {
+      printf "finding|%s|%s|%s|%s\n" "$1" "$2" "$3" "$4"
+    }
+    check_pinning
+  ' _ "$AUDIT"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "finding|high|vendored-skill-pin-drift|"
 }
