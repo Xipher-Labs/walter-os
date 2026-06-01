@@ -49,9 +49,7 @@ setup() {
 }
 
 @test "listmonk avoids public host ports" {
-  run grep -nE '^[[:space:]]+-[[:space:]]+"?([0-9]+|0\.0\.0\.0):' "$LISTMONK_COMPOSE"
-  [ "$status" -ne 0 ]
-  run grep -nE '9000:9000' "$LISTMONK_COMPOSE"
+  run grep -nE '^[[:space:]]*ports:' "$LISTMONK_COMPOSE"
   [ "$status" -ne 0 ]
 }
 

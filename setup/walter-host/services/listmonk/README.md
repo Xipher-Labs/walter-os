@@ -89,6 +89,10 @@ docker run --rm \
   alpine tar -czf /backup/listmonk-uploads-volume.tgz /listmonk/uploads
 ```
 
+If you use a custom Compose project name, confirm the actual volume names with
+`docker volume ls | grep listmonk` and adjust the `-v` arguments before running
+the backup commands.
+
 For cleaner database restores, also schedule a logical `pg_dump` from the `listmonk-db` container and include `.env` in the VM's encrypted restic set.
 
 ## Upgrade
