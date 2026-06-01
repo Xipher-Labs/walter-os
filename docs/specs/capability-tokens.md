@@ -33,7 +33,7 @@ This is NOT a sandbox (that's A-3 — process isolation via nsjail/sandbox-exec)
 | D-5 | **Enforcement via `hooks/capability-check.sh`** PreToolUse hook. Reads the relevant tool call (path + command), looks up the latest valid token for that tool in the session, verifies the cap covers the requested operation. | Same chain as the other gates. |
 | D-6 | **Fail-secure for high-tier categories.** If no valid token exists for an `Edit`/`Write`/`Bash` op AND the operation falls in a tier-`high` category from `approval-gate.sh CATEGORY_MIN_TIER`, the hook BLOCKS. Lower tiers fall through (cap is mandatory only for high-tier ops; low-tier ops are governed by the existing approval-gate alone). | Layered defense. v0.5.0 doesn't try to gate everything; only the dangerous tier. |
 | D-7 | **Operator-overridable per-skill defaults**. `~/.config/walter-os/overlay/skill-capabilities.yml` declares which skills auto-mint a default capability at session start (e.g. `nuclei-cli` auto-mints `tool=Bash, scope.patterns=[nuclei.*]`). | Skills the operator trusts get auto-caps; novel commands require explicit minting. |
-| D-8 | **No transitive delegation in v0.5.0.** A subagent cannot mint a token from its parent's token. Operator is always in the loop. Enforcement: `walter-os cap mint` checks `WALTER_AGENT_CONTEXT` (set by `agents/run.sh` when a subagent invocation is active) and refuses with `error: cap minting blocked inside subagent context (caller=$WALTER_AGENT_CONTEXT). Operator must mint caps in the top-level session.` This blocks the "subagent runs `walter-os cap mint` via the Bash tool" escape vector. AC-2 below tests this path with a bats case. Approval-gate.sh's `CATEGORY_MIN_TIER` also classifies `walter-os cap mint` as `high` tier from the outset so even from a top-level session it requires the operator's two-factor approval. | Capability-system 101: simple before clever. The subagent-mint guard is enforcement of "operator-in-the-loop" at code, not just policy. |
+| D-8 | **No transitive delegation in v0.5.0.** A subagent cannot mint a token from its parent's token. Operator is always in the loop. Enforcement: `walter-os cap mint` checks `WALTER_AGENT_CONTEXT` (set by `agents/run.sh` when a subagent invocation is active) and refuses with `error: cap minting blocked inside subagent context (caller=$WALTER_AGENT_CONTEXT). Operator must mint caps in the top-level session.` Outside test fixtures, minting also requires an interactive `/dev/tty` operator-presence challenge: Walter-OS prints a fresh nonce phrase and only continues when the operator types it back. This blocks the "subagent runs `walter-os cap mint` via the Bash tool" escape vector and avoids env-var-only approvals that agents can forge. AC-2 below tests the noninteractive, forged-env, nested-shell, command-substitution, and direct-entrypoint bypass paths. Approval-gate.sh's `CATEGORY_MIN_TIER` also classifies `walter-os cap mint` as `high` tier from the outset so even from a top-level session it requires the operator's two-factor approval. | Capability-system 101: simple before clever. The subagent-mint guard and `/dev/tty` challenge enforce "operator-in-the-loop" at code, not just policy. |
 
 ### Token claims schema (D-3 reference)
 
@@ -60,6 +60,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
 ## Acceptance criteria
 
 ### AC-1 — PASETO v4 helper + key generation
+
 - [x] `scripts/walter/lib/capability-token.sh` (new) — signs and verifies
   PASETO v4.public-compatible tokens using OpenSSL Ed25519, PAE
   canonicalization, Python stdlib base64/struct helpers, and `jq -S` JSON
@@ -72,13 +73,18 @@ renderer mangles multi-line fenced code blocks inside table cells.
 - [x] `bats` coverage in `tests/walter/capability-token.bats` — sign + verify produces same claims.
 
 ### AC-2 — `walter-os cap` CLI
+
 - [x] `walter-os cap mint <tool> --paths <glob>... --network <host>... --duration <N>[smh] [--patterns <regex>...]` — emits a PASETO v4 token to stdout AND writes to `~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto`. Duration syntax matches D-4 above (Go-style suffixed number; bare integers rejected).
 - [x] `walter-os cap list` — prints active tokens for the current session.
 - [x] `walter-os cap revoke <nonce>` — deletes the token file; subsequent tool calls won't find it.
 - [x] `walter-os cap verify <token-file>` — sanity-check a token (operator debugging).
+- [x] `walter-os cap mint` requires top-level operator context and a
+  `/dev/tty` challenge outside isolated test fixtures; forged env vars, nested
+  shells, command substitutions, and direct `cap.sh` entrypoints cannot mint.
 - [x] bats coverage in `tests/walter/cap-cli.bats`.
 
 ### AC-3 — `hooks/capability-check.sh` PreToolUse hook
+
 - [ ] Hook runs in the PreToolUse chain after `approval-gate.sh` (so a category is already classified).
 - [ ] For `Edit`/`Write`: extracts `file_path`; checks every cap in the session's `caps-<session>/` dir for `tool` matching AND `scope.paths` glob matching.
 - [ ] For `Bash`: extracts `command`; checks every cap for `tool=Bash` AND (a) `scope.patterns` regex matching OR (b) network destination in `scope.network` (parsed from curl/git/etc. like A-1 egress hook does).
@@ -92,6 +98,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
   - Two-factor bypass (`WALTER_CAP_BYPASS=1` + `--allow-no-cap`) → allow with WARN
 
 ### AC-4 — Default skill capabilities
+
 - [ ] `contexts/_examples/skill-capabilities.example.yml`:
   ```yaml
   # When these skills are autoloaded at session start, walter-os
@@ -116,12 +123,14 @@ renderer mangles multi-line fenced code blocks inside table cells.
 - [ ] `scripts/walter/lib/skill-cap-loader.sh` reads the YAML at session start and mints matching tokens.
 
 ### AC-5 — Daily-audit integration
+
 - [ ] `daily-supply-chain-audit` adds `check_cap_state()`:
   - Orphaned `caps-<session>/` dirs (session ended but caps remain) → `info` finding `cap-cleanup-stale`
   - Token mode != 0600 → `high` finding (operator-side perms issue)
   - PASETO key file mode != 0600 → `crit` finding (signing-key exposure)
 
 ### AC-6 — Operator-facing docs + CHANGELOG
+
 - [ ] `docs/operational/capability-tokens.md` (new):
   - Philosophy (layered above approval-gate, mandatory for high-tier ops)
   - Common workflow: skill auto-caps; operator-mints when needed
