@@ -94,10 +94,11 @@ Check logs:
 docker compose --profile notifications logs -f ntfy
 ```
 
-Send a test notification after creating a user and topic:
+Send a test notification after creating a user and topic. Set `NTFY_PASSWORD`
+in your shell first:
 
 ```bash
-curl -u walter "https://ntfy.${WALTER_DOMAIN}/alerts" \
+curl -u "walter:${NTFY_PASSWORD}" "https://ntfy.${WALTER_DOMAIN}/alerts" \
   -H "Title: Walter test" \
   -d "ntfy profile is reachable"
 ```
