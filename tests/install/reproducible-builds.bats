@@ -31,12 +31,23 @@ setup() {
 
 @test "reproducible release script can compare canonical SBOM when tools exist" {
   grep -Fq 'command -v syft' "$SCRIPT"
+  grep -Fq 'gh release download "$tag"' "$SCRIPT"
   grep -Fq 'git archive --format=tar --prefix="walter-os-${tag}/" "$tag"' "$SCRIPT"
   grep -Fq 'tar -x -C "$sbom_root"' "$SCRIPT"
   grep -Fq 'syft dir:"${sbom_root}/walter-os-${tag}"' "$SCRIPT"
+  grep -Fq -e '--pattern "walter-os-${tag}.sbom.cdx.json"' "$SCRIPT"
   grep -Fq 'sort_by(.["bom-ref"] // .name // "")' "$SCRIPT"
   grep -Fq 'sort_by(.ref // "")' "$SCRIPT"
   grep -Fq 'SBOM mismatch' "$SCRIPT"
+}
+
+@test "reproducible release script downloads SBOM only when syft is available" {
+  syft_line="$(grep -n 'if command -v syft' "$SCRIPT" | cut -d: -f1)"
+  sbom_download_line="$(grep -n -- '--pattern "walter-os-${tag}.sbom.cdx.json"' "$SCRIPT" | cut -d: -f1)"
+
+  [ -n "$syft_line" ]
+  [ -n "$sbom_download_line" ]
+  [ "$sbom_download_line" -gt "$syft_line" ]
 }
 
 @test "reproducible builds runbook documents scope and troubleshooting" {

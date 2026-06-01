@@ -60,7 +60,6 @@ echo "Downloading release assets for ${tag}..."
 gh release download "$tag" \
   --pattern "checksums.sha256" \
   --pattern "walter-os-${tag}.source.tar.gz" \
-  --pattern "walter-os-${tag}.sbom.cdx.json" \
   --dir "$asset_dir"
 
 checksums="${asset_dir}/checksums.sha256"
@@ -81,6 +80,9 @@ echo "source tarball: OK"
 if command -v syft >/dev/null 2>&1; then
   need jq
   need tar
+  gh release download "$tag" \
+    --pattern "walter-os-${tag}.sbom.cdx.json" \
+    --dir "$asset_dir"
   rebuilt_sbom="${work_dir}/walter-os-${tag}.sbom.cdx.json"
   sbom_root="${work_dir}/sbom-root"
   mkdir -p "$sbom_root"
