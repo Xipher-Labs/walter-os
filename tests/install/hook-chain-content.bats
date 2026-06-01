@@ -60,6 +60,49 @@ setup() {
   [ "$approval_line" -lt "$network_line" ]
 }
 
+@test "AC-3 (#122 capability): install.sh PreToolUse Bash chain includes capability-check.sh" {
+  grep -q 'hooks/capability-check.sh' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-3 (#122 capability): capability-check.sh runs AFTER approval-gate.sh" {
+  approval_line=$(grep -n 'hooks/approval-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  cap_line=$(grep -n 'hooks/capability-check.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  [ -n "$approval_line" ]
+  [ -n "$cap_line" ]
+  [ "$approval_line" -lt "$cap_line" ]
+}
+
+@test "AC-3 (#122 capability): capability-check.sh runs BEFORE network-gate.sh" {
+  cap_line=$(grep -n 'hooks/capability-check.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  network_line=$(grep -n 'hooks/network-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  [ -n "$cap_line" ]
+  [ -n "$network_line" ]
+  [ "$cap_line" -lt "$network_line" ]
+}
+
+@test "AC-3 (#122 capability): edit hook matcher includes edit tools" {
+  grep -q 'matcher: "Write|Edit|MultiEdit|NotebookEdit"' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-3 (#122 capability): read hook matcher includes read tools" {
+  grep -q 'matcher: "Read|Grep|Glob|LS"' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-3 (#122 capability): edit hook chain includes capability-check" {
+  sed -n '/matcher: "Write|Edit|MultiEdit|NotebookEdit"/,/wiki-validator-hook[.]sh/p' "$REPO_ROOT/install.sh" \
+    | grep -q 'hooks/capability-check.sh'
+}
+
+@test "AC-3 (#122 capability): read hook chain includes approval gate" {
+  read_chain="$(sed -n '/matcher: "Read|Grep|Glob|LS"/,/]/p' "$REPO_ROOT/install.sh")"
+
+  grep -q 'hooks/approval-gate.sh' <<< "$read_chain"
+}
+
 @test "AC-5 (#122 A-2): network-gate.sh appears BEFORE branch-flow-guard.sh" {
   # branch-flow-guard is about push-target policy, which only matters
   # for git pushes that ALREADY passed the network-gate host check.

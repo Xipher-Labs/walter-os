@@ -44,8 +44,9 @@ The six requested runtime tracks map to this implementation order:
 - #241 is open, mergeable, and completes the session-key foundation slice:
   per-session Ed25519 key material, caps directory creation, safe cleanup, and
   install/runtime OpenSSL checks.
-- The next slice is **Capability Tokens / PASETO helper and CLI**, stacked on
-  #241.
+- #243 is open, mergeable, and completes the PASETO-compatible helper plus
+  `walter-os cap` CLI slice stacked on #241.
+- The next slice is **Capability enforcement hook**, stacked on #243.
 
 ## Design Risks To Resolve Before Claiming Completion
 
