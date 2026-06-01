@@ -89,6 +89,7 @@ _mode() {
   grep -q '@WALTER_SANDBOX_PARENT@' "$profile"
   grep -q '@WALTER_SANDBOX_SCRATCH@' "$profile"
   grep -q '@WALTER_CONFIG_REGEX@/state/session-' "$profile"
+  grep -q '(deny file-write\*' "$profile"
   grep -Fq '[.]key[.]tmp' "$profile"
   grep -q '@HOME@/.ssh' "$profile"
   grep -q '(subpath "@WALTER_SANDBOX_PARENT@")' "$profile"

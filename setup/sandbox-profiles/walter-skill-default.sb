@@ -27,7 +27,15 @@
   (require-all
     (subpath "@WALTER_SANDBOX_PARENT@")
     (regex #".*[.]pem$")))
+(deny file-write*
+  (require-all
+    (subpath "@WALTER_SANDBOX_PARENT@")
+    (regex #".*[.]pem$")))
 (deny file-read*
+  (require-all
+    (subpath "@WALTER_SANDBOX_PARENT@")
+    (regex #".*[.]key$")))
+(deny file-write*
   (require-all
     (subpath "@WALTER_SANDBOX_PARENT@")
     (regex #".*[.]key$")))
@@ -35,7 +43,15 @@
   (require-all
     (subpath "@WALTER_CONFIG@")
     (regex #".*[.]pem$")))
+(deny file-write*
+  (require-all
+    (subpath "@WALTER_CONFIG@")
+    (regex #".*[.]pem$")))
 (deny file-read*
+  (require-all
+    (subpath "@WALTER_CONFIG@")
+    (regex #".*[.]key$")))
+(deny file-write*
   (require-all
     (subpath "@WALTER_CONFIG@")
     (regex #".*[.]key$")))
@@ -43,7 +59,15 @@
   (require-all
     (subpath "@HOME@")
     (regex #".*[.]pem$")))
+(deny file-write*
+  (require-all
+    (subpath "@HOME@")
+    (regex #".*[.]pem$")))
 (deny file-read*
+  (require-all
+    (subpath "@HOME@")
+    (regex #".*[.]key$")))
+(deny file-write*
   (require-all
     (subpath "@HOME@")
     (regex #".*[.]key$")))
