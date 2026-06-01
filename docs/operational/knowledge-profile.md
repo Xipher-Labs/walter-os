@@ -104,7 +104,7 @@ The profile should ship an `.env.template` documenting these values:
 - `OUTLINE_UTILS_SECRET`
 - `OUTLINE_DATABASE_URL`
 - `OUTLINE_REDIS_URL`
-- `LINKWARDEN_URL=https://links.${WALTER_DOMAIN}`
+- `NEXTAUTH_URL=https://links.${WALTER_DOMAIN}`
 - `LINKWARDEN_NEXTAUTH_SECRET`
 - `LINKWARDEN_DATABASE_URL`
 - optional OIDC client IDs/secrets for Authentik integration
