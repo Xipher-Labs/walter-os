@@ -16,6 +16,8 @@ The reproducible release path covers:
 
 `checksums.sha256.cosign.bundle` is not reproducible by design because cosign
 keyless signing includes timestamped, transparency-log-backed material.
+Always verify `checksums.sha256` with `checksums.sha256.cosign.bundle` before
+treating the checksums as authoritative.
 
 ## Toolchain
 
@@ -39,6 +41,16 @@ From a clean clone:
 ```bash
 git fetch --tags origin
 git checkout <tag>
+
+gh release download <tag> \
+  --pattern "checksums.sha256*"
+
+cosign verify-blob \
+  --bundle checksums.sha256.cosign.bundle \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp 'https://github\.com/Xipher-Labs/walter-os/\.github/workflows/release\.yml.*' \
+  checksums.sha256
+
 scripts/release/reproduce.sh <tag>
 ```
 

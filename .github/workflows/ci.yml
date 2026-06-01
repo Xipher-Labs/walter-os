@@ -121,6 +121,8 @@ jobs:
             tests/install/makefile-ci-shellcheck-parity.bats \
             tests/install/escape-helpers.bats \
             tests/install/no-eval-in-helpers.bats \
+            tests/install/workflow-pins.bats \
+            tests/install/reproducible-builds.bats \
             tests/install/yq-flavor-and-arch.bats
 
   install-dry-run:
