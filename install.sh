@@ -1016,6 +1016,14 @@ merge_claude_hooks() {
         _walter_os: true
       }]
     }],
+    UserPromptSubmit: [{
+      matcher: "*",
+      hooks: [{
+        type: "command",
+        command: ($repo + "/hooks/session-timeout.sh"),
+        _walter_os: true
+      }]
+    }],
     PreToolUse: [
       {
         matcher: "Bash",

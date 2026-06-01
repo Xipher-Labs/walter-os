@@ -38,6 +38,29 @@ teardown() {
   [[ "$output" == *"/opt/walter-os"* ]]
 }
 
+@test "A-4: session timeout keys are exported from Walter env" {
+  cat > "$TMP_CFG/env" <<'ENV'
+WALTER_SESSION_MAX_HOURS=8
+WALTER_SESSION_MAX_IDLE_MIN=60
+ENV
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; echo \"\${WALTER_SESSION_MAX_HOURS:-UNSET}|\${WALTER_SESSION_MAX_IDLE_MIN:-UNSET}\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"8|60"* ]]
+}
+
+@test "A-4: operator env cannot override active PHI mode" {
+  cat > "$TMP_CFG/env" <<'ENV'
+WALTER_PHI_MODE=0
+ENV
+
+  run bash -c "export WALTER_PHI_MODE=1; source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>/dev/null; echo \"\${WALTER_PHI_MODE:-UNSET}\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == "1" ]]
+}
+
 @test "P1-09: non-allowlisted key ARBITRARY_VAR is ignored + warning emitted" {
   echo 'ARBITRARY_VAR=baz' > "$TMP_CFG/env"
 

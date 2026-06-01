@@ -74,3 +74,8 @@ setup() {
   [ -n "$branchflow_line" ]
   [ "$network_line" -lt "$branchflow_line" ]
 }
+
+@test "AC-2 (#122 A-4): install.sh registers session-timeout UserPromptSubmit hook" {
+  grep -q 'UserPromptSubmit' "$REPO_ROOT/install.sh"
+  grep -q 'hooks/session-timeout.sh' "$REPO_ROOT/install.sh"
+}
