@@ -840,9 +840,6 @@ walter_sandbox_provider_path() {
   fi
   provider_dir="${provider_path%/*}"
   provider_base="${provider_path##*/}"
-  if [[ "$provider_dir" == "$provider_path" ]]; then
-    provider_dir="."
-  fi
   provider_dir="$(cd "$provider_dir" && pwd -P)" || return 1
   printf '%s\n' "${provider_dir}/${provider_base}"
 }
