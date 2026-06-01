@@ -312,6 +312,23 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+@test "A-5: overlay removal preserves colon-bearing path names" {
+  secret_path="$HOME/Secret Store/token:file"
+  mkdir -p "$(dirname "$secret_path")"
+  printf 'token\n' > "$secret_path"
+  cat > "$WALTER_CONFIG/overlay/sandbox-invisible-paths.txt" <<EOF
+$secret_path:file
+!$secret_path
+EOF
+
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail 1"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  run grep -Fq "dst: \"$secret_path\"" "$profile"
+  [ "$status" -ne 0 ]
+}
+
 @test "A-5: invisible overlay preserves hash characters in paths" {
   extra="$HOME/secrets/secret#1.env"
   mkdir -p "$(dirname "$extra")"

@@ -596,7 +596,7 @@ _walter_sandbox_invisible_remove_path() {
 }
 
 _walter_sandbox_invisible_apply_file() {
-  local file="$1" active="$2" required="${3:-0}" raw line remove entry path type expanded
+  local file="$1" active="$2" required="${3:-0}" raw line remove entry path type expanded next_active
   [[ -f "$file" ]] || {
     if [[ "$required" == "1" ]]; then
       echo "walter-sandbox: required invisible path policy missing: $file" >&2
@@ -617,13 +617,20 @@ _walter_sandbox_invisible_apply_file() {
     fi
     entry="$line"
     if [[ "$remove" -eq 1 ]]; then
-      case "$entry" in
-        *:dir|*:file) path="${entry%:*}" ;;
-        *) path="$entry" ;;
-      esac
-      expanded="$(_walter_sandbox_invisible_expand_path "$path")" || return 1
+      expanded="$(_walter_sandbox_invisible_expand_path "$entry")" || return 1
       expanded="$(_walter_sandbox_invisible_normalize_path "$expanded")"
-      active="$(_walter_sandbox_invisible_remove_path "$active" "$expanded")"
+      next_active="$(_walter_sandbox_invisible_remove_path "$active" "$expanded")"
+      if [[ "$next_active" == "$active" ]]; then
+        case "$entry" in
+          *:dir|*:file)
+            path="${entry%:*}"
+            expanded="$(_walter_sandbox_invisible_expand_path "$path")" || return 1
+            expanded="$(_walter_sandbox_invisible_normalize_path "$expanded")"
+            next_active="$(_walter_sandbox_invisible_remove_path "$active" "$expanded")"
+            ;;
+        esac
+      fi
+      active="$next_active"
       continue
     fi
     case "$entry" in
