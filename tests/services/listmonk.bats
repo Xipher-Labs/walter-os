@@ -56,7 +56,7 @@ setup() {
 }
 
 @test "listmonk docs mention route, SMTP, unsubscribe, backups, and optionality" {
-  grep -q 'https://listmonk.${WALTER_DOMAIN}' "$LISTMONK_README"
+  grep -Fq 'https://listmonk.${WALTER_DOMAIN}' "$LISTMONK_README"
   grep -qi 'SMTP' "$LISTMONK_README"
   grep -qi 'unsubscribe' "$LISTMONK_README"
   grep -qi 'backup' "$LISTMONK_README"
