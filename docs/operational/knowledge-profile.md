@@ -76,7 +76,71 @@ Expected service boundary:
 - Authentik, when enabled, can provide app-level identity and OIDC.
 - Secrets are loaded from the approved Walter-OS secrets flow, not hardcoded.
 
-## Implementation notes
+## Implementation Scope
+
+The `knowledge` profile should define a concrete, disabled-by-default service
+surface. The later implementation PR should add the service files, but this
+decision pins what that PR must include.
+
+### Compose
+
+- Add `setup/walter-host/services/knowledge/compose.yml`.
+- Use `profiles: [knowledge]` for every service in the profile.
+- Add `outline`, `outline-redis` if required by the current Outline release,
+  and `linkwarden`.
+- Use pinned image tags, not `latest` or floating major tags.
+- Use named volumes for uploaded files, Linkwarden archived pages, and any
+  cache/state directory that is not disposable.
+- Use the shared Postgres service through separate databases:
+  `outline` and `linkwarden`.
+- Do not expose public ports directly; route only through Caddy.
+
+### Environment and Secrets
+
+The profile should ship an `.env.template` documenting these values:
+
+- `OUTLINE_URL=https://outline.${WALTER_DOMAIN}`
+- `OUTLINE_SECRET_KEY`
+- `OUTLINE_UTILS_SECRET`
+- `OUTLINE_DATABASE_URL`
+- `OUTLINE_REDIS_URL`
+- `LINKWARDEN_URL=https://links.${WALTER_DOMAIN}`
+- `LINKWARDEN_NEXTAUTH_SECRET`
+- `LINKWARDEN_DATABASE_URL`
+- optional OIDC client IDs/secrets for Authentik integration
+
+Secrets must be loaded from the approved Walter-OS secrets flow. The template
+must not contain working defaults for signing secrets, database passwords, or
+OIDC client secrets.
+
+### Caddy and Access
+
+- Add `outline.${WALTER_DOMAIN}` and `links.${WALTER_DOMAIN}` Caddy routes.
+- Keep Cloudflare Access as the perimeter gate.
+- Keep application-level login enabled inside Outline and Linkwarden.
+- When Authentik is enabled, use it as the OIDC provider for app-level identity;
+  do not make Authentik a hard dependency of the `knowledge` profile.
+
+### Backups
+
+The backup/runbook scope must include:
+
+- Postgres databases for `outline` and `linkwarden`.
+- Outline uploaded attachments or local object-storage volume.
+- Linkwarden archived page volume.
+- Restore smoke test: bring up the profile, restore DB + volumes, log in, open
+  one Outline page, and open one archived Linkwarden link.
+
+### Verification
+
+The implementation PR should include static tests for:
+
+- all services are profile-gated by `knowledge`;
+- no image tag is floating;
+- no direct public port is exposed;
+- required secrets use fail-loud or documented secret-loader behavior;
+- Caddy routes exist for both subdomains;
+- backup docs mention DBs and volumes for both apps.
 
 Before adding the profile, verify current upstream deployment requirements:
 
