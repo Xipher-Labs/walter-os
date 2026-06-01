@@ -79,7 +79,8 @@ prefix. Roadmap items use their layer-letter prefix (A-1, B-2, C-1, D-1, E-2).
 Wrap per-OS primitives:
 - **Linux**: nsjail (preferred — fine-grained capabilities) or firejail (operator-friendlier)
 - **macOS**: `sandbox-exec` (built-in, profile-based)
-- **WSL**: nsjail under WSL2
+- **WSL2**: follows the Linux shim path when `uname -s` reports `Linux`;
+  there is no separate WSL detector in the first shim slice.
 
 Walter-OS ships a `scripts/walter/lib/sandbox.sh` shim that exposes a uniform `walter_sandbox_run <profile> <cmd>` regardless of host. Profile names map to per-OS config files.
 
