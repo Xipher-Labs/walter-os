@@ -1,0 +1,5 @@
+services:
+  forgejo-runner:
+    profiles: ["forgejo-runner-docker-socket"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

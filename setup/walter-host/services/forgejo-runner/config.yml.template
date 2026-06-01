@@ -17,4 +17,4 @@ container:
   privileged: false
   options: ""
   valid_volumes: []
-  docker_host: unix:///var/run/docker.sock
+  docker_host: ""

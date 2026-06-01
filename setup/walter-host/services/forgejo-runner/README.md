@@ -7,6 +7,8 @@ selected.
 ## Files
 
 - `compose.yml` starts one pinned Forgejo runner container.
+- `compose.docker-socket.yml` is an explicit high-risk overlay for Docker
+  executor jobs.
 - `.env.template` documents required local values. Copy it to `.env` and keep
   the registration token out of git.
 - `config.yml.template` keeps runner state at `/data/.runner` inside the named
@@ -22,7 +24,8 @@ selected.
 2. Create or copy a runner registration token.
 3. Copy `.env.template` to `.env` and set:
    - `FORGEJO_INSTANCE_URL`, for example `https://git.${WALTER_DOMAIN}`.
-   - `FORGEJO_RUNNER_REGISTRATION_TOKEN`, pasted from Forgejo.
+   - `FORGEJO_RUNNER_REGISTRATION_TOKEN`, pasted from Forgejo. This is required
+     only while `/data/.runner` is absent.
    - `FORGEJO_RUNNER_NAME`, one stable name for this host.
    - `FORGEJO_RUNNER_LABELS`, if the default label does not fit.
 4. Start exactly one runner:
@@ -33,7 +36,9 @@ docker compose --profile forgejo-runner up -d
 
 On first start, `forgejo-runner register --no-interactive` registers the runner
 and creates `/data/.runner` in the `forgejo-runner-data` named volume. After
-that, the container starts `forgejo-runner daemon`.
+that, the container starts `forgejo-runner daemon`. Once `.runner` exists, the
+container no longer needs `FORGEJO_RUNNER_REGISTRATION_TOKEN` at Compose
+interpolation time or daemon startup.
 
 ## Labels
 
@@ -51,7 +56,9 @@ runs-on: docker
 
 Add more labels only when you have a real isolation boundary or separate
 runtime need. For a small team, one boring Docker label is easier to reason
-about than a fleet of overlapping labels.
+about than a fleet of overlapping labels. Docker executor labels require a
+Docker daemon. The default `compose.yml` does not mount the host Docker socket;
+use the explicit overlay below if you accept that risk.
 
 ## State and credentials
 
@@ -70,7 +77,18 @@ the runner is registered if your operational flow allows it.
 
 ## Docker socket risk
 
-This profile explicitly mounts:
+The default profile does not mount the Docker socket. To opt in, run the
+runner with the Docker socket overlay:
+
+```bash
+docker compose \
+  -f compose.yml \
+  -f compose.docker-socket.yml \
+  --profile forgejo-runner-docker-socket \
+  up -d
+```
+
+The overlay explicitly mounts:
 
 ```text
 /var/run/docker.sock:/var/run/docker.sock

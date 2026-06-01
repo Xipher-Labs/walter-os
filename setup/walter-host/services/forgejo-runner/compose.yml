@@ -6,13 +6,12 @@ services:
     restart: unless-stopped
     environment:
       FORGEJO_INSTANCE_URL: ${FORGEJO_INSTANCE_URL:?required - set your Forgejo base URL, for example https://git.example.com}
-      FORGEJO_RUNNER_REGISTRATION_TOKEN: ${FORGEJO_RUNNER_REGISTRATION_TOKEN:?required - create a runner registration token in Forgejo}
+      FORGEJO_RUNNER_REGISTRATION_TOKEN: ${FORGEJO_RUNNER_REGISTRATION_TOKEN:-}
       FORGEJO_RUNNER_NAME: ${FORGEJO_RUNNER_NAME:-walter-forgejo-runner-1}
       FORGEJO_RUNNER_LABELS: ${FORGEJO_RUNNER_LABELS:-docker:docker://node:20-bullseye}
     volumes:
       - forgejo-runner-data:/data
       - ./config.yml.template:/etc/forgejo-runner/config.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock
     security_opt:
       - no-new-privileges:true
     command:
@@ -22,6 +21,11 @@ services:
         cd /data
 
         if [ ! -f /data/.runner ]; then
+          if [ -z "$${FORGEJO_RUNNER_REGISTRATION_TOKEN}" ]; then
+            echo "FORGEJO_RUNNER_REGISTRATION_TOKEN is required when /data/.runner is absent" >&2
+            exit 1
+          fi
+
           forgejo-runner register \
             --no-interactive \
             --instance "$${FORGEJO_INSTANCE_URL}" \

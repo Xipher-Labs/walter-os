@@ -5,6 +5,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   RUNNER_DIR="$REPO_ROOT/setup/walter-host/services/forgejo-runner"
   COMPOSE_FILE="$RUNNER_DIR/compose.yml"
+  SOCKET_COMPOSE_FILE="$RUNNER_DIR/compose.docker-socket.yml"
   ENV_TEMPLATE="$RUNNER_DIR/.env.template"
   README_FILE="$RUNNER_DIR/README.md"
   CONFIG_TEMPLATE="$RUNNER_DIR/config.yml.template"
@@ -12,6 +13,7 @@ setup() {
 
 @test "forgejo runner service files exist" {
   [[ -f "$COMPOSE_FILE" ]]
+  [[ -f "$SOCKET_COMPOSE_FILE" ]]
   [[ -f "$ENV_TEMPLATE" ]]
   [[ -f "$README_FILE" ]]
   [[ -f "$CONFIG_TEMPLATE" ]]
@@ -26,8 +28,14 @@ setup() {
   grep -q "code.forgejo.org/forgejo/runner:12.10.2" "$COMPOSE_FILE"
 }
 
-@test "compose requires registration token at runtime" {
-  grep -qE '\$\{FORGEJO_RUNNER_REGISTRATION_TOKEN:\?' "$COMPOSE_FILE"
+@test "compose does not require registration token during interpolation" {
+  ! grep -qE '\$\{FORGEJO_RUNNER_REGISTRATION_TOKEN:\?' "$COMPOSE_FILE"
+  grep -q 'FORGEJO_RUNNER_REGISTRATION_TOKEN: ${FORGEJO_RUNNER_REGISTRATION_TOKEN:-}' "$COMPOSE_FILE"
+}
+
+@test "entrypoint requires registration token only before .runner exists" {
+  grep -q 'if \[ ! -f /data/.runner \]; then' "$COMPOSE_FILE"
+  grep -q 'FORGEJO_RUNNER_REGISTRATION_TOKEN is required when /data/.runner is absent' "$COMPOSE_FILE"
 }
 
 @test "env template does not contain a real registration token" {
@@ -40,8 +48,15 @@ setup() {
   grep -q "forgejo-runner-data:/data" "$COMPOSE_FILE"
 }
 
-@test "docker socket mount is explicit and documented as high risk" {
-  grep -q "/var/run/docker.sock:/var/run/docker.sock" "$COMPOSE_FILE"
+@test "default compose does not mount the Docker socket" {
+  ! grep -q "/var/run/docker.sock:/var/run/docker.sock" "$COMPOSE_FILE"
+  ! grep -q "/var/run/docker.sock" "$CONFIG_TEMPLATE"
+}
+
+@test "docker socket override is explicit and documented as high risk" {
+  grep -q "profiles:" "$SOCKET_COMPOSE_FILE"
+  grep -q "forgejo-runner-docker-socket" "$SOCKET_COMPOSE_FILE"
+  grep -q "/var/run/docker.sock:/var/run/docker.sock" "$SOCKET_COMPOSE_FILE"
   grep -qi "docker socket" "$README_FILE"
   grep -qi "high-risk" "$README_FILE"
 }
