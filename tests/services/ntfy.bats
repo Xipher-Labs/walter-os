@@ -19,8 +19,17 @@ setup() {
 }
 
 @test "ntfy compose is gated behind optional ntfy profile" {
-  grep -q "profiles:" "$NTFY_COMPOSE"
-  grep -Eq 'profiles:[[:space:]]*\[[^]]*ntfy[^]]*notifications|profiles:[[:space:]]*\[[^]]*notifications[^]]*ntfy' "$NTFY_COMPOSE"
+  python3 - "$NTFY_COMPOSE" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    compose = yaml.safe_load(handle)
+
+profiles = compose["services"]["ntfy"].get("profiles", [])
+assert "ntfy" in profiles
+assert "notifications" in profiles
+PY
 }
 
 @test "ntfy compose keeps env file optional and network stable" {
