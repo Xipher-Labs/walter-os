@@ -110,3 +110,34 @@ PROVIDER
     'select(.decision_source == "operator-sandbox-bypass" and .profile == "walter-hook-default" and (.hook | endswith("test-hook.sh")))' \
     "$WALTER_CONFIG/sandbox-bypass.jsonl"
 }
+
+@test "#260 AC-4: sandbox bypass fails closed when audit row cannot be written" {
+  WALTER_CONFIG="$TMP_HOME/not-a-dir"
+  export WALTER_CONFIG
+  printf 'not a directory\n' > "$WALTER_CONFIG"
+
+  run env WALTER_SANDBOX_BYPASS=1 PATH="$FAKE_BIN:$PATH" "$BASH" "$RUNNER" --no-sandbox "$HOOK" <<< '{"tool_name":"Bash"}'
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"bypass audit failed"* ]]
+  [ ! -f "$HOOK_PAYLOAD_OUT" ]
+}
+
+@test "#260 AC-4: sandboxed hook failure reports actual exit status" {
+  provider="$(_host_provider)"
+  _write_fake_provider "$provider"
+  failing_hook="$TMP_HOME/failing-hook.sh"
+  cat > "$failing_hook" <<'HOOK'
+#!/usr/bin/env bash
+exit 17
+HOOK
+  chmod +x "$failing_hook"
+
+  run env PATH="$FAKE_BIN:$PATH" "$BASH" "$RUNNER" "$failing_hook" <<< '{"tool_name":"Bash"}'
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"exit 17"* ]]
+  [[ "$output" != *"exit 0"* ]]
+}

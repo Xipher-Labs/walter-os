@@ -47,7 +47,7 @@ EOF
 
 _audit_bypass() {
   local profile="$1" hook="$2" logfile ts row
-  mkdir -p "$WALTER_CONFIG" 2>/dev/null || return 0
+  mkdir -p "$WALTER_CONFIG" || return 1
   logfile="${WALTER_CONFIG}/sandbox-bypass.jsonl"
   ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf '%s' unknown)"
   if command -v jq >/dev/null 2>&1; then
@@ -65,7 +65,8 @@ _audit_bypass() {
   else
     row="{\"ts\":\"$(_json_escape "$ts")\",\"decision\":\"allow\",\"decision_source\":\"operator-sandbox-bypass\",\"profile\":\"$(_json_escape "$profile")\",\"hook\":\"$(_json_escape "$hook")\"}"
   fi
-  [[ -n "$row" ]] && printf '%s\n' "$row" >> "$logfile" 2>/dev/null || true
+  [[ -n "$row" ]] || return 1
+  printf '%s\n' "$row" >> "$logfile"
 }
 
 profile="walter-hook-default"
@@ -106,7 +107,9 @@ fi
 
 if [[ "$no_sandbox" -eq 1 || "${WALTER_SANDBOX_BYPASS:-0}" == "1" ]]; then
   if [[ "$no_sandbox" -eq 1 && "${WALTER_SANDBOX_BYPASS:-0}" == "1" ]]; then
-    _audit_bypass "$profile" "$hook"
+    if ! _audit_bypass "$profile" "$hook"; then
+      _emit_block "sandbox hook runner: bypass audit failed for $hook"
+    fi
     printf '%s\n' "sandbox hook runner: WARN two-factor sandbox bypass used for ${hook}" >&2
     exec "$hook" "$@"
   fi
@@ -142,9 +145,10 @@ if walter_sandbox_run "$profile" "$hook" "$@" >"$out_file" 2>"$err_file"; then
   cat "$out_file"
   cat "$err_file" >&2
   exit 0
+else
+  status=$?
 fi
 
-status=$?
 err="$(cat "$err_file" 2>/dev/null || true)"
 [[ -n "$err" ]] || err="exit ${status}"
 _emit_block "sandbox hook runner: sandboxed hook failed for $hook: $err"
