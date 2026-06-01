@@ -1,16 +1,16 @@
 # Knowledge Profile Options
 
-Walter-OS supports two different knowledge-management patterns. They are not
-interchangeable: one is for shared team knowledge, the other is for local-first
-personal thinking.
+This guide compares two knowledge-management patterns Walter-OS should support.
+They are not interchangeable: one is for shared team knowledge, the other is
+for local-first personal thinking.
 
 ## Recommendation
 
-Use **Outline + Linkwarden** for the optional Walter-VM `knowledge` profile.
-Keep **Obsidian** as a personal/local-first recommendation outside the server
-profile.
+Use **Outline + Linkwarden** as the recommendation for the future optional
+Walter-VM `knowledge` profile. Keep **Obsidian** as a personal/local-first
+recommendation outside the server profile.
 
-This is the default recommendation for:
+This recommendation fits:
 
 - personal operators who want a browser-accessible shared knowledge base;
 - startup or small-team installs up to roughly 10 people;
