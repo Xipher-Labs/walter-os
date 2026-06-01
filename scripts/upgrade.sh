@@ -58,6 +58,10 @@ shell_quote() {
   printf "%q" "$1"
 }
 
+single_quote() {
+  printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
 validate_service_name() {
   local service="$1"
   [[ "$service" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
@@ -159,8 +163,9 @@ run_vm_upgrade() {
   local remote_repo
   remote_repo="$(shell_quote "$vm_repo")"
 
-  local remote_cmd
-  remote_cmd="cd ${remote_repo} && test -z \"\$(git status --porcelain)\" && git fetch --quiet && git pull --ff-only --quiet && bash ./install.sh --upgrade && ./bin/walter-os audit && ./bin/walter-os doctor"
+  local remote_payload remote_cmd
+  remote_payload="cd ${remote_repo} && test -z \"\$(git status --porcelain)\" && git fetch --quiet && git pull --ff-only --quiet && bash ./install.sh --upgrade && ./bin/walter-os audit && ./bin/walter-os doctor"
+  remote_cmd="bash -lc $(single_quote "$remote_payload")"
   run_cmd ssh "$vm_host" "$remote_cmd"
 
   local service

@@ -158,7 +158,7 @@ See `docs/specs/secrets-runtime-architecture.md` for the full secrets flow.
 
 ## Upgrading Walter-OS without breaking your overlay
 
-When you pull upstream changes into your fork:
+When you fast-forward from the branch's configured upstream tracking ref:
 
 ```bash
 walter-os upgrade
