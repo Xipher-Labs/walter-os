@@ -913,6 +913,18 @@ _mint() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "Bash mention of envrc path remains low-tier" {
+  output="$(_hook_json Bash command "cat .envrc")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash mention of env file remains high-tier" {
+  output="$(_hook_json Bash command "cat .env.local")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "expired capability is ignored and high-tier Bash blocks" {
   _mint Bash --network api.github.com --duration 5m >/dev/null
   export WALTER_SESSION_NOW_EPOCH=1767225961

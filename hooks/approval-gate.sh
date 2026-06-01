@@ -67,9 +67,18 @@ TRUST_TIERS="${WALTER_TRUST_TIERS:-$WALTER_CONFIG/trust-tiers.yml}"
 
 # ---------- block patterns (keep in lockstep with §7.1 of the spec) ----------
 
+protected_path_policy_missing() {
+  local reason="approval-gate: missing Walter-OS protected path policy"
+  if [[ $# -gt 0 ]]; then
+    echo "approval-gate: BLOCK — $reason" >&2
+    exit 7
+  fi
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"%s"}}\n' "$reason"
+  exit 0
+}
+
 if [[ ! -f "$PROTECTED_PATHS_LIB" ]]; then
-  echo "approval-gate: BLOCK — missing Walter-OS protected path policy" >&2
-  exit 7
+  protected_path_policy_missing "$@"
 fi
 
 # shellcheck source=/dev/null

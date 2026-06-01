@@ -985,7 +985,7 @@ _cap_is_high_tier_path() {
 
 _cap_bash_mentions_high_tier_path() {
   local command="$1"
-  local protected_path_re='(^|[^A-Za-z0-9_./-])(hooks/[^[:space:];|&"'\''`]+[.]sh|[.][/]hooks/[^[:space:];|&"'\''`]+[.]sh|[.]claude/settings[.]json|[.]github/workflows/[^[:space:];|&"'\''`]+|install[.]sh|[.][/]install[.]sh|bin/walter-os|[.][/]bin/walter-os|AGENTS[.]md|CLAUDE[.]md|mcp/servers[.]json|scripts/walter/(lib/(capability-token|session-state|protected-paths)[.]sh|subcommands/cap[.]sh)|agents/[^[:space:];|&"'\''`]+[.]md|skills/[^[:space:];|&"'\''`]+/SKILL[.]md|auth/[^[:space:];|&"'\''`]+|crypto/[^[:space:];|&"'\''`]+|personal/health/[^[:space:];|&"'\''`]+|[.]ssh/[^[:space:];|&"'\''`]+|[^[:space:];|&"'\''`]+/[.]ssh/[^[:space:];|&"'\''`]+|[^[:space:];|&"'\''`]+[.](key|pem|crt)|[^[:space:];|&"'\''`]+[.]env([^[:space:];|&"'\''`]*)?|[.]env([^[:space:];|&"'\''`]*)?)([^A-Za-z0-9_./-]|$)'
+  local protected_path_re='(^|[^A-Za-z0-9_./-])(hooks/[^[:space:];|&"'\''`]+[.]sh|[.][/]hooks/[^[:space:];|&"'\''`]+[.]sh|[.]claude/settings[.]json|[.]github/workflows/[^[:space:];|&"'\''`]+|install[.]sh|[.][/]install[.]sh|bin/walter-os|[.][/]bin/walter-os|AGENTS[.]md|CLAUDE[.]md|mcp/servers[.]json|scripts/walter/(lib/(capability-token|session-state|protected-paths)[.]sh|subcommands/cap[.]sh)|agents/[^[:space:];|&"'\''`]+[.]md|skills/[^[:space:];|&"'\''`]+/SKILL[.]md|auth/[^[:space:];|&"'\''`]+|crypto/[^[:space:];|&"'\''`]+|personal/health/[^[:space:];|&"'\''`]+|[.]ssh/[^[:space:];|&"'\''`]+|[^[:space:];|&"'\''`]+/[.]ssh/[^[:space:];|&"'\''`]+|[^[:space:];|&"'\''`]+[.](key|pem|crt)|[^[:space:];|&"'\''`]+[.]env([.][^[:space:];|&"'\''`]*)?|[.]env([.][^[:space:];|&"'\''`]*)?)([^A-Za-z0-9_./-]|$)'
   [[ "$command" =~ $protected_path_re ]]
 }
 
