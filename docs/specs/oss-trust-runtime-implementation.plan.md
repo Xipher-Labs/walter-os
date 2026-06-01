@@ -51,7 +51,11 @@ The six requested runtime tracks map to this implementation order:
   `walter-os cap` CLI slice stacked on #241.
 - #244 is open, mergeable, and completes high-tier capability enforcement.
 - #245 is open, mergeable, and completes default skill capabilities.
-- The next slice is **Process isolation sandbox AC-1**, stacked on #245.
+- #246 is open, mergeable, and completes process-isolation sandbox AC-1:
+  provider detection, profile path resolution, command wrapping, and scaffold
+  profiles.
+- The next slice is **Process isolation sandbox AC-2 hook profile**, stacked on
+  #246.
 
 ## Design Risks To Resolve Before Claiming Completion
 
@@ -123,20 +127,25 @@ The six requested runtime tracks map to this implementation order:
    - Deliverable: `walter_sandbox_provider`, `walter_sandbox_check`, and
      `walter_sandbox_run` for macOS `sandbox-exec`, Linux `nsjail`, and
      optional Linux `firejail`.
-   - Scope boundary: this PR may ship profile scaffolds, but AC-2/AC-3 are the
-     first PRs that claim actual filesystem/network/signal isolation semantics.
-6. **Default hook and skill profiles**.
+   - Current status: implemented in #246. AC-2/AC-3 are the first PRs that
+     claim actual filesystem/network/signal isolation semantics.
+6. **Default hook profile**.
    - Files: `setup/sandbox-profiles/*`,
-     `tests/walter/sandbox-hook-profile.bats`,
+     `tests/walter/sandbox-hook-profile.bats`.
+   - Deliverable: read-only hook profile, sensitive path deny rules,
+     private scratch-only writes, no-network posture, and process/signal
+     namespace constraints per OS.
+7. **Default skill profile**.
+   - Files: `setup/sandbox-profiles/*`,
      `tests/walter/sandbox-skill-profile.bats`.
-   - Deliverable: read-only hook profile, repo-scoped skill profile, sensitive
-     path deny rules, and signal/network constraints per OS.
-7. **Hook and skill integration**.
+   - Deliverable: repo-scoped skill profile, sensitive path deny rules, and
+     signal/network constraints per OS.
+8. **Hook and skill integration**.
    - Files: `hooks/*.sh`, skill execution entry points, `install.sh`,
      `skills/daily-supply-chain-audit/scripts/audit.sh`.
    - Deliverable: runtime fail-closed sandbox use, install-time warning
      sentinel, provider/profile checksum baselines, and explicit bypass logging.
-8. **Capability-aware dynamic profiles**.
+9. **Capability-aware dynamic profiles**.
    - Files: `scripts/walter/lib/sandbox.sh`,
      `tests/walter/sandbox-cap-integration.bats`.
    - Deliverable: valid cap `scope.paths` tightens the sandbox profile for the
@@ -144,13 +153,13 @@ The six requested runtime tracks map to this implementation order:
 
 ### Read-Only / Hidden Secret Mounts
 
-9. **Invisible mount mechanism**.
+10. **Invisible mount mechanism**.
    - Files: `scripts/walter/lib/sandbox.sh`,
      `setup/sandbox-profiles/invisible-paths.default.txt`,
      `tests/walter/sandbox-invisible-*.bats`.
    - Deliverable: high-tier sandbox runs hide default and overlay-configured
      secret-bearing paths with type-correct placeholders.
-10. **High-tier integration, bypass, and audit**.
+11. **High-tier integration, bypass, and audit**.
     - Files: `hooks/approval-gate.sh`, sandbox wrapper call sites,
       daily audit script, `docs/operational/sandbox-invisible-mounts.md`.
     - Deliverable: high-tier operations activate invisible mounts; two-factor
@@ -158,18 +167,18 @@ The six requested runtime tracks map to this implementation order:
 
 ### Audit Chain And Receipts
 
-11. **Audit chain writer**.
+12. **Audit chain writer**.
     - Files: `scripts/walter/lib/audit-chain.sh`,
       `tests/walter/audit-chain-append.bats`.
     - Deliverable: atomic JSONL append with sorted-key normalization,
       per-day chain files, and `prev_hash`.
-12. **Signing and verification**.
+13. **Signing and verification**.
     - Files: `scripts/walter/lib/audit-chain.sh`,
       `scripts/walter/subcommands/audit.sh` or existing audit dispatcher,
       `bin/walter-os`, `tests/walter/audit-chain-verify.bats`.
     - Deliverable: row signatures using session keys, public-key archive, and
       `walter-os audit verify-chain`.
-13. **Hook integration and daily roots**.
+14. **Hook integration and daily roots**.
     - Files: `hooks/approval-gate.sh`, `hooks/bash-denylist.sh`,
       `hooks/network-gate.sh`, `hooks/capability-check.sh`,
       `tests/hooks/audit-chain-hook-integration.bats`.
@@ -178,13 +187,13 @@ The six requested runtime tracks map to this implementation order:
 
 ### Audit Telemetry
 
-14. **Promtail and dashboard provisioning**.
+15. **Promtail and dashboard provisioning**.
     - Files: `setup/walter-host/services/observability/promtail/*`,
       `setup/walter-host/services/observability/grafana/provisioning/dashboards/walter-audit.json`,
       `tests/services/*audit*`.
     - Deliverable: local Loki ingestion of audit-chain JSONL with dashboard
       panels and default retention.
-15. **Loki verification and opt-out**.
+16. **Loki verification and opt-out**.
     - Files: audit CLI, `docs/operational/audit-telemetry.md`,
       `tests/walter/audit-chain-verify-from-loki.bats`.
     - Deliverable: `verify-chain --from-loki`, `WALTER_AUDIT_LOKI_DISABLE=1`,
@@ -192,7 +201,7 @@ The six requested runtime tracks map to this implementation order:
 
 ### Planned SLSA Build L3 Provenance And Reproducible Builds
 
-16. **Planned SLSA Build L3 provenance**.
+17. **SLSA Build L3 provenance**.
     - Files: `.github/workflows/release.yml`,
       `tests/release/attestation-verify.bats`,
       `docs/security/verification.md`.
@@ -200,7 +209,7 @@ The six requested runtime tracks map to this implementation order:
       attestations, and release-time attestation verification aligned with SLSA
       v1.2 Build Track L3 requirements: provenance exists, is authentic,
       is unforgeable by the build, and is produced on a hosted isolated builder.
-17. **Deterministic artifacts**.
+18. **Deterministic artifacts**.
     - Files: `.github/workflows/release.yml`,
       `scripts/release/reproduce.sh`,
       `tests/release/reproducibility.bats`,

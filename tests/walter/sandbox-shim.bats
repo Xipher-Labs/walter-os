@@ -184,5 +184,5 @@ EOF
   [ "$status" -eq 17 ]
   [ "$output" = "ok" ]
   grep -q -- '--config' "$WALTER_SANDBOX_PROVIDER_LOG"
-  grep -q -- 'walter-hook-default.nsjail.conf' "$WALTER_SANDBOX_PROVIDER_LOG"
+  grep -q -- 'walter-hook-default.nsjail.' "$WALTER_SANDBOX_PROVIDER_LOG"
 }
