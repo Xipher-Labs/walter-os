@@ -11,6 +11,15 @@ setup() {
   LANGFUSE_DOC="$REPO_ROOT/docs/operational/langfuse.md"
 }
 
+service_stanza() {
+  local service="$1"
+  awk -v service="$service" '
+    $0 ~ "^  " service ":" { in_service=1; print; next }
+    in_service && /^  [A-Za-z0-9_-]+:/ { exit }
+    in_service { print }
+  ' "$LANGFUSE_COMPOSE"
+}
+
 @test "langfuse service files exist" {
   [[ -f "$LANGFUSE_COMPOSE" ]]
   [[ -f "$LANGFUSE_ENV_TEMPLATE" ]]
@@ -20,8 +29,7 @@ setup() {
 @test "every langfuse service is gated by langfuse profile" {
   for service in langfuse-web langfuse-worker langfuse-postgres langfuse-clickhouse langfuse-redis langfuse-minio; do
     grep -qE "^  ${service}:" "$LANGFUSE_COMPOSE"
-    grep -A12 -E "^  ${service}:" "$LANGFUSE_COMPOSE" \
-      | grep -q "profiles: \\[langfuse\\]"
+    service_stanza "$service" | grep -q "profiles: \\[langfuse\\]"
   done
 }
 
