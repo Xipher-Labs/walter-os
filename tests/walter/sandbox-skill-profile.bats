@@ -286,16 +286,18 @@ _mode() {
   [[ "$output" == *"sensitive key scan exceeded 2 entries"* ]]
 }
 
-@test "AC-3: key scan uses incremental find traversal" {
-  # shellcheck disable=SC2016 # These grep patterns intentionally match shell source literally.
-  run grep -q 'for entry in "$dir"/\*' "$SANDBOX_LIB"
-  [ "$status" -ne 0 ]
-  # shellcheck disable=SC2016
-  grep -q 'mkfifo "$fifo"' "$SANDBOX_LIB"
-  # shellcheck disable=SC2016
-  grep -q 'find "$root" -mindepth 1 -maxdepth "$scan_depth" -print0 > "$fifo"' "$SANDBOX_LIB"
-  # shellcheck disable=SC2016
-  grep -q 'if wait "$find_pid"; then' "$SANDBOX_LIB"
+@test "AC-3: key scan traverses large workspace trees" {
+  mkdir -p "$PROJECT_DIR/many files/nested"
+  for i in $(seq 1 150); do
+    printf 'noise\n' > "$PROJECT_DIR/many files/nested/file-$i.txt"
+  done
+  printf 'large-tree-key\n' > "$PROJECT_DIR/many files/nested/secret.key"
+
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; WALTER_SANDBOX_KEY_SCAN_MAX_ENTRIES=300 walter_sandbox_materialize_profile walter-skill-default nsjail"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -q "dst: \"$PROJECT_DIR/many files/nested/secret.key\"" "$profile"
 }
 
 @test "AC-3: key scan creates traversal FIFO with private umask" {
