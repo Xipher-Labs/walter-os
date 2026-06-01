@@ -1,0 +1,106 @@
+# Optional Authentik SSO profile for Walter-OS.
+# Start explicitly with:
+#   docker compose --profile authentik up -d
+
+services:
+  authentik-postgresql:
+    image: docker.io/library/postgres:16-alpine
+    container_name: authentik-postgresql
+    restart: unless-stopped
+    profiles: ["authentik"]
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: "${AUTHENTIK_POSTGRESQL__PASSWORD:?required - set in .env or fetch from Infisical}"
+    volumes:
+      - authentik-postgresql-data:/var/lib/postgresql/data
+    networks:
+      - authentik
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  authentik-redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: authentik-redis
+    restart: unless-stopped
+    profiles: ["authentik"]
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - authentik-redis-data:/data
+    networks:
+      - authentik
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2026.5.2
+    container_name: authentik-server
+    restart: unless-stopped
+    profiles: ["authentik"]
+    command: server
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_SECRET_KEY: "${AUTHENTIK_SECRET_KEY:?required - generate with openssl rand -base64 60}"
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: "${AUTHENTIK_POSTGRESQL__PASSWORD:?required - set in .env or fetch from Infisical}"
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+    volumes:
+      - authentik-data:/media
+      - authentik-certs:/certs
+      - authentik-templates:/templates
+    expose:
+      - "9000"
+    networks:
+      - authentik
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2026.5.2
+    container_name: authentik-worker
+    restart: unless-stopped
+    profiles: ["authentik"]
+    command: worker
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_SECRET_KEY: "${AUTHENTIK_SECRET_KEY:?required - generate with openssl rand -base64 60}"
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: "${AUTHENTIK_POSTGRESQL__PASSWORD:?required - set in .env or fetch from Infisical}"
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+    volumes:
+      - authentik-data:/media
+      - authentik-certs:/certs
+      - authentik-templates:/templates
+    networks:
+      - authentik
+
+volumes:
+  authentik-postgresql-data:
+  authentik-redis-data:
+  authentik-data:
+  authentik-certs:
+  authentik-templates:
+
+networks:
+  authentik:
+    name: authentik
