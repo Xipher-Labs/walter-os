@@ -20,6 +20,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agent-runtime-watchdog.sh \
 		scripts/agent-audit-log.sh \
 		scripts/agent-secret-redactor.sh \
+		scripts/release/reproduce.sh \
 		scripts/agents/run.sh \
 		scripts/agents/main.sh \
 		scripts/agents/lib/plane.sh \
