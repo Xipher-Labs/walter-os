@@ -52,8 +52,11 @@ git archive --format=tar --prefix="walter-os-<tag>/" <tag> | gzip -n -9
 
 Then it compares the rebuilt SHA-256 digest with `checksums.sha256`.
 
-If `syft` and `jq` are available, the script also rebuilds and canonicalizes the
-CycloneDX SBOM, then compares that digest with the release checksums.
+If `syft` and `jq` are available, the script also exports the tag into a
+temporary tree with `git archive`, rebuilds and canonicalizes the CycloneDX SBOM
+from that exported tree, then compares that digest with the release checksums.
+Using the archive export keeps local submodule checkouts and untracked files out
+of SBOM reproduction, matching the release workflow's tag checkout.
 
 ## Troubleshooting
 
@@ -68,6 +71,7 @@ If the SBOM digest does not match:
 
 - Confirm `syft` is installed and close to the version used by
   `anchore/sbom-action` in the release workflow.
-- Re-run from a clean checkout with no untracked dependency files.
+- Re-run from a clean checkout with no local modifications. Untracked files and
+  initialized submodules are intentionally excluded from SBOM reproduction.
 - Treat persistent mismatches as security-relevant and open an issue with the
   tag, local tool versions, and the mismatching digest.

@@ -31,6 +31,9 @@ setup() {
 
 @test "reproducible release script can compare canonical SBOM when tools exist" {
   grep -Fq 'command -v syft' "$SCRIPT"
+  grep -Fq 'git archive --format=tar --prefix="walter-os-${tag}/" "$tag"' "$SCRIPT"
+  grep -Fq 'tar -x -C "$sbom_root"' "$SCRIPT"
+  grep -Fq 'syft dir:"${sbom_root}/walter-os-${tag}"' "$SCRIPT"
   grep -Fq 'sort_by(.["bom-ref"] // .name // "")' "$SCRIPT"
   grep -Fq 'sort_by(.ref // "")' "$SCRIPT"
   grep -Fq 'SBOM mismatch' "$SCRIPT"

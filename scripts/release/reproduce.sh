@@ -80,8 +80,13 @@ echo "source tarball: OK"
 
 if command -v syft >/dev/null 2>&1; then
   need jq
+  need tar
   rebuilt_sbom="${work_dir}/walter-os-${tag}.sbom.cdx.json"
-  syft dir:. -o cyclonedx-json="${rebuilt_sbom}.raw" >/dev/null
+  sbom_root="${work_dir}/sbom-root"
+  mkdir -p "$sbom_root"
+  git archive --format=tar --prefix="walter-os-${tag}/" "$tag" \
+    | tar -x -C "$sbom_root"
+  syft dir:"${sbom_root}/walter-os-${tag}" -o cyclonedx-json="${rebuilt_sbom}.raw" >/dev/null
   jq '
     if (.components | type) == "array" then
       .components |= sort_by(.["bom-ref"] // .name // "")
