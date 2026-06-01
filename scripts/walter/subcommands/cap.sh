@@ -137,6 +137,8 @@ _cap_operator_mint_challenge() {
     echo "walter-os cap mint: operator challenge mismatch; refusing to mint capability token." >&2
     return 4
   fi
+
+  return 0
 }
 
 _cap_require_operator_mint_context() {
