@@ -74,7 +74,7 @@ EOF
 @test "AC-1: Darwin uses sandbox-exec" {
   _mock_uname Darwin
 
-  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_provider"
+  run bash -c "source '$SANDBOX_LIB'; walter_sandbox_provider 2>&1"
 
   [ "$status" -eq 0 ]
   [ "$output" = "sandbox-exec" ]
@@ -111,7 +111,7 @@ EOF
 @test "AC-1: sandbox check fails when provider binary is missing" {
   _mock_uname Linux
 
-  run bash -c "command() { if [[ \"\$1\" == -v && \"\$2\" == nsjail ]]; then return 1; fi; builtin command \"\$@\"; }; source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default"
+  run bash -c "command() { if [[ \"\$1\" == -v && \"\$2\" == nsjail ]]; then return 1; fi; builtin command \"\$@\"; }; source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default 2>&1"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"provider missing: nsjail"* ]]

@@ -29,6 +29,61 @@ _write_config() {
   cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
 }
 
+@test "skill cap loader ignores WALTER_SKILL_CAPABILITIES unless env override is explicit" {
+  _write_config <<'YAML'
+skills:
+  docs-writer:
+    tool: Write
+    scope:
+      paths: ["docs/**"]
+    duration: 4h
+YAML
+  override_config="$TMP_HOME/override-skill-capabilities.yml"
+  cat > "$override_config" <<'YAML'
+skills:
+  shell-runner:
+    tool: Bash
+    scope:
+      patterns: ["^echo[[:space:]]"]
+    duration: 4h
+YAML
+
+  export WALTER_SKILL_CAPABILITIES="$override_config"
+
+  run bash -c "source '$LOADER'; walter_skill_cap_config_path"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$WALTER_CONFIG/overlay/skill-capabilities.yml" ]
+}
+
+@test "skill cap loader honors WALTER_SKILL_CAPABILITIES with operator override" {
+  _write_config <<'YAML'
+skills:
+  docs-writer:
+    tool: Write
+    scope:
+      paths: ["docs/**"]
+    duration: 4h
+YAML
+  override_config="$TMP_HOME/override-skill-capabilities.yml"
+  cat > "$override_config" <<'YAML'
+skills:
+  shell-runner:
+    tool: Bash
+    scope:
+      patterns: ["^echo[[:space:]]"]
+    duration: 4h
+YAML
+
+  export WALTER_SKILL_CAPABILITIES="$override_config"
+  export WALTER_SKILL_CAPABILITIES_ALLOW_ENV=1
+
+  run bash -c "source '$LOADER'; walter_skill_cap_config_path"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$override_config" ]
+}
+
 @test "skill cap loader auto-mints enabled default capabilities" {
   _write_config <<'YAML'
 skills:
