@@ -1,0 +1,20 @@
+# Pinning manifest for vendored third-party skills + MCP servers.
+#
+# PROVENANCE DOCUMENTATION ONLY — NOT YET ENFORCED.
+# Maps every vendored skill and MCP server to its pinned 40-char commit hash.
+# As of today, `check-pinning.py` only parses a Claude Code `settings.json` and
+# reports `mcpServers` entries that are not version-pinned; it does NOT read
+# this file and does NOT validate vendored skills. So this manifest records the
+# pinned upstream SHAs for audit/provenance, but skills-drift detection is
+# manual. Teaching the audit to read this file (and exit non-zero on an invalid
+# or drifted ref) is future work tracked in issue #255.
+#
+# When you vendor a new skill or add an MCP server, add its pinned ref here.
+
+[skills]
+# Vendored third-party design skills (see docs/specs/ux-skills-adoption.md).
+impeccable = "b913668ba4d25b95c4a62278d3637837e9d2c6d9"
+ui-ux-pro-max = "b7e3af80f6e331f6fb456667b82b12cade7c9d35"
+
+[mcp]
+# (none pinned here yet)
