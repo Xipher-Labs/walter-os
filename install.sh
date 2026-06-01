@@ -1090,10 +1090,10 @@ merge_claude_hooks() {
       {
         matcher: "Bash",
         hooks: [
-          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/bash-denylist.sh") | @sh),    _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/bash-denylist.sh") | @sh)),    _walter_os: true },
           { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true },
-          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh), _walter_os: true },
-          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/network-gate.sh") | @sh),     _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh)), _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/network-gate.sh") | @sh)),     _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
         ]
@@ -1108,7 +1108,7 @@ merge_claude_hooks() {
         matcher: "Write|Edit|MultiEdit|NotebookEdit",
         hooks: [
           { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true },
-          { type: "command", command: (($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh), _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh)), _walter_os: true },
           {
             type: "command",
             command: ($repo + "/hooks/wiki-validator-hook.sh"),

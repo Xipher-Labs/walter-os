@@ -24,11 +24,7 @@ teardown() {
 }
 
 _mode() {
-  if stat -f %Lp "$1" >/dev/null 2>&1; then
-    stat -f %Lp "$1"
-  else
-    stat -c %a "$1"
-  fi
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
 }
 
 @test "AC-2: nsjail hook profile declares resource limits and no-network posture" {

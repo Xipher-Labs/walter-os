@@ -40,11 +40,7 @@ teardown() {
 }
 
 _mode() {
-  if stat -f %Lp "$1" >/dev/null 2>&1; then
-    stat -f %Lp "$1"
-  else
-    stat -c %a "$1"
-  fi
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
 }
 
 @test "AC-3: nsjail skill profile declares workspace scope and signal isolation" {
