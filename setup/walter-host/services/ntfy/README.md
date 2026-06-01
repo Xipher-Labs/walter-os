@@ -73,12 +73,18 @@ iOS push has a platform tradeoff: Apple's push system requires the official ntfy
 
 ## Backups
 
-Back up both named Docker volumes:
+Back up the durable auth/config state:
 
 - `ntfy_data` stores the auth database at `/var/lib/ntfy/user.db`.
-- `ntfy_cache` stores cached messages and attachment cache data under `/var/cache/ntfy`.
+- Profile-local `server.yml` and `.env` files store server configuration and
+  environment values.
 
-Also back up the profile-local `server.yml` and `.env` files from the host. Restores need the config file plus both volumes to preserve users, permissions, cached messages, and attachments.
+`ntfy_cache` stores cached messages and attachment cache data under
+`/var/cache/ntfy`. It is optional backup material: include it only if you want
+to preserve short-lived cached messages or attachments across restores. The
+shipped template keeps attachments ephemeral with `attachment-expiry-duration:
+"3h"`, so most restores only need `ntfy_data` plus the config files to preserve
+users, permissions, and topics.
 
 ## Operations
 
