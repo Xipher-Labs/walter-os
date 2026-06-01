@@ -31,6 +31,7 @@ The Docker image does not ship a usable `/etc/ntfy/server.yml` in the container.
 cp .env.template .env
 cp server.yml.template server.yml
 sed -i.bak 's/\${WALTER_DOMAIN}/example.com/g' server.yml
+docker network create ntfy_net 2>/dev/null || true
 ```
 
 Replace `example.com` with the real `WALTER_DOMAIN`. For this example, the

@@ -34,6 +34,7 @@ PY
 
 @test "ntfy compose keeps env file optional and network stable" {
   grep -q "required: false" "$NTFY_COMPOSE"
+  grep -q "external: true" "$NTFY_COMPOSE"
   grep -q "name: ntfy_net" "$NTFY_COMPOSE"
 }
 
