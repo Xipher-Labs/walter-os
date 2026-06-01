@@ -104,7 +104,7 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
   - Running `cat $WALTER_OS_HOME/README.md` via the profile → allowed (read-only)
   - Running `echo X > $WALTER_OS_HOME/X` via the profile → blocked (read-only)
   - Running `echo X > <cwd outside HOME/WALTER/config>` via the profile → blocked
-  - Running `mktemp` via the profile → allowed only inside private sandbox scratch
+  - Running `mktemp` via the profile → allowed inside the sandbox's private tmpfs on Linux (`nsjail` `/tmp`, `firejail` `private-tmp`) and inside private sandbox scratch via `TMPDIR` on macOS
   - Network call (`curl https://example.com`) via the profile → blocked
 
 ### AC-3 — `walter-skill-default` profile
