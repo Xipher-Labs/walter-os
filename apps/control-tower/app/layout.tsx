@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   description: "Real-time ops dashboard for the Walter Council multi-agent system",
 };
 
+// D-1: dark-mode-first. The operator runs this at night, so `.dark` is the
+// default applied theme on <html> (not a prefers-color-scheme fallback). Light
+// is opt-out by replacing the class with `.light`. The class is set
+// server-side so there is no flash of the wrong theme on first paint.
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -25,9 +29,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        {children}
+      </body>
     </html>
   );
 }

@@ -39,12 +39,16 @@ ongoing).
    Dist-tags/ranges are rejected (`@latest`, `@beta`, `^1.2.3`, `>=1.0`,
    `~=1.5`, etc.). If you change `mcp/servers.json`, re-run `install.sh
    --upgrade` so `~/.claude/settings.json` is refreshed before auditing.
-8. **CVE feed** — checks NVD for new CVEs published in the last 24h affecting
+8. **Vendored skill pins** — every third-party skill vendored under `skills/`
+   must be listed in `assets/pinned-refs.toml` with a full 40-char upstream
+   commit SHA and a deterministic local content hash. Drift or missing
+   manifest entries emit a high-severity audit finding.
+9. **CVE feed** — checks NVD for new CVEs published in the last 24h affecting
    any installed package. Match-by-name and match-by-CPE.
-9. **Secrets exposure** — greps `~/.claude/settings.json`, `~/.codex/config.toml`,
+10. **Secrets exposure** — greps `~/.claude/settings.json`, `~/.codex/config.toml`,
    and any `.mcp.json` for plaintext keys (API tokens, JWT, AWS creds).
    Should be zero — all secrets via env vars.
-10. **Minimum release age** — queries npm and PyPI to verify that each installed
+11. **Minimum release age** — queries npm and PyPI to verify that each installed
     package version meets the active protection level's `minReleaseAge` threshold.
     Uses `check-release-age.py` with a 24h TTL cache and justify-log integration.
     Network failures produce `info`-severity findings (not blocks) so the audit
@@ -209,7 +213,7 @@ be acked — they must be resolved.
 - CVE-2025-59536 (Claude Code hooks injection RCE)
 - CVE-2026-21852 (Claude Code MCP consent bypass)
 - ClawHavoc malicious skills disclosure (April 2026)
-- Snyk mcp-scan: https://github.com/snyk/mcp-scan
-- Cisco mcp-scanner: https://github.com/cisco/mcp-scanner
-- AgentAudit: https://agentaudit.dev
-- mcpskills.io: https://mcpskills.io
+- Snyk mcp-scan: <https://github.com/snyk/mcp-scan>
+- Cisco mcp-scanner: <https://github.com/cisco/mcp-scanner>
+- AgentAudit: <https://agentaudit.dev>
+- mcpskills.io: <https://mcpskills.io>
