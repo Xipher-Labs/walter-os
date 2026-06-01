@@ -430,9 +430,10 @@ _walter_sandbox_nsjail_key_mount_renderer() {
 }
 
 _walter_sandbox_nsjail_config_key_mount_renderer() {
-  local path="$1" deny_file="$2"
+  local path="$1" deny_file="$2" state_dir
+  state_dir="${WALTER_CONFIG:-${HOME}/.config/walter-os}/state"
   case "$path" in
-    */state/session-*.key|*/state/session-*.key.tmp)
+    "$state_dir"/session-*.key|"$state_dir"/session-*.key.tmp)
       return 0
       ;;
   esac

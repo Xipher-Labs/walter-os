@@ -27,6 +27,8 @@ setup() {
   printf 'session-temp-secret\n' > "$WALTER_CONFIG/state/session-test.key.tmp"
   mkdir -p "$WALTER_CONFIG/keys"
   printf 'config-key\n' > "$WALTER_CONFIG/keys/operator.pem"
+  mkdir -p "$WALTER_CONFIG/keys/state"
+  printf 'nested-config-key\n' > "$WALTER_CONFIG/keys/state/session-api.key"
 }
 
 teardown() {
@@ -221,6 +223,7 @@ _mode() {
   [ "$(grep -c "dst: \"$WALTER_CONFIG/state/session-test.key\"$" "$profile")" -eq 1 ]
   [ "$(grep -c "dst: \"$WALTER_CONFIG/state/session-test.key.tmp\"$" "$profile")" -eq 1 ]
   grep -q "dst: \"$WALTER_CONFIG/keys/operator.pem\"" "$profile"
+  grep -q "dst: \"$WALTER_CONFIG/keys/state/session-api.key\"" "$profile"
   grep -q "dst: \"$PROJECT_DIR/local.key\"" "$profile"
   run grep -q "dst: \"$PROJECT_PARENT/client.pem\"" "$profile"
   [ "$status" -ne 0 ]
