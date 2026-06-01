@@ -321,6 +321,58 @@ EOF
   [ "$output" = "" ]
 }
 
+@test "AC-2: nsjail hook profile enforces read/write/network boundaries when available" {
+  command -v nsjail >/dev/null || skip "nsjail not installed"
+  mkdir -p "$HOME/.ssh"
+  printf 'secret\n' > "$HOME/.ssh/id_rsa"
+
+  run env WALTER_SANDBOX_PROVIDER=nsjail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/true"
+  if [ "$status" -ne 0 ]; then
+    skip "nsjail cannot run profiles in this environment"
+  fi
+
+  run env WALTER_SANDBOX_PROVIDER=nsjail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/cat '$WALTER_OS_HOME/README.md'"
+  [ "$status" -eq 0 ]
+
+  run env WALTER_SANDBOX_PROVIDER=nsjail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/sh -c \"printf x > '$WALTER_OS_HOME/.sandbox-write-test'\""
+  [ "$status" -ne 0 ]
+  [ ! -e "$WALTER_OS_HOME/.sandbox-write-test" ]
+
+  run env WALTER_SANDBOX_PROVIDER=nsjail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/cat '$HOME/.ssh/id_rsa'"
+  [ "$status" -ne 0 ]
+
+  if command -v curl >/dev/null; then
+    run env WALTER_SANDBOX_PROVIDER=nsjail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default curl --connect-timeout 2 https://example.com"
+    [ "$status" -ne 0 ]
+  fi
+}
+
+@test "AC-2: firejail hook profile enforces read/write/network boundaries when available" {
+  command -v firejail >/dev/null || skip "firejail not installed"
+  mkdir -p "$HOME/.ssh"
+  printf 'secret\n' > "$HOME/.ssh/id_rsa"
+
+  run env WALTER_SANDBOX_PROVIDER=firejail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/true"
+  if [ "$status" -ne 0 ]; then
+    skip "firejail cannot run profiles in this environment"
+  fi
+
+  run env WALTER_SANDBOX_PROVIDER=firejail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/cat '$WALTER_OS_HOME/README.md'"
+  [ "$status" -eq 0 ]
+
+  run env WALTER_SANDBOX_PROVIDER=firejail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/sh -c \"printf x > '$WALTER_OS_HOME/.sandbox-write-test'\""
+  [ "$status" -ne 0 ]
+  [ ! -e "$WALTER_OS_HOME/.sandbox-write-test" ]
+
+  run env WALTER_SANDBOX_PROVIDER=firejail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default /bin/cat '$HOME/.ssh/id_rsa'"
+  [ "$status" -ne 0 ]
+
+  if command -v curl >/dev/null; then
+    run env WALTER_SANDBOX_PROVIDER=firejail bash -c "source '$SANDBOX_LIB'; walter_sandbox_run walter-hook-default curl --connect-timeout 2 https://example.com"
+    [ "$status" -ne 0 ]
+  fi
+}
+
 @test "AC-2: sandbox run cleans profiles after failures under errexit" {
   command -v sandbox-exec >/dev/null || skip "sandbox-exec not installed"
   sandbox-exec -p '(version 1) (allow default)' /usr/bin/true >/dev/null 2>&1 \
