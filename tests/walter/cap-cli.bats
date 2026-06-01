@@ -179,6 +179,16 @@ teardown() {
   [[ "$output" == *"interactive operator terminal required"* ]]
 }
 
+@test "walter-os cap mint help works outside interactive mint context" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+
+  run "$CLI" cap mint --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage: walter-os cap"* ]]
+}
+
 @test "walter-os cap mint reports missing option values" {
   cd "$REPO_UNDER_TEST"
 

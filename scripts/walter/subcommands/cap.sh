@@ -127,6 +127,13 @@ _cap_require_operator_mint_context() {
 }
 
 cmd_cap_mint() {
+  case "${1:-}" in
+    -h|--help|help)
+      cap_usage
+      return 0
+      ;;
+  esac
+
   local tool="${1:-}" duration="" repo="$PWD" paths='[]' network='[]' patterns='[]'
   local state_file now_epoch now_iso duration_seconds requested_exp session_exp exp_epoch exp_iso nonce session_id claims token value
   [[ -n "$tool" ]] || {
