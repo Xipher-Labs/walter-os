@@ -110,20 +110,52 @@ _cap_mint_test_context_allowed() {
   esac
 }
 
+_cap_operator_mint_challenge() {
+  local challenge expected response
+
+  if [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+    echo "walter-os cap mint: interactive operator terminal required. Run cap mint directly from your terminal; noninteractive agent/script minting is blocked." >&2
+    return 4
+  fi
+
+  challenge="$(_walter_session_uuid)"
+  expected="mint ${challenge}"
+
+  {
+    printf '%s\n' "walter-os cap mint: operator presence required."
+    printf '%s\n' "Type this exact phrase to continue:"
+    printf '%s\n' "$expected"
+    printf '> '
+  } >/dev/tty
+
+  if ! IFS= read -r response </dev/tty; then
+    echo "walter-os cap mint: operator challenge failed." >&2
+    return 4
+  fi
+
+  if [[ "$response" != "$expected" ]]; then
+    echo "walter-os cap mint: operator challenge mismatch; refusing to mint capability token." >&2
+    return 4
+  fi
+
+  return 0
+}
+
 _cap_require_operator_mint_context() {
   if [[ -n "${WALTER_AGENT_CONTEXT:-}" || -n "${WALTER_AGENT_NAME:-}" ]]; then
     local caller="${WALTER_AGENT_NAME:-${WALTER_AGENT_CONTEXT:-unknown}}"
     echo "walter-os cap mint: cap minting blocked inside agent context (caller=${caller}). Operator must mint caps in the top-level session." >&2
     return 4
   fi
-  if [[ -t 0 && -t 1 ]]; then
-    return 0
-  fi
   if _cap_mint_test_context_allowed; then
     return 0
   fi
-  echo "walter-os cap mint: interactive operator terminal required. Run cap mint directly from your terminal; noninteractive agent/script minting is blocked." >&2
-  return 4
+  if [[ ! -t 0 && ! -t 2 ]]; then
+    echo "walter-os cap mint: interactive operator terminal required. Run cap mint directly from your terminal; noninteractive agent/script minting is blocked." >&2
+    return 4
+  fi
+  _cap_operator_mint_challenge
+  return $?
 }
 
 cmd_cap_mint() {
