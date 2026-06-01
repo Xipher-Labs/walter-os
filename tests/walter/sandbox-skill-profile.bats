@@ -242,6 +242,23 @@ _mode() {
   [ "$status" -ne 0 ]
 }
 
+@test "AC-3: nsjail materialization fails closed on root scaffold errors" {
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; mkdir() { for arg in \"\$@\"; do [[ \"\$arg\" == */etc ]] && return 1; done; command mkdir \"\$@\"; }; walter_sandbox_materialize_profile walter-skill-default nsjail"
+
+  [ "$status" -ne 0 ]
+}
+
+@test "AC-3: nsjail root placeholder escapes quoted runtime paths" {
+  QUOTED_RUNTIME="$TMP_HOME/runtime\"quoted"
+  mkdir -p "$QUOTED_RUNTIME"
+
+  run env WALTER_RUNTIME_DIR="$QUOTED_RUNTIME" bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -Fq 'runtime\"quoted' "$profile"
+}
+
 @test "AC-3: nsjail key mask generation rejects newline paths" {
   bad_key="${PROJECT_DIR}/bad"$'\n'"name.key"
   printf 'bad\n' > "$bad_key"

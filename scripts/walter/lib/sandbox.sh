@@ -233,15 +233,15 @@ _walter_sandbox_nsjail_root_mkdir_for_path() {
 
 _walter_sandbox_prepare_nsjail_root() {
   local root="$1" workspace="$2" config="$3" home="$4"
-  mkdir -p "$root"/{tmp,dev,etc,usr,bin,lib,lib64}
-  : > "$root/dev/null"
-  : > "$root/dev/urandom"
-  : > "$root/etc/passwd"
-  : > "$root/etc/group"
-  : > "$root/etc/nsswitch.conf"
-  : > "$root/etc/hosts"
-  : > "$root/etc/resolv.conf"
-  : > "$root/etc/gitconfig"
+  mkdir -p "$root"/{tmp,dev,etc,usr,bin,lib,lib64} || return 1
+  : > "$root/dev/null" || return 1
+  : > "$root/dev/urandom" || return 1
+  : > "$root/etc/passwd" || return 1
+  : > "$root/etc/group" || return 1
+  : > "$root/etc/nsswitch.conf" || return 1
+  : > "$root/etc/hosts" || return 1
+  : > "$root/etc/resolv.conf" || return 1
+  : > "$root/etc/gitconfig" || return 1
   _walter_sandbox_nsjail_root_mkdir_for_path "$root" "$workspace" || return 1
   _walter_sandbox_nsjail_root_mkdir_for_path "$root" "$config" || return 1
   _walter_sandbox_nsjail_root_mkdir_for_path "$root" "$home/.ssh" || return 1
@@ -666,7 +666,7 @@ walter_sandbox_materialize_profile() {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
-    nsjail_root_value="$(_walter_sandbox_sed_escape "$(cd "$nsjail_root_raw" && pwd -P)")" || {
+    nsjail_root_value="$(_walter_sandbox_profile_escape "$provider" "$(cd "$nsjail_root_raw" && pwd -P)")" || {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
