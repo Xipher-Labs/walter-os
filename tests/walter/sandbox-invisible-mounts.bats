@@ -160,6 +160,19 @@ EOF
   [ "$first_src" = "$second_src" ]
 }
 
+@test "A-5: invisible directory placeholders are recreated empty" {
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail 1"
+  [ "$status" -eq 0 ]
+  profile="$output"
+  dir_src="$(awk '$1 == "src:" && $2 ~ /\/dir-[0-9a-f]+"/ { gsub(/"/, "", $2); print $2; exit }' "$profile")"
+  [ -d "$dir_src" ]
+  printf 'stale\n' > "$dir_src/stale"
+
+  run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-skill-default nsjail 1"
+  [ "$status" -eq 0 ]
+  [ ! -e "$dir_src/stale" ]
+}
+
 @test "A-5: invisible placeholder root chmod failure fails closed" {
   bad_bin="$TMP_HOME/no-chmod-bin"
   mkdir -p "$bad_bin"

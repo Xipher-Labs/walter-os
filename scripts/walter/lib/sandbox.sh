@@ -703,6 +703,9 @@ _walter_sandbox_invisible_placeholder() {
       if [[ -e "$placeholder" && ! -d "$placeholder" ]]; then
         rm -f -- "$placeholder" || return 1
       fi
+      if [[ -d "$placeholder" ]]; then
+        rm -rf -- "$placeholder" || return 1
+      fi
       mkdir -p "$placeholder" || return 1
       if ! chmod 700 "$placeholder"; then
         echo "walter-sandbox: failed to lock down invisible directory placeholder: $placeholder" >&2
