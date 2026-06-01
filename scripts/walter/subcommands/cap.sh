@@ -150,12 +150,12 @@ _cap_require_operator_mint_context() {
   if _cap_mint_test_context_allowed; then
     return 0
   fi
-  if [[ -t 0 && -t 1 ]]; then
-    _cap_operator_mint_challenge
-    return $?
+  if [[ ! -t 0 && ! -t 2 ]]; then
+    echo "walter-os cap mint: interactive operator terminal required. Run cap mint directly from your terminal; noninteractive agent/script minting is blocked." >&2
+    return 4
   fi
-  echo "walter-os cap mint: interactive operator terminal required. Run cap mint directly from your terminal; noninteractive agent/script minting is blocked." >&2
-  return 4
+  _cap_operator_mint_challenge
+  return $?
 }
 
 cmd_cap_mint() {
