@@ -27,7 +27,7 @@ selected.
    - `FORGEJO_RUNNER_REGISTRATION_TOKEN`, pasted from Forgejo. This is required
      only while `/data/.runner` is absent.
    - `FORGEJO_RUNNER_NAME`, one stable name for this host.
-   - `FORGEJO_RUNNER_LABELS`, if the default label does not fit.
+   - `FORGEJO_RUNNER_LABELS`, if the default no-socket label does not fit.
 4. Start exactly one runner:
 
 ```bash
@@ -42,23 +42,32 @@ interpolation time or daemon startup.
 
 ## Labels
 
-The default label is the official Docker executor form:
+The default no-socket label is:
 
 ```text
-docker:docker://node:20-bullseye
+self-hosted:host
 ```
 
 Use the label name, which is the left side before the colon, in workflow jobs:
 
 ```yaml
-runs-on: docker
+runs-on: self-hosted
+```
+
+This runs jobs in the runner container shell without Docker executor isolation.
+Use it only for trusted repositories and simple workflows.
+
+Docker executor labels require a Docker daemon. The default `compose.yml` does
+not mount the host Docker socket. If you need workflows with `runs-on: docker`,
+use the explicit overlay below and set:
+
+```text
+FORGEJO_RUNNER_LABELS=docker:docker://node:20-bullseye
 ```
 
 Add more labels only when you have a real isolation boundary or separate
-runtime need. For a small team, one boring Docker label is easier to reason
-about than a fleet of overlapping labels. Docker executor labels require a
-Docker daemon. The default `compose.yml` does not mount the host Docker socket;
-use the explicit overlay below if you accept that risk.
+runtime need. For a small team, one boring label is easier to reason about than
+a fleet of overlapping labels.
 
 ## State and credentials
 

@@ -1,5 +1,7 @@
 services:
   forgejo-runner:
     profiles: ["forgejo-runner-docker-socket"]
+    environment:
+      FORGEJO_RUNNER_LABELS: ${FORGEJO_RUNNER_LABELS:-docker:docker://node:20-bullseye}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

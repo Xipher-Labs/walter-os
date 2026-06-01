@@ -8,7 +8,7 @@ services:
       FORGEJO_INSTANCE_URL: ${FORGEJO_INSTANCE_URL:?required - set your Forgejo base URL, for example https://git.example.com}
       FORGEJO_RUNNER_REGISTRATION_TOKEN: ${FORGEJO_RUNNER_REGISTRATION_TOKEN:-}
       FORGEJO_RUNNER_NAME: ${FORGEJO_RUNNER_NAME:-walter-forgejo-runner-1}
-      FORGEJO_RUNNER_LABELS: ${FORGEJO_RUNNER_LABELS:-docker:docker://node:20-bullseye}
+      FORGEJO_RUNNER_LABELS: ${FORGEJO_RUNNER_LABELS:-self-hosted:host}
     volumes:
       - forgejo-runner-data:/data
       - ./config.yml.template:/etc/forgejo-runner/config.yml:ro

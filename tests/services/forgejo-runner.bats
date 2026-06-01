@@ -56,6 +56,7 @@ setup() {
 @test "docker socket override is explicit and documented as high risk" {
   grep -q "profiles:" "$SOCKET_COMPOSE_FILE"
   grep -q "forgejo-runner-docker-socket" "$SOCKET_COMPOSE_FILE"
+  grep -Fq 'FORGEJO_RUNNER_LABELS: ${FORGEJO_RUNNER_LABELS:-docker:docker://node:20-bullseye}' "$SOCKET_COMPOSE_FILE"
   grep -Fq "/var/run/docker.sock:/var/run/docker.sock" "$SOCKET_COMPOSE_FILE"
   grep -qi "docker socket" "$README_FILE"
   grep -qi "high-risk" "$README_FILE"
@@ -66,10 +67,11 @@ setup() {
 }
 
 @test "service files do not use latest tags" {
-  ! grep --line-number -E '(:latest|@latest)' "$COMPOSE_FILE" "$SOCKET_COMPOSE_FILE"
+  ! grep -n -E '(:latest|@latest)' "$COMPOSE_FILE" "$SOCKET_COMPOSE_FILE"
 }
 
 @test "readme mentions runner credentials and labels" {
   grep -Fq ".runner" "$README_FILE"
+  grep -Fq "self-hosted:host" "$README_FILE"
   grep -Fq "docker:docker://node:20-bullseye" "$README_FILE"
 }
