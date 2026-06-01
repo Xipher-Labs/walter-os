@@ -650,6 +650,14 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "gh pr approve with host flag requires pattern capability" {
+  _mint Bash --network ghe.example --duration 30m >/dev/null
+
+  output="$(_hook_json Bash command "gh --host ghe.example pr review 244 --approve")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "gh comment body URL is not treated as network destination" {
   _mint Bash --network github.com --duration 30m >/dev/null
 
@@ -891,12 +899,30 @@ _mint() {
   echo "$output" | jq -e '.decision == "block"'
 }
 
+@test "Bash write touching protected policy path requires capability" {
+  output="$(_hook_json Bash command "sed -i.bak 's/foo/bar/' scripts/walter/lib/protected-paths.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
 @test "Bash write touching protected path allows matching pattern capability" {
   _mint Bash --patterns '^sed[[:space:]].*hooks/approval-gate[.]sh$' --duration 30m >/dev/null
 
   output="$(_hook_json Bash command "sed -i.bak 's/foo/bar/' hooks/approval-gate.sh")"
 
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash mention of envrc path remains low-tier" {
+  output="$(_hook_json Bash command "cat .envrc")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Bash mention of env file remains high-tier" {
+  output="$(_hook_json Bash command "cat .env.local")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "expired capability is ignored and high-tier Bash blocks" {
@@ -959,6 +985,18 @@ _mint() {
 
   output="$(_hook_json Write file_path "hooks/example.sh")"
   echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "Write protected path without capability is blocked" {
+  output="$(_hook_json Write file_path "hooks/example.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Write protected policy path without capability is blocked" {
+  output="$(_hook_json Write file_path "scripts/walter/lib/protected-paths.sh")"
+
+  echo "$output" | jq -e '.decision == "block"'
 }
 
 @test "medium-tier Write without capability passes through" {

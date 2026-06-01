@@ -11,7 +11,7 @@ This is a **combined spec** for two layer-C items: both touch `release.yml`, bot
 
 Today `release.yml` ships **integrity**: SBOM (CycloneDX), SHA-256 checksums, cosign keyless OIDC signature on the checksums file. That's enough for "did this file change after the release was cut" but doesn't answer two questions a downstream forker has every right to ask:
 
-1. **Where did this artifact come from?** Without a SLSA provenance attestation, all the operator can say is "trust GitHub Actions ran release.yml." There's no machine-verifiable record of `{tag, commit SHA, builder identity, build inputs, materials}` bound to the artifact. Pasted on top of cosign, SLSA L3 provenance gives `slsa-verifier` and any downstream the ability to independently validate `this tarball was built from THIS commit by THIS GH Actions workflow run`.
+1. **Where did this artifact come from?** Without a SLSA provenance attestation, all the operator can say is "trust GitHub Actions ran release.yml." There's no machine-verifiable record of `{tag, commit SHA, builder identity, build inputs, materials}` bound to the artifact. Pasted on top of cosign, SLSA Build L3 provenance gives `slsa-verifier` and any downstream the ability to independently validate `this tarball was built from THIS commit by THIS GH Actions workflow run`.
 2. **Can I rebuild this exact tarball from source?** Today, no — two runs of `release.yml` for the same tag produce subtly different artifacts (timestamps in tar headers, mtime jitter, dependency lockfile drift). That breaks the "you can re-derive the artifact and compare hashes" trust path that reproducible-builds depends on.
 
 C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). Together they let an independent forker say: "I rebuilt walter-os v1.0 from source. My SHA-256 matches the release. The SLSA attestation matches the GH Actions runner that produced the official artifact. Therefore I trust this binary."
@@ -52,7 +52,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 
 ## Acceptance criteria
 
-### AC-1 — SLSA L3 attestation in `release.yml` (C-1)
+### AC-1 — SLSA Build L3 attestation in `release.yml` (C-1)
 - [ ] `release.yml` gains an `attest` step after artifact assembly that calls `actions/attest-build-provenance@<commit-sha>` (40-char SHA, never a mutable tag like `v2`) with `subject-path` covering tarball + SBOM + `checksums.sha256` + its signature/bundle.
 - [ ] The action emits one `.intoto.jsonl` per artifact and uploads to Rekor + GH attestation store automatically.
 - [ ] The release uploads ALSO include the `.intoto.jsonl` files as release assets (operator-friendly: one place to download).
@@ -115,7 +115,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 
 ## Recommended PR ordering
 
-C-1 first (faster, lower risk, unblocks the "we have SLSA L3" claim for v1.0 marketing). C-2 second (depends on `release.yml` already cleaned up by C-1).
+C-1 first (faster, lower risk, unblocks the "we have SLSA Build L3" claim for v1.0 marketing). C-2 second (depends on `release.yml` already cleaned up by C-1).
 
 **C-1 PRs (≤200 LOC each, 3-round review):**
 1. AC-1 — `attest-build-provenance` step + release-asset upload
