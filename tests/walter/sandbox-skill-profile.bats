@@ -259,7 +259,7 @@ _mode() {
   grep -Fq 'runtime\"quoted' "$profile"
 }
 
-@test "AC-3: nsjail key mask generation rejects newline paths" {
+@test "AC-3: key masking fails closed on invalid key paths" {
   bad_key="${PROJECT_DIR}/bad"$'\n'"name.key"
   printf 'bad\n' > "$bad_key"
 
@@ -269,14 +269,14 @@ _mode() {
   [[ "$output" == *"path contains newline"* ]]
 }
 
-@test "AC-3: nsjail key mask generation fails closed on scan budget" {
+@test "AC-3: key masking fails closed when scan budget is exhausted" {
   run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; WALTER_SANDBOX_KEY_SCAN_MAX_ENTRIES=1 walter_sandbox_materialize_profile walter-skill-default nsjail"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"sensitive key scan exceeded 1 entries"* ]]
 }
 
-@test "AC-3: nsjail key scan budget counts flat workspace files" {
+@test "AC-3: scan budget accounts for flat workspace files" {
   printf 'one\n' > "$PROJECT_DIR/one.txt"
   printf 'two\n' > "$PROJECT_DIR/two.txt"
 
@@ -286,7 +286,7 @@ _mode() {
   [[ "$output" == *"sensitive key scan exceeded 2 entries"* ]]
 }
 
-@test "AC-3: key scan traverses large workspace trees" {
+@test "AC-3: key masking covers keys in large workspace trees" {
   mkdir -p "$PROJECT_DIR/many files/nested"
   for i in $(seq 1 150); do
     printf 'noise\n' > "$PROJECT_DIR/many files/nested/file-$i.txt"
@@ -300,25 +300,38 @@ _mode() {
   grep -q "dst: \"$PROJECT_DIR/many files/nested/secret.key\"" "$profile"
 }
 
-@test "AC-3: key scan creates traversal FIFO with private umask" {
+@test "AC-3: key masking creates private traversal FIFO" {
   wrapper_dir="$TMP_HOME/bin"
-  umask_file="$TMP_HOME/mkfifo.umask"
+  fifo_modes="$TMP_HOME/mkfifo.modes"
   real_mkfifo="$(command -v mkfifo)"
   mkdir -p "$wrapper_dir"
   cat > "$wrapper_dir/mkfifo" <<EOF
 #!/usr/bin/env bash
-umask > "$umask_file"
-exec "$real_mkfifo" "\$@"
+set -euo pipefail
+"$real_mkfifo" "\$@"
+for fifo in "\$@"; do
+  if [ -p "\$fifo" ]; then
+    if mode="\$(stat -f %Lp "\$fifo" 2>/dev/null)"; then
+      :
+    else
+      mode="\$(stat -c %a "\$fifo")"
+    fi
+    printf '%s\n' "\$mode" >> "$fifo_modes"
+  fi
+done
 EOF
   chmod +x "$wrapper_dir/mkfifo"
 
   run bash -c "umask 000; cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; PATH='$wrapper_dir':\$PATH walter_sandbox_materialize_profile walter-skill-default nsjail"
 
   [ "$status" -eq 0 ]
-  grep -q '^0077$' "$umask_file"
+  [ -s "$fifo_modes" ]
+  while IFS= read -r mode; do
+    [ "$mode" = "600" ]
+  done < "$fifo_modes"
 }
 
-@test "AC-3: key scan fails closed on traversal errors" {
+@test "AC-3: key masking fails closed on traversal errors" {
   mkdir -p "$PROJECT_DIR/locked"
   printf 'hidden\n' > "$PROJECT_DIR/locked/hidden.key"
   chmod 111 "$PROJECT_DIR/locked"
@@ -363,13 +376,13 @@ PROFILE
   [[ "$output" == *"multiline placeholder must be on a standalone line"* ]]
 }
 
-@test "AC-3: key scan numeric budgets normalize leading zeroes" {
+@test "AC-3: key masking numeric budgets normalize leading zeroes" {
   run bash -c "cd '$PROJECT_DIR'; source '$SANDBOX_LIB'; WALTER_SANDBOX_KEY_SCAN_MAX_DEPTH=08 WALTER_SANDBOX_KEY_SCAN_MAX_ENTRIES=020 walter_sandbox_materialize_profile walter-skill-default nsjail"
 
   [ "$status" -eq 0 ]
 }
 
-@test "AC-3: nsjail key scan fails closed on max depth" {
+@test "AC-3: key masking fails closed when traversal depth is exhausted" {
   mkdir -p "$PROJECT_DIR/deep/nested"
   printf 'deep-key\n' > "$PROJECT_DIR/deep/nested/private.key"
 
@@ -379,7 +392,7 @@ PROFILE
   [[ "$output" == *"sensitive key scan exceeded max depth 1"* ]]
 }
 
-@test "AC-3: nsjail key scan fails closed on over-depth key files" {
+@test "AC-3: key masking fails closed on over-depth key files" {
   mkdir -p "$PROJECT_DIR/deep"
   printf 'deep-key\n' > "$PROJECT_DIR/deep/private.key"
 
