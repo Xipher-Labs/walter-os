@@ -111,7 +111,16 @@ EOF
 @test "AC-1: sandbox check fails when provider binary is missing" {
   _mock_uname Linux
 
-  run bash -c "command() { if [[ \"\$1\" == -v && \"\$2\" == nsjail ]]; then return 1; fi; builtin command \"\$@\"; }; source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default 2>&1"
+  run bash -c "command() { if [[ \"\$1\" == -v && \"\${2:-}\" == -- && \"\${3:-}\" == nsjail ]]; then return 1; fi; builtin command \"\$@\"; }; source '$SANDBOX_LIB'; walter_sandbox_check walter-hook-default 2>&1"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"provider missing: nsjail"* ]]
+}
+
+@test "AC-1: provider path rejects shell functions" {
+  _mock_uname Linux
+
+  run bash -c "nsjail() { :; }; source '$SANDBOX_LIB'; walter_sandbox_provider_path nsjail 2>&1"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"provider missing: nsjail"* ]]
@@ -132,12 +141,9 @@ EOF
 
   run bash -c "
     source '$SANDBOX_LIB'
-    walter_sandbox_check() {
+    walter_sandbox_profile_path() {
       PATH='$shadow_bin':\$PATH
       hash -r
-      return 0
-    }
-    walter_sandbox_profile_path() {
       printf '%s\n' '$REPO_ROOT/setup/sandbox-profiles/walter-hook-default.nsjail.conf'
     }
     walter_sandbox_run walter-hook-default bash -c 'printf trusted'

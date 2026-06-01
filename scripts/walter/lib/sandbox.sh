@@ -77,7 +77,7 @@ walter_sandbox_provider_path() {
   }
   local provider="$1" provider_path provider_dir provider_base
   provider_path="$(command -v -- "$provider" 2>/dev/null || true)"
-  if [[ -z "$provider_path" ]]; then
+  if [[ -z "$provider_path" || "$provider_path" != */* || ! -f "$provider_path" || ! -x "$provider_path" ]]; then
     echo "walter-sandbox: provider missing: $provider" >&2
     return 1
   fi
