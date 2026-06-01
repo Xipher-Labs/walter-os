@@ -167,6 +167,26 @@ _mode() {
   [ "$status" -ne 0 ]
 }
 
+@test "AC-2: sandbox materializes quoted scratch placeholders safely" {
+  quoted_runtime="$TMP_HOME/runtime\"quoted"
+  mkdir -p "$quoted_runtime"
+
+  run env WALTER_RUNTIME_DIR="$quoted_runtime" bash -c "source '$SANDBOX_LIB'; walter_sandbox_materialize_profile walter-hook-default sandbox-exec"
+
+  [ "$status" -eq 0 ]
+  profile="$output"
+  grep -Fq 'runtime\"quoted' "$profile"
+}
+
+@test "AC-2: placeholder detection handles dash-prefixed profile paths" {
+  dash_profile="$TMP_HOME/-profile.sb"
+  printf '(allow file-read* (subpath "@HOME@"))\n' > "$dash_profile"
+
+  run bash -c "cd '$TMP_HOME'; source '$SANDBOX_LIB'; _walter_sandbox_profile_has_placeholders -profile.sb"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "AC-2: sandbox materialization cleans early path failures" {
   run bash -c "source '$SANDBOX_LIB'; WALTER_CONFIG=\$'bad\npath' walter_sandbox_materialize_profile walter-hook-default sandbox-exec"
 
