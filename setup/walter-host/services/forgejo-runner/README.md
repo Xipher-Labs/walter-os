@@ -11,8 +11,9 @@ selected.
   executor jobs.
 - `.env.template` documents required local values. Copy it to `.env` and keep
   the registration token out of git.
-- `config.yml.template` keeps runner state at `/data/.runner` inside the named
-  Docker volume.
+- `config.yml.template` is the default runner config mounted read-only at
+  `/etc/forgejo-runner/config.yml`; edit it in place if you need to tune runner
+  capacity, cache, or container settings.
 
 ## Register one runner
 
