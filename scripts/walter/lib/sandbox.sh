@@ -242,7 +242,7 @@ walter_sandbox_materialize_profile() {
   dest="$(mktemp "${runtime_dir}/${profile}.${provider}.XXXXXX")" || return 1
   tmp_dest="${dest}.tmp"
   local scratch_dir scratch_value
-  if grep -q '@WALTER_SANDBOX_SCRATCH@' "$src"; then
+  if grep -q -- '@WALTER_SANDBOX_SCRATCH@' "$src"; then
     scratch_dir="${dest}.scratch"
     mkdir -m 700 "$scratch_dir" || {
       _walter_sandbox_cleanup_materialized "$dest"
