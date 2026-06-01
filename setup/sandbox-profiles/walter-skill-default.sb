@@ -71,3 +71,4 @@
   (require-all
     (subpath "@HOME@")
     (regex #".*[.]key$")))
+@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@

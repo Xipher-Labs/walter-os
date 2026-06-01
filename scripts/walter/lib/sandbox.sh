@@ -203,9 +203,12 @@ _walter_sandbox_profile_has_placeholders() {
     || grep -q -- '@WALTER_NSJAIL_SESSION_KEY_MASKS@' "$path" \
     || grep -q -- '@WALTER_NSJAIL_CONFIG_KEY_MASKS@' "$path" \
     || grep -q -- '@WALTER_NSJAIL_SENSITIVE_KEY_MASKS@' "$path" \
+    || grep -q -- '@WALTER_NSJAIL_INVISIBLE_MOUNTS@' "$path" \
     || grep -q -- '@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@' "$path" \
     || grep -q -- '@WALTER_FIREJAIL_HOME_KEY_BLACKLISTS@' "$path" \
-    || grep -q -- '@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@' "$path"
+    || grep -q -- '@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@' "$path" \
+    || grep -q -- '@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@' "$path" \
+    || grep -q -- '@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@' "$path"
 }
 
 _walter_sandbox_workspace_root() {
@@ -251,6 +254,23 @@ _walter_sandbox_prepare_nsjail_root() {
   _walter_sandbox_nsjail_root_mkdir_for_path "$root" "$home/.ssh" || return 1
   _walter_sandbox_nsjail_root_mkdir_for_path "$root" "$home/.aws" || return 1
   _walter_sandbox_nsjail_root_mkdir_for_path "$root" "$home/.gnupg" || return 1
+}
+
+_walter_sandbox_nsjail_root_touch_for_path() {
+  local root="$1" path="$2" target
+  case "$path" in
+    /*) ;;
+    *) return 0 ;;
+  esac
+  case "$path" in
+    */../*|*/..)
+      echo "walter-sandbox: refusing parent-directory component in nsjail root path: $path" >&2
+      return 1
+      ;;
+  esac
+  target="${root}${path}"
+  mkdir -p "$(dirname "$target")" || return 1
+  : > "$target"
 }
 
 _walter_sandbox_nsjail_quote() {
@@ -496,6 +516,285 @@ _walter_sandbox_firejail_home_key_blacklists() {
   _walter_sandbox_key_scan "$root" _walter_sandbox_firejail_key_blacklist_renderer
 }
 
+_walter_sandbox_trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
+}
+
+_walter_sandbox_invisible_expand_path() {
+  local path="$1" config_dir
+  config_dir="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+  case "$path" in
+    *$'\n'*|*$'\r'*|*'|'*)
+      echo "walter-sandbox: invisible path contains unsupported characters: $path" >&2
+      return 1
+      ;;
+    \~)
+      printf '%s\n' "$HOME"
+      ;;
+    \~/*)
+      printf '%s/%s\n' "$HOME" "${path#\~/}"
+      ;;
+    \$WALTER_CONFIG)
+      printf '%s\n' "$config_dir"
+      ;;
+    \$WALTER_CONFIG/*)
+      printf '%s/%s\n' "$config_dir" "${path#\$WALTER_CONFIG/}"
+      ;;
+    \$\{WALTER_CONFIG\})
+      printf '%s\n' "$config_dir"
+      ;;
+    \$\{WALTER_CONFIG\}/*)
+      printf '%s/%s\n' "$config_dir" "${path#\$\{WALTER_CONFIG\}/}"
+      ;;
+    /*)
+      printf '%s\n' "$path"
+      ;;
+    *)
+      echo "walter-sandbox: invisible path must be absolute or home-relative: $path" >&2
+      return 1
+      ;;
+  esac
+}
+
+_walter_sandbox_invisible_validate_type() {
+  local path="$1" type="$2"
+  case "$type" in
+    dir)
+      if [[ -e "$path" && ! -d "$path" ]]; then
+        echo "walter-sandbox: invisible path expected directory but found file: $path" >&2
+        return 1
+      fi
+      ;;
+    file)
+      if [[ -e "$path" && ! -f "$path" ]]; then
+        echo "walter-sandbox: invisible path expected file but found directory: $path" >&2
+        return 1
+      fi
+      ;;
+    *)
+      echo "walter-sandbox: invisible path has invalid type: $type" >&2
+      return 1
+      ;;
+  esac
+}
+
+_walter_sandbox_invisible_normalize_path() {
+  local path="$1"
+  while [[ "$path" != "/" && "$path" == */ ]]; do
+    path="${path%/}"
+  done
+  printf '%s\n' "$path"
+}
+
+_walter_sandbox_invisible_remove_path() {
+  local active="$1" remove_path="$2" line type path
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    type="${line%%|*}"
+    path="${line#*|}"
+    [[ "$path" == "$remove_path" ]] || printf '%s|%s\n' "$type" "$path"
+  done <<< "$active"
+}
+
+_walter_sandbox_invisible_apply_file() {
+  local file="$1" active="$2" required="${3:-0}" raw line remove entry path type expanded next_active
+  [[ -f "$file" ]] || {
+    if [[ "$required" == "1" ]]; then
+      echo "walter-sandbox: required invisible path policy missing: $file" >&2
+      return 1
+    fi
+    printf '%s' "$active"
+    return 0
+  }
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    line="$raw"
+    line="$(_walter_sandbox_trim "$line")"
+    [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
+    remove=0
+    if [[ "$line" == !* ]]; then
+      remove=1
+      line="${line#!}"
+      line="$(_walter_sandbox_trim "$line")"
+    fi
+    entry="$line"
+    if [[ "$remove" -eq 1 ]]; then
+      expanded="$(_walter_sandbox_invisible_expand_path "$entry")" || return 1
+      expanded="$(_walter_sandbox_invisible_normalize_path "$expanded")"
+      next_active="$(_walter_sandbox_invisible_remove_path "$active" "$expanded")"
+      if [[ "$next_active" == "$active" ]]; then
+        case "$entry" in
+          *:dir|*:file)
+            path="${entry%:*}"
+            expanded="$(_walter_sandbox_invisible_expand_path "$path")" || return 1
+            expanded="$(_walter_sandbox_invisible_normalize_path "$expanded")"
+            next_active="$(_walter_sandbox_invisible_remove_path "$active" "$expanded")"
+            ;;
+        esac
+      fi
+      active="$next_active"
+      continue
+    fi
+    case "$entry" in
+      *:dir|*:file)
+        path="${entry%:*}"
+        type="${entry##*:}"
+        ;;
+      *)
+        echo "walter-sandbox: invisible path missing :dir or :file: $entry" >&2
+        return 1
+        ;;
+    esac
+    expanded="$(_walter_sandbox_invisible_expand_path "$path")" || return 1
+    expanded="$(_walter_sandbox_invisible_normalize_path "$expanded")"
+    _walter_sandbox_invisible_validate_type "$expanded" "$type" || return 1
+    active="$(_walter_sandbox_invisible_remove_path "$active" "$expanded")"
+    active="${active}${active:+$'\n'}${type}|${expanded}"
+  done < "$file"
+  printf '%s' "$active"
+}
+
+_walter_sandbox_invisible_paths() {
+  local repo_root config_dir defaults overlay active
+  repo_root="$(walter_sandbox_repo_root)" || return 1
+  config_dir="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+  defaults="${repo_root}/setup/sandbox-profiles/invisible-paths.default.txt"
+  overlay="${config_dir}/overlay/sandbox-invisible-paths.txt"
+  active=""
+  active="$(_walter_sandbox_invisible_apply_file "$defaults" "$active" 1)" || return 1
+  active="$(_walter_sandbox_invisible_apply_file "$overlay" "$active")" || return 1
+  printf '%s\n' "$active"
+}
+
+_walter_sandbox_invisible_placeholder_root() {
+  local materialized_path="$1" runtime_dir root
+  runtime_dir="$(dirname "$materialized_path")"
+  root="${runtime_dir}/invisible"
+  if [[ -L "$root" ]]; then
+    echo "walter-sandbox: unsafe invisible placeholder path: $root" >&2
+    return 1
+  fi
+  mkdir -p "$root" || return 1
+  if ! chmod 700 "$root"; then
+    echo "walter-sandbox: failed to lock down invisible placeholder root: $root" >&2
+    return 1
+  fi
+  printf '%s\n' "$root"
+}
+
+_walter_sandbox_invisible_placeholder_hash() {
+  local value="$1" digest
+  if command -v shasum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | shasum -a 256 | awk '{print substr($1,1,16)}')" || return 1
+  elif command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | sha256sum | awk '{print substr($1,1,16)}')" || return 1
+  else
+    echo "walter-sandbox: sha256sum or shasum is required for invisible placeholder hashes" >&2
+    return 1
+  fi
+  [[ -n "$digest" ]] || {
+    echo "walter-sandbox: failed to derive invisible placeholder hash" >&2
+    return 1
+  }
+  printf '%s\n' "$digest"
+}
+
+_walter_sandbox_invisible_placeholder() {
+  local root="$1" type="$2" path="$3" hash placeholder
+  hash="$(_walter_sandbox_invisible_placeholder_hash "${type}|${path}")" || return 1
+  case "$type" in
+    dir)
+      placeholder="${root}/dir-${hash}"
+      if [[ -L "$placeholder" ]]; then
+        echo "walter-sandbox: unsafe invisible placeholder path: $placeholder" >&2
+        return 1
+      fi
+      if [[ -e "$placeholder" && ! -d "$placeholder" ]]; then
+        rm -f -- "$placeholder" || return 1
+      fi
+      if [[ -d "$placeholder" ]]; then
+        rm -rf -- "$placeholder" || return 1
+      fi
+      mkdir -p "$placeholder" || return 1
+      if ! chmod 700 "$placeholder"; then
+        echo "walter-sandbox: failed to lock down invisible directory placeholder: $placeholder" >&2
+        return 1
+      fi
+      ;;
+    file)
+      placeholder="${root}/file-${hash}"
+      if [[ -L "$placeholder" ]]; then
+        echo "walter-sandbox: unsafe invisible placeholder path: $placeholder" >&2
+        return 1
+      fi
+      if [[ -d "$placeholder" ]]; then
+        rm -rf -- "$placeholder" || return 1
+      fi
+      : > "$placeholder" || return 1
+      if ! chmod 600 "$placeholder"; then
+        echo "walter-sandbox: failed to lock down invisible file placeholder: $placeholder" >&2
+        return 1
+      fi
+      ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$placeholder"
+}
+
+_walter_sandbox_nsjail_invisible_mounts() {
+  local active="$1" placeholder_root="$2" nsjail_root="$3" line type path placeholder quoted_path quoted_placeholder
+  [[ -n "$active" ]] || return 0
+  if [[ -z "$nsjail_root" || "$nsjail_root" != /* || ! -d "$nsjail_root" ]]; then
+    echo "walter-sandbox: invisible nsjail mounts require a prepared nsjail root" >&2
+    return 1
+  fi
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    type="${line%%|*}"
+    path="${line#*|}"
+    [[ -e "$path" ]] || continue
+    placeholder="$(_walter_sandbox_invisible_placeholder "$placeholder_root" "$type" "$path")" || return 1
+    if [[ "$type" == "dir" ]]; then
+      _walter_sandbox_nsjail_root_mkdir_for_path "$nsjail_root" "$path" || return 1
+    else
+      _walter_sandbox_nsjail_root_touch_for_path "$nsjail_root" "$path" || return 1
+    fi
+    quoted_path="$(_walter_sandbox_nsjail_quote "$path")" || return 1
+    quoted_placeholder="$(_walter_sandbox_nsjail_quote "$placeholder")" || return 1
+    printf 'mount {\n'
+    printf '  src: "%s"\n' "$quoted_placeholder"
+    printf '  dst: "%s"\n' "$quoted_path"
+    printf '  is_bind: true\n'
+    printf '  rw: false\n'
+    printf '  mandatory: true\n'
+    printf '}\n'
+  done <<< "$active"
+}
+
+_walter_sandbox_exec_invisible_denies() {
+  local active="$1" line path escaped
+  [[ -n "$active" ]] || return 0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    path="${line#*|}"
+    escaped="$(_walter_sandbox_nsjail_quote "$path")" || return 1
+    printf '(deny file-read-data (subpath "%s"))\n' "$escaped"
+  done <<< "$active"
+}
+
+_walter_sandbox_firejail_invisible_blacklists() {
+  local active="$1" line path escaped_path
+  [[ -n "$active" ]] || return 0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    path="${line#*|}"
+    escaped_path="$(_walter_sandbox_firejail_path_escape "$path")" || return 1
+    printf 'blacklist %s\n' "$escaped_path"
+  done <<< "$active"
+}
+
 walter_sandbox_profile_path() {
   [[ "$#" -ge 1 ]] || {
     echo "walter-sandbox: usage: walter_sandbox_profile_path <profile> [provider]" >&2
@@ -525,14 +824,15 @@ walter_sandbox_profile_path() {
 }
 
 walter_sandbox_materialize_profile() {
-  [[ "$#" -eq 2 ]] || {
-    echo "walter-sandbox: usage: walter_sandbox_materialize_profile <profile> <provider>" >&2
+  [[ "$#" -eq 2 || "$#" -eq 3 ]] || {
+    echo "walter-sandbox: usage: walter_sandbox_materialize_profile <profile> <provider> [high-tier]" >&2
     return 2
   }
-  local profile="$1" provider="$2" src runtime_dir dest tmp_dest tmp_pre
+  local profile="$1" provider="$2" high_tier="${3:-0}" src runtime_dir dest tmp_dest tmp_pre
   local repo_root repo_root_raw config_dir config_dir_raw config_dir_regex config_dir_regex_raw
   local home_value cwd_raw cwd_value parent_raw parent_value nsjail_root_raw nsjail_root_value needs_cwd needs_parent
   local nsjail_deny_file nsjail_session_key_mounts nsjail_config_key_mounts nsjail_sensitive_key_mounts firejail_config_key_blacklists firejail_home_key_blacklists firejail_sensitive_key_blacklists
+  local invisible_paths invisible_placeholder_root nsjail_invisible_mounts sandbox_exec_invisible_denies firejail_invisible_blacklists
   local placeholder trimmed
   src="$(walter_sandbox_profile_path "$profile" "$provider")" || return 1
   if [[ ! -f "$src" ]]; then
@@ -540,6 +840,10 @@ walter_sandbox_materialize_profile() {
     return 1
   fi
   if ! _walter_sandbox_profile_has_placeholders "$src"; then
+    if [[ "$high_tier" == "1" ]]; then
+      echo "walter-sandbox: high-tier profile missing invisible-mount placeholder" >&2
+      return 1
+    fi
     printf '%s\n' "$src"
     return 0
   fi
@@ -675,6 +979,46 @@ walter_sandbox_materialize_profile() {
       return 1
     }
   fi
+  invisible_paths=""
+  invisible_placeholder_root=""
+  nsjail_invisible_mounts=""
+  sandbox_exec_invisible_denies=""
+  firejail_invisible_blacklists=""
+  if [[ "$high_tier" == "1" ]]; then
+    invisible_paths="$(_walter_sandbox_invisible_paths)" || {
+      _walter_sandbox_cleanup_materialized "$dest"
+      return 1
+    }
+    if [[ -n "$invisible_paths" ]]; then
+      invisible_placeholder_root="$(_walter_sandbox_invisible_placeholder_root "$dest")" || {
+        _walter_sandbox_cleanup_materialized "$dest"
+        return 1
+      }
+      case "$provider" in
+        nsjail)
+          if ! grep -q '@WALTER_NSJAIL_INVISIBLE_MOUNTS@' "$src"; then
+            echo "walter-sandbox: high-tier nsjail profile missing invisible-mount placeholder" >&2
+            _walter_sandbox_cleanup_materialized "$dest"
+            return 1
+          fi
+          ;;
+        firejail)
+          if ! grep -q '@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@' "$src"; then
+            echo "walter-sandbox: high-tier firejail profile missing invisible blacklist placeholder" >&2
+            _walter_sandbox_cleanup_materialized "$dest"
+            return 1
+          fi
+          ;;
+        sandbox-exec)
+          if ! grep -q '@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@' "$src"; then
+            echo "walter-sandbox: high-tier sandbox-exec profile missing invisible deny placeholder" >&2
+            _walter_sandbox_cleanup_materialized "$dest"
+            return 1
+          fi
+          ;;
+      esac
+    fi
+  fi
   nsjail_session_key_mounts=""
   nsjail_deny_file=""
   if grep -q '@WALTER_NSJAIL_SESSION_KEY_MASKS@' "$src" \
@@ -710,6 +1054,12 @@ walter_sandbox_materialize_profile() {
       return 1
     }
   fi
+  if grep -q '@WALTER_NSJAIL_INVISIBLE_MOUNTS@' "$src" && [[ -n "$invisible_paths" ]]; then
+    nsjail_invisible_mounts="$(_walter_sandbox_nsjail_invisible_mounts "$invisible_paths" "$invisible_placeholder_root" "$nsjail_root_raw")" || {
+      _walter_sandbox_cleanup_materialized "$dest"
+      return 1
+    }
+  fi
   firejail_config_key_blacklists=""
   if grep -q '@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@' "$src"; then
     firejail_config_key_blacklists="$(_walter_sandbox_firejail_config_key_blacklists "$config_dir_raw")" || {
@@ -727,6 +1077,18 @@ walter_sandbox_materialize_profile() {
   firejail_sensitive_key_blacklists=""
   if grep -q '@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@' "$src"; then
     firejail_sensitive_key_blacklists="$(_walter_sandbox_firejail_sensitive_key_blacklists "$parent_raw")" || {
+      _walter_sandbox_cleanup_materialized "$dest"
+      return 1
+    }
+  fi
+  if grep -q '@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@' "$src" && [[ -n "$invisible_paths" ]]; then
+    firejail_invisible_blacklists="$(_walter_sandbox_firejail_invisible_blacklists "$invisible_paths")" || {
+      _walter_sandbox_cleanup_materialized "$dest"
+      return 1
+    }
+  fi
+  if grep -q '@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@' "$src" && [[ -n "$invisible_paths" ]]; then
+    sandbox_exec_invisible_denies="$(_walter_sandbox_exec_invisible_denies "$invisible_paths")" || {
       _walter_sandbox_cleanup_materialized "$dest"
       return 1
     }
@@ -755,9 +1117,12 @@ walter_sandbox_materialize_profile() {
       *'@WALTER_NSJAIL_SESSION_KEY_MASKS@'*) placeholder="@WALTER_NSJAIL_SESSION_KEY_MASKS@" ;;
       *'@WALTER_NSJAIL_CONFIG_KEY_MASKS@'*) placeholder="@WALTER_NSJAIL_CONFIG_KEY_MASKS@" ;;
       *'@WALTER_NSJAIL_SENSITIVE_KEY_MASKS@'*) placeholder="@WALTER_NSJAIL_SENSITIVE_KEY_MASKS@" ;;
+      *'@WALTER_NSJAIL_INVISIBLE_MOUNTS@'*) placeholder="@WALTER_NSJAIL_INVISIBLE_MOUNTS@" ;;
       *'@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@'*) placeholder="@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@" ;;
       *'@WALTER_FIREJAIL_HOME_KEY_BLACKLISTS@'*) placeholder="@WALTER_FIREJAIL_HOME_KEY_BLACKLISTS@" ;;
       *'@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@'*) placeholder="@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@" ;;
+      *'@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@'*) placeholder="@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@" ;;
+      *'@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@'*) placeholder="@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@" ;;
     esac
     if [[ -n "$placeholder" ]]; then
       trimmed="${line#"${line%%[![:space:]]*}"}"
@@ -790,6 +1155,13 @@ walter_sandbox_materialize_profile() {
           return 1
         }
       fi
+    elif [[ "$placeholder" == "@WALTER_NSJAIL_INVISIBLE_MOUNTS@" ]]; then
+      if [[ -n "$nsjail_invisible_mounts" ]]; then
+        printf '%s\n' "$nsjail_invisible_mounts" >> "$tmp_dest" || {
+          _walter_sandbox_cleanup_materialized "$dest"
+          return 1
+        }
+      fi
     elif [[ "$placeholder" == "@WALTER_FIREJAIL_CONFIG_KEY_BLACKLISTS@" ]]; then
       if [[ -n "$firejail_config_key_blacklists" ]]; then
         printf '%s\n' "$firejail_config_key_blacklists" >> "$tmp_dest" || {
@@ -807,6 +1179,20 @@ walter_sandbox_materialize_profile() {
     elif [[ "$placeholder" == "@WALTER_FIREJAIL_SENSITIVE_KEY_BLACKLISTS@" ]]; then
       if [[ -n "$firejail_sensitive_key_blacklists" ]]; then
         printf '%s\n' "$firejail_sensitive_key_blacklists" >> "$tmp_dest" || {
+          _walter_sandbox_cleanup_materialized "$dest"
+          return 1
+        }
+      fi
+    elif [[ "$placeholder" == "@WALTER_FIREJAIL_INVISIBLE_BLACKLISTS@" ]]; then
+      if [[ -n "$firejail_invisible_blacklists" ]]; then
+        printf '%s\n' "$firejail_invisible_blacklists" >> "$tmp_dest" || {
+          _walter_sandbox_cleanup_materialized "$dest"
+          return 1
+        }
+      fi
+    elif [[ "$placeholder" == "@WALTER_SANDBOX_EXEC_INVISIBLE_DENIES@" ]]; then
+      if [[ -n "$sandbox_exec_invisible_denies" ]]; then
+        printf '%s\n' "$sandbox_exec_invisible_denies" >> "$tmp_dest" || {
           _walter_sandbox_cleanup_materialized "$dest"
           return 1
         }
@@ -864,12 +1250,32 @@ walter_sandbox_run() {
     echo "walter-sandbox: usage: walter_sandbox_run <profile> <cmd...>" >&2
     return 2
   }
-  local profile="$1" provider provider_path profile_path cleanup_profile status
+  local profile="$1" provider provider_path profile_path cleanup_profile status high_tier
   shift
+  high_tier=0
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --high-tier)
+        high_tier=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+  [[ "$#" -ge 1 ]] || {
+    echo "walter-sandbox: usage: walter_sandbox_run <profile> [--high-tier] <cmd...>" >&2
+    return 2
+  }
 
   provider="$(walter_sandbox_provider)" || return 1
   provider_path="$(walter_sandbox_provider_path "$provider")" || return 1
-  profile_path="$(walter_sandbox_materialize_profile "$profile" "$provider")" || return 1
+  profile_path="$(walter_sandbox_materialize_profile "$profile" "$provider" "$high_tier")" || return 1
   cleanup_profile=0
   case "$profile_path" in
     */sandbox/"$profile"."$provider".*) cleanup_profile=1 ;;

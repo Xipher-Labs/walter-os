@@ -1,0 +1,10 @@
+# Walter-OS high-tier invisible paths.
+# Format: <path>:dir or <path>:file. Overlay removals use !<path>.
+~/.ssh/:dir
+~/.aws/:dir
+~/.gnupg/:dir
+$WALTER_CONFIG/state/:dir
+~/.config/op/:dir
+~/.local/share/keyrings/:dir
+$WALTER_CONFIG/overlay/personal.env:file
+~/.docker/config.json:file
