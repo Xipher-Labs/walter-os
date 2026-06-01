@@ -42,12 +42,17 @@ this corpus with plain `grep` and `Read` over the CSVs — no `python3
 search.py`, no runtime dependency. The data is intentionally CSV so it is
 greppable.
 
-These CSVs are byte-exact upstream copies pinned to the commit below. Some rows
-contain code-example fields with embedded commas and unescaped double quotes
-(e.g. an HTML/JSX snippet), so a strict RFC-4180 CSV parser may reject or
+This corpus is pinned to the upstream commit below, with Walter-OS adaptations
+recorded in `docs/specs/ux-skills-adoption.md`: unstructured/non-English
+upstream files are omitted, a small number of non-English cells were translated,
+and `data/stacks/threejs.csv` was normalized to the shared per-stack `No,...`
+schema. Do not assume every vendored byte can be compared directly to upstream
+without applying those documented adaptations.
+
+Some rows contain code-example fields with embedded commas and unescaped double
+quotes (e.g. an HTML/JSX snippet), so a strict RFC-4180 CSV parser may reject or
 mis-column them. That is expected: this corpus is meant for line-oriented
-`grep`/`Read` lookup, NOT for parsing as structured CSV. Do not "repair" the
-quoting — it would diverge from the pinned upstream source.
+`grep`/`Read` lookup, NOT for parsing as structured CSV.
 
 ## The corpus
 

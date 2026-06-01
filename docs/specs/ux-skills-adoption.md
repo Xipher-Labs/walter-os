@@ -84,18 +84,21 @@
   unstructured (no CSV header), upstream excludes `draft.csv` from search, and
   both contained non-English (Chinese) content — they are not cleanly
   greppable data and violate the English-only repo rule. Stray Chinese keyword
-  cells in `icons.csv` and `styles.csv` were translated to English, and the
-  `quick-reference.md` activation section was translated to English; a
-  full-tree scan confirms no CJK remains. Did NOT vendor any Python
-  (`search.py`/`core.py`/`design_system.py`/`_sync_all.py`) or the CLI.
-  Carried upstream `LICENSE` (MIT).
+  cells in `icons.csv` and `styles.csv` were translated to English; the
+  `quick-reference.md` activation section was translated to English; and
+  `data/stacks/threejs.csv` was normalized by adding the missing `No` column so
+  it matches the shared per-stack schema documented in `SKILL.md`. A full-tree
+  scan confirms no CJK remains. Did NOT vendor any Python
+  (`search.py`/`core.py`/`design_system.py`/`_sync_all.py`) or the CLI. Carried
+  upstream `LICENSE` (MIT).
 
 ## Security verdict
 
 - Both skills were security-vetted and APPROVED prior to vendoring: clean — no
   data exfiltration, no telemetry, no install hooks. Licenses confirmed
-  Apache-2.0 (impeccable) and MIT (ui-ux-pro-max). Full reports at
-  `/tmp/vet-impeccable.md` and `/tmp/vet-uipromax.md` at adoption time.
+  Apache-2.0 (impeccable) and MIT (ui-ux-pro-max). The full vetting scratch
+  reports were temporary local artifacts at adoption time and are not repository
+  evidence; this spec records the durable summarized verdict.
 - The vet reports placed all risk surface (impeccable: a version phone-home,
   loopback live server, credential forwarding, CSP patching; ui-ux-pro-max: the
   Python search engine) entirely in the executable tooling that is EXCLUDED

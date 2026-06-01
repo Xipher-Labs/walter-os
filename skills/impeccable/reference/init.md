@@ -143,35 +143,32 @@ If the user agrees, delegate to `/impeccable document` (it auto-detects scan vs 
 
 If the user prefers to skip, mention they can run `/impeccable document` any time later.
 
-## Step 6: Configure live mode (when code exists)
+## Step 6: Live mode unavailable in Walter-OS
 
-If the project has code with HTML entries and a dev server (the same "code exists" condition that puts `/impeccable document` in scan mode), pre-configure live mode now. You already identified the framework and the served HTML entry in Step 2, so this is nearly free, and it spares the user the first-time setup detour when they later run `/impeccable live`.
+Do not configure live mode from this vendored copy. The upstream live-preview
+flow depends on Node helper scripts that Walter-OS does not bundle. Do not write
+`.impeccable/live/config.json`, do not run `detect-csp.mjs`, and do not suggest
+`/impeccable live` as an available next command.
 
-**Skip this step for empty / pre-implementation projects** (nothing to inject into yet). Tell the user live mode will configure itself the first time they run it once there's code.
-
-**If `.impeccable/live/config.json` already exists, leave it untouched** and note that live mode is already configured.
-
-Otherwise:
-
-1. Write `.impeccable/live/config.json`. Choose `files` (the HTML entries the browser actually loads), `insertBefore`, and `commentSyntax` from the framework table in [live.md](live.md)'s **First-time setup** section, using the framework you found in Step 2. That table is canonical; do not restate it here. For multi-page static sites, prefer a glob (`["public/**/*.html"]`) over a literal list.
-2. Run `node {{scripts_path}}/detect-csp.mjs`. If it reports a patchable shape (`append-arrays` / `append-string`), use the **consent prompt template** from live.md before editing any source file. On decline, skip the patch. For `middleware` / `meta-tag` shapes, surface the detected files and ask the user to add `http://localhost:8400` to `script-src` and `connect-src` manually. For `null`, there's nothing to do.
-3. Set `cspChecked: true` in the config once CSP is handled (patched, declined, manual, or not needed). The schema and per-shape patch details live in live.md's First-time setup; follow it rather than duplicating.
-
-Writing the config file is harmless and needs no consent; only the CSP **source-file patch** requires a yes.
+If the project has code and needs visual iteration, use the harness's normal
+browser/screenshot tools and the other Impeccable references instead. [live.md](live.md)
+is an explicit upstream-only unavailability note in this repository.
 
 ## Step 7: Recommend starting points, then wrap up
 
 Summarize tersely:
 - Register captured (brand / product)
-- What was written (PRODUCT.md, DESIGN.md, live config, or a subset)
+- What was written (PRODUCT.md, DESIGN.md, or a subset)
 - The 3-5 strategic principles from PRODUCT.md that will guide future work
-- If DESIGN.md or live config is pending, one line on how to set it up later
+- If DESIGN.md is pending, one line on how to set it up later
 
 Then recommend the **best commands to run next**, drawn from what your Step 2 crawl already surfaced. Do not run a fresh analysis here; surface observations you already have. Tailor to register and to what you saw, offer the 2-4 most relevant (not a menu dump), and give the exact command to type. Group by intent:
 
 - **Build something new**: `/impeccable craft <feature>` (shape, then build end-to-end) or `/impeccable shape <feature>` (plan first). Lead with this for empty or early-stage projects.
 - **Improve what's there**: name the specific surface. `/impeccable critique <page>` for a scored UX review; `/impeccable audit <area>` for a11y / perf / responsive checks; `/impeccable polish <component>` for a pre-ship pass. When the crawl flagged a specific weakness, point the matching command at it: thin hierarchy or spacing → `layout`, flat or gray palette → `colorize`, missing error / empty states → `harden` or `onboard`, dull or unclear copy → `clarify`.
-- **Iterate visually**: `/impeccable live` (configured in Step 6) to pick elements in the browser and generate variants in place.
+- **Iterate visually**: use the harness's browser/screenshot tools with the
+  Impeccable references; `/impeccable live` is unavailable in Walter-OS because
+  the upstream Node helpers are not bundled.
 
 The full command menu is one bare `/impeccable` away; keep this list short and pointed.
 

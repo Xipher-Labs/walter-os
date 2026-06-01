@@ -75,17 +75,14 @@ If a photographic, architectural, product, or place-led mock becomes generic CSS
 
 Don't substitute a different hero composition or visual driver post-approval without user sign-off.
 
-## Step F: Asset Slicing via the Asset Producer
+## Step F: Asset Production
 
-Raster ingredients identified in Step E need clean production assets. Use the bundled `impeccable_asset_producer` subagent rather than producing inline.
+Raster ingredients identified in Step E need clean production assets. Walter-OS
+does not bundle an Impeccable asset-producer subagent, so produce these assets
+inline with the harness's available image-generation/editing tools and keep the
+asset brief explicit.
 
-Spawn it as a scoped subagent. If you do not have explicit permission to use agents, stop and ask:
-
-```text
-Asset production will work better as a scoped subagent job. Should I spawn the Impeccable asset producer subagent for this step?
-```
-
-Pass to the agent:
+For each generated or edited asset, define:
 
 - Approved mock path or screenshot reference
 - Crop paths or a contact sheet with crop ids
@@ -94,9 +91,9 @@ Pass to the agent:
 - Avoid list
 - Notes on what should remain semantic HTML/CSS/SVG instead of raster
 
-Attach image generation capability to the spawned agent when the harness supports it. Do **not** load image-generation reference material into the parent thread.
-
-Inline asset production is allowed only if the user declines subagents, the harness cannot spawn the authorized agent, or the user explicitly asks for single-thread mode.
+Do not invent a missing subagent or ask the user to install one. Keep image
+generation prompts scoped to the approved direction and use direct asset edits
+when the harness supports them.
 
 Prefer HTML/CSS/SVG/canvas when they can credibly reproduce an ingredient; reach for real, generated, or stock imagery when the mock or subject matter calls for actual visual content.
 

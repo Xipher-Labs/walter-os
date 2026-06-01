@@ -41,8 +41,9 @@ impeccable  (github.com/pbakaus/impeccable)
 - License: Apache-2.0 (see skills/impeccable/LICENSE).
 - Copyright 2025-2026 Paul Bakaus. Built on Anthropic's frontend-design skill
   (Apache-2.0, Copyright 2025 Anthropic, PBC) and incorporating typography
-  additions from ehmo's typecraft-guide-skill. Full attribution carried
-  verbatim in skills/impeccable/NOTICE.md (required by Apache-2.0 section 4(d)).
+  additions from ehmo's typecraft-guide-skill (MIT, Copyright (c) 2026).
+  Full attribution and the Typecraft MIT notice text are carried in
+  skills/impeccable/NOTICE.md (Apache-2.0 section 4(d) preservation).
 
 ui-ux-pro-max  (github.com/nextlevelbuilder/ui-ux-pro-max-skill)
 - Vendored into skills/ui-ux-pro-max/ (CSV data + quick-reference only; the
