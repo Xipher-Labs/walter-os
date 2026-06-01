@@ -11,9 +11,10 @@ $EDITOR .env
 docker compose --profile langfuse up -d
 ```
 
-Caddy should route `https://langfuse.${WALTER_DOMAIN}` to `localhost:3011`.
-The profile exposes only the Langfuse UI on loopback; Postgres, ClickHouse,
-Redis, and object storage stay service-local.
+Caddy should route `https://langfuse.${WALTER_DOMAIN}` to
+`localhost:${LANGFUSE_HOST_PORT:-3011}`. The profile exposes only the Langfuse
+UI on loopback; Postgres, ClickHouse, Redis, and object storage stay
+service-local.
 
 ## Emitting traces
 

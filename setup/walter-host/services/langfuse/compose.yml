@@ -177,7 +177,7 @@ services:
     volumes:
       - langfuse_minio_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/minio/health/live >/dev/null"]
+      test: ["CMD-SHELL", "MC_HOST_local=\"http://$${MINIO_ROOT_USER}:$${MINIO_ROOT_PASSWORD}@localhost:9000\" mc ready local 2>/dev/null || wget -qO- http://localhost:9000/minio/health/live >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 10

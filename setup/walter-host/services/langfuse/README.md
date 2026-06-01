@@ -18,8 +18,9 @@ https://langfuse.${WALTER_DOMAIN}
 ```
 
 Do not publish the datastore ports. Caddy should proxy the route to
-`localhost:3011`; the compose file exposes only the Langfuse UI on loopback and
-keeps Postgres, ClickHouse, Redis, and MinIO service-local.
+`localhost:${LANGFUSE_HOST_PORT:-3011}`; the compose file exposes only the
+Langfuse UI on loopback and keeps Postgres, ClickHouse, Redis, and MinIO
+service-local.
 
 ## Why optional
 
