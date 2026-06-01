@@ -8,6 +8,10 @@ walter_sandbox_provider() {
   os="$(uname -s 2>/dev/null || true)"
   case "$os" in
     Darwin)
+      if [[ -n "${WALTER_SANDBOX_PROVIDER:-}" ]]; then
+        echo "walter-sandbox: WALTER_SANDBOX_PROVIDER is Linux-only; Darwin uses sandbox-exec" >&2
+        return 1
+      fi
       printf '%s\n' "sandbox-exec"
       ;;
     Linux)
