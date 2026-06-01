@@ -887,11 +887,12 @@ _cap_is_mint_like_command() {
 _cap_has_compound_separator() {
   local command="$1" token
   local -a tokens=()
+  [[ "$command" == *$'\n'* ]] && return 0
   if _cap_load_shell_tokens "$command"; then
     tokens=("${CAP_LOADED_SHELL_TOKENS[@]}")
     for token in "${tokens[@]}"; do
       case "$token" in
-        ''|';'|'|'|'&'|'&&'|'||'|$'\n') return 0 ;;
+        ';'|'|'|'&'|'&&'|'||') return 0 ;;
       esac
     done
     return 1
