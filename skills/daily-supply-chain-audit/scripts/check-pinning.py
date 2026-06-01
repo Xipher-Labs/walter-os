@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
 Detect MCP servers in a Claude Code settings.json that are NOT pinned to an
-*exact* version. Prints unpinned server names, one per line.
+*exact* version. Also validates Walter-OS vendored skill pin manifests.
+Prints findings, one per line.
 
 Usage: check-pinning.py <path-to-settings.json>
+       check-pinning.py --vendored-skills <pinned-refs.toml> <skills-root>
 Exit codes:
   0  always (findings are on stdout; absence = clean)
   2  usage error (missing arg or unreadable file)
@@ -32,9 +34,14 @@ that logic with explicit, testable detection.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import sys
 from pathlib import Path
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    tomllib = None  # type: ignore[assignment]
 
 # Exact semver per semver.org §2 & §11, simplified:
 #   <numeric core>(-<prerelease>)?(+<build>)?
@@ -162,9 +169,119 @@ def unpinned_servers(settings: dict) -> list[str]:
     return out
 
 
+_FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _safe_skill_name(name: object) -> bool:
+    """Return True iff a manifest key is one relative path component."""
+    if not isinstance(name, str):
+        return False
+    if not name or name in (".", ".."):
+        return False
+    return "/" not in name and "\\" not in name and "\0" not in name
+
+
+def _skill_files(skill_dir: Path) -> list[Path]:
+    """List regular files without recursing into symlinked directories."""
+    files: list[Path] = []
+    for child in skill_dir.iterdir():
+        if child.is_symlink():
+            continue
+        if child.is_dir():
+            files.extend(_skill_files(child))
+        elif child.is_file():
+            files.append(child)
+    return files
+
+
+def _tree_hash(skill_dir: Path) -> str:
+    """Deterministic hash of file paths + bytes under a vendored skill dir."""
+    digest = hashlib.sha256()
+    for path in sorted(_skill_files(skill_dir)):
+        rel = path.relative_to(skill_dir).as_posix()
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def vendored_skill_pin_findings(manifest_path: Path, skills_root: Path) -> list[str]:
+    if tomllib is None:
+        return ["manifest: Python tomllib unavailable; use Python 3.11+"]
+    if not manifest_path.is_file():
+        return [f"manifest: missing {manifest_path}"]
+    if not skills_root.is_dir():
+        return [f"manifest: skills root missing {skills_root}"]
+
+    try:
+        manifest = tomllib.loads(manifest_path.read_text())
+    except Exception as exc:  # tomllib raises TOMLDecodeError; keep py<3.11 happy
+        return [f"manifest: invalid TOML: {exc}"]
+
+    skills = manifest.get("skills") or {}
+    content_hashes = manifest.get("skill_content_sha256") or {}
+    findings: list[str] = []
+
+    if not isinstance(skills, dict):
+        return ["manifest: [skills] must be a TOML table"]
+    if not isinstance(content_hashes, dict):
+        return ["manifest: [skill_content_sha256] must be a TOML table"]
+
+    for name, pin in sorted(skills.items()):
+        if not _safe_skill_name(name):
+            findings.append(
+                f"manifest: invalid skill name {name!r}; "
+                "must be one safe path component"
+            )
+            continue
+        if not isinstance(pin, str) or not _FULL_SHA.match(pin):
+            findings.append(f"{name}: pin must be a full 40-char commit sha")
+            continue
+
+        skill_dir = skills_root / name
+        if not skill_dir.is_dir():
+            findings.append(f"{name}: skill directory missing")
+            continue
+
+        expected_hash = content_hashes.get(name)
+        actual_hash = _tree_hash(skill_dir)
+        if not isinstance(expected_hash, str) or not re.match(r"^[0-9a-f]{64}$", expected_hash):
+            findings.append(
+                f"{name}: missing or invalid skill_content_sha256 actual={actual_hash}"
+            )
+            continue
+
+        if actual_hash != expected_hash:
+            findings.append(
+                f"{name}: content hash mismatch expected={expected_hash} actual={actual_hash}"
+            )
+
+    # A vendored/third-party skill must carry a NOTICE.md. If one appears under
+    # skills/ but is absent from the manifest, flag it so future adoptions do
+    # not silently skip provenance.
+    for notice in sorted(skills_root.glob("*/NOTICE.md")):
+        name = notice.parent.name
+        if name not in skills:
+            findings.append(f"{name}: NOTICE.md present but skill missing from [skills]")
+
+    return findings
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) == 4 and argv[1] == "--vendored-skills":
+        manifest_path = Path(argv[2])
+        skills_root = Path(argv[3])
+        for finding in vendored_skill_pin_findings(manifest_path, skills_root):
+            print(finding)
+        return 0
+
     if len(argv) != 2:
-        print("usage: check-pinning.py <settings.json>", file=sys.stderr)
+        print(
+            "usage: check-pinning.py <settings.json> | "
+            "--vendored-skills <pinned-refs.toml> <skills-root>",
+            file=sys.stderr,
+        )
         return 2
     path = Path(argv[1])
     if not path.is_file():

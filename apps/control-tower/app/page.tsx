@@ -5,71 +5,73 @@ import CostDashboard from "@/app/components/CostDashboard";
 import HAStatus from "@/app/components/HAStatus";
 import AlertFeed from "@/app/components/AlertFeed";
 import ModeIndicator from "@/app/components/ModeIndicator";
-import VersionBadge from "@/app/components/VersionBadge";
-import Link from "next/link";
+import TopNav from "@/app/components/ui/TopNav";
 
 /**
- * Walter Council Control Tower — Main Dashboard
+ * Walter Council Control Tower — overview.
  *
- * Server Component shell. Client components handle real-time updates.
+ * Server Component shell; the surfaces are client components that stream/poll
+ * their own data. Layout is a dense overview grid (D-3): on desktop (>=1280px)
+ * every surface is visible at once without scrolling for the signal; on tablet
+ * (768-1279px) it collapses to two columns; below that, a single column.
+ *
+ * Card weight varies by information priority rather than a uniform grid
+ * (impeccable: no identical card grid). Mode + alerts lead, the agent board is
+ * the wide centrepiece, health + spend pair, the timeline is the tall feed,
+ * and the Grafana metrics embed anchors the bottom full-width.
  */
 export default function DashboardPage() {
   return (
-    <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      {/* Accessible page title — visually hidden, used by tests and screen readers */}
-      <h1 className="sr-only">Walter Council</h1>
+    <div className="min-h-screen bg-background">
+      <a
+        href="#overview"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-surface-2 focus:px-3 focus:py-2 focus:text-sm focus:text-foreground"
+      >
+        Skip to overview
+      </a>
 
-      {/* Top nav */}
-      <nav className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <span className="font-bold text-zinc-900 dark:text-zinc-100">
-            Walter Council — Control Tower
-          </span>
-          <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400">
-            <Link href="/council" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              Council Chat
-            </Link>
-            <Link href="/ideation" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              Ideation
-            </Link>
-            <Link href="/history" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              History
-            </Link>
-            <Link href="/content" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              Content Analytics
-            </Link>
-            <VersionBadge />
-          </div>
-        </div>
-      </nav>
+      <TopNav active="/" />
 
-      {/* Dashboard grid */}
-      <div className="max-w-6xl mx-auto p-6 flex flex-col gap-8">
-        {/* Row 1: Mode + Alerts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1">
+      <main
+        id="overview"
+        className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6"
+      >
+        <h1 className="sr-only">Walter Council — Control Tower overview</h1>
+
+        {/* xl: 12-col masthead so weight varies; md: 2-col; base: stacked. */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-12">
+          {/* Lead row: consensus mode (compact) + alerts (wide). */}
+          <div className="md:col-span-1 xl:col-span-4">
             <ModeIndicator />
           </div>
-          <div className="lg:col-span-2">
+          <div className="md:col-span-1 xl:col-span-8">
             <AlertFeed />
           </div>
+
+          {/* Centrepiece: the agent board spans full width. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <AgentStatusBoard />
+          </div>
+
+          {/* Operational pair: service health + spend. */}
+          <div className="md:col-span-1 xl:col-span-5">
+            <HAStatus />
+          </div>
+          <div className="md:col-span-1 xl:col-span-7">
+            <CostDashboard />
+          </div>
+
+          {/* Tall feed: decision timeline. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <DecisionTimeline />
+          </div>
+
+          {/* Anchor: Grafana metrics embed, full width. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <MetricsDashboard />
+          </div>
         </div>
-
-        {/* Row 2: Agent Status Board */}
-        <AgentStatusBoard />
-
-        {/* Row 3: HA Status + Cost */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <HAStatus />
-          <CostDashboard />
-        </div>
-
-        {/* Row 4: Decision Timeline */}
-        <DecisionTimeline />
-
-        {/* Row 5: Grafana embed */}
-        <MetricsDashboard />
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

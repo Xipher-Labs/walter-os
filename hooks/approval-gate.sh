@@ -38,6 +38,8 @@
 
 set -uo pipefail
 
+REPO_ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
+PROTECTED_PATHS_LIB="${REPO_ROOT}/scripts/walter/lib/protected-paths.sh"
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
 
 # Standing-approvals config path is HARDCODED (audit P1-06). The env var
@@ -64,6 +66,25 @@ fi
 TRUST_TIERS="${WALTER_TRUST_TIERS:-$WALTER_CONFIG/trust-tiers.yml}"
 
 # ---------- block patterns (keep in lockstep with §7.1 of the spec) ----------
+
+protected_path_policy_missing() {
+  local reason="approval-gate: missing Walter-OS protected path policy"
+  if [[ $# -gt 0 ]]; then
+    echo "approval-gate: BLOCK — $reason" >&2
+    exit 7
+  fi
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"%s"}}\n' "$reason"
+  exit 0
+}
+
+if [[ ! -f "$PROTECTED_PATHS_LIB" ]]; then
+  protected_path_policy_missing "$@"
+fi
+
+# shellcheck source=/dev/null
+if ! source "$PROTECTED_PATHS_LIB" 2>/dev/null; then
+  protected_path_policy_missing "$@"
+fi
 
 # Bash command patterns that match destructive ops. Each line: regex.
 # These are extended regex (grep -E). Whitespace at start of pattern allowed.
@@ -97,32 +118,7 @@ declare -a BLOCK_BASH_PATTERNS=(
 )
 
 # Edit / Write paths that require approval. POSIX-glob style; we shell-match.
-declare -a BLOCK_PATH_PATTERNS=(
-  # Walter-OS contract files
-  'hooks/*.sh'
-  '.claude/settings.json'
-  '.github/workflows/*'
-  'install.sh'
-  'AGENTS.md'
-  'CLAUDE.md'
-  'mcp/servers.json'
-  # Self-modification
-  'agents/*.md'
-  'skills/*/SKILL.md'
-  # Auth / crypto / PHI
-  # Operators: extend this list for project-specific PHI / sensitive paths.
-  'auth/*'
-  'crypto/*'
-  'personal/health/*'
-  '*.key'
-  '*.pem'
-  '*.crt'
-  '.ssh/*'
-  '*/.ssh/*'
-  # Secrets
-  '*.env'
-  '*.env.*'
-)
+declare -a BLOCK_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 
 # ---------- trust tier matrix ----------
 # Maps operation categories to minimum tier required.
@@ -859,8 +855,11 @@ case "$tool" in
   Edit|MultiEdit)
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
     ;;
-  Write|NotebookEdit)
+  Write)
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
+    ;;
+  NotebookEdit)
+    payload=$(echo "$input" | jq -r '.tool_input.notebook_path // .tool_input.file_path // ""')
     ;;
   *)
     payload=""

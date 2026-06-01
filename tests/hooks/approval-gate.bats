@@ -101,6 +101,16 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: Edit on capability verifier library is blocked" {
+  run "$HOOK" check "scripts/walter/lib/capability-token.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
+@test "CLI: Edit on capability minting entrypoint is blocked" {
+  run "$HOOK" check "scripts/walter/subcommands/cap.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
 @test "CLI: walter-os cap mint is blocked for operator approval" {
   run "$HOOK" check "walter-os cap mint Bash --patterns '.*' --duration 5m"
   [[ "$status" -eq 7 ]]
@@ -495,6 +505,11 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: Edit on walter-os dispatcher is blocked" {
+  run "$HOOK" check "bin/walter-os" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
 @test "CLI: Edit on .env file is blocked" {
   run "$HOOK" check ".env.local" --tool Edit
   [[ "$status" -eq 7 ]]
@@ -579,9 +594,41 @@ teardown() {
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
 }
 
+@test "Hook: NotebookEdit blocks protected notebook_path" {
+  result=$(echo '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"personal/health/notes.ipynb"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+}
+
 @test "Hook: empty stdin allows" {
   result=$(echo '' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: missing protected-path policy emits JSON block" {
+  policy="$BATS_TEST_DIRNAME/../../scripts/walter/lib/protected-paths.sh"
+  backup="${policy}.bak.$$"
+  mv "$policy" "$backup"
+
+  run bash -c "printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo ok\"}}' | '$HOOK'"
+  mv "$backup" "$policy"
+
+  [[ "$status" -eq 0 ]]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("missing Walter-OS protected path policy")'
+}
+
+@test "Hook: invalid protected-path policy emits JSON block" {
+  policy="$BATS_TEST_DIRNAME/../../scripts/walter/lib/protected-paths.sh"
+  backup="${policy}.bak.$$"
+  mv "$policy" "$backup"
+  printf '%s\n' 'if broken' > "$policy"
+
+  run bash -c "printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo ok\"}}' | '$HOOK'"
+  mv "$backup" "$policy"
+
+  [[ "$status" -eq 0 ]]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("protected path policy")'
 }
 
 # ---------- Standing approvals ----------
