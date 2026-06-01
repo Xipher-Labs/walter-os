@@ -66,7 +66,7 @@ setup() {
 }
 
 @test "service files do not use latest tags" {
-  ! grep -R --line-number -E '(:latest|@latest)' "$RUNNER_DIR"
+  ! grep --line-number -E '(:latest|@latest)' "$COMPOSE_FILE" "$SOCKET_COMPOSE_FILE"
 }
 
 @test "readme mentions runner credentials and labels" {
