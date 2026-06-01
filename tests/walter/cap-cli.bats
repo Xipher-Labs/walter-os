@@ -179,6 +179,60 @@ teardown() {
   [[ "$output" == *"interactive operator terminal required"* ]]
 }
 
+@test "walter-os cap mint ignores forged operator approval env vars" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+  export WALTER_CAP_MINT_OPERATOR_APPROVED=1
+  export WALTER_CAP_MINT_APPROVED=1
+  export WALTER_OPERATOR_APPROVED=1
+  export WALTER_CAP_MINT_RESPONSE="mint-anything"
+
+  run "$CLI" cap mint Bash --patterns '.*' --duration 5m
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"interactive operator terminal required"* ]]
+}
+
+@test "walter-os cap mint is blocked through nested noninteractive shell" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+
+  run bash -lc "cd '$REPO_UNDER_TEST' && '$CLI' cap mint Bash --patterns '.*' --duration 5m"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"interactive operator terminal required"* ]]
+}
+
+@test "walter-os cap mint is blocked inside command substitution" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+
+  run bash -lc "cd '$REPO_UNDER_TEST' && token=\"\$('$CLI' cap mint Bash --patterns '.*' --duration 5m)\""
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"interactive operator terminal required"* ]]
+}
+
+@test "direct cap.sh mint entrypoint requires operator context" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+
+  run bash "$REPO_ROOT/scripts/walter/subcommands/cap.sh" mint Bash --patterns '.*' --duration 5m
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"interactive operator terminal required"* ]]
+}
+
+@test "walter-os cap mint help works outside interactive mint context" {
+  cd "$REPO_UNDER_TEST"
+  unset WALTER_CAP_MINT_TEST_ALLOW
+
+  run "$CLI" cap mint --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage: walter-os cap"* ]]
+}
+
 @test "walter-os cap mint reports missing option values" {
   cd "$REPO_UNDER_TEST"
 

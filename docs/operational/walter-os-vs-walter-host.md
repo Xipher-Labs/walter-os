@@ -43,17 +43,17 @@ workflow to another repo without writing anything to `~/.claude`,
 `~/.codex`, or `~/.config/walter-os`. This is the right mode when you are
 auditing Walter-OS before trusting it or only want the operating model.
 
-**Client install** is the right start for most operators. You install walter-os
-(client-only refresh: `./install.sh --check` then `./install.sh --upgrade` —
-this installs the symlinks, hooks, and MCP configs without running the
-walter-host bootstrap steps), scaffold `~/.config/walter-os/overlay/`, set
+**Client install** is the right start for most operators. You install Walter-OS
+(initial bootstrap: `./install.sh --upgrade`; later refreshes:
+`walter-os upgrade`), scaffold
+`~/.config/walter-os/overlay/`, set
 `WALTER_GITHUB_ORG` and any provider-specific values, and have a working agent
 framework in minutes. You keep using GitHub, Linear, and the Anthropic API
 directly. No VM to maintain.
 
 > The bare `./install.sh` (no flags) launches the full interactive wizard,
 > which includes optional walter-host bootstrap steps (Plane, Postgres,
-> Docker, n8n, Infisical). Use `--upgrade` to stay client-only.
+> Docker, n8n, Infisical). Use `walter-os upgrade` to stay client-only.
 
 **Client + selected services** is the incremental path. Add Infisical when shell
 secrets become hard to manage. Add LiteLLM when you want one model gateway,
@@ -160,8 +160,8 @@ walter doctor
 ```
 
 > The bare `./install.sh` (no flags) launches the full interactive wizard
-> which includes optional walter-host bootstrap steps. Stick to `--upgrade`
-> for the client-only mode described here.
+> which includes optional walter-host bootstrap steps. Stick to
+> `walter-os upgrade` for the client-only mode described here.
 
 **Required**: `WALTER_GITHUB_ORG` in personal.env.
 **Not required**: `WALTER_OPERATOR_USER`, `WALTER_DOMAIN` (use defaults).

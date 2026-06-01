@@ -1,9 +1,17 @@
+import { SectionTitle, Panel } from "@/app/components/ui/Panel";
+
 /**
- * Metrics Dashboard — embeds the Grafana "Walter Council" dashboard.
- * Uses kiosk mode to hide Grafana chrome. Auth via service account token
- * embedded in the URL (Grafana anonymous embedding with SA token).
+ * Metrics Dashboard — embeds the Grafana "Walter Council" dashboard in kiosk
+ * mode. Re-skinned to tokens (D-2); the embed itself is themed dark via the
+ * Grafana `theme=dark` param.
+ *
+ * SECURITY: the SA token is intentionally NOT placed in the iframe src URL
+ * (exposed in history / access logs / Referer). Network-level controls gate the
+ * embed. The `token` prop stays for forward-compat but is unused here.
+ * (Enforced by tests/unit/metrics-dashboard-token.test.ts.)
  *
  * Refs: docs/specs/walter-council-v2.md (Part B, AC-4)
+ *       docs/specs/control-tower-redesign.md (AC-4)
  * Task: T-40
  */
 
@@ -18,30 +26,20 @@ export default function MetricsDashboard({
 }: MetricsDashboardProps) {
   if (!grafanaUrl) {
     return (
-      <section>
-        <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-3">
-          Metrics
-        </h2>
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 p-6 text-center">
-          <p className="text-sm text-zinc-400 italic">
+      <section aria-label="Metrics">
+        <SectionTitle>Metrics</SectionTitle>
+        <Panel className="text-center">
+          <p className="text-sm text-muted">
             GRAFANA_URL not configured. Set it in .env.local.
           </p>
-        </div>
+        </Panel>
       </section>
     );
   }
 
-  // Build Grafana embed URL
-  // Dashboard UID is "walter-council" (provisioned by T-4)
-  // kiosk=true hides the top navbar
-  //
-  // NOTE: The SA token is intentionally NOT added to the URL query string.
-  // Tokens in iframe src URLs are exposed in browser history, server access
-  // logs, and Referer headers sent to third parties. Grafana authentication
-  // for embedded dashboards should use network-level controls (Tailscale,
-  // same-origin proxy, or Grafana anonymous access with IP allowlist).
-  // The `token` prop is accepted for forward-compatibility but not used here.
-  void token; // suppress unused-variable warning
+  // The SA token is deliberately omitted from the URL — see the security note
+  // above. The prop is referenced here only to satisfy the unused-var lint.
+  void token;
   const params = new URLSearchParams({
     kiosk: "true",
     theme: "dark",
@@ -50,24 +48,31 @@ export default function MetricsDashboard({
   const embedUrl = `${grafanaUrl}/d/walter-council/walter-council?${params.toString()}`;
 
   return (
-    <section>
-      <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-3">
+    <section aria-label="Metrics">
+      <SectionTitle
+        meta={
+          <a
+            href={`${grafanaUrl}/d/walter-council/walter-council`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent transition-colors hover:text-accent-strong"
+          >
+            Open in Grafana
+          </a>
+        }
+      >
         Metrics
-      </h2>
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+      </SectionTitle>
+      <Panel padded={false} className="overflow-hidden">
         <iframe
           src={embedUrl}
           width="100%"
           height="600"
-          frameBorder="0"
           title="Walter Council Grafana Dashboard"
           sandbox="allow-same-origin allow-scripts allow-forms"
           className="block"
         />
-      </div>
-      <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-2">
-        Opens in Grafana: {grafanaUrl}
-      </p>
+      </Panel>
     </section>
   );
 }

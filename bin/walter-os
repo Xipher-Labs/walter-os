@@ -26,6 +26,7 @@
 #   enable-hook <name>          Enable a hook in ~/.claude/settings.json
 #   disable-hook <name>         Disable a hook (without uninstalling)
 #   sync                        Pull + reinstall walter-os itself
+#   upgrade                     Upgrade local checkout and/or Walter-VM services
 #   sync-repos                  Pull configured personal/work repos
 #   profile {default|high-risk} Switch MCP profile (settings.json swap)
 #   profile-bootstrap {init|status|sync-shared} [claude|codex|all]
@@ -517,7 +518,11 @@ cmd_disable_hook() {
 # ---------- sync ----------
 
 cmd_sync() {
-  exec "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
+  exec bash "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
+}
+
+cmd_upgrade() {
+  exec bash "${WALTER_OS_HOME}/scripts/upgrade.sh" "$@"
 }
 
 cmd_sync_repos() {
@@ -1967,7 +1972,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap)
+    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -1985,6 +1990,7 @@ case "$cmd" in
   enable-hook)    cmd_enable_hook "$@" ;;
   disable-hook)   cmd_disable_hook "$@" ;;
   sync)               cmd_sync "$@" ;;
+  upgrade)            cmd_upgrade "$@" ;;
   sync-repos)         cmd_sync_repos "$@" ;;
   profile)            cmd_profile "$@" ;;
   profile-bootstrap)  cmd_profile_bootstrap "$@" ;;

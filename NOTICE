@@ -29,3 +29,27 @@ ADRs:
 - docs/decisions/0010-oss-license.md (original AGPL decision, partially superseded)
 - docs/decisions/0018-licensing-strategy.md (dual-license)
 - docs/decisions/0022-xipher-labs-legal-entity.md (legal entity)
+
+================================================================================
+Third-party vendored skills
+================================================================================
+
+impeccable  (github.com/pbakaus/impeccable)
+- Vendored into skills/impeccable/ (markdown + reference only; the upstream
+  Node CLI is not bundled). Pinned at commit
+  b913668ba4d25b95c4a62278d3637837e9d2c6d9.
+- License: Apache-2.0 (see skills/impeccable/LICENSE).
+- Copyright 2025-2026 Paul Bakaus. Built on Anthropic's frontend-design skill
+  (Apache-2.0, Copyright 2025 Anthropic, PBC) and incorporating typography
+  additions from ehmo's typecraft-guide-skill (MIT, Copyright (c) 2026).
+  Full attribution and the Typecraft MIT notice text are carried in
+  skills/impeccable/NOTICE.md (Apache-2.0 section 4(d) preservation).
+
+ui-ux-pro-max  (github.com/nextlevelbuilder/ui-ux-pro-max-skill)
+- Vendored into skills/ui-ux-pro-max/ (CSV data + quick-reference only; the
+  upstream Python CLI and google-fonts.csv are not bundled). Pinned at commit
+  b7e3af80f6e331f6fb456667b82b12cade7c9d35.
+- License: MIT (see skills/ui-ux-pro-max/LICENSE).
+- Copyright (c) 2024 Next Level Builder.
+
+See docs/specs/ux-skills-adoption.md for the adoption rationale.
