@@ -18,6 +18,7 @@ commands, expected outputs, and troubleshooting. The audience is a technical ope
 | [`hosting-providers-comparison.md`](hosting-providers-comparison.md) | VPS/cloud provider comparison for Walter-OS v0.2.0 adopters: specs, pricing, gotchas, and portability notes. Hetzner is default reference; 10 alternatives documented. |
 | [`universal-vs-personal-config.md`](universal-vs-personal-config.md) | What lives in the public repo vs your personal overlay (`~/.config/walter-os/overlay/`). Includes full decision table and upgrade semantics. |
 | [`multi-device-sync.md`](multi-device-sync.md) | Syncthing setup walkthrough for multi-device operators. What to sync, conflict resolution, alternative mechanisms, and hub topology. |
+| [`langfuse.md`](langfuse.md) | Optional Langfuse profile runbook: traces, evals, backups, retention, and when the operational cost is worth it. |
 
 > **Note**: `phase-v-tools-availability.md` and `postiz-analytics-export.md` live in
 > the `feature/council-v2-analytics` branch. They will land in `docs/operational/`

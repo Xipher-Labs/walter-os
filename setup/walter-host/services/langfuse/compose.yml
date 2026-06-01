@@ -153,11 +153,11 @@ services:
     profiles: [langfuse]
     environment:
       REDIS_AUTH: ${REDIS_AUTH:?required}
-    command: ["redis-server", "--requirepass", "${REDIS_AUTH:?required}", "--maxmemory-policy", "noeviction"]
+    command: ["sh", "-c", "redis-server --requirepass \"$$REDIS_AUTH\" --maxmemory-policy noeviction"]
     volumes:
       - langfuse_redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_AUTH\" ping | grep -q PONG"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_AUTH\" ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
