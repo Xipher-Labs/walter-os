@@ -207,6 +207,10 @@ setup() {
   [ -f "docs/operational/walter-os-vs-walter-host.md" ]
 }
 
+@test "cross-link: docs/operational/v0.6.0-release-readiness.md exists" {
+  [ -f "docs/operational/v0.6.0-release-readiness.md" ]
+}
+
 @test "cross-link: docs/decisions/0013-solo-operator-merge-policy.md exists" {
   [ -f "docs/decisions/0013-solo-operator-merge-policy.md" ]
 }
