@@ -161,15 +161,21 @@ See `docs/specs/secrets-runtime-architecture.md` for the full secrets flow.
 When you pull upstream changes into your fork:
 
 ```bash
-git pull upstream main
-./install.sh --upgrade
+walter-os upgrade
 ```
 
-The `--upgrade` path:
-1. Updates the OSS core files (scripts, hooks, compose templates).
-2. Runs `walter doctor` to check if your overlay references any skills or
-   hooks that have changed incompatibly.
-3. Does **not** touch anything under `~/.config/walter-os/overlay/`.
+The `upgrade` path:
+1. Fast-forwards the Walter-OS checkout only when it is safe to do so.
+2. Runs `install.sh --upgrade` to refresh symlinks, hooks, commands, and MCP
+   configs.
+3. Runs `walter-os audit` and `walter-os doctor` unless explicitly skipped.
+4. Does **not** touch anything under `~/.config/walter-os/overlay/`.
+
+Preview first with:
+
+```bash
+walter-os upgrade --dry-run
+```
 
 If a new version of Walter-OS adds a new generic template that you haven't
 personalized yet, the generic template activates automatically (it's in the

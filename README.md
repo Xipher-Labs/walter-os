@@ -400,13 +400,42 @@ For "how do I get help?" → [SUPPORT.md](SUPPORT.md).
 Routine update (monthly recommended):
 
 ```bash
-cd /opt/walter-os
-git pull
-./install.sh --upgrade        # idempotent — re-runs symlink + hook registration
-walter-os audit               # verify nothing drifted
+walter-os upgrade             # local checkout + install.sh --upgrade + audit + doctor
 ```
 
-Major version bumps may include breaking changes — read the [CHANGELOG](CHANGELOG.md) entry for the target version before pulling. The `quarterly-upgrade-cadence` skill formalizes the pre-bump snapshot + tier-by-tier rollout + rollback procedure.
+Preview first when you want to see every command before it mutates anything:
+
+```bash
+walter-os upgrade --dry-run
+```
+
+For the Walter-VM host, update the remote Walter-OS checkout/config explicitly:
+
+```bash
+walter-os upgrade --all --snapshot
+```
+
+`--snapshot` is opt-in because VM snapshots may cost money, and non-dry-run
+snapshot upgrades require `--yes`.
+
+Docker service rollouts are never automatic. Name each service explicitly so a
+framework update does not silently migrate databases or restart production
+containers:
+
+```bash
+walter-os upgrade --all --service n8n
+```
+
+Explicit service rollouts go through the existing `walter deploy <service>`
+path, so service-specific config sync and `.env` exclusions still apply.
+
+Major version bumps may include breaking changes — read the [CHANGELOG](CHANGELOG.md) entry for the target version before pulling. To pin an upgrade to a tagged release:
+
+```bash
+walter-os upgrade --target v0.6.0
+```
+
+The `quarterly-upgrade-cadence` skill formalizes the pre-bump snapshot + tier-by-tier rollout + rollback procedure.
 
 Rollback: `git checkout <prev-tag>` + `./install.sh --upgrade`. Symlinks are re-pointed atomically.
 
