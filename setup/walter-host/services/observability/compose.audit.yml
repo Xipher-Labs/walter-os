@@ -3,20 +3,12 @@
 # Use with:
 #   docker compose -f compose.yml -f compose.audit.yml up -d
 #
-# Compose keeps the base promtail.yml mount and adds promtail.audit.yml. The
-# audit command below points at promtail.audit.yml; the base file remains
-# mounted only for debugging/reference inside the container.
-#
 # The audit directory must already exist and be readable by Docker. Keeping
 # create_host_path disabled avoids silently creating a root-owned host path.
 
 services:
   promtail:
-    command: -config.file=/etc/promtail/promtail.audit.yml -config.expand-env=true
-    environment:
-      WALTER_AUDIT_HOST: ${WALTER_AUDIT_HOST:-walter-os}
     volumes:
-      - ./promtail/promtail.audit.yml:/etc/promtail/promtail.audit.yml:ro
       - type: bind
         source: ${WALTER_AUDIT_DIR:-/home/walter/.config/walter-os/audit}
         target: /var/log/walter-audit

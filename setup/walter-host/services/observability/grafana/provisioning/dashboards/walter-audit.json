@@ -149,7 +149,7 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Distinct Sessions Seen",
+      "title": "Session-tagged Rows",
       "gridPos": {
         "h": 6,
         "w": 8,
@@ -162,8 +162,8 @@
       },
       "targets": [
         {
-          "expr": "count(count by (session_id) (count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} |= \"\\\"session_id\\\"\" | regexp \"\\\\\\\"session_id\\\\\\\"\\\\s*:\\\\s*\\\\\\\"(?P<session_id>[^\\\\\\\"]+)\\\\\\\"\" | session_id != \"\" | __error__=\"\")[$__range])))",
-          "legendFormat": "sessions",
+          "expr": "sum(count_over_time(({app=\"walter-os\", kind=\"audit-chain\"} | json session_id=\"session_id\" | session_id != \"\" | __error__=\"\")[$__range]))",
+          "legendFormat": "rows",
           "refId": "A",
           "datasource": {
             "type": "loki",

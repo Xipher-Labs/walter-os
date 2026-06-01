@@ -7,6 +7,44 @@ ENV_FILE="$SVC_DIR/.env"
 
 cd "$SVC_DIR"
 
+read_env_value() {
+  local key="$1" file="$2" line value
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$file" 2>/dev/null | tail -n 1 || true)"
+  [[ -n "$line" ]] || return 1
+  value="${line#*=}"
+  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  if [[ "$value" == \"* ]]; then
+    value="${value#\"}"
+    value="${value%%\"*}"
+  elif [[ "$value" == \'* ]]; then
+    value="${value#\'}"
+    value="${value%%\'*}"
+  else
+    value="$(printf '%s' "$value" | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//')"
+  fi
+  printf '%s\n' "$value"
+}
+
+migrate_promtail_positions() {
+  local positions_path="$DATA_DIR/promtail/promtail-positions.yaml" was_running=""
+  sudo test ! -f "$positions_path" || return 0
+  sudo docker container inspect promtail >/dev/null 2>&1 || return 0
+
+  was_running="$(sudo docker inspect --format '{{.State.Running}}' promtail 2>/dev/null || true)"
+  if [[ "$was_running" == "true" ]]; then
+    sudo docker stop promtail >/dev/null || {
+      echo "→ could not stop promtail for positions migration; leaving legacy positions in place"
+      return 0
+    }
+  fi
+
+  if sudo docker cp promtail:/tmp/promtail-positions.yaml "$positions_path" 2>/dev/null; then
+    echo "→ migrated promtail positions to $positions_path"
+  else
+    echo "→ no legacy /tmp/promtail-positions.yaml found; promtail will create a new positions file"
+  fi
+}
+
 # 1. Generate .env if missing
 if [[ ! -f "$ENV_FILE" ]]; then
   cp .env.template "$ENV_FILE"
@@ -27,7 +65,7 @@ EOF
 fi
 
 if [[ -z "${OBSERVABILITY_DATA_DIR:-}" ]]; then
-  OBSERVABILITY_DATA_DIR="$(sed -n 's/^OBSERVABILITY_DATA_DIR=//p' "$ENV_FILE" | tail -n 1)"
+  OBSERVABILITY_DATA_DIR="$(read_env_value OBSERVABILITY_DATA_DIR "$ENV_FILE" || true)"
 fi
 export OBSERVABILITY_DATA_DIR="${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}"
 DATA_DIR="$OBSERVABILITY_DATA_DIR"
@@ -45,16 +83,9 @@ sudo chown -R 472:472 "$DATA_DIR/grafana"
 # Prometheus container runs as 65534:65534 (nobody)
 sudo chown -R 65534:65534 "$DATA_DIR/prometheus"
 # Promtail used /tmp/promtail-positions.yaml before the positions file moved
-# onto the host data volume. Preserve it once when upgrading an existing
-# container so redeploys do not re-tail already-scraped logs.
-if sudo test ! -f "$DATA_DIR/promtail/promtail-positions.yaml" \
-  && sudo docker container inspect promtail >/dev/null 2>&1; then
-  if sudo docker cp promtail:/tmp/promtail-positions.yaml "$DATA_DIR/promtail/promtail-positions.yaml" 2>/dev/null; then
-    echo "→ migrated promtail positions to $DATA_DIR/promtail/promtail-positions.yaml"
-  else
-    echo "→ no legacy /tmp/promtail-positions.yaml found; promtail will create a new positions file"
-  fi
-fi
+# onto the host data volume. Stop it before copying so the legacy file cannot
+# change while it is being migrated.
+migrate_promtail_positions
 
 # 3. Bring up
 sudo docker compose --env-file "$ENV_FILE" up -d
