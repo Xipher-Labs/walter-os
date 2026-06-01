@@ -175,7 +175,7 @@ _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 def _tree_hash(skill_dir: Path) -> str:
     """Deterministic hash of file paths + bytes under a vendored skill dir."""
     digest = hashlib.sha256()
-    files = sorted(p for p in skill_dir.rglob("*") if p.is_file())
+    files = sorted(p for p in skill_dir.rglob("*") if p.is_file() and not p.is_symlink())
     for path in files:
         rel = path.relative_to(skill_dir).as_posix()
         digest.update(rel.encode("utf-8"))
@@ -218,11 +218,13 @@ def vendored_skill_pin_findings(manifest_path: Path, skills_root: Path) -> list[
             continue
 
         expected_hash = content_hashes.get(name)
+        actual_hash = _tree_hash(skill_dir)
         if not isinstance(expected_hash, str) or not re.match(r"^[0-9a-f]{64}$", expected_hash):
-            findings.append(f"{name}: missing or invalid skill_content_sha256")
+            findings.append(
+                f"{name}: missing or invalid skill_content_sha256 actual={actual_hash}"
+            )
             continue
 
-        actual_hash = _tree_hash(skill_dir)
         if actual_hash != expected_hash:
             findings.append(
                 f"{name}: content hash mismatch expected={expected_hash} actual={actual_hash}"

@@ -371,12 +371,32 @@ impeccable = \"$hash\"
 
 @test "vendored skill manifest requires content hash entries" {
   write_notice_skill "impeccable"
+  hash="$(skill_hash impeccable)"
   write_manifest "[skills]
 impeccable = \"0123456789abcdef0123456789abcdef01234567\"
 "
   run_vendored_check
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "impeccable: missing or invalid skill_content_sha256"
+  echo "$output" | grep -q "actual=$hash"
+}
+
+@test "vendored skill manifest ignores symlink targets in content hash" {
+  write_notice_skill "impeccable"
+  external="$TMP/external.txt"
+  printf 'first\n' > "$external"
+  ln -s "$external" "$TMP/skills/impeccable/external-link.txt"
+  hash="$(skill_hash impeccable)"
+  printf 'second\n' > "$external"
+  write_manifest "[skills]
+impeccable = \"0123456789abcdef0123456789abcdef01234567\"
+
+[skill_content_sha256]
+impeccable = \"$hash\"
+"
+  run_vendored_check
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 @test "vendored skill manifest detects local content drift" {
@@ -472,4 +492,30 @@ TOML
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "finding|high|vendored-skill-pin-drift|"
+}
+
+@test "daily audit emits high finding when vendored manifest is missing" {
+  AUDIT="${BATS_TEST_DIRNAME}/../../skills/daily-supply-chain-audit/scripts/audit.sh"
+  fake_home="$TMP/home"
+  fake_repo="$TMP/repo"
+  export HOME="$fake_home"
+  export WALTER_CONFIG="$TMP/config"
+  export WALTER_OS_HOME="$fake_repo"
+  mkdir -p "$fake_repo/skills/daily-supply-chain-audit/assets" \
+           "$fake_repo/skills/impeccable" \
+           "$fake_home/.claude"
+  printf 'changed\n' > "$fake_repo/skills/impeccable/SKILL.md"
+  printf 'notice\n' > "$fake_repo/skills/impeccable/NOTICE.md"
+
+  run bash -c '
+    source "$1"
+    finding() {
+      printf "finding|%s|%s|%s|%s\n" "$1" "$2" "$3" "$4"
+    }
+    check_pinning
+  ' _ "$AUDIT"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "finding|high|vendored-skill-pin-drift|"
+  echo "$output" | grep -q "manifest: missing"
 }

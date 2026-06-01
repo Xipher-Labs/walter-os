@@ -705,7 +705,7 @@ check_pinning() {
   fi
   local manifest="${walter_home}/skills/daily-supply-chain-audit/assets/pinned-refs.toml"
   local skills_root="${walter_home}/skills"
-  if [[ -n "$walter_home" && -f "$manifest" && -d "$skills_root" ]]; then
+  if [[ -n "$walter_home" && -d "$skills_root" ]]; then
     local vendored_findings
     vendored_findings="$(python3 "$helper" --vendored-skills "$manifest" "$skills_root" 2>/dev/null | paste -sd';' -)"
     if [[ -n "$vendored_findings" ]]; then
