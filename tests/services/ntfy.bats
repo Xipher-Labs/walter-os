@@ -20,12 +20,12 @@ setup() {
 
 @test "ntfy compose is gated behind optional ntfy profile" {
   grep -q "profiles:" "$NTFY_COMPOSE"
-  awk '
-    /profiles:/ { in_profiles=1 }
-    in_profiles && /ntfy/ { found=1 }
-    in_profiles && /^[^[:space:]-]/ { in_profiles=0 }
-    END { exit found ? 0 : 1 }
-  ' "$NTFY_COMPOSE"
+  grep -Eq 'profiles:[[:space:]]*\[[^]]*ntfy[^]]*notifications|profiles:[[:space:]]*\[[^]]*notifications[^]]*ntfy' "$NTFY_COMPOSE"
+}
+
+@test "ntfy compose keeps env file optional and network stable" {
+  grep -q "required: false" "$NTFY_COMPOSE"
+  grep -q "name: ntfy_net" "$NTFY_COMPOSE"
 }
 
 @test "ntfy compose pins exact v2.23.0 image and avoids latest" {

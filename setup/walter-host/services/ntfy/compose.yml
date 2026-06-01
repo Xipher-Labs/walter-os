@@ -1,19 +1,20 @@
 # Optional ntfy notification profile for Walter-VM.
 # Start explicitly with:
-#   docker compose --profile ntfy up -d
+#   docker compose --profile notifications up -d
 
 services:
   ntfy:
     image: binwiederhier/ntfy:v2.23.0
     container_name: ntfy
     restart: unless-stopped
-    profiles: [ntfy]
+    profiles: [ntfy, notifications]
     command:
       - serve
       - --config
       - /etc/ntfy/server.yml
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       TZ: ${TZ:-UTC}
     volumes:
@@ -31,4 +32,5 @@ volumes:
 
 networks:
   ntfy_net:
+    name: ntfy_net
     driver: bridge

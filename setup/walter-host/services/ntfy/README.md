@@ -5,8 +5,11 @@ ntfy is an optional self-hosted notification service for alerts that should reac
 It is disabled by default. Start it only when you want a dedicated push channel for Walter-VM alerts:
 
 ```bash
-docker compose --profile ntfy up -d
+docker compose --profile notifications up -d
 ```
+
+The `ntfy` profile name remains as a service-specific alias; use
+`notifications` for Walter-OS-wide verification commands.
 
 ## What it is for
 
@@ -27,7 +30,7 @@ The Docker image does not ship a usable `/etc/ntfy/server.yml` in the container.
 ```bash
 cp .env.template .env
 cp server.yml.template server.yml
-sed -i.bak 's/${WALTER_DOMAIN}/example.com/g' server.yml
+sed -i.bak 's/\${WALTER_DOMAIN}/example.com/g' server.yml
 ```
 
 Replace `example.com` with the real `WALTER_DOMAIN`. For this example, the
@@ -48,9 +51,9 @@ auth-default-access: deny-all
 Create explicit users and topic permissions after first boot:
 
 ```bash
-docker compose --profile ntfy exec ntfy ntfy user add walter
-docker compose --profile ntfy exec ntfy ntfy access walter alerts rw
-docker compose --profile ntfy exec ntfy ntfy access walter backups rw
+docker compose --profile notifications exec ntfy ntfy user add walter
+docker compose --profile notifications exec ntfy ntfy access walter alerts rw
+docker compose --profile notifications exec ntfy ntfy access walter backups rw
 ```
 
 Use separate topics for different alert classes, for example `alerts`, `backups`, `deploys`, and `security`. Grant read/write narrowly. Do not rely on obscure topic names as the only control.
@@ -81,13 +84,13 @@ Also back up the profile-local `server.yml` and `.env` files from the host. Rest
 Start or update:
 
 ```bash
-docker compose --profile ntfy up -d
+docker compose --profile notifications up -d
 ```
 
 Check logs:
 
 ```bash
-docker compose --profile ntfy logs -f ntfy
+docker compose --profile notifications logs -f ntfy
 ```
 
 Send a test notification after creating a user and topic:
