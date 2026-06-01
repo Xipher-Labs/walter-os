@@ -80,6 +80,15 @@ EOF
   [ "$output" = "sandbox-exec" ]
 }
 
+@test "AC-1: Darwin rejects Linux provider overrides" {
+  _mock_uname Darwin
+
+  run env WALTER_SANDBOX_PROVIDER=firejail bash -c "source '$SANDBOX_LIB'; walter_sandbox_provider 2>&1"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Linux-only"* ]]
+}
+
 @test "AC-1: Linux uses nsjail by default" {
   _mock_uname Linux
 
