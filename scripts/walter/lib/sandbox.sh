@@ -662,7 +662,10 @@ _walter_sandbox_invisible_placeholder_root() {
     return 1
   fi
   mkdir -p "$root" || return 1
-  chmod 700 "$root" 2>/dev/null || true
+  if ! chmod 700 "$root"; then
+    echo "walter-sandbox: failed to lock down invisible placeholder root: $root" >&2
+    return 1
+  fi
   printf '%s\n' "$root"
 }
 
@@ -697,7 +700,10 @@ _walter_sandbox_invisible_placeholder() {
         rm -f -- "$placeholder" || return 1
       fi
       mkdir -p "$placeholder" || return 1
-      chmod 700 "$placeholder" 2>/dev/null || true
+      if ! chmod 700 "$placeholder"; then
+        echo "walter-sandbox: failed to lock down invisible directory placeholder: $placeholder" >&2
+        return 1
+      fi
       ;;
     file)
       placeholder="${root}/file-${hash}"
@@ -709,7 +715,10 @@ _walter_sandbox_invisible_placeholder() {
         rm -rf -- "$placeholder" || return 1
       fi
       : > "$placeholder" || return 1
-      chmod 600 "$placeholder" 2>/dev/null || true
+      if ! chmod 600 "$placeholder"; then
+        echo "walter-sandbox: failed to lock down invisible file placeholder: $placeholder" >&2
+        return 1
+      fi
       ;;
     *) return 1 ;;
   esac

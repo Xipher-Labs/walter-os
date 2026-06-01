@@ -160,6 +160,37 @@ EOF
   [ "$first_src" = "$second_src" ]
 }
 
+@test "A-5: invisible placeholder root chmod failure fails closed" {
+  bad_bin="$TMP_HOME/no-chmod-bin"
+  mkdir -p "$bad_bin"
+  cat > "$bad_bin/chmod" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  command chmod +x "$bad_bin/chmod"
+
+  run bash -c "source '$SANDBOX_LIB'; PATH='$bad_bin':\$PATH _walter_sandbox_invisible_placeholder_root '$TMP_HOME/profile.nsjail.conf'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to lock down invisible placeholder root"* ]]
+}
+
+@test "A-5: invisible file placeholder chmod failure fails closed" {
+  bad_bin="$TMP_HOME/no-chmod-bin"
+  root="$TMP_HOME/invisible-root"
+  mkdir -p "$bad_bin" "$root"
+  cat > "$bad_bin/chmod" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  command chmod +x "$bad_bin/chmod"
+
+  run bash -c "source '$SANDBOX_LIB'; PATH='$bad_bin':\$PATH _walter_sandbox_invisible_placeholder '$root' file '$HOME/personal.env'"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to lock down invisible file placeholder"* ]]
+}
+
 @test "A-5: nsjail invisible mounts require a prepared root" {
   mkdir -p "$WALTER_CONFIG/overlay/sandbox-profiles"
   cat > "$WALTER_CONFIG/overlay/sandbox-profiles/no-root.nsjail.conf" <<'EOF'
