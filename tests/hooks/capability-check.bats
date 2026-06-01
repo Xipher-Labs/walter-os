@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016,SC2314
 # tests/hooks/capability-check.bats
 #
 # OSS Trust #122 / capability-tokens AC-3.
@@ -37,6 +38,97 @@ _hook_json() {
 
 _mint() {
   (cd "$REPO_UNDER_TEST" && "$CLI" cap mint "$@")
+}
+
+_install_counting_python3() {
+  local bin_dir="$BATS_TEST_TMPDIR/counting-python-bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/python3" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-" && "$#" -eq 2 && "${2:-}" == "${CAP_TEST_TOKEN_PAYLOAD:?}" ]]; then
+  count_file="${CAP_TEST_PY_COUNT:?}"
+  count=0
+  if [[ -f "$count_file" ]]; then
+    IFS= read -r count < "$count_file" || count=0
+  fi
+  printf '%s\n' "$((count + 1))" > "$count_file"
+
+  payload="$2"
+  payload="${payload//;/ ; }"
+  payload="${payload//|/ | }"
+  payload="${payload//&/ & }"
+  payload="${payload//(/ ( }"
+  payload="${payload//)/ ) }"
+  # shellcheck disable=SC2206 # Intentional minimal token splitter for focused parser-call regression tests.
+  tokens=($payload)
+  printf '%s\n' "${tokens[@]}"
+  exit 0
+fi
+
+exec "${CAP_TEST_REAL_PYTHON:?}" "$@"
+SH
+  chmod +x "$bin_dir/python3"
+  printf '%s\n' "$bin_dir"
+}
+
+_real_python3_or_skip() {
+  local real_python
+  real_python="/opt/homebrew/bin/python3"
+  if [[ -x "$real_python" ]]; then
+    printf '%s\n' "$real_python"
+    return 0
+  fi
+  real_python="$(command -v python3 || true)"
+  if [[ -n "$real_python" && -x "$real_python" ]]; then
+    printf '%s\n' "$real_python"
+    return 0
+  fi
+  skip "python3 required for counting tokenizer tests"
+}
+
+_hook_json_with_counting_python() {
+  local tool="$1" key="$2" value="$3" count_file="$4" python_bin input real_python
+  python_bin="$(_install_counting_python3)"
+  real_python="$(_real_python3_or_skip)"
+  input="$(printf '{"tool_name":"%s","tool_input":{"%s":%s}}' \
+    "$tool" "$key" "$(printf '%s' "$value" | jq -Rs .)")"
+  printf '%s' "$input" \
+    | PATH="$python_bin:$PATH" CAP_TEST_REAL_PYTHON="$real_python" CAP_TEST_TOKEN_PAYLOAD="$value" CAP_TEST_PY_COUNT="$count_file" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK"
+}
+
+_install_failing_counting_python3() {
+  local bin_dir="$BATS_TEST_TMPDIR/failing-counting-python-bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/python3" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-" && "$#" -eq 2 && "${2:-}" == "${CAP_TEST_TOKEN_PAYLOAD:?}" ]]; then
+  count_file="${CAP_TEST_PY_COUNT:?}"
+  count=0
+  if [[ -f "$count_file" ]]; then
+    IFS= read -r count < "$count_file" || count=0
+  fi
+  printf '%s\n' "$((count + 1))" > "$count_file"
+  exit 1
+fi
+
+exec "${CAP_TEST_REAL_PYTHON:?}" "$@"
+SH
+  chmod +x "$bin_dir/python3"
+  printf '%s\n' "$bin_dir"
+}
+
+_hook_json_with_failing_counting_python() {
+  local tool="$1" key="$2" value="$3" count_file="$4" python_bin input real_python
+  python_bin="$(_install_failing_counting_python3)"
+  real_python="$(_real_python3_or_skip)"
+  input="$(printf '{"tool_name":"%s","tool_input":{"%s":%s}}' \
+    "$tool" "$key" "$(printf '%s' "$value" | jq -Rs .)")"
+  printf '%s' "$input" \
+    | PATH="$python_bin:$PATH" CAP_TEST_REAL_PYTHON="$real_python" CAP_TEST_TOKEN_PAYLOAD="$value" CAP_TEST_PY_COUNT="$count_file" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK"
 }
 
 @test "malformed hook JSON fails closed" {
@@ -179,6 +271,62 @@ _mint() {
   output="$(_hook_json Bash command "curl 'https://api.github.com/repos/x/y")"
 
   echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash tokenization failure is not retried by compound detection" {
+  count_file="$BATS_TEST_TMPDIR/token-failure-count"
+
+  output="$(_hook_json_with_failing_counting_python Bash command "walter-os cap mint 'unterminated" "$count_file")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  [ "$(cat "$count_file")" -eq 1 ]
+}
+
+@test "Bash shared tokenization covers network classification and host extraction" {
+  _mint Bash --network api.github.com --duration 30m >/dev/null
+  count_file="$BATS_TEST_TMPDIR/network-token-count"
+
+  output="$(_hook_json_with_counting_python Bash command "curl https://api.github.com/repos/x/y" "$count_file")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+  [ "$(cat "$count_file")" -eq 1 ]
+}
+
+@test "Bash shared tokenization covers gh approval detection" {
+  _mint Bash --network github.com --duration 30m >/dev/null
+  count_file="$BATS_TEST_TMPDIR/gh-approve-token-count"
+
+  output="$(_hook_json_with_counting_python Bash command "gh pr review 244 --approve" "$count_file")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'no valid token'
+  [ "$(cat "$count_file")" -eq 1 ]
+}
+
+@test "Bash shared tokenization covers protected path detection" {
+  count_file="$BATS_TEST_TMPDIR/protected-path-token-count"
+
+  output="$(_hook_json_with_counting_python Bash command "cat .env.local" "$count_file")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'no valid token'
+  [ "$(cat "$count_file")" -eq 1 ]
+}
+
+@test "Bash shared tokenizer missing python3 fails closed before protected path detection" {
+  mkdir -p "$BATS_TEST_TMPDIR/no-python-bin-shared"
+  ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/no-python-bin-shared/dirname"
+  ln -s "$(command -v jq)" "$BATS_TEST_TMPDIR/no-python-bin-shared/jq"
+  ln -s "$(command -v mktemp)" "$BATS_TEST_TMPDIR/no-python-bin-shared/mktemp"
+  ln -s "$(command -v rm)" "$BATS_TEST_TMPDIR/no-python-bin-shared/rm"
+
+  input="$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' "cat .env.local" | jq -Rs .)")"
+  output="$(printf '%s' "$input" \
+    | PATH="$BATS_TEST_TMPDIR/no-python-bin-shared" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -er '.reason' | grep -q 'python3 is required for Bash capability inspection'
 }
 
 @test "Bash egress with matching network capability is allowed" {
@@ -946,6 +1094,12 @@ _mint() {
 
 @test "walter-os cap mint with quoted regex alternation bootstraps" {
   output="$(_hook_json Bash command "walter-os cap mint Bash --patterns 'curl|wget' --duration 30m")"
+
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "walter-os cap mint with empty quoted argument bootstraps" {
+  output="$(_hook_json Bash command "walter-os cap mint Bash --patterns '' --duration 30m")"
 
   echo "$output" | jq -e '.decision == "allow"'
 }
