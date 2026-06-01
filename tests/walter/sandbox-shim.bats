@@ -19,7 +19,7 @@ setup() {
 teardown() {
   chmod -R u+w "$TMP_HOME" 2>/dev/null || true
   case "$TMP_HOME" in
-    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
+    /tmp/*|/private/tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac
 }
 

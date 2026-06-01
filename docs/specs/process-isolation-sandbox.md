@@ -91,7 +91,13 @@ A-3 puts ALL hooks + skill execution inside a per-OS process sandbox with **deny
     mandatory: false
   }
   
-  envar: ["PATH", "HOME", "USER", "LANG", "WALTER_CONFIG", "WALTER_OS_HOME"]
+  keep_env: false
+  envar: "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
+  envar: "HOME=@HOME@"
+  envar: "USER"
+  envar: "LANG"
+  envar: "WALTER_CONFIG=@WALTER_CONFIG@"
+  envar: "WALTER_OS_HOME=@WALTER_OS_HOME@"
   
   keep_caps: false
   disable_no_new_privs: false
