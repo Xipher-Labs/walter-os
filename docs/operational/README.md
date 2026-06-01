@@ -16,6 +16,7 @@ commands, expected outputs, and troubleshooting. The audience is a technical ope
 | [`postiz-analytics-export.md`](postiz-analytics-export.md) | How to export Postiz analytics for manual ingestion into the DevRel analytics Postgres (Phase V workaround while Twitter API approval is pending) |
 | [`known-issues.md`](known-issues.md) | Active known issues on Walter-VM: claude-code-router daemon bind issue, headscale-admin `/admin/` path quirk, subscription proxy status |
 | [`hosting-providers-comparison.md`](hosting-providers-comparison.md) | VPS/cloud provider comparison for Walter-OS v0.2.0 adopters: specs, pricing, gotchas, and portability notes. Hetzner is default reference; 10 alternatives documented. |
+| [`knowledge-profile.md`](knowledge-profile.md) | Decision guide for Outline + Linkwarden versus Obsidian in personal, startup, and small-team installs |
 | [`universal-vs-personal-config.md`](universal-vs-personal-config.md) | What lives in the public repo vs your personal overlay (`~/.config/walter-os/overlay/`). Includes full decision table and upgrade semantics. |
 | [`multi-device-sync.md`](multi-device-sync.md) | Syncthing setup walkthrough for multi-device operators. What to sync, conflict resolution, alternative mechanisms, and hub topology. |
 | [`langfuse.md`](langfuse.md) | Optional Langfuse profile runbook: traces, evals, backups, retention, and when the operational cost is worth it. |
