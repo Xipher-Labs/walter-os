@@ -12,7 +12,7 @@ Do not expose Listmonk with a public Docker host port. Attach the service to `wa
 
 ```caddy
 listmonk.{$WALTER_DOMAIN} {
-  import admin_auth_gate
+  # Add your Walter-OS auth gate here before exposing the admin UI.
   reverse_proxy listmonk:9000
 }
 ```
