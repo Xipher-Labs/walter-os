@@ -119,7 +119,9 @@ _cap_load_shell_tokens() {
   CAP_LOADED_SHELL_TOKENS=()
 
   if [[ "$CAP_PREPARED_SHELL_STATUS" != "2" && "$command" == "$CAP_PREPARED_SHELL_COMMAND" ]]; then
-    CAP_LOADED_SHELL_TOKENS=("${CAP_PREPARED_SHELL_TOKENS[@]}")
+    if [[ "$CAP_PREPARED_SHELL_STATUS" == "0" ]]; then
+      CAP_LOADED_SHELL_TOKENS=("${CAP_PREPARED_SHELL_TOKENS[@]}")
+    fi
     return "$CAP_PREPARED_SHELL_STATUS"
   fi
 
@@ -893,6 +895,9 @@ _cap_has_compound_separator() {
       esac
     done
     return 1
+  fi
+  if [[ "${CAP_PREPARED_SHELL_COMMAND:-}" == "$command" && "${CAP_PREPARED_SHELL_STATUS:-2}" != "0" ]]; then
+    return 0
   fi
   if command -v python3 >/dev/null 2>&1; then
     python3 - "$command" <<'PY'

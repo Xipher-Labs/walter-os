@@ -84,6 +84,40 @@ _hook_json_with_counting_python() {
     | PATH="$python_bin:$PATH" CAP_TEST_REAL_PYTHON="$real_python" CAP_TEST_TOKEN_PAYLOAD="$value" CAP_TEST_PY_COUNT="$count_file" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK"
 }
 
+_install_failing_counting_python3() {
+  local bin_dir="$BATS_TEST_TMPDIR/failing-counting-python-bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/python3" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-" && "$#" -eq 2 && "${2:-}" == "${CAP_TEST_TOKEN_PAYLOAD:?}" ]]; then
+  count_file="${CAP_TEST_PY_COUNT:?}"
+  count=0
+  if [[ -f "$count_file" ]]; then
+    IFS= read -r count < "$count_file" || count=0
+  fi
+  printf '%s\n' "$((count + 1))" > "$count_file"
+  exit 1
+fi
+
+exec "${CAP_TEST_REAL_PYTHON:?}" "$@"
+SH
+  chmod +x "$bin_dir/python3"
+  printf '%s\n' "$bin_dir"
+}
+
+_hook_json_with_failing_counting_python() {
+  local tool="$1" key="$2" value="$3" count_file="$4" python_bin input real_python
+  python_bin="$(_install_failing_counting_python3)"
+  real_python="/opt/homebrew/bin/python3"
+  [[ -x "$real_python" ]] || real_python="$(command -v python3)"
+  input="$(printf '{"tool_name":"%s","tool_input":{"%s":%s}}' \
+    "$tool" "$key" "$(printf '%s' "$value" | jq -Rs .)")"
+  printf '%s' "$input" \
+    | PATH="$python_bin:$PATH" CAP_TEST_REAL_PYTHON="$real_python" CAP_TEST_TOKEN_PAYLOAD="$value" CAP_TEST_PY_COUNT="$count_file" WALTER_SESSION_REPO="$REPO_UNDER_TEST" /bin/bash "$HOOK"
+}
+
 @test "malformed hook JSON fails closed" {
   output="$(printf '{"tool_name":"Bash"' | WALTER_SESSION_REPO="$REPO_UNDER_TEST" bash "$HOOK")"
 
@@ -224,6 +258,15 @@ _hook_json_with_counting_python() {
   output="$(_hook_json Bash command "curl 'https://api.github.com/repos/x/y")"
 
   echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "Bash tokenization failure is not retried by compound detection" {
+  count_file="$BATS_TEST_TMPDIR/token-failure-count"
+
+  output="$(_hook_json_with_failing_counting_python Bash command "walter-os cap mint 'unterminated" "$count_file")"
+
+  echo "$output" | jq -e '.decision == "block"'
+  [ "$(cat "$count_file")" -eq 1 ]
 }
 
 @test "Bash shared tokenization covers network classification and host extraction" {
