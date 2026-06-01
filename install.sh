@@ -238,6 +238,7 @@ check_requirements() {
   check_required_tool git "brew install git  # or: sudo apt-get install -y git"
   check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
   check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
+  check_required_tool python3 "brew install python  # or: sudo apt-get install -y python3"
   if _openssl_bin="$(resolve_openssl_bin)"; then
     ok "openssl: ${_openssl_bin}"
   else
@@ -276,7 +277,6 @@ check_requirements() {
   check_optional_tool gitleaks "brew install gitleaks  # or: sudo apt-get install -y gitleaks"
   check_optional_tool node "Use mise: mise install node@22"
   check_optional_tool pnpm "Use mise: mise install pnpm@9"
-  check_optional_tool python3 "brew install python  # or: sudo apt-get install -y python3"
   check_optional_tool uvx "Use mise: mise install uv"
 
   say
@@ -1395,8 +1395,8 @@ _install_deps_macos() {
   # in Step 1 and then trip on the missing tool the next time
   # approval-gate.sh ran on a hook event (the failure surfaces as a
   # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
-  local required_deps=(git curl jq openssl yq docker bats)
-  local optional_deps=(python3)
+  local required_deps=(git curl jq python3 openssl yq docker bats)
+  local optional_deps=()
   local _openssl_bin
 
   # Hard dependency: docker
@@ -1423,6 +1423,8 @@ _install_deps_macos() {
   fi
 
   for dep in "${required_deps[@]}"; do
+    local install_dep="$dep"
+    [[ "$dep" == "python3" ]] && install_dep="python"
     [[ "$dep" == "docker" ]] && continue
     if [[ "$dep" == "openssl" ]]; then
       if _openssl_bin="$(resolve_openssl_bin)"; then
@@ -1458,10 +1460,10 @@ _install_deps_macos() {
       ok "$dep already installed"
     else
       if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: brew install $dep"
+        dry "would run: brew install $install_dep"
       else
         say "Installing $dep via Homebrew..."
-        brew install "$dep"
+        brew install "$install_dep"
         ok "Installed $dep"
       fi
     fi
@@ -1483,8 +1485,8 @@ _install_deps_macos() {
 
 _install_deps_linux() {
   # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
-  local required_deps=(git curl jq openssl yq bats)
-  local optional_deps=(python3)
+  local required_deps=(git curl jq python3 openssl yq bats)
+  local optional_deps=()
   local _openssl_bin
 
   # Hard dependency: docker
@@ -1534,6 +1536,11 @@ _install_deps_linux() {
     if ! resolve_openssl_bin >/dev/null 2>&1; then
       err "openssl with ED25519 support is REQUIRED at runtime and not installed."
       err "  Install OpenSSL for your distro or launch with WALTER_OPENSSL_BIN=/path/to/openssl."
+      exit 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+      err "python3 is REQUIRED at runtime for capability token operations and not installed."
+      err "  Install Python 3 for your distro before re-running."
       exit 1
     fi
     # If yq is missing entirely on a non-Debian Linux, surface that

@@ -150,6 +150,7 @@ declare -A CATEGORY_MIN_TIER=(
   [run-tests-linters]="low"
   [gh-pr-comment]="low"
   [gh-pr-review-approve]="high"
+  [capability-token-mint]="high"
 )
 set -u
 
@@ -163,12 +164,185 @@ _tier_rank() {
   esac
 }
 
+_shellish_normalize_payload() {
+  local value="$1" backslash_newline
+  backslash_newline=$'\\\n'
+  value="${value//$backslash_newline/ }"
+  value="${value//$'\n'/ }"
+  value="${value//\$\{IFS\}/ }"
+  value="${value//\$IFS/ }"
+  value="${value//,/ }"
+  value="${value//[/ }"
+  value="${value//]/ }"
+  value="${value//\\/}"
+  value="${value//\"/}"
+  value="${value//\'/}"
+  printf '%s' "$value"
+}
+
+_is_capability_token_mint_payload() {
+  local payload="$1"
+  local normalized
+  local walter_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
+  local cap_script_mint='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\.sh[[:space:]]+[$]?mint([[:space:]]|$)'
+  local shell_expansion='([$][A-Za-z_][A-Za-z0-9_]*|[$][0-9]+|[$][@*#?$!-]|[$][{]([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])[}]|[$][(]|`)'
+  local walter_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+[^[:space:];|&]*${shell_expansion}"
+  local walter_cap_dynamic_subcommand="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+[^[:space:];|&]*${shell_expansion}"
+  local walter_dynamic_command_word="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[^[:space:];|&]*${shell_expansion}[^[:space:];|&]*[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)"
+  local walter_split_command_substitution_word='(^|[[:space:];|&()])([^[:space:];|&()]*/)?[^[:space:];|&]*[$][(][^;|&)]*[)][^[:space:];|&]*[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
+  local command_indirect_cap_mint="(^|[[:space:];|&()])${shell_expansion}[[:space:]]+cap[[:space:]]+([^[:space:];|&]*${shell_expansion}|[$]?mint)([[:space:]]|$)"
+  # shellcheck disable=SC2016 # Literal $() and backticks are part of the regex.
+  local command_substitution_walter_mint='(^|[[:space:];|&()])([$][(][^;|&)]*walter-os[^;|&)]*[)]|`[^;|&`]*walter-os[^;|&`]*`)[[:space:]]+cap[[:space:]]+[$]?mint([[:space:]]|$)'
+  local cap_script_dynamic="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap[.]sh[[:space:]]+[^[:space:];|&]*${shell_expansion}"
+  local walter_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?walter-os[[:space:]]+cap[[:space:]]+${shell_expansion}"
+  local cap_script_ambiguous="(^|[[:space:];|&()])([^[:space:];|&()]*/)?[$]?cap\\.sh[[:space:]]+${shell_expansion}"
+  local cap_function='(^|[[:space:];|&()])[$]?(cmd_cap_mint|walter_cap_sign_claims)([[:space:]]|$)'
+  local cap_source='(^|[[:space:];|&()])(source|[.])[[:space:]]+[^;|&]*capability-token[.]sh([[:space:];|&()]|$)'
+
+  normalized="$(_shellish_normalize_payload "$payload")"
+
+  [[ "$normalized" =~ $walter_mint ]] || \
+    [[ "$normalized" =~ $cap_script_mint ]] || \
+    [[ "$normalized" =~ $walter_dynamic_subcommand ]] || \
+    [[ "$normalized" =~ $walter_cap_dynamic_subcommand ]] || \
+    [[ "$normalized" =~ $walter_dynamic_command_word ]] || \
+    [[ "$normalized" =~ $walter_split_command_substitution_word ]] || \
+    [[ "$normalized" =~ $command_indirect_cap_mint ]] || \
+    [[ "$normalized" =~ $command_substitution_walter_mint ]] || \
+    [[ "$normalized" =~ $cap_script_dynamic ]] || \
+    [[ "$normalized" =~ $walter_ambiguous ]] || \
+    [[ "$normalized" =~ $cap_script_ambiguous ]] || \
+    [[ "$normalized" =~ $cap_function ]] || \
+    [[ "$normalized" =~ $cap_source ]]
+}
+
+_is_capability_private_key_payload() {
+  local payload="$1"
+  local normalized
+  local config_state_dir="${WALTER_CONFIG:-$HOME/.config/walter-os}/state"
+  local literal_config_root="\$WALTER_CONFIG/"
+  local literal_braced_config_root="\${WALTER_CONFIG}/"
+  local literal_config_state="\$WALTER_CONFIG/state"
+  local literal_braced_config_state="\${WALTER_CONFIG}/state"
+  local literal_home_root="\$HOME/.config/walter-os/"
+  local literal_braced_home_root="\${HOME}/.config/walter-os/"
+  local literal_home_state="\$HOME/.config/walter-os/state"
+  local literal_braced_home_state="\${HOME}/.config/walter-os/state"
+  local session_artifact_re='session-[^[:space:];|&]*[.](key|json|pub)'
+  local session_metadata_re='session-[^[:space:];|&]*[.](json|pub)'
+  local caps_artifact_re='caps-[^[:space:];|&/]+(/[[:graph:]]*)?'
+  local cap_token_artifact_re='cap-[^[:space:];|&/]*[.]paseto'
+  local relative_session_secret_re='(^|[[:space:];|&])([.]/)?session-[^/[:space:];|&]*[.](key|json)([[:space:];|&]|$)'
+  local relative_caps_token_re='(^|[[:space:];|&])([.]/)?caps-[^/[:space:];|&]+/cap-[^/[:space:];|&]*[.]paseto([[:space:];|&]|$)'
+
+  normalized="$(_shellish_normalize_payload "$payload")"
+
+  [[ "$normalized" == *"capability_private_key_path"* ]] && return 0
+  [[ "$normalized" =~ $relative_session_secret_re ]] && return 0
+  [[ "$normalized" =~ $relative_caps_token_re ]] && return 0
+
+  if [[ "$normalized" == *"$config_state_dir"* ]] || \
+     [[ "$normalized" == *".config/walter-os/state"* ]] || \
+     [[ "$normalized" == *"$literal_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+     [[ "$normalized" == *"$literal_home_state"* ]] || \
+     [[ "$normalized" == *"$literal_braced_home_state"* ]]; then
+    return 0
+  fi
+
+  if [[ "$normalized" =~ (tar|zip|cp|rsync|ditto) ]] && \
+     { [[ "$normalized" == *"$config_state_dir"* ]] || \
+       [[ "$normalized" == *".config/walter-os/state"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; }; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$config_state_dir"* ]] || \
+       [[ "$normalized" == *".config/walter-os/state"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; } && \
+     [[ "$normalized" =~ $cap_token_artifact_re ]]; then
+    return 0
+  fi
+
+  if [[ "$normalized" == *".config/walter-os/"* ]] && \
+     [[ "$normalized" =~ $session_artifact_re ]]; then
+    return 0
+  fi
+
+  if [[ "$normalized" == *"$config_state_dir/"* ]] && \
+     [[ "$normalized" =~ $session_artifact_re ]]; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$config_state_dir"* ]] || \
+       [[ "$normalized" == *".config/walter-os"* ]] || \
+       [[ "$normalized" == *"\$WALTER_CONFIG"* ]] || \
+       [[ "$normalized" == *"\${WALTER_CONFIG}"* ]] || \
+       [[ "$normalized" == *"\$HOME/.config/walter-os"* ]] || \
+       [[ "$normalized" == *"\${HOME}/.config/walter-os"* ]]; } && \
+     [[ "$normalized" == *"/state/"* ]] && \
+     [[ "$normalized" =~ $caps_artifact_re ]]; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$literal_config_root"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_root"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_root"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_root"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; } && \
+     [[ "$normalized" =~ $caps_artifact_re ]]; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *".config/walter-os"* ]] || \
+       [[ "$normalized" == *"\$WALTER_CONFIG"* ]] || \
+       [[ "$normalized" == *"\${WALTER_CONFIG}"* ]] || \
+       [[ "$normalized" == *"\$HOME/.config/walter-os"* ]] || \
+       [[ "$normalized" == *"\${HOME}/.config/walter-os"* ]]; } && \
+     [[ "$normalized" == *"/state/"* ]] && \
+     { [[ "$normalized" =~ [*][.]json ]] || \
+       [[ "$normalized" =~ [.](key) ]] || \
+       [[ "$normalized" =~ $session_metadata_re ]]; }; then
+    return 0
+  fi
+
+  if { [[ "$normalized" == *"$literal_config_root"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_root"* ]] || \
+       [[ "$normalized" == *"$literal_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_config_state"* ]] || \
+       [[ "$normalized" == *"$literal_home_root"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_root"* ]] || \
+       [[ "$normalized" == *"$literal_home_state"* ]] || \
+       [[ "$normalized" == *"$literal_braced_home_state"* ]]; } && \
+     [[ "$normalized" =~ $session_artifact_re ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 # classify_command <tool> <payload> → category name or empty string
 # Returns the category slug for a command, or empty if not categorizable.
 _classify_command() {
   local tool="$1" payload="$2"
   case "$tool" in
     Bash)
+      # Capability operations must preempt lower-risk categories below. A
+      # compound command such as `gh pr comment ... "$(walter-os cap mint ...)"`
+      # is still a capability-token mint and must not be tier-overridden as a
+      # comment operation.
+      if _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"; then
+        echo "capability-token-mint"; return
+      fi
       # git push to feature/* — but NOT force push (force-push is blocked-all)
       if [[ "$payload" =~ git[[:space:]]+push.*feature/ ]] && \
          ! [[ "$payload" =~ --force([^-]|$)|--force-with-lease ]]; then
@@ -371,6 +545,9 @@ apply_trust_tier() {
       block "trust tier '${agent_tier}' does not permit category '$category' (agent: $agent)"
     fi
   elif [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+    if [[ "$category" == "capability-token-mint" ]]; then
+      return 0
+    fi
     # The command was blocked by pattern, but trust tier may override.
     if _trust_tier_allows "$agent" "$category"; then
       decision="allow"
@@ -418,16 +595,44 @@ analyze() {
     Bash)
       if matches_any_regex "$payload" "${BLOCK_BASH_PATTERNS[@]}"; then
         block "Bash command matches blocked pattern: ${payload:0:120}"
+      elif _is_capability_token_mint_payload "$payload"; then
+        block "capability-token-mint: Bash command mints capability token: ${payload:0:120}"
+      elif _is_capability_private_key_payload "$payload"; then
+        block "Bash command accesses capability private key material: ${payload:0:120}"
+      fi
+      ;;
+    Read|Grep|Glob|LS)
+      if _is_capability_private_key_payload "$payload"; then
+        block "${tool} accesses capability private key material: ${payload:0:120}"
       fi
       ;;
     Edit|Write|MultiEdit|NotebookEdit)
-      if matches_any_glob "$payload" "${BLOCK_PATH_PATTERNS[@]}"; then
+      if _is_capability_private_key_payload "$payload"; then
+        block "${tool} modifies capability private key material: ${payload:0:120}"
+      elif matches_any_glob "$payload" "${BLOCK_PATH_PATTERNS[@]}"; then
         block "Edit/Write to protected path: $payload"
       fi
       ;;
     *)
-      # Other tools (Read, Grep, Glob, etc.) — fast-path allow.
+      # Other tools — fast-path allow.
       :
+      ;;
+  esac
+}
+
+is_capability_terminal_block() {
+  local tool="$1"
+  local payload="$2"
+
+  case "$tool" in
+    Bash)
+      _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"
+      ;;
+    Read|Grep|Glob|LS|Edit|Write|MultiEdit|NotebookEdit)
+      _is_capability_private_key_payload "$payload"
+      ;;
+    *)
+      return 1
       ;;
   esac
 }
@@ -531,7 +736,8 @@ if [[ $# -gt 0 ]]; then
         apply_trust_tier "$cli_tool" "$cli_command"
       fi
 
-      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+         ! is_capability_terminal_block "$cli_tool" "$cli_command"; then
         # Standing-approval check (CLI-mode hint: WALTER_AGENT_NAME env)
         # Guard: skip entirely when PANIC_LOCKED — panic lock is terminal, no override allowed.
         agent="${WALTER_AGENT_NAME:-unknown}"
@@ -620,6 +826,36 @@ case "$tool" in
   Bash)
     payload=$(echo "$input" | jq -r '.tool_input.command // ""')
     ;;
+  Read)
+    payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
+    ;;
+  Grep)
+    payload=$(echo "$input" | jq -r '
+      .tool_input.path as $path |
+      .tool_input.glob as $glob |
+      [$path, $glob] | map(select(. != null)) | join(" ") as $joined |
+      if ($path != null and $path != "" and $glob != null and $glob != "") then
+        $joined + " " + ($path | sub("/+$"; "")) + "/" + $glob
+      else
+        $joined
+      end
+    ')
+    ;;
+  Glob)
+    payload=$(echo "$input" | jq -r '
+      .tool_input.path as $path |
+      .tool_input.pattern as $pattern |
+      [$path, $pattern] | map(select(. != null)) | join(" ") as $joined |
+      if ($path != null and $path != "" and $pattern != null and $pattern != "") then
+        $joined + " " + ($path | sub("/+$"; "")) + "/" + $pattern
+      else
+        $joined
+      end
+    ')
+    ;;
+  LS)
+    payload=$(echo "$input" | jq -r '.tool_input.path // ""')
+    ;;
   Edit|MultiEdit)
     payload=$(echo "$input" | jq -r '.tool_input.file_path // ""')
     ;;
@@ -643,7 +879,8 @@ if [[ "$PANIC_LOCKED" -eq 0 ]]; then
   apply_trust_tier "$tool" "$payload"
 fi
 
-if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+   ! is_capability_terminal_block "$tool" "$payload"; then
   # Guard: skip when PANIC_LOCKED — panic lock is terminal, no override allowed.
   agent="${WALTER_AGENT_NAME:-unknown}"
   if matches_standing_approval "$agent" "$tool" "$payload"; then

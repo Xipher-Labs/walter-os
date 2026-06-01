@@ -67,6 +67,8 @@
 #                               Manage network egress allowlist (#122 A-2)
 #                               See docs/operational/network-egress.md
 #   session {status|restart}    Manage time-bounded session state (#122 A-4)
+#   cap {mint|list|verify|revoke}
+#                               Manage session capability tokens (#122 A-2)
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
 #   help                        Show this help
@@ -1601,6 +1603,7 @@ cmd_egress() {
       _egress_validate_host "$host" || return $?
       # Source loader fresh per invocation so each test sees the current
       # on-disk allowlist (no caching).
+      # shellcheck source=/dev/null
       # shellcheck disable=SC1090
       source "${WALTER_OS_HOME}/scripts/walter/lib/egress-loader.sh"
       if walter_egress_host_allowed "$host"; then
@@ -1969,7 +1972,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session)
+    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2009,6 +2012,7 @@ case "$cmd" in
   overlay)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/overlay.sh" "$@" ;;
   egress)             cmd_egress "$@" ;;
   session)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/session.sh" "$@" ;;
+  cap)                exec "${WALTER_OS_HOME}/scripts/walter/subcommands/cap.sh" "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
