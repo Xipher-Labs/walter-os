@@ -65,7 +65,7 @@ jobs:
           echo "Target tag: $tag (version $version)"
 
       - name: Checkout tag (full history for git-cliff)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
         with:
           ref: ${{ steps.refs.outputs.tag }}
           fetch-depth: 0  # git-cliff needs full history for changelog generation
@@ -129,7 +129,7 @@ jobs:
 
     steps:
       - name: Checkout tag
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
         with:
           ref: ${{ needs.release.outputs.tag }}
 
