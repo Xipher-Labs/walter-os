@@ -7,8 +7,9 @@
 #   node-exporter — host metrics         :9100 (internal)
 #   cAdvisor     — container metrics    :8081 (internal)
 #
-# Storage: Loki + Prometheus persisted on /mnt/walter-vm-data (Cloud Volume).
-# Both have 30-day retention by default.
+# Storage: Loki + Prometheus persisted under OBSERVABILITY_DATA_DIR
+# (default: /mnt/walter-vm-data/observability). Both have 30-day retention by
+# default.
 
 services:
 
@@ -24,7 +25,7 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - /mnt/walter-vm-data/observability/prometheus:/prometheus:rw
+      - ${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}/prometheus:/prometheus:rw
     expose:
       - "9090"
     networks: [obs_net]
@@ -41,7 +42,7 @@ services:
     command: -config.file=/etc/loki/loki.yml
     volumes:
       - ./loki/loki.yml:/etc/loki/loki.yml:ro
-      - /mnt/walter-vm-data/observability/loki:/loki:rw
+      - ${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}/loki:/loki:rw
     expose:
       - "3100"
     networks: [obs_net]
@@ -60,6 +61,7 @@ services:
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}/promtail:/promtail:rw
     networks: [obs_net]
     depends_on:
       loki:
@@ -133,7 +135,7 @@ services:
     ports:
       - "127.0.0.1:3030:3000"
     volumes:
-      - /mnt/walter-vm-data/observability/grafana:/var/lib/grafana:rw
+      - ${OBSERVABILITY_DATA_DIR:-/mnt/walter-vm-data/observability}/grafana:/var/lib/grafana:rw
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     networks: [obs_net]
     depends_on:
