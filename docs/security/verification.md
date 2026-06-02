@@ -50,6 +50,9 @@ sha256sum --check checksums.sha256
 ```
 
 Replace `<tag>` with the target release tag (e.g., `v0.4.1`).
+If you are verifying an older release, the deterministic source archive and
+SLSA provenance were not backfilled; omit those two `--pattern` entries and the
+SLSA provenance step when those assets are absent.
 
 ## SLSA provenance verification
 

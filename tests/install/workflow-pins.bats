@@ -26,7 +26,7 @@ _check_workflow_pins() {
   local unpinned
   unpinned=$(grep -E '^[[:space:]]*(-[[:space:]]*)?uses:' "$REPO_ROOT/$workflow" \
     | grep -vE '@[0-9a-f]{40}' \
-    | grep -vE 'slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v2\.1\.0' \
+    | grep -vE 'slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v2\.1\.0([[:space:]]|$)' \
     || true)
   if [ -n "$unpinned" ]; then
     echo "Unpinned action in $workflow:"
@@ -54,4 +54,18 @@ _check_workflow_pins() {
 
 @test "all uses: lines in release.yml are sha-pinned" {
   _check_workflow_pins ".github/workflows/release.yml" required
+}
+
+@test "SLSA generator allowlist rejects suffixed release tags" {
+  cat > "$BATS_TEST_TMPDIR/slsa-suffix.yml" <<'YAML'
+jobs:
+  provenance:
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0-rc1
+YAML
+
+  REPO_ROOT="$BATS_TEST_TMPDIR"
+  run _check_workflow_pins "slsa-suffix.yml" required
+
+  [ "$status" -eq 1 ]
+  grep -Fq "Unpinned action" <<<"$output"
 }
