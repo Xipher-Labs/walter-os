@@ -138,7 +138,7 @@ YAML
 
 @test "auto_merge.allowed_branches cannot include patterns matching protected branches" {
   write_valid_config
-  sed -i.bak 's/"demo"/m*/' "$TMP_DIR/repo/walter-repo-config.yaml"
+  sed -i.bak 's|"demo"|"m*"|' "$TMP_DIR/repo/walter-repo-config.yaml"
 
   run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
 
