@@ -50,15 +50,55 @@ walter_model_default_for() {
 
 walter_model_value_valid() {
   local value="${1:-}"
+  local route
+  local stripped
+  local -a routes
   [[ -n "$value" ]] || return 1
-  [[ "$value" =~ ^[A-Za-z0-9._/@:+-]+(,[A-Za-z0-9._/@:+-]+)*$ ]]
+
+  # Strip every allowed character. Anything left over is a shell/control
+  # character we do not want in a model alias or endpoint-like value.
+  stripped="${value//[A-Za-z0-9._\/@:+,\[\]-]/}"
+  [[ -z "$stripped" ]] || return 1
+
+  IFS=',' read -ra routes <<<"$value"
+  for route in "${routes[@]}"; do
+    [[ -n "$route" ]] || return 1
+  done
+}
+
+_walter_model_local_alias_safe() {
+  local alias="${1:-}"
+  [[ -n "$alias" ]] || return 1
+  [[ "$alias" =~ ^[A-Za-z0-9._+-]+$ ]]
 }
 
 _walter_model_is_local() {
   local value="${1:-}"
+  local suffix
+
   case "$value" in
-    local|local-*|local/*|ollama|ollama/*|ollama:*)
+    local|ollama)
       return 0
+      ;;
+    local-*)
+      suffix="${value#local-}"
+      _walter_model_local_alias_safe "$suffix"
+      return $?
+      ;;
+    local/*)
+      suffix="${value#local/}"
+      _walter_model_local_alias_safe "$suffix"
+      return $?
+      ;;
+    ollama/*)
+      suffix="${value#ollama/}"
+      _walter_model_local_alias_safe "$suffix"
+      return $?
+      ;;
+    ollama:*)
+      suffix="${value#ollama:}"
+      _walter_model_local_alias_safe "$suffix"
+      return $?
       ;;
     localhost:[0-9]*|127.0.0.1:[0-9]*|'[::1]:'[0-9]*)
       return 0

@@ -83,6 +83,22 @@ setup() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: PHI rejects ollama URL-like aliases" {
+  run env WALTER_MODEL_PHI='ollama:https://evil.example/ollama-proxy' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: PHI rejects local URL-like aliases" {
+  run env WALTER_MODEL_PHI='local/https://evil.example/ollama-proxy' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
 @test "model-router: PHI rejects localhost-looking DNS names" {
   run env WALTER_MODEL_PHI='localhost.com:443' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
 
@@ -96,6 +112,13 @@ setup() {
 
   [ "$status" -eq 0 ]
   [ "$output" = "127.0.0.1:11434" ]
+}
+
+@test "model-router: PHI accepts bracketed IPv6 loopback aliases" {
+  run env WALTER_MODEL_PHI='[::1]:11434' bash -c "source '$ROUTER'; walter_model_for phi"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "[::1]:11434" ]
 }
 
 @test "model-router: invalid model values are rejected" {
