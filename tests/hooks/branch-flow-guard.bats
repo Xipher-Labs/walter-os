@@ -15,6 +15,10 @@ setup() {
 
   # Create a temp git repo so the hook has a branch context
   TMPDIR_TEST="$(mktemp -d)"
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
+  mkdir -p "$WALTER_CONFIG"
   cd "$TMPDIR_TEST"
   git init -q -b feature/test
   git config user.email "test@test.com"
@@ -24,7 +28,7 @@ setup() {
 }
 
 teardown() {
-  unset WALTER_BRANCH_FLOW WALTER_MANUAL_PR_REMOTE_PATTERN
+  unset WALTER_BRANCH_FLOW WALTER_MANUAL_PR_REMOTE_PATTERN WALTER_CONFIG WALTER_AUDIT_DIR
   rm -rf "$TMPDIR_TEST"
 }
 
@@ -156,6 +160,13 @@ input_json() {
   export WALTER_MANUAL_PR_REMOTE_PATTERN=example/test
   result="$(input_json "gh pr create --title test" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
+
+@test "block reasons are emitted as valid JSON strings" {
+  export WALTER_BRANCH_FLOW=three-stage
+  result="$(input_json 'gh pr create --base "main\bad" --title test' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("three-stage")' <<<"$result" >/dev/null
 }
 
 @test "manual-PR remote pattern allows with override flag" {

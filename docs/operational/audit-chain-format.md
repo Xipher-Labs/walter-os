@@ -35,7 +35,16 @@ Each line is canonical JSON (`jq -cS`) with these unsigned B-1 foundation fields
 
 Append operations take a sidecar lock at `audit/.chain.lock`, reopen the active `chain-YYYY-MM-DD.jsonl` path inside the lock, read the last row, compute the next `prev_hash`, and append one line.
 
-This slice does not wire the writer into PreToolUse hooks yet. Until the follow-up hook-integration PR lands, rows are produced only by callers that explicitly invoke `walter_audit_append`.
+Hook-integration rows currently use these `decision_source` values:
+
+- `approval-gate`
+- `bash-denylist`
+- `network-gate`
+- `branch-flow-guard`
+- `pre-commit-tests`
+- `wiki-validator-hook`
+
+Audit append failures fail closed for allow decisions and ordinary policy decisions. Dependency-failure block paths before JSON tooling is available are narrower: when `jq` itself is missing, hooks return the actionable `jq missing` block and attempt a best-effort audit row first. That best-effort path can create the first dependency-failure row in an empty chain, but it is allowed to skip the row when the existing chain cannot be verified without `jq`. Dependency failures after `jq` is available, such as approval-gate's `yq missing` branch, use the normal strict append path and refuse unaudited append failures.
 
 Verify a day with:
 

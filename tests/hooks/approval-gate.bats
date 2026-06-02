@@ -9,8 +9,12 @@ setup() {
   [[ -x "$HOOK" ]] || skip "approval-gate.sh not executable"
   command -v jq >/dev/null 2>&1 || skip "jq required"
 
-  # Isolate from operator's real config + Plane creds
-  export WALTER_CONFIG=/tmp/walter-os-test-$$
+  # Isolate from operator's real config, audit chain, and Plane creds.
+  TMPDIR_TEST="$(mktemp -d)"
+  export TMPDIR_TEST
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
   export WALTER_AGENT_PLANE_ISSUE=
   export WALTER_AGENT_NAME=test-agent
   unset PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT
@@ -65,7 +69,9 @@ YQ
 }
 
 teardown() {
+  unset WALTER_AUDIT_DIR
   rm -rf "$WALTER_CONFIG"
+  rm -rf "$TMPDIR_TEST"
 }
 
 # ---------- CLI mode: blocked ----------
@@ -695,6 +701,13 @@ EOF
   [[ "$output" =~ "test panic reason" ]]
 }
 
+@test "Panic lock: CLI check trims trailing newline from lock reason" {
+  printf 'test panic reason\n' > "$WALTER_CONFIG/gate.lock"
+  run "$HOOK" check "git push origin feature/x" --tool Bash
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ 'Lock: "test panic reason"' ]]
+}
+
 @test "Panic lock: CLI check allows normally after lock removed" {
   touch "$WALTER_CONFIG/gate.lock"
   rm -f "$WALTER_CONFIG/gate.lock"
@@ -896,12 +909,12 @@ EOF
 @test "P1-05: hook mode fails CLOSED when yq is missing" {
   command -v jq >/dev/null 2>&1 || skip "jq required"
 
-  # Build a minimal PATH that has every binary the hook NEEDS at startup
-  # (bash, jq, grep, sed, cat, rm, mkdir, printf, echo) but does NOT
-  # include yq. `command -v yq` then returns false.
+  # Build a minimal PATH that has every binary the hook and strict audit
+  # append path need, but does NOT include yq. `command -v yq` then
+  # returns false while the yq-missing decision can still be audited.
   local stub_dir
   stub_dir="$(mktemp -d)"
-  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr; do
+  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr chmod date tail od stat shasum sha256sum ps sleep perl cut dirname mv; do
     if [ -x "$(command -v "$bin" 2>/dev/null)" ]; then
       ln -sf "$(command -v "$bin")" "$stub_dir/$bin"
     fi

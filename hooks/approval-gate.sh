@@ -41,6 +41,37 @@ set -uo pipefail
 REPO_ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
 PROTECTED_PATHS_LIB="${REPO_ROOT}/scripts/walter/lib/protected-paths.sh"
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+audit_approval_decision() {
+  local audit_tool="${1:-unknown}" audit_input="${2:-}" audit_decision="$3" audit_reason="${4:-}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append "$audit_tool" "$audit_input" "$audit_decision" "approval-gate" "$audit_reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"approval-gate: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"approval-gate: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
+audit_dependency_failure_best_effort() {
+  local audit_tool="${1:-unknown}" audit_input="${2:-}" audit_reason="$3"
+  # jq-missing blocks happen before normal JSON tooling is available. The
+  # audit-chain helper can create an initial dependency-failure row without jq,
+  # but refuses to extend an existing chain because it cannot verify canonical
+  # JSON/root integrity. Keep the safety decision fail-closed either way.
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append "$audit_tool" "$audit_input" block "approval-gate" "$audit_reason" >/dev/null 2>&1 || true
+  fi
+}
 
 # Standing-approvals config path is HARDCODED (audit P1-06). The env var
 # `WALTER_STANDING_APPROVALS` is no longer honored as a config-pointer
@@ -561,12 +592,14 @@ check_panic_lock() {
   if [[ -f "$lock_file" ]]; then
     local lock_content
     lock_content="$(cat "$lock_file" 2>/dev/null || echo 'unknown')"
+    while [[ "$lock_content" == *$'\n' || "$lock_content" == *$'\r' ]]; do
+      lock_content="${lock_content%$'\n'}"
+      lock_content="${lock_content%$'\r'}"
+    done
     # Escape gate.lock content for safe embedding in JSON reason string.
-    # Use python3 json.dumps to handle newlines, tabs, control chars, quotes.
     local lock_content_escaped
-    if command -v python3 >/dev/null 2>&1; then
-      lock_content_escaped="$(printf '%s' "$lock_content" | \
-        python3 -c "import json,sys; print(json.dumps(sys.stdin.read().rstrip()))")"
+    if command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
+      lock_content_escaped="$(printf '%s' "$lock_content" | jq -Rs .)"
     else
       # Bash fallback: cover the most dangerous chars for JSON strings
       local s="${lock_content//\\/\\\\}"
@@ -792,15 +825,17 @@ while IFS= read -r _line 2>/dev/null; do
 done
 input="${input%$'\n'}"
 if [[ -z "$input" ]]; then
+  audit_approval_decision unknown "" allow "empty hook input"
   echo '{"decision":"allow"}'
   exit 0
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Fail CLOSED — without jq we cannot parse the hook event or enforce policy.
   # Allowing all ops when jq is missing would let an attacker bypass the gate
   # by shadowing jq on PATH. See: docs/operational/security-audit-2026-05-11.md P0-03
   echo "approval-gate: jq missing — failing closed for safety. Install jq to proceed." >&2
+  audit_dependency_failure_best_effort unknown "$input" "approval-gate: jq missing — failing closed for safety"
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: jq missing — failing closed for safety"}}\n'
   exit 0
 fi
@@ -813,6 +848,7 @@ if ! command -v yq >/dev/null 2>&1; then
   # hard dependency, same as jq.
   # See: docs/operational/security-audit-2026-05-11.md P1-05
   echo "approval-gate: yq missing — failing closed for safety. Install yq to proceed." >&2
+  audit_approval_decision unknown "$input" block "approval-gate: yq missing — failing closed for safety"
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"approval-gate: yq missing — failing closed for safety"}}\n'
   exit 0
 fi
@@ -894,7 +930,9 @@ if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
 fi
 
 if [[ "$decision" == "allow" ]]; then
+  audit_approval_decision "$tool" "$payload" allow "$reason"
   echo '{"decision":"allow"}'
 else
+  audit_approval_decision "$tool" "$payload" block "$reason"
   jq -nc --arg r "$reason" '{"decision":"block","reason":$r}'
 fi
