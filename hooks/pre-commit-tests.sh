@@ -31,12 +31,28 @@ audit_precommit_decision() {
   fi
 }
 
-INPUT="$(cat)"
+emit_precommit_block() {
+  local reason="$1" input_summary="${2:-${CMD:-}}" reason_json
+  audit_precommit_decision block "$reason" "$input_summary"
+  reason_json="$(walter_audit_json_string "$reason")"
+  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
+  exit 0
+}
 
-if command -v jq >/dev/null 2>&1; then
-  CMD="$(echo "$INPUT" | jq -r '.tool_input.command // ""')"
-else
-  CMD="$(echo "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+INPUT="$(cat)"
+CMD=""
+
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
+  emit_precommit_block "pre-commit-tests: jq missing, failing closed" "$INPUT"
+fi
+
+if [[ -z "$INPUT" ]] || ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
+  emit_precommit_block "pre-commit-tests: invalid hook JSON, failing closed" "$INPUT"
+fi
+
+CMD="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')"
+if [[ -z "$CMD" ]]; then
+  emit_precommit_block "pre-commit-tests: missing tool_input.command, failing closed" "$INPUT"
 fi
 
 # Only act on `git commit` (not commit-tree, commit-graph, etc.)
@@ -60,11 +76,7 @@ cd "$REPO_ROOT" || { audit_precommit_decision allow "cannot enter repository"; e
 
 block() {
   local reason="$1"
-  local reason_json
-  audit_precommit_decision block "$reason"
-  reason_json="$(walter_audit_json_string "$reason")"
-  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
-  exit 0
+  emit_precommit_block "$reason"
 }
 
 # ---------- branch-aware scaling ----------

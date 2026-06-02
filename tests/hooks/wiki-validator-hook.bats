@@ -42,6 +42,13 @@ teardown() {
   echo "$result" | jq -e '.decision' >/dev/null
 }
 
+@test "M13: malformed hook JSON fails closed" {
+  [[ -x "$HOOK" ]] || skip "hook not found"
+  result=$(printf '{"tool_input":' | bash "$HOOK")
+  [[ "$(echo "$result" | jq -r '.decision')" == "block" ]]
+  [[ "$(echo "$result" | jq -r '.reason')" =~ "invalid hook JSON" ]]
+}
+
 @test "M16: block reason with control characters produces valid JSON" {
   [[ -x "$HOOK" ]] || skip "hook not found"
   # Create a mock validator that outputs a reason with control characters (0x01).

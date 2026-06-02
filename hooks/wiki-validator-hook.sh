@@ -102,8 +102,13 @@ if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   exit 0
 fi
 
-tool_name="$(echo "$input" | jq -r '.tool_name // "unknown"' 2>/dev/null || echo "unknown")"
-file_path="$(echo "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null || echo "")"
+if ! printf '%s' "$input" | jq -e . >/dev/null 2>&1; then
+  file_path="$input"
+  emit_block "wiki-validator-hook: invalid hook JSON, failing closed"
+fi
+
+tool_name="$(printf '%s' "$input" | jq -r '.tool_name // "unknown"')"
+file_path="$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""')"
 
 # Only validate files under wiki/ paths; everything else passes through.
 if [[ -z "$file_path" ]] || ! [[ "$file_path" =~ /wiki/|^wiki/ ]]; then

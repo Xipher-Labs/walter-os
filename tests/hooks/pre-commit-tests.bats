@@ -31,6 +31,18 @@ input_json() {
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }
 
+@test "blocks malformed hook JSON" {
+  result="$(printf '{"tool_input":' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("invalid hook JSON")' <<<"$result" >/dev/null
+}
+
+@test "blocks missing command in hook JSON" {
+  result="$(printf '{"tool_name":"Bash","tool_input":{}}' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("missing tool_input.command")' <<<"$result" >/dev/null
+}
+
 @test "allows commit with --no-verify" {
   result="$(input_json "git commit -m foo --no-verify" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
