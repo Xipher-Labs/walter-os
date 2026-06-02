@@ -14,7 +14,7 @@ setup() {
   export MUTATION_LOG
   mkdir -p "$HOME" "$WALTER_CONFIG" "$TMP_DIR/bin"
 
-  for cmd in cloudflared curl docker docker-compose docker-compose-v2 docker compose \
+  for cmd in cloudflared curl docker docker-compose docker-compose-v2 \
     forgejo headscale infisical npx ntfy pnpm syncthing tailscale tea; do
     cat > "$TMP_DIR/bin/$cmd" <<'SH'
 #!/usr/bin/env bash

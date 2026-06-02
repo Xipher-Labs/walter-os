@@ -50,7 +50,7 @@ The checklist focuses on:
 | Langfuse | LLM tracing and prompt observability | Optional |
 | Listmonk | Email newsletter and lightweight campaigns | Optional |
 | ntfy | Push notifications for operators and teammates | Optional |
-| Knowledge/bookmarking | Outline, Linkwarden, or Obsidian-style capture | Optional |
+| knowledge/bookmarking | Outline, Linkwarden, or Obsidian-style capture | Optional |
 
 ## Related Docs
 
