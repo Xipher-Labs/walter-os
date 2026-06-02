@@ -104,6 +104,32 @@ teardown() {
   [ "$status" -eq 2 ]
 }
 
+@test "AC4: missing event fails closed" {
+  run bash "$SCRIPT"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing event"* ]]
+}
+
+@test "AC4: explicit help exits cleanly" {
+  run bash "$SCRIPT" --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "AC4: missing option value fails closed" {
+  run bash "$SCRIPT" link \
+    --issue \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --issue"* ]]
+}
+
 @test "AC5: newline input is rejected" {
   run bash "$SCRIPT" link \
     --issue $'issue\nuuid' \
@@ -132,4 +158,9 @@ teardown() {
   if grep -Eq 'git .* push' "$CALL_LOG"; then
     return 1
   fi
+}
+
+@test "AC6: script declares jq preflight" {
+  grep -q 'command -v jq' "$SCRIPT"
+  grep -q 'jq is required' "$SCRIPT"
 }

@@ -26,12 +26,24 @@ fi
 # shellcheck source=/dev/null
 source "$PLANE_LIB"
 
+require_jq() {
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "plane-pr-sync: jq is required" >&2
+    exit 3
+  fi
+}
+
 event="${1:-}"
-if [[ -z "$event" || "$event" == "-h" || "$event" == "--help" || "$event" == "help" ]]; then
+if [[ "$event" == "-h" || "$event" == "--help" || "$event" == "help" ]]; then
   usage
-  [[ -z "$event" || "$event" == "help" || "$event" == "-h" || "$event" == "--help" ]] && exit 0
+  exit 0
 fi
-shift || true
+if [[ -z "$event" ]]; then
+  echo "plane-pr-sync: missing event" >&2
+  usage >&2
+  exit 2
+fi
+shift
 
 issue=""
 pr_url=""
@@ -40,14 +52,22 @@ repo=""
 branch=""
 merge_sha=""
 
+require_option_value() {
+  local flag="$1" value="${2:-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "plane-pr-sync: missing value for $flag" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --issue) issue="${2:-}"; shift 2 ;;
-    --pr-url) pr_url="${2:-}"; shift 2 ;;
-    --pr-number) pr_number="${2:-}"; shift 2 ;;
-    --repo) repo="${2:-}"; shift 2 ;;
-    --branch) branch="${2:-}"; shift 2 ;;
-    --merge-sha) merge_sha="${2:-}"; shift 2 ;;
+    --issue) require_option_value "$1" "${2:-}"; issue="$2"; shift 2 ;;
+    --pr-url) require_option_value "$1" "${2:-}"; pr_url="$2"; shift 2 ;;
+    --pr-number) require_option_value "$1" "${2:-}"; pr_number="$2"; shift 2 ;;
+    --repo) require_option_value "$1" "${2:-}"; repo="$2"; shift 2 ;;
+    --branch) require_option_value "$1" "${2:-}"; branch="$2"; shift 2 ;;
+    --merge-sha) require_option_value "$1" "${2:-}"; merge_sha="$2"; shift 2 ;;
     -h|--help|help) usage; exit 0 ;;
     *) echo "plane-pr-sync: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -98,6 +118,7 @@ if [[ "$event" == "merged" ]]; then
   require_value merge-sha "$merge_sha"
 fi
 
+require_jq
 _plane_check_env || exit $?
 
 plane_comment_once() {
