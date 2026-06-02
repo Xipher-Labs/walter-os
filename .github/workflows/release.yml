@@ -200,7 +200,7 @@ jobs:
             ! -name "${CHECKSUMS_FILE}.sig" \
             ! -name "${CHECKSUMS_FILE}.pem" \
             ! -name "*.cosign.bundle" \
-            -exec sha256sum {} + | sort > "${CHECKSUMS_FILE}"
+            -exec sha256sum {} + | LC_ALL=C sort > "${CHECKSUMS_FILE}"
           test -s "${CHECKSUMS_FILE}"
           echo "----- checksums.sha256 -----"
           cat "${CHECKSUMS_FILE}"
