@@ -111,7 +111,10 @@ fetch_pr_json() {
     exit 3
   fi
   number="$(printf '%s\n' "$pr_json" | jq -r '.number')"
-  repo_json="$(gh repo view --json owner,name)"
+  if ! repo_json="$(gh repo view --json owner,name)"; then
+    echo "walter-os pr-score: failed to read repository data with gh" >&2
+    exit 3
+  fi
   owner="$(printf '%s\n' "$repo_json" | jq -r '.owner.login')"
   repo="$(printf '%s\n' "$repo_json" | jq -r '.name')"
 
@@ -205,7 +208,7 @@ if [[ "$title_ok" -eq 0 ]]; then
 fi
 
 link_points=0
-if grep -Eiq '(Closes|Fixes|Resolves|Refs)[[:space:]]+#?[0-9]+' <<<"$body"; then
+if grep -Eiq '(Closes|Fixes|Resolves|Refs):?[[:space:]]+#?[0-9]+' <<<"$body"; then
   link_points=10
 else
   add_finding "missing issue reference in PR body"

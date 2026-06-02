@@ -195,6 +195,22 @@ write_fixture() {
   echo "$output" | jq -e '.findings | type == "array"'
 }
 
+@test "AC4: issue references may use a colon after keyword" {
+  local fixture="$TMP_DIR/colon-ref.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]' \
+    $'## Verification\n- bats tests/cli/pr-score.bats\n\nCloses: #236'
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.components.issue_links.points == 10'
+  echo "$output" | jq -e '.findings | index("missing issue reference in PR body") | not'
+}
+
 @test "AC4: --fixture cannot be combined with a PR reference" {
   local fixture="$TMP_DIR/clean.json"
   write_fixture \
