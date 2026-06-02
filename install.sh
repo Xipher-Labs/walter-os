@@ -1591,18 +1591,20 @@ _install_deps_macos() {
     fi
   done
 
-  for dep in "${optional_deps[@]}"; do
-    if command -v "$dep" >/dev/null 2>&1; then
-      ok "$dep already installed (optional)"
-    else
-      if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: brew install $dep (optional)"
+  if ((${#optional_deps[@]} > 0)); then
+    for dep in "${optional_deps[@]}"; do
+      if command -v "$dep" >/dev/null 2>&1; then
+        ok "$dep already installed (optional)"
       else
-        say "Installing optional dep $dep via Homebrew..."
-        brew install "$dep" || warn "$dep install failed (optional, continuing)"
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: brew install $dep (optional)"
+        else
+          say "Installing optional dep $dep via Homebrew..."
+          brew install "$dep" || warn "$dep install failed (optional, continuing)"
+        fi
       fi
-    fi
-  done
+    done
+  fi
 }
 
 _install_deps_linux() {
@@ -1778,17 +1780,19 @@ _install_deps_linux() {
     fi
   done
 
-  for dep in "${optional_deps[@]}"; do
-    if command -v "$dep" >/dev/null 2>&1; then
-      ok "$dep already installed (optional)"
-    else
-      if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: sudo apt-get install -y $dep (optional)"
+  if ((${#optional_deps[@]} > 0)); then
+    for dep in "${optional_deps[@]}"; do
+      if command -v "$dep" >/dev/null 2>&1; then
+        ok "$dep already installed (optional)"
       else
-        sudo apt-get install -y "$dep" || warn "$dep install failed (optional, continuing)"
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: sudo apt-get install -y $dep (optional)"
+        else
+          sudo apt-get install -y "$dep" || warn "$dep install failed (optional, continuing)"
+        fi
       fi
-    fi
-  done
+    done
+  fi
 }
 
 # ---------- Step 2: env var prompts [AC-3] ----------
