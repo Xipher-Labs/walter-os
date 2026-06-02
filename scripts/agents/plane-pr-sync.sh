@@ -151,6 +151,10 @@ acquire_lock() {
     echo "plane-pr-sync: WARN failed to secure lock dir; continuing without concurrency lock" >&2
     return 0
   fi
+  if [[ -e "$lock_file" && ( -L "$lock_file" || ! -f "$lock_file" ) ]]; then
+    echo "plane-pr-sync: WARN unsafe lock file; continuing without concurrency lock" >&2
+    return 0
+  fi
 
   if ! exec 9>"$lock_file"; then
     echo "plane-pr-sync: WARN failed to open lock file; continuing without concurrency lock" >&2

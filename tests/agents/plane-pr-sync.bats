@@ -372,9 +372,8 @@ FLOCK_MOCK
   chmod +x "$MOCK_DIR/flock"
   mkdir -p "$MOCK_DIR/tmp" "$MOCK_DIR/lock-target"
   ln -s "$MOCK_DIR/lock-target" "$MOCK_DIR/tmp/walter-os-plane-pr-sync"
-  export TMPDIR="$MOCK_DIR/tmp"
 
-  run bash "$SCRIPT" link \
+  run env TMPDIR="$MOCK_DIR/tmp" bash "$SCRIPT" link \
     --issue "issue-uuid" \
     --pr-url "https://git.example.test/acme/app/pulls/7" \
     --pr-number "7" \
@@ -383,5 +382,26 @@ FLOCK_MOCK
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"unsafe symlink lock dir"* ]]
+  grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
+}
+
+@test "AC6: symlink lock file warns and continues" {
+  cat > "$MOCK_DIR/flock" <<'FLOCK_MOCK'
+#!/usr/bin/env bash
+exit 0
+FLOCK_MOCK
+  chmod +x "$MOCK_DIR/flock"
+  mkdir -p "$MOCK_DIR/tmp/walter-os-plane-pr-sync" "$MOCK_DIR/lock-target"
+  ln -s "$MOCK_DIR/lock-target" "$MOCK_DIR/tmp/walter-os-plane-pr-sync/acme_app-7.lock"
+
+  run env TMPDIR="$MOCK_DIR/tmp" bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unsafe lock file"* ]]
   grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
 }
