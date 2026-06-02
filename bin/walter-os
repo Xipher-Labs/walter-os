@@ -1300,10 +1300,10 @@ cmd_version() {
   local latest_tag
   if [[ -n "$auth_header" ]]; then
     latest_tag="$(curl -fsSL --max-time 5 --connect-timeout 3 -H "$auth_header" "$api_url" 2>/dev/null \
-      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')"
+      | grep '"tag_name"' | head -1 | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
   else
     latest_tag="$(curl -fsSL --max-time 5 --connect-timeout 3 "$api_url" 2>/dev/null \
-      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')"
+      | grep '"tag_name"' | head -1 | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
   fi
 
   if [[ -z "$latest_tag" ]]; then
@@ -1314,6 +1314,8 @@ cmd_version() {
 
   if _version_is_newer "$latest_version" "$current"; then
     echo "(update available: v${latest_version} — https://github.com/${owner}/${repo}/releases/tag/${latest_tag})"
+    echo "Next step: walter-os upgrade --dry-run"
+    echo "Targeted upgrade: walter-os upgrade --target ${latest_tag}"
   else
     echo "(up to date)"
   fi

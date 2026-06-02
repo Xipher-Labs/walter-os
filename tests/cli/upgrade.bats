@@ -11,6 +11,25 @@ setup() {
   mkdir -p "$WALTER_CONFIG" "$HOME"
 }
 
+make_upgrade_fixture_repo() {
+  local repo="$1"
+  mkdir -p "$repo/scripts"
+  cp "$UPGRADE_SH" "$repo/scripts/upgrade.sh"
+  cat > "$repo/install.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" > install-args.txt
+touch install-ran
+SH
+  chmod +x "$repo/install.sh"
+  printf '0.6.0\n' > "$repo/VERSION"
+  git -C "$repo" init -q
+  git -C "$repo" config user.email "test@example.invalid"
+  git -C "$repo" config user.name "Walter Test"
+  git -C "$repo" add .
+  git -C "$repo" commit -qm "fixture"
+}
+
 @test "walter-os help lists upgrade" {
   grep -q "#   upgrade" "$WALTER_OS_BIN"
   grep -q "upgrade) *cmd_upgrade" "$WALTER_OS_BIN"
@@ -27,6 +46,43 @@ setup() {
   echo "$output" | grep -q "install.sh --upgrade"
   echo "$output" | grep -q "walter-os audit"
   echo "$output" | grep -q "walter-os doctor"
+}
+
+@test "upgrade dry-run prints an operator summary" {
+  run bash "$UPGRADE_SH" --dry-run
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Upgrade summary"
+  echo "$output" | grep -q "dry-run: no changes applied"
+  echo "$output" | grep -q "Next step: run walter-os upgrade without --dry-run"
+}
+
+@test "upgrade local target prints summary after install" {
+  local repo="$BATS_TEST_TMPDIR/upgrade-repo"
+  make_upgrade_fixture_repo "$repo"
+
+  run bash "$repo/scripts/upgrade.sh" --target HEAD --skip-audit --skip-doctor
+
+  [ "$status" -eq 0 ]
+  [ -f "$repo/install-ran" ]
+  grep -q -- "--upgrade" "$repo/install-args.txt"
+  echo "$output" | grep -q "Upgrade summary"
+  echo "$output" | grep -q "mode: local"
+  echo "$output" | grep -q "version: 0.6.0"
+  echo "$output" | grep -q "audit: skipped"
+  echo "$output" | grep -q "doctor: skipped"
+  echo "$output" | grep -q "rollback: git -C"
+}
+
+@test "upgrade local refuses dirty tree before install" {
+  local repo="$BATS_TEST_TMPDIR/dirty-upgrade-repo"
+  make_upgrade_fixture_repo "$repo"
+  printf 'dirty\n' >> "$repo/VERSION"
+
+  run bash "$repo/scripts/upgrade.sh" --target HEAD --skip-audit --skip-doctor
+
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q "working tree dirty"
+  [ ! -f "$repo/install-ran" ]
 }
 
 @test "upgrade dry-run can skip audit and doctor" {

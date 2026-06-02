@@ -94,6 +94,11 @@ Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isol
   narrative in favor of the committed `walter-repo-config.yaml`
   `auto_merge` policy block, keeping one source of truth for per-repo
   autonomy settings.
+- **#266 upgrade UX summary.** `walter-os upgrade` now ends with an operator
+  summary that distinguishes dry-run/local/VM outcomes, reports audit and
+  doctor status, and prints a rollback hint after local upgrades. The version
+  update notice now points operators to `walter-os upgrade --dry-run` and a
+  targeted `--target <tag>` command.
 
 ---
 

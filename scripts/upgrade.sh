@@ -18,6 +18,10 @@ assume_yes=0
 vm_host="walter-vm"
 vm_repo="${WALTER_VM_REPO:-/opt/walter-os}"
 services=()
+local_upgrade_ran=0
+vm_upgrade_ran=0
+local_before_ref=""
+local_after_ref=""
 
 usage() {
   cat <<'EOF'
@@ -75,6 +79,60 @@ run_cmd() {
   "$@"
 }
 
+current_version() {
+  local version_file="${REPO_ROOT}/VERSION"
+  if [[ -f "$version_file" ]]; then
+    tr -d '[:space:]' < "$version_file"
+  else
+    printf 'unknown'
+  fi
+}
+
+print_upgrade_summary() {
+  log ""
+  log "Upgrade summary"
+  log "  mode: ${mode}"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    log "  dry-run: no changes applied"
+    log "  Next step: run walter-os upgrade without --dry-run"
+    return 0
+  fi
+
+  if [[ "$local_upgrade_ran" -eq 1 ]]; then
+    log "  local: complete"
+    log "  version: $(current_version)"
+    [[ -n "$local_before_ref" ]] && log "  previous ref: ${local_before_ref}"
+    [[ -n "$local_after_ref" ]] && log "  current ref: ${local_after_ref}"
+    if [[ "$skip_audit" -eq 0 ]]; then
+      log "  audit: ran"
+    else
+      log "  audit: skipped"
+    fi
+    if [[ "$skip_doctor" -eq 0 ]]; then
+      log "  doctor: ran"
+    else
+      log "  doctor: skipped"
+    fi
+    if [[ -n "$local_before_ref" ]]; then
+      log "  rollback: git -C $(shell_quote "$REPO_ROOT") checkout ${local_before_ref} && bash $(shell_quote "${REPO_ROOT}/install.sh") --upgrade"
+    fi
+  else
+    log "  local: not requested"
+  fi
+
+  if [[ "$vm_upgrade_ran" -eq 1 ]]; then
+    log "  vm: complete (${vm_host})"
+    if [[ "${#services[@]}" -gt 0 ]]; then
+      log "  services: ${services[*]}"
+    else
+      log "  services: none"
+    fi
+  elif [[ "$mode" == "vm" || "$mode" == "all" ]]; then
+    log "  vm: not completed"
+  fi
+}
+
 ensure_clean_tree() {
   if [[ "$dry_run" -eq 1 ]]; then
     print_cmd git -C "$REPO_ROOT" status --porcelain
@@ -126,6 +184,8 @@ fast_forward_checkout() {
 run_local_upgrade() {
   log "==> Local Walter-OS checkout"
   cd "$REPO_ROOT"
+  local_upgrade_ran=1
+  local_before_ref="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 
   ensure_clean_tree
 
@@ -144,10 +204,13 @@ run_local_upgrade() {
   if [[ "$skip_doctor" -eq 0 ]]; then
     run_cmd "$WALTER_OS_BIN" doctor
   fi
+
+  local_after_ref="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 }
 
 run_vm_upgrade() {
   log "==> Walter-VM checkout"
+  vm_upgrade_ran=1
 
   if [[ "$snapshot" -eq 1 ]]; then
     log "  snapshot warning: Hetzner snapshots may create a monthly storage cost."
@@ -247,3 +310,5 @@ case "$mode" in
     exit 2
     ;;
 esac
+
+print_upgrade_summary
