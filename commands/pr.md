@@ -73,3 +73,17 @@ Then:
 - Print the `gh pr create` command with the prepared body, BUT DO NOT RUN
   IT. [Company] policy: humans open every PR.
 - Print the URL the operator will get after they run the command.
+## Multi-Model Review Routing
+
+Use the operator's model-routing preferences before requesting non-Copilot
+review rounds:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+review_model="$(walter_model_for backend_review)"
+```
+
+Default routing prefers Codex for backend/security/infrastructure review and
+Claude for frontend/UX/design work. Operators can override those aliases in
+`~/.config/walter-os/overlay/personal.env`; PHI/medical work must stay on the
+`phi` route and cannot be overridden to an external model.

@@ -71,6 +71,13 @@ requires the one-minor-version notice cycle.
 
 Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isolation, A-4 capability tokens, A-5 read-only mounts), severity-gate runtime implementation (Phase A-F tree from `docs/specs/pr-review-severity-gate.plan.md`), and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
 
+### Added
+
+- **#24 multi-model routing preferences.** Adds `scripts/walter/lib/model-router.sh`,
+  `WALTER_MODEL_*` overlay defaults, `walter-os status --models`, LiteLLM
+  `metadata.domain` attribution, and operator docs for routing Codex, Claude,
+  Gemini aliases, and local Ollama by task domain.
+
 ---
 
 ## [0.5.1] — 2026-05-23

@@ -495,16 +495,21 @@ context. The `using-git-worktrees` skill handles this.
 
 ## When to invoke another model
 
-Some tasks benefit from cross-model second opinion:
+Some tasks benefit from cross-model second opinion. Walter-OS resolves the
+default choice through `scripts/walter/lib/model-router.sh` and the operator's
+`~/.config/walter-os/overlay/personal.env` `WALTER_MODEL_*` preferences.
+Run `walter-os status --models` to inspect the effective routing.
 
-- **Codex (GPT-5.5)** — invoked via `bash` from Claude Code: `codex "review the
-  changes on branch X for security and edge cases"`. Best for: alternative
-  reasoning paths, security review, when Claude has been in the same context too
-  long and might be drift-confirming.
-- **Claude (from Codex)** — same pattern, reverse direction. Use Claude for
-  literary/long-form writing, complex refactors with deep context.
+- **Backend/security/infrastructure review** — use `walter_model_for
+  backend_review` (default: Codex). Best for alternative reasoning paths,
+  security review, deployment-flow issues, and edge cases.
+- **Frontend/UX/design/long-form** — use `walter_model_for frontend` or
+  `walter_model_for longform` (default: Claude).
+- **Brainstorming/research synthesis** — use `walter_model_for brainstorm`
+  (default: Claude + Codex in parallel; operators may add Gemini aliases).
 - **Local Ollama (standby homelab node / local LLM node, Phase L)** — for anything tagged PHI/medical/legal-
-  privileged that must not leave the homelab.
+  privileged that must not leave the homelab. This maps to `walter_model_for
+  phi` and ignores `WALTER_MODEL_OVERRIDE`.
 
 ## Repo language
 
