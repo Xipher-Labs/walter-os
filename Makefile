@@ -28,6 +28,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agents/lib/alerts.sh \
 		scripts/agents/lib/metrics.sh \
 		scripts/agents/lib/spend.sh \
+		scripts/walter/lib/audit-chain.sh \
 		tests/lint-frontmatter.sh \
 		hooks/approval-gate.sh \
 		hooks/bash-denylist.sh \
