@@ -101,15 +101,15 @@ slugify_access_path() {
 
 bypass_paths_for_sub() {
   local sub="$1" entry entry_sub entry_path seen_paths
-  seen_paths="|"
+  seen_paths=""
   for entry in "${BYPASS_PATHS[@]}"; do
     entry_sub="${entry%%:*}"
     entry_path="${entry#*:}"
     if [[ "$entry_sub" == "$sub" && "$entry_path" == /* ]]; then
-      case "$seen_paths" in
-        *"|${entry_path}|"*) continue ;;
-      esac
-      seen_paths="${seen_paths}${entry_path}|"
+      if printf '%s' "$seen_paths" | grep -Fxq "$entry_path"; then
+        continue
+      fi
+      seen_paths="${seen_paths}${entry_path}"$'\n'
       printf '%s\n' "$entry_path"
     fi
   done
@@ -218,7 +218,6 @@ for sub in vault llm plane git status home secrets uptime \
     bypass_slug="$(slugify_access_path "$bypass_path")"
     bypass_name="Walter-VM ${sub} bypass (${bypass_slug})"
 
-    existing_apps=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps")
     bypass_app_id=$(echo "$existing_apps" | jq -r --arg d "$bypass_domain" '.result[]? | select(.domain==$d) | .id' | head -1)
 
     bypass_app_payload="$(access_app_payload "$bypass_name" "$bypass_domain" "false")"

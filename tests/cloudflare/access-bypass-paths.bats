@@ -227,6 +227,43 @@ FAKE_CURL
   [ "$n8n_updates" -eq 1 ]
 }
 
+@test "#170: glob characters are literal during de-duplication" {
+  tmpdir="$(mktemp -d)"
+  log_file="$tmpdir/curl.jsonl"
+  export CURL_LOG="$log_file"
+  _install_fake_curl "$tmpdir"
+
+  run env \
+    PATH="$tmpdir:$PATH" \
+    CF_EMAIL="operator@example.test" \
+    CF_KEY="global-api-key" \
+    CF_ACCOUNT="account-id" \
+    WALTER_CF_ACCESS_BYPASS_PATHS="postiz:/integrations/social/callback postiz:/integrations/social/*" \
+    bash "$CF_SCRIPT" example.test example.test otp
+
+  if [[ "$status" -ne 0 ]]; then
+    printf '%s\n' "$output" >&2
+  fi
+  [ "$status" -eq 0 ]
+
+  wildcard_updates=$(jq -r '
+    select(.method == "PUT")
+    | select(.url | endswith("/access/apps/existing-postiz-bypass"))
+    | .url
+  ' "$log_file" | wc -l | tr -d ' ')
+  callback_creates=$(jq -r '
+    select(.method == "POST")
+    | select(.url | endswith("/access/apps"))
+    | .payload
+    | fromjson
+    | select(.domain == "postiz.example.test/integrations/social/callback")
+    | .domain
+  ' "$log_file" | wc -l | tr -d ' ')
+
+  [ "$wildcard_updates" -eq 1 ]
+  [ "$callback_creates" -eq 1 ]
+}
+
 @test "#170: runbook documents defaults and narrow-path warning" {
   grep -qF 'postiz.${WALTER_DOMAIN}/integrations/social/*' "$CF_README"
   grep -qF 'n8n.${WALTER_DOMAIN}/webhook/*' "$CF_README"
