@@ -19,8 +19,9 @@ _check_workflow_pins() {
     return 0
   fi
 
-  # Extract uses: lines, strip leading whitespace. Third-party actions must be
-  # SHA-pinned. The SLSA generic generator is a reusable workflow exception:
+  # Select step-level and reusable-workflow uses: lines. Third-party actions
+  # must be SHA-pinned. The SLSA generic generator is a reusable workflow
+  # exception:
   # upstream requires release tags so slsa-verifier can validate the trusted
   # builder identity embedded in provenance.
   local unpinned
