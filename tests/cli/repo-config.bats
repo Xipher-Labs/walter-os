@@ -136,11 +136,35 @@ YAML
   [[ "$output" == *"verification: risk_based"* ]]
 }
 
+@test "repo-config subcommand preserves config-sourced WALTER_OS_HOME" {
+  printf 'WALTER_OS_HOME=%q\n' "$REPO_ROOT" > "$WALTER_CONFIG/env"
+  unset WALTER_OS_HOME
+
+  run "$WALTER_OS_BIN" repo-config defaults
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"autonomy_mode: guided"* ]]
+  export WALTER_OS_HOME="$REPO_ROOT"
+}
+
 @test "repository walter-repo-config.yaml validates" {
   run "$WALTER_OS_BIN" repo-config validate "$REPO_ROOT"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"repo-config: valid"* ]]
+}
+
+@test "doctor --repo-config validates git root policy from subdirectories" {
+  write_valid_config
+  sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+  git -C "$TMP_DIR/repo" init -q
+  mkdir -p "$TMP_DIR/repo/nested/path"
+
+  run bash -c "cd '$TMP_DIR/repo/nested/path' && '$WALTER_OS_BIN' doctor --repo-config"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid autonomy_mode"* ]]
 }
 
 @test "doctor --repo-config validates the current repository policy" {

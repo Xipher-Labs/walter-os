@@ -7,7 +7,11 @@
 #   walter-os repo-config help
 set -euo pipefail
 
-WALTER_OS_HOME="${WALTER_OS_HOME:-${HOME}/walter-os}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+if [[ ! -f "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh" ]]; then
+  WALTER_OS_HOME="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+fi
 
 if [[ ! -f "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh" ]]; then
   echo "repo-config: library not found under WALTER_OS_HOME=${WALTER_OS_HOME}" >&2

@@ -1710,9 +1710,12 @@ _doctor_repo_config_probe() {
   echo "Walter-OS doctor — repo config"
   echo
 
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
   # shellcheck source=/dev/null
   source "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh"
-  walter_repo_config_validate "$(pwd)"
+  walter_repo_config_validate "$repo_root"
 }
 
 # cmd_uninstall: front for `install.sh --uninstall`.
