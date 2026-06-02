@@ -248,8 +248,15 @@ fall back to manual operator merge as today.
   implementation must amend both:
   - Line ~336 (`## Universal disciplines` → `Things agents must NEVER do` → "Auto-merge a PR. Operator clicks merge.") → amended to "Auto-merge a PR UNLESS the bounded conditions in §4.3 (gate) + §4.4 (action sequence) of `docs/specs/pr-review-severity-gate.md` are met".
   - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects bounded auto-merge when `walter-repo-config.yaml` has `auto_merge.enabled: true` and all gate conditions hold.
-  Both edits link ADR 0015 in a new subsection. The implementation PR (not this spec PR) also updates `hooks/approval-gate.sh` to read `walter-repo-config.yaml` from the default branch + invoke the gate before refusing the merge action.
-- [ ] **AC12.** ADR 0015 documents the design choice + rejected alternatives (always auto-merge / fully manual / per-PR label / time-based auto-merge).
+  Both edits link ADR 0015 for the severity-gate rationale and ADR-0026
+  for the repo-config opt-in surface. The implementation PR (not this spec
+  PR) also updates `hooks/approval-gate.sh` to read
+  `walter-repo-config.yaml` from the default branch + invoke the gate before
+  refusing the merge action.
+- [ ] **AC12.** ADR 0015 documents the severity-gate design choice + rejected
+  alternatives (always auto-merge / fully manual / per-PR label / time-based
+  auto-merge), while ADR-0026 documents `walter-repo-config.yaml` as the
+  repo-config opt-in surface.
 - [ ] **AC13.** End-to-end smoke: a sample PR with one MINOR finding + 3
   completed review rounds + `walter-repo-config.yaml` auto-merge enabled on
   the default branch produces a follow-up issue, resolves the thread, and
