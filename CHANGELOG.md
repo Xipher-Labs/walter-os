@@ -73,7 +73,7 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ---
 
-## [0.6.0] — 2026-06-01
+## [0.6.0] — 2026-06-02
 
 **OSS Trust runtime-hardening release.**
 
