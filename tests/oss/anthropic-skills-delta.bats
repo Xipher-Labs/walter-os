@@ -8,6 +8,13 @@ setup() {
   OP_INDEX="$REPO_ROOT/docs/operational/README.md"
 }
 
+assert_decision_row() {
+  local skill="$1"
+  local decision_prefix="$2"
+
+  grep -Fq "| \`$skill\` | No | $decision_prefix" "$AUDIT_DOC"
+}
+
 @test "anthropic skills delta audit documents upstream sha and no-vendor decision" {
   [[ -f "$AUDIT_DOC" ]]
   grep -Fq "da20c92503b2e8ff1cf28ca81a0df4673debdbf7" "$AUDIT_DOC"
@@ -16,16 +23,13 @@ setup() {
 }
 
 @test "anthropic skills delta audit covers every net-new upstream skill" {
-  for skill in \
-    claude-api \
-    doc-coauthoring \
-    frontend-design \
-    mcp-builder \
-    slack-gif-creator \
-    web-artifacts-builder \
-    webapp-testing; do
-    grep -Fq "$skill" "$AUDIT_DOC"
-  done
+  assert_decision_row "claude-api" "Skip "
+  assert_decision_row "doc-coauthoring" "Skip "
+  assert_decision_row "frontend-design" "Skip "
+  assert_decision_row "mcp-builder" "Track "
+  assert_decision_row "slack-gif-creator" "Skip"
+  assert_decision_row "web-artifacts-builder" "Skip "
+  assert_decision_row "webapp-testing" "Track "
 }
 
 @test "anthropic skills delta audit flags stale issue plugin entries" {
