@@ -89,6 +89,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$fixture" && -n "$pr_ref" ]]; then
+  echo "walter-os pr-score: PR reference cannot be combined with --fixture" >&2
+  exit 2
+fi
+
 require_jq
 
 fetch_pr_json() {

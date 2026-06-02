@@ -195,6 +195,20 @@ write_fixture() {
   echo "$output" | jq -e '.findings | type == "array"'
 }
 
+@test "AC4: --fixture cannot be combined with a PR reference" {
+  local fixture="$TMP_DIR/clean.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+
+  run bash "$WALTER_OS_BIN" pr-score 289 --fixture "$fixture"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"PR reference cannot be combined with --fixture"* ]]
+}
+
 @test "AC5: help documents pr-score" {
   run bash "$WALTER_OS_BIN" help
 
