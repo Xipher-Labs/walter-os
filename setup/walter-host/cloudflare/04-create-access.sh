@@ -100,11 +100,18 @@ slugify_access_path() {
 }
 
 bypass_paths_for_sub() {
-  local sub="$1" entry entry_sub entry_path
+  local sub="$1" entry entry_sub entry_path seen_paths
+  seen_paths="|"
   for entry in "${BYPASS_PATHS[@]}"; do
     entry_sub="${entry%%:*}"
     entry_path="${entry#*:}"
-    [[ "$entry_sub" == "$sub" && "$entry_path" == /* ]] && printf '%s\n' "$entry_path"
+    if [[ "$entry_sub" == "$sub" && "$entry_path" == /* ]]; then
+      case "$seen_paths" in
+        *"|${entry_path}|"*) continue ;;
+      esac
+      seen_paths="${seen_paths}${entry_path}|"
+      printf '%s\n' "$entry_path"
+    fi
   done
 }
 
