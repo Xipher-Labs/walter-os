@@ -123,6 +123,9 @@ rows, audit telemetry wiring, and release provenance/reproducibility gates.
   source archive checks, SBOM reproduction support, SLSA3 provenance
   generation, checksums verification guidance, and CI coverage for workflow
   pinning and reproducibility docs.
+- **Node 24 workflow action migration (#285, closes #283).** Moves pinned
+  `actions/checkout`, `actions/setup-node`, and `github/codeql-action` uses to
+  Node 24-compatible SHAs while keeping full 40-character pin enforcement.
 
 ### Added (release-adjacent candidates)
 
