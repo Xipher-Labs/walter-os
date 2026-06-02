@@ -31,7 +31,10 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 - **G1.** Every Copilot/Codex finding is assigned a severity (BLOCKER, MAJOR, MINOR, COSMETIC) at review-receive time.
 - **G2.** After a configurable number of review rounds (default 3), if all remaining findings are MINOR or below AND a set of safety preconditions hold, the PR may be auto-merged. The deferred findings spin off into a single follow-up issue with full context.
 - **G3.** BLOCKER findings never permit auto-merge regardless of rounds. The action sequence (§4.4) **(a) creates a new high-priority issue with the BLOCKER finding(s) + a suggested fix-shape, AND (b) posts a PR comment explaining the block and linking the new issue.** PR CLOSE on BLOCKER is an operator decision, not an automatic gate action — the gate posts the diagnostic and waits.
-- **G4.** Auto-merge is **per-repo opt-in** via a marker file (`auto-merge-enabled` in repo root). Repos without the marker behave per current `AGENTS.md` (manual operator merge).
+- **G4.** Auto-merge is **per-repo opt-in** via `walter-repo-config.yaml`
+  (`auto_merge.enabled: true` plus scoped `auto_merge.allowed_branches`).
+  Repos without the config, or with auto-merge disabled, behave per current
+  `AGENTS.md` (manual operator merge).
 - **G5.** The current safety paths are NEVER eligible for auto-merge, regardless of opt-in or severity. AGENTS.md maintains three related but distinct lists — the task-rigor "auto-escalate to major" triggers (`AGENTS.md:89`), the "Blocked for ALL tiers" hardcoded approval-gate list (`AGENTS.md:322`), and the "Things agents must NEVER do" list (`AGENTS.md:329`). This spec takes the **union** of all three as a conservative super-set: a path landing on any list is BLOCKER. The path-glob list in §4.2 covers auth/, crypto/, money flows including Solana program code (`programs/**` — AGENTS.md explicitly names "money (Solana TX, Stripe)" as an auto-escalation trigger) + Stripe SDK paths, PHI / `personal/health/**`, audit logs (any directory literally named `audit/` or `audit-logs/`), prod migrations, hooks/, AGENTS.md, install.sh, mcp/servers.json. Only ONE path in §4.2 (`**/secrets/**` for any nested secrets dir) is an explicit conservative addition beyond AGENTS.md — labeled as such in §4.2 so future readers don't mis-cite AGENTS.md.
 - **G6.** Severity classification is auditable: a deterministic ruleset produces the verdict, and any LLM-fallback classification is logged with the reasoning that led to it.
 - **G7.** Follow-up issues for deferred MINORs are auto-created with the verbatim finding + the source-of-truth file:line reference + a suggested fix shape.
@@ -42,7 +45,10 @@ Neither matches the operator's actual intent ("merge when only minor stuff remai
 - **NG2.** Not reclassifying findings retroactively. Findings landing AFTER this spec ships are classified; older findings stay as-is.
 - **NG3.** Not building a UI. CLI + GitHub Actions integration + the existing hook/n8n event surface only — no operator dashboard, no web app, no new UX.
 - **NG4.** Not extending to repos beyond walter-os in the first version. Per-org rollout is a follow-up if the walter-os experience is positive.
-- **NG5.** Not implementing a "severity override" by the operator on individual findings. The classifier is the source of truth; the operator can adjust the ruleset itself via the `classifier_overrides` block in the repo-root `auto-merge-enabled` file (see §4.5 schema) if they disagree.
+- **NG5.** Not implementing a "severity override" by the operator on
+  individual findings. The classifier is the source of truth; future
+  classifier override policy belongs in `walter-repo-config.yaml` or a
+  referenced repo-policy extension, not in a separate marker file.
 
 ## 4. Design (decisions locked, see ADR 0015)
 
@@ -133,8 +139,8 @@ A skill named `pr-review-severity` documents the ruleset, the keyword lists, and
 
 | # | Condition | Why |
 |---|---|---|
-| C1 | `auto-merge-enabled` marker file exists at repo root AND its `enabled:` key is true (or missing — defaults to true). | Per-repo opt-in + kill-switch. The marker must be present (covers the `no-opt-in` slug) AND `enabled: false` in the marker triggers the `opt-out-kill-switch` slug (lets the operator temporarily disable auto-merge without deleting the marker — useful during incident response). |
-| C2 | ≥ N completed review rounds (default N=3, configurable in `auto-merge-enabled` file) | The 3-round Walter-OS review loop has proven its value; we bound the loop, not skip it. |
+| C1 | `walter-repo-config.yaml` exists on the default branch before the PR and has `auto_merge.enabled: true`; the PR source branch matches `auto_merge.allowed_branches` and does not match `auto_merge.forbidden_branches`. | Per-repo opt-in + kill-switch for eligible source branches. Absence returns `MERGE_BLOCKED:no-opt-in`; disabled auto-merge returns `MERGE_BLOCKED:opt-out-kill-switch`; source branch mismatch returns `MERGE_BLOCKED:branch-not-eligible`. Reading the default-branch version prevents a PR from authorizing itself. |
+| C2 | ≥ N completed review rounds (default N=3; future repo-config extension may lower/raise this without relaxing the hard floor) | The 3-round Walter-OS review loop has proven its value; we bound the loop, not skip it. |
 | C3 | Zero BLOCKER findings on the latest HEAD | Hard rule. |
 | C4 | Zero MAJOR findings on the latest HEAD | Hard rule. |
 | C5 | All CI checks success on the latest HEAD | Existing rule, just reaffirmed. |
@@ -167,48 +173,61 @@ When C1-C8 hold (gate passes):
 
 When the gate fails on any condition (C1-C8):
 
-4. Post a PR comment naming the failing condition + `MERGE_BLOCKED:<reason-slug>` + remediation guidance. PR remains open.
+1. Post a PR comment naming the failing condition + `MERGE_BLOCKED:<reason-slug>` + remediation guidance. PR remains open.
 
 When a BLOCKER finding is detected (independent of gate pass/fail — this path supersedes step 3's gate-pass action when ANY BLOCKER is present, since C3 would already be failing):
 
-5. Create a high-priority follow-up issue capturing the BLOCKER finding(s) verbatim + the source file:line + a suggested fix-shape (per G3). The issue title prefix is `[FIX] -SECURITY-` for security paths, `[FIX] -OPERATIONS-` otherwise.
-6. Post a PR comment naming the BLOCKER(s), linking the issue from step 5, and explicitly stating the gate did NOT auto-close the PR — operator decides (G3, Decision 4).
-7. The PR stays open. No further action.
+1. Create a high-priority follow-up issue capturing the BLOCKER finding(s) verbatim + the source file:line + a suggested fix-shape (per G3). The issue title prefix is `[FIX] -SECURITY-` for security paths, `[FIX] -OPERATIONS-` otherwise.
+2. Post a PR comment naming the BLOCKER(s), linking the issue from step 1, and explicitly stating the gate did NOT auto-close the PR — operator decides (G3, Decision 4).
+3. The PR stays open. No further action.
 
-### 4.5 `auto-merge-enabled` file format
+### 4.5 `walter-repo-config.yaml` auto-merge policy
 
 ```yaml
-# auto-merge-enabled — repo opt-in to the Walter-OS severity-gate auto-merge.
-# Operator declaration that this repo accepts the bounded auto-merge contract.
-# Empty file = accept all defaults. Below is the full schema with defaults.
-
-enabled: true                              # opt-out kill switch
-required_review_rounds: 3                  # rounds before auto-merge of MINOR+COSMETIC-only state
-loc_cap:
-  additions: 1500
-  deletions: 500
-classifier_overrides:                      # per-repo additions to the BLOCKER path list
-  blocker_paths: []
-  major_keywords: []
-follow_up_issue:
-  labels: [auto-merge-deferred, copilot-review]
-  # Severity-neutral prefix — the issue captures both MINOR and COSMETIC
-  # deferrals per C8.
-  title_prefix: "[CHORE] -OPERATIONS- deferred review findings from PR #"
-audit_log:                                 # where the classifier writes its decisions
-  path: ~/.config/walter-os/state/auto-merge-log.jsonl
-llm_fallback:                              # cost caps for the UNCLASSIFIED → LLM path
-  per_call_cap_usd: 0.01                   # hard cap per individual finding classification
-  per_pr_cap_usd: 1.0                      # hard cap across all UNCLASSIFIED findings in one PR
+# walter-repo-config.yaml — single per-repo autonomy policy surface.
+autonomy_mode: guided
+profile: balanced
+capability_tier_ceiling: 1
+auto_merge:
+  enabled: true
+  allowed_branches: ["feature/*", "codex/*"]
+  forbidden_branches:
+    - main
+    - master
+    - staging
+    - production
+    - "release/*"
+  require_green_ci: true
+  min_walter_score: 90
+  max_risk: low
+verification: risk_based
+preview_deploy: false
+human_approval_required_for:
+  - auth
+  - payments
+  - secrets
+  - prod_infra
+  - db_migrations
+  - destructive_ops
 ```
 
-Repos without this file → no auto-merge, manual operator merge as today.
+The old standalone auto-merge marker file is superseded by ADR-0026 and the
+`auto_merge` block above. The global LLM fallback cap and audit logging remain
+part of this severity-gate spec; per-repo configurability for classifier
+overrides, follow-up issue labels, audit log path, and LLM fallback caps remains
+a future extension. If added, those controls should extend this policy surface or
+reference a repo-policy extension from it.
+
+Repos without `walter-repo-config.yaml`, or with `auto_merge.enabled: false`,
+fall back to manual operator merge as today.
 
 ### 4.6 Failure modes & guard rails
 
 - **Misclassified MINOR that's actually MAJOR**: caught by the LLM fallback's audit log + the operator's weekly digest (out-of-scope follow-up F1 in §6). If discovered post-merge, the operator reverts via standard git revert and adjusts the classifier rules.
 - **Classifier loops on UNCLASSIFIED → LLM cost runaway**: LLM fallback hard-caps at $0.01 per finding + $1 per PR. Above cap, defaults to MAJOR (fail-safe to "needs human").
-- **Operator wants to defer a finding the classifier called MAJOR**: not allowed in the gate. Operator can adjust the keyword list in `auto-merge-enabled` for future PRs, OR manually merge this one.
+- **Operator wants to defer a finding the classifier called MAJOR**: not
+  allowed in the gate. Operator can manually merge this one, or later adjust
+  classifier policy through the repo-config extension surface if implemented.
 - **Branch protection enforces non-bypassable rules**: gate respects them. If branch protection requires a human approval that the operator hasn't pre-authorized, gate falls back to posting a "ready for your merge" comment and stops.
 
 ## 5. Acceptance criteria
@@ -219,22 +238,38 @@ Repos without this file → no auto-merge, manual operator merge as today.
 - [ ] **AC4.** Keyword-based MAJOR trigger fires on each keyword in the §4.2 list; tested with a fixture file per keyword.
 - [ ] **AC5.** Doc-file MINOR vs COSMETIC bias distinguishes correctly for a 10-sample fixture (5 each).
 - [ ] **AC6.** UNCLASSIFIED findings trigger the LLM fallback (validated by checking the audit log entry); cost-cap enforces fail-safe to MAJOR above $0.01.
-- [ ] **AC7.** `walter-os pr-auto-merge <pr-num>` checks C1-C8 (§4.3) and returns one of `MERGE_APPROVED` (exit 0) or `MERGE_BLOCKED:<reason-slug>` (exit 1, reason-slug is one of: `no-opt-in`, `insufficient-rounds`, `blocker-present`, `major-present`, `ci-not-clean`, `loc-cap-exceeded`, `safe-path-touched`, `unresolved-threads`, `opt-out-kill-switch`, `follow-up-issue-create-failed`). Tested with one positive fixture (MERGE_APPROVED) + one fixture per blocking slug (10 total = 11 fixtures, matching plan A3's 11 FAIL). The last slug fires when §4.4 step 3a's `gh issue create` returns non-zero — visibility-of-deferred-work is a hard requirement, so the gate aborts the merge if it can't be enforced.
+- [ ] **AC7.** `walter-os pr-auto-merge <pr-num>` checks C1-C8 (§4.3) and returns one of `MERGE_APPROVED` (exit 0) or `MERGE_BLOCKED:<reason-slug>` (exit 1, reason-slug is one of: `no-opt-in`, `insufficient-rounds`, `blocker-present`, `major-present`, `ci-not-clean`, `loc-cap-exceeded`, `safe-path-touched`, `unresolved-threads`, `opt-out-kill-switch`, `branch-not-eligible`, `follow-up-issue-create-failed`). Tested with one positive fixture (MERGE_APPROVED) + one fixture per blocking slug (11 total = 12 fixtures, matching plan A3's 12 FAIL). The last slug fires when §4.4 step 3a's `gh issue create` returns non-zero — visibility-of-deferred-work is a hard requirement, so the gate aborts the merge if it can't be enforced.
 - [ ] **AC8.** When MERGE_APPROVED: hook creates the follow-up issue, auto-resolves the relevant conversation threads, and invokes `gh pr merge --squash --delete-branch --admin`. Tested via mocked GitHub API.
 - [ ] **AC9.** When MERGE_BLOCKED: hook posts a comment to the PR with the blocking condition + remediation guidance. Tested via mocked GitHub API.
-- [ ] **AC10.** `auto-merge-enabled` file at repo root is the only opt-in mechanism. Repos without it return `MERGE_BLOCKED:no-opt-in` (slug consistent with AC7's slug enumeration).
-- [ ] **AC11.** AGENTS.md has TWO blocks that mention auto-merging — both are amended in this PR's implementation:
+- [ ] **AC10.** `walter-repo-config.yaml` with `auto_merge.enabled: true` is
+  the only opt-in mechanism. Repos without it return
+  `MERGE_BLOCKED:no-opt-in` (slug consistent with AC7's slug enumeration).
+  The policy must be read from the default branch state that existed before
+  the PR, so a PR that adds or loosens the file cannot self-authorize.
+- [ ] **AC11.** AGENTS.md has TWO blocks that mention auto-merging — the
+  implementation must amend both:
   - Line ~336 (`## Universal disciplines` → `Things agents must NEVER do` → "Auto-merge a PR. Operator clicks merge.") → amended to "Auto-merge a PR UNLESS the bounded conditions in §4.3 (gate) + §4.4 (action sequence) of `docs/specs/pr-review-severity-gate.md` are met".
-  - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects the bounded auto-merge when the marker file is present + gate conditions hold.
-  Both edits link ADR 0015 in a new subsection. The implementation PR (not this spec PR) also updates `hooks/approval-gate.sh` to read the marker file + invoke the gate before refusing the merge action.
-- [ ] **AC12.** ADR 0015 documents the design choice + rejected alternatives (always auto-merge / fully manual / per-PR label / time-based auto-merge).
-- [ ] **AC13.** End-to-end smoke: a sample PR with one MINOR finding + 3 completed review rounds + `auto-merge-enabled` present produces a follow-up issue, resolves the thread, and squash-merges. Tested via a dedicated `tests/e2e/auto-merge-mock-pr.bats` using a forked test repo.
+  - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects bounded auto-merge when `walter-repo-config.yaml` has `auto_merge.enabled: true` and all gate conditions hold.
+  Both edits link ADR 0015 for the severity-gate rationale and ADR-0026
+  for the repo-config opt-in surface. The implementation PR (not this spec
+  PR) also updates `hooks/approval-gate.sh` to read
+  `walter-repo-config.yaml` from the default branch + invoke the gate before
+  refusing the merge action.
+- [ ] **AC12.** ADR 0015 documents the severity-gate design choice + rejected
+  alternatives (always auto-merge / fully manual / per-PR label / time-based
+  auto-merge), while ADR-0026 documents `walter-repo-config.yaml` as the
+  repo-config opt-in surface.
+- [ ] **AC13.** End-to-end smoke: a sample PR with one MINOR finding + 3
+  completed review rounds + `walter-repo-config.yaml` auto-merge enabled on
+  the default branch produces a follow-up issue, resolves the thread, and
+  squash-merges. Tested via a dedicated `tests/e2e/auto-merge-mock-pr.bats`
+  using a forked test repo.
 
 ## 6. Out-of-scope follow-ups (file as separate issues)
 
 - **F1.** Operator weekly digest: "PRs auto-merged this week: N; MINOR findings created from those: M; of which closed: K". Surfaces drift before it becomes systemic.
 - **F2.** Severity-gate dashboard in Control Tower with per-classifier-rule pass rate (how often did each BLOCKER trigger fire? UNCLASSIFIED rate trending up = ruleset getting stale).
-- **F3.** Cross-repo rollout: `auto-merge-enabled` discoverable across the operator's repos with a `walter-os pr-auto-merge --discover` mode.
+- **F3.** Cross-repo rollout: `walter-repo-config.yaml` discoverable across the operator's repos with a `walter-os pr-auto-merge --discover` mode.
 - **F4.** Reverse path: detect operator manually overriding the classifier (closing a flagged MAJOR PR without resolving) and prompt to update the ruleset.
 
 ## 7. Risks
@@ -245,14 +280,17 @@ Repos without this file → no auto-merge, manual operator merge as today.
 | Loop becomes ritual sans value, operator disables everything | Low | High | Telemetry shows real value; if turned off, manual merge still works |
 | Codex and Copilot disagree on severity | Med | Low | Worst-of: any classifier saying BLOCKER → BLOCKER. Disagreement = upgrade severity. |
 | MINOR findings accumulate invisible debt | High | Med | Auto-created follow-up issue is mandatory; an open-follow-up backlog alert is tracked as an out-of-scope follow-up (F1 weekly digest covers near-term visibility; F2 dashboard formalizes the count-and-threshold mechanic). |
-| `auto-merge-enabled` accidentally committed by a fork | Low | Med | The file's presence is operator-intent; fork inheriting it is operator's responsibility. Worst case: the fork auto-merges its own PRs, doesn't affect upstream. |
+| `walter-repo-config.yaml` with `auto_merge.enabled: true` accidentally committed by a fork | Low | Med | The policy's presence is operator intent; fork inheriting it is operator responsibility. Worst case: the fork auto-merges its own eligible PRs, but protected branch and hard-floor rules still apply. |
 | LLM fallback hallucinates a severity | Low | Med | Cost-cap fail-safes to MAJOR; audit log + monthly review |
 | Branch-protection rule changes silently break the gate | Med | Low | Gate logs the exact GitHub API error; operator notified via the same audit log path |
 
 ## 8. Open questions for operator
 
 - **Q1**: should COSMETIC findings skip the 3-round minimum entirely (auto-merge on first round)? **Currently locked: NO** — §4.1 and C2 treat COSMETIC the same as MINOR for the round threshold. This question is preserved as an open lever the operator may choose to unlock later (it would require relaxing C2's "unconditional N rounds" semantics in the ADR + amending §4.1).
-- **Q2**: per-repo `auto-merge-enabled` override OR per-context (walter-os-personal vs walter-os-work) inheritance? Proposed: per-repo only (G4) — simpler, no inheritance ambiguity. Operator copies the file per repo.
+- **Q2**: per-repo `walter-repo-config.yaml` override OR per-context
+  (walter-os-personal vs walter-os-work) inheritance? Locked by ADR-0026:
+  per-repo policy only. Context can suggest defaults, but committed repo
+  policy is the source of truth.
 - **Q3**: should the gate be allowed to convert a MAJOR finding to MINOR after the operator resolves the underlying issue (without a new finding from Copilot)? Proposed: no — operator's "resolve" via the GitHub UI is sufficient; the gate doesn't second-guess the operator.
 
 ## 9. References

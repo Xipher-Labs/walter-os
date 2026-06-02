@@ -88,6 +88,13 @@ Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isol
   `metadata.domain` attribution, and operator docs for routing Codex, Claude,
   Gemini aliases, and local Ollama by task domain.
 
+### Changed
+
+- **#234 auto-merge policy docs.** Retires the old auto-merge touchfile
+  narrative in favor of the committed `walter-repo-config.yaml`
+  `auto_merge` policy block, keeping one source of truth for per-repo
+  autonomy settings.
+
 ---
 
 ## [0.5.1] — 2026-05-23
