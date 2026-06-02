@@ -118,7 +118,27 @@ if [[ "$event" == "merged" ]]; then
   require_value merge-sha "$merge_sha"
 fi
 
+acquire_lock() {
+  local lock_dir lock_key lock_file
+  lock_dir="${TMPDIR:-/tmp}/walter-os-plane-pr-sync"
+  lock_key="$(printf '%s' "${repo}-${pr_number}-${event}" | tr -c 'A-Za-z0-9._-' '_')"
+  lock_file="${lock_dir}/${lock_key}.lock"
+  mkdir -p "$lock_dir"
+
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "plane-pr-sync: WARN flock not found; continuing without concurrency lock" >&2
+    return 0
+  fi
+
+  exec 9>"$lock_file"
+  if ! flock -n 9; then
+    echo "plane-pr-sync: another sync is already running for ${repo}#${pr_number}:${event}" >&2
+    exit 3
+  fi
+}
+
 require_jq
+acquire_lock
 _plane_check_env || exit $?
 
 plane_comment_once() {

@@ -34,6 +34,10 @@ elif echo "$args" | grep -q "/comments/"; then
       echo 'not-json'
       exit 0
     fi
+    if [[ -n "${PLANE_EXISTING_COMMENTS:-}" ]]; then
+      printf '{"results":[{"comment_stripped":"%s"}]}\n' "$PLANE_EXISTING_COMMENTS"
+      exit 0
+    fi
     echo '{"results":[]}'
   else
     echo '{"ok":true}'
@@ -115,6 +119,23 @@ teardown() {
   if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
     return 1
   fi
+}
+
+@test "AC1: Plane comments are idempotent" {
+  export PLANE_EXISTING_COMMENTS="[walter-pr-sync:acme/app#7:link] already posted"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  if grep -Eq 'curl .* -X POST .*comments/' "$CALL_LOG"; then
+    return 1
+  fi
+  grep -q 'state-review' "$CALL_LOG"
 }
 
 @test "AC1: Forgejo comment failure warns and continues" {
@@ -276,4 +297,9 @@ teardown() {
 @test "AC6: script declares jq preflight" {
   grep -q 'command -v jq' "$SCRIPT"
   grep -q 'jq is required' "$SCRIPT"
+}
+
+@test "AC6: script declares optional flock guard" {
+  grep -q 'command -v flock' "$SCRIPT"
+  grep -q 'flock -n' "$SCRIPT"
 }
