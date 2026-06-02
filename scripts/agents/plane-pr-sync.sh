@@ -9,7 +9,9 @@ PLANE_LIB="${WALTER_OS_HOME}/scripts/agents/lib/plane.sh"
 
 usage() {
   cat <<'EOF'
-Usage: plane-pr-sync.sh <link|merged> --issue <id> --pr-url <url> --pr-number <n> --repo <owner/repo> --branch <name> [--merge-sha <sha>]
+Usage:
+  plane-pr-sync.sh link --issue <id> --pr-url <url> --pr-number <n> --repo <owner/repo> --branch <name>
+  plane-pr-sync.sh merged --issue <id> --pr-url <url> --pr-number <n> --repo <owner/repo> --branch <name> --merge-sha <sha>
 
 Events:
   link     Link an open PR to a Plane issue and move Plane to review.
@@ -183,7 +185,7 @@ forgejo_comment_once() {
     echo "plane-pr-sync: WARN tea not found; skipped Forgejo PR comment" >&2
     return 0
   fi
-  if existing="$(tea issues "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
+  if existing="$(tea issues view "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
     if jq -e --arg marker "$marker" '.. | strings | select(contains($marker))' \
         >/dev/null <<<"$existing"; then
       return 0

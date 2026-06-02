@@ -117,7 +117,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 0 ]
-  grep -q 'tea issues 7 --repo acme/app --comments --output json' "$CALL_LOG"
+  grep -q 'tea issues view 7 --repo acme/app --comments --output json' "$CALL_LOG"
   if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
     return 1
   fi
