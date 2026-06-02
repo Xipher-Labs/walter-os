@@ -95,6 +95,37 @@ write_fixture() {
   [[ "$output" == *"title does not match"* ]]
 }
 
+@test "AC2: unknown title category blocks the PR" {
+  local fixture="$TMP_DIR/title-category.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -PRODUCT- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Decision: block"* ]]
+  [[ "$output" == *"title does not match"* ]]
+}
+
+@test "AC2: completed check without conclusion is pending" {
+  local fixture="$TMP_DIR/check-no-conclusion.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":null}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "human-review"'
+  echo "$output" | jq -e '.findings | index("pending checks: 1")'
+  echo "$output" | jq -e '.findings | index("failing checks: 1") | not'
+}
+
 @test "AC3: workflow changes force human review" {
   local fixture="$TMP_DIR/workflow.json"
   write_fixture \
@@ -108,6 +139,44 @@ write_fixture() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Decision: human-review"* ]]
   [[ "$output" == *"sensitive path"* ]]
+}
+
+@test "AC3: outdated unresolved review threads are ignored" {
+  local fixture="$TMP_DIR/outdated-thread.json"
+  local updated="$TMP_DIR/outdated-thread-updated.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq '.reviewThreads = [{isResolved: false, isOutdated: true}] | .reviewThreadsTotalCount = 1' \
+    "$fixture" > "$updated"
+  mv "$updated" "$fixture"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "policy-auto-merge"'
+  echo "$output" | jq -e '.findings | index("unresolved review threads: 1") | not'
+}
+
+@test "AC3: incomplete review thread page forces human review" {
+  local fixture="$TMP_DIR/thread-page.json"
+  local updated="$TMP_DIR/thread-page-updated.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq '.reviewThreads = [{isResolved: true, isOutdated: false}] | .reviewThreadsTotalCount = 101' \
+    "$fixture" > "$updated"
+  mv "$updated" "$fixture"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "human-review"'
+  echo "$output" | jq -e '.findings | index("review thread page incomplete: fetched 1 of 101")'
 }
 
 @test "AC4: --json emits machine-readable score and decision" {

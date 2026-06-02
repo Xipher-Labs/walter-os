@@ -106,17 +106,23 @@ fetch_pr_json() {
       repository(owner:$owner, name:$repo) {
         pullRequest(number:$number) {
           reviewThreads(first:100) {
+            totalCount
             nodes { isResolved isOutdated }
           }
         }
       }
     }' \
-      --jq '.data.repository.pullRequest.reviewThreads.nodes')"; then
+      --jq '.data.repository.pullRequest.reviewThreads')"; then
     echo "walter-os pr-score: failed to read PR review threads with gh" >&2
     exit 3
   fi
 
-  jq -c --argjson threads "$threads_json" '. + {reviewThreads: $threads}' <<<"$pr_json"
+  jq -c \
+    --argjson threads "$threads_json" \
+    '. + {
+      reviewThreads: ($threads.nodes // []),
+      reviewThreadsTotalCount: ($threads.totalCount // ($threads.nodes // [] | length))
+    }' <<<"$pr_json"
 }
 
 if [[ -n "$fixture" ]]; then
@@ -138,7 +144,7 @@ title="$(jq -r '.title // ""' <<<"$pr_json")"
 body="$(jq -r '.body // ""' <<<"$pr_json")"
 
 checks_total="$(jq '[.statusCheckRollup[]?] | length' <<<"$pr_json")"
-checks_failed="$(jq '[.statusCheckRollup[]? | select((.status // "") == "COMPLETED") | select((.conclusion // "") != "SUCCESS" and (.conclusion // "") != "SKIPPED" and (.conclusion // "") != "NEUTRAL")] | length' <<<"$pr_json")"
+checks_failed="$(jq '[.statusCheckRollup[]? | select((.status // "") == "COMPLETED") | select((.conclusion // "") != "") | select((.conclusion // "") != "SUCCESS" and (.conclusion // "") != "SKIPPED" and (.conclusion // "") != "NEUTRAL")] | length' <<<"$pr_json")"
 checks_pending="$(jq '[.statusCheckRollup[]? | select((.status // "") != "COMPLETED" or (.conclusion // "") == "")] | length' <<<"$pr_json")"
 
 checks_points=0
@@ -154,10 +160,15 @@ else
   checks_points=30
 fi
 
-unresolved_threads="$(jq '[.reviewThreads[]? | select(.isResolved != true)] | length' <<<"$pr_json")"
+unresolved_threads="$(jq '[.reviewThreads[]? | select(.isResolved != true and (.isOutdated != true))] | length' <<<"$pr_json")"
+review_threads_fetched="$(jq '[.reviewThreads[]?] | length' <<<"$pr_json")"
+review_threads_total="$(jq '.reviewThreadsTotalCount // ([.reviewThreads[]?] | length)' <<<"$pr_json")"
 review_requests="$(jq '[.reviewRequests[]?] | length' <<<"$pr_json")"
 review_points=20
-if [[ "$unresolved_threads" -gt 0 ]]; then
+if [[ "$review_threads_total" -gt "$review_threads_fetched" ]]; then
+  review_points=10
+  add_finding "review thread page incomplete: fetched $review_threads_fetched of $review_threads_total"
+elif [[ "$unresolved_threads" -gt 0 ]]; then
   review_points=0
   add_finding "unresolved review threads: $unresolved_threads"
 elif [[ "$review_requests" -gt 0 ]]; then
@@ -167,13 +178,10 @@ fi
 
 title_points=0
 title_ok=0
-if [[ "$title" =~ ^\[(FEAT|FIX|DOCS|CHORE|TEST)\][[:space:]]-[A-Z]+-[[:space:]].+ ]]; then
-  title_body="${title#*] -}"
-  title_body="${title_body#*- }"
-  if [[ "${#title_body}" -le 60 && "$title_body" != *. ]]; then
-    title_ok=1
-    title_points=10
-  fi
+title_regex='^\[(FEAT|FIX|DOCS|CHORE|TEST)\] -(SECURITY|BUSINESS|COMPLIANCE|OPERATIONS|TECHNICAL|CUSTOMER|CONTENT|LEARNING)- [^[:space:]].{0,58}[^[:space:].]$'
+if grep -qE "$title_regex" <<<"$title"; then
+  title_ok=1
+  title_points=10
 fi
 if [[ "$title_ok" -eq 0 ]]; then
   add_finding "title does not match Walter-OS convention"
@@ -220,7 +228,7 @@ exit_code=0
 if [[ "$checks_failed" -gt 0 || "$title_ok" -eq 0 || "$score" -lt 70 ]]; then
   decision="block"
   exit_code=1
-elif [[ "$checks_pending" -eq 0 && "$unresolved_threads" -eq 0 && "$review_requests" -eq 0 && "$sensitive_count" -eq 0 && "$score" -ge 90 ]]; then
+elif [[ "$checks_pending" -eq 0 && "$unresolved_threads" -eq 0 && "$review_requests" -eq 0 && "$review_threads_total" -le "$review_threads_fetched" && "$sensitive_count" -eq 0 && "$score" -ge 90 ]]; then
   decision="policy-auto-merge"
 fi
 
