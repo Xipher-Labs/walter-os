@@ -121,7 +121,7 @@ fi
 acquire_lock() {
   local lock_dir lock_key lock_file
   lock_dir="${TMPDIR:-/tmp}/walter-os-plane-pr-sync"
-  lock_key="$(printf '%s' "${repo}-${pr_number}-${event}" | tr -c 'A-Za-z0-9._-' '_')"
+  lock_key="$(printf '%s' "${repo}-${pr_number}" | tr -c 'A-Za-z0-9._-' '_')"
   lock_file="${lock_dir}/${lock_key}.lock"
   mkdir -p "$lock_dir"
 
@@ -132,7 +132,7 @@ acquire_lock() {
 
   exec 9>"$lock_file"
   if ! flock -n 9; then
-    echo "plane-pr-sync: another sync is already running for ${repo}#${pr_number}:${event}" >&2
+    echo "plane-pr-sync: another sync is already running for ${repo}#${pr_number}" >&2
     exit 3
   fi
 }
@@ -189,13 +189,13 @@ marker="[walter-pr-sync:${repo}#${pr_number}:${event}]"
 
 case "$event" in
   link)
-    comment="${marker} PR linked: ${pr_url} (branch: ${branch}). Moving Plane issue to review."
+    comment="${marker} PR linked: ${pr_url} (branch: ${branch}). Requesting Plane issue move to review."
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "review"
     forgejo_comment_once "$marker" "$comment"
     ;;
   merged)
-    comment="${marker} PR merged: ${pr_url} at $(short_sha "$merge_sha"). Moving Plane issue to done."
+    comment="${marker} PR merged: ${pr_url} at $(short_sha "$merge_sha"). Requesting Plane issue move to done."
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "done"
     forgejo_comment_once "$marker" "$comment"

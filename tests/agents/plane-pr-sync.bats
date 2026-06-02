@@ -4,6 +4,8 @@
 # Covers: docs/specs/plane-pr-sync.md
 
 setup() {
+  command -v jq >/dev/null 2>&1 || skip "jq is required"
+
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   SCRIPT="$REPO_ROOT/scripts/agents/plane-pr-sync.sh"
   MOCK_DIR="$(mktemp -d)"
