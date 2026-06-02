@@ -73,8 +73,10 @@ title_is_valid() {
   local candidate="$1"
   local validator="${WALTER_OS_HOME}/hooks/pr-title-validator.sh"
   if [[ -x "$validator" ]]; then
-    "$validator" "$candidate" >/dev/null 2>&1
-    return $?
+    if "$validator" "$candidate" >/dev/null 2>&1; then
+      return 0
+    fi
+    return 1
   fi
 
   local title_regex
