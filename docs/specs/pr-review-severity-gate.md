@@ -139,7 +139,7 @@ A skill named `pr-review-severity` documents the ruleset, the keyword lists, and
 
 | # | Condition | Why |
 |---|---|---|
-| C1 | `walter-repo-config.yaml` exists on the default branch before the PR and has `auto_merge.enabled: true`; the PR source branch matches `auto_merge.allowed_branches`; the target branch does not match `auto_merge.forbidden_branches`. | Per-repo opt-in + kill-switch. Absence returns `MERGE_BLOCKED:no-opt-in`; disabled auto-merge returns `MERGE_BLOCKED:opt-out-kill-switch`. Reading the default-branch version prevents a PR from authorizing itself. |
+| C1 | `walter-repo-config.yaml` exists on the default branch before the PR and has `auto_merge.enabled: true`; the PR source branch matches `auto_merge.allowed_branches` and does not match `auto_merge.forbidden_branches`. | Per-repo opt-in + kill-switch for eligible source branches. Absence returns `MERGE_BLOCKED:no-opt-in`; disabled auto-merge returns `MERGE_BLOCKED:opt-out-kill-switch`. Reading the default-branch version prevents a PR from authorizing itself. |
 | C2 | ≥ N completed review rounds (default N=3; future repo-config extension may lower/raise this without relaxing the hard floor) | The 3-round Walter-OS review loop has proven its value; we bound the loop, not skip it. |
 | C3 | Zero BLOCKER findings on the latest HEAD | Hard rule. |
 | C4 | Zero MAJOR findings on the latest HEAD | Hard rule. |
@@ -246,8 +246,8 @@ fall back to manual operator merge as today.
   the PR, so a PR that adds or loosens the file cannot self-authorize.
 - [ ] **AC11.** AGENTS.md has TWO blocks that mention auto-merging — both are amended in this PR's implementation:
   - Line ~336 (`## Universal disciplines` → `Things agents must NEVER do` → "Auto-merge a PR. Operator clicks merge.") → amended to "Auto-merge a PR UNLESS the bounded conditions in §4.3 (gate) + §4.4 (action sequence) of `docs/specs/pr-review-severity-gate.md` are met".
-  - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects the bounded auto-merge when the marker file is present + gate conditions hold.
-  Both edits link ADR 0015 in a new subsection. The implementation PR (not this spec PR) also updates `hooks/approval-gate.sh` to read the marker file + invoke the gate before refusing the merge action.
+  - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects bounded auto-merge when `walter-repo-config.yaml` has `auto_merge.enabled: true` and all gate conditions hold.
+  Both edits link ADR 0015 in a new subsection. The implementation PR (not this spec PR) also updates `hooks/approval-gate.sh` to read `walter-repo-config.yaml` from the default branch + invoke the gate before refusing the merge action.
 - [ ] **AC12.** ADR 0015 documents the design choice + rejected alternatives (always auto-merge / fully manual / per-PR label / time-based auto-merge).
 - [ ] **AC13.** End-to-end smoke: a sample PR with one MINOR finding + 3
   completed review rounds + `walter-repo-config.yaml` auto-merge enabled on
