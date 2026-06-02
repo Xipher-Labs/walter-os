@@ -9,7 +9,15 @@ setup() {
 
 _check_workflow_pins() {
   local workflow="$1"
-  [ -f "$REPO_ROOT/$workflow" ] || { echo "SKIP: $workflow not found"; return 0; }
+  local required="${2:-optional}"
+  if [ ! -f "$REPO_ROOT/$workflow" ]; then
+    if [ "$required" = "required" ]; then
+      echo "Required workflow missing: $workflow"
+      return 1
+    fi
+    echo "SKIP: $workflow not found"
+    return 0
+  fi
 
   # Extract uses: lines, strip leading whitespace
   # Uses: grep -E to get lines containing 'uses:', then filter out SHA-pinned ones
@@ -39,6 +47,6 @@ _check_workflow_pins() {
   _check_workflow_pins ".github/workflows/codeql.yml"
 }
 
-@test "all uses: lines in release-security.yml are sha-pinned" {
-  _check_workflow_pins ".github/workflows/release-security.yml"
+@test "all uses: lines in release.yml are sha-pinned" {
+  _check_workflow_pins ".github/workflows/release.yml" required
 }

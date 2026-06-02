@@ -9,6 +9,19 @@ OWASP Top 10 for web applications. Covers the bug classes that consistently
 ship to production and become public CVEs. Auto-triggers on any code touching
 HTTP handlers, auth, file uploads, URL parsing, or DB queries with user input.
 
+## Model Routing
+
+For cross-model review, use the backend/security route:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+security_model="$(walter_model_for backend_review)"
+```
+
+Default preference is Codex because these reviews emphasize threat modeling,
+edge cases, deployment flow, and backend correctness. If the diff contains PHI
+or medical data, switch to `walter_model_for phi`.
+
 This is BASELINE — it doesn't replace a real security audit before launch.
 It catches the well-known patterns. For high-stakes systems ([Project B], [Project A]
 production), the `security-auditor` agent goes deeper, and a third-party audit

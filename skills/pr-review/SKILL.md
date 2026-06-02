@@ -9,6 +9,20 @@ This is the rubric. Apply it to every PR before opening and again before
 merging. The reviewer subagent uses this checklist with read-only tools
 (`Read`, `Grep`, `Glob`).
 
+## Model Routing
+
+When a PR needs a cross-model second opinion, resolve the backend/security
+review model through:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+review_model="$(walter_model_for backend_review)"
+```
+
+Default preference is Codex for backend, security, infrastructure, and edge-case
+review. Frontend-heavy PRs may additionally use `walter_model_for frontend`.
+PHI/medical diffs must use `walter_model_for phi` and stay local.
+
 ## Required before opening a PR
 
 - [ ] **PR title validated**: run `./hooks/pr-title-validator.sh "$TITLE"` before

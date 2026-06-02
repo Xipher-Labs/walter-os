@@ -40,7 +40,7 @@ setup() {
 # -----------------------------------------------------------------------
 @test "snap-missing fallback no longer hardcodes amd64 — arch detection present" {
   # _yq_arch case statement must cover at least amd64 + arm64.
-  grep -qE 'case "\$\(uname -m\)" in' "$INSTALL_SH"
+  grep -qE 'case "\$\(install_arch\)" in' "$INSTALL_SH"
   grep -qE 'aarch64\|arm64.*arm64' "$INSTALL_SH"
   grep -qE 'x86_64\|amd64.*amd64' "$INSTALL_SH"
 }

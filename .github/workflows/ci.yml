@@ -128,9 +128,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - name: Install jq
-        run: sudo apt-get update -qq && sudo apt-get install -qq jq
+      - name: Install jq + bats
+        run: sudo apt-get update -qq && sudo apt-get install -qq jq bats
       - name: Make scripts executable
         run: chmod +x install.sh hooks/*.sh scripts/*.sh skills/*/scripts/*.sh bin/*
       - name: Run dry-run
         run: ./install.sh --dry-run
+      - name: Run Ubuntu install contract smoke test
+        run: bats tests/install/platform-contract.bats
