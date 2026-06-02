@@ -1,0 +1,15 @@
+# Optional Renovate cron fragment.
+#
+# Disabled by default: copy this file into a host-specific crontab only after
+# the dry-run in README.md has succeeded.
+#
+# The walter-run wrapper must load RENOVATE_TOKEN from Infisical before running
+# the service. Keep one explicit repo list or a restrictive autodiscover filter
+# in the wrapper's environment.
+#
+# Example weekly run, Sunday 03:17 UTC:
+# 17 3 * * 0 cd /opt/walter-vm/services/renovate && /usr/local/bin/walter-run renovate ./run.sh run >> /var/log/walter-council/renovate.log 2>&1
+#
+# Manual trigger:
+#   cd /opt/walter-vm/services/renovate
+#   /usr/local/bin/walter-run renovate ./run.sh dry-run
