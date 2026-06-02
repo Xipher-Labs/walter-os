@@ -386,6 +386,7 @@ The README only covers the top of the funnel. Deep-dive docs by topic:
 | Symptom-cause-fix troubleshooting | [`docs/operational/troubleshooting.md`](docs/operational/troubleshooting.md) |
 | n8n workflow catalogue | [`docs/operational/n8n-workflows.md`](docs/operational/n8n-workflows.md) |
 | Full step-by-step VM install | [`docs/operational/operator-setup-runbook.md`](docs/operational/operator-setup-runbook.md) |
+| Second-device / teammate onboarding | [`docs/operational/onboarding-planner.md`](docs/operational/onboarding-planner.md) |
 | Operator contexts cascade | [`docs/operational/operator-contexts.md`](docs/operational/operator-contexts.md) |
 | Multi-device sync (Syncthing) | [`docs/operational/multi-device-sync.md`](docs/operational/multi-device-sync.md) |
 | Control Tower runbook | [`docs/operational/control-tower-runbook.md`](docs/operational/control-tower-runbook.md) |

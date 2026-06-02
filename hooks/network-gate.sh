@@ -32,12 +32,41 @@
 
 set -uo pipefail
 
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+_audit_early_decision() {
+  local decision="$1" reason="${2:-}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append unknown "" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"network-gate: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"network-gate: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
 # Re-exec under bash 4+ if we landed on bash 3.2 (macOS default). We use
 # `=~` and `read -a` which both work in 3.2 — but indexed-array growth +
 # `${arr[@]}` semantics differ in subtle ways. Inherit the same re-exec
 # dance bash-denylist.sh uses so this hook behaves identically.
-if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+_walter_bash_major="${BASH_VERSION%%.*}"
+_walter_hook_sourced=0
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  _walter_hook_sourced=1
+fi
+if [[ "$_walter_hook_sourced" == "1" && "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
+  _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
+fi
+if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   if [[ "${WALTER_NETWORK_GATE_REEXEC:-0}" == "1" ]]; then
+    _audit_early_decision block "network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."
     printf '%s\n' '{"decision":"block","reason":"network-gate: re-exec landed on bash < 4 again. Install GNU bash >= 4."}'
     exit 0
   fi
@@ -47,44 +76,86 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
       WALTER_NETWORK_GATE_REEXEC=1 exec "$_candidate" "$_self" "$@"
     fi
   done
+  _audit_early_decision block "network-gate: requires bash >= 4.0 — install brew bash or upgrade /bin/bash."
   printf '%s\n' '{"decision":"block","reason":"network-gate: requires bash >= 4.0 — install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
+unset _walter_bash_major _walter_hook_sourced
 
 # ---------- stdin parsing ----------
 
 INPUT="$(cat)"
 
-if ! command -v jq >/dev/null 2>&1; then
+_audit_decision() {
+  local audit_tool="${TOOL_NAME:-unknown}" decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append "$audit_tool" "$input_summary" "$decision" "network-gate" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"network-gate: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"network-gate: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
+_audit_dependency_failure_best_effort() {
+  local reason="$1"
+  # jq-missing blocks happen before normal JSON tooling is available. The
+  # audit-chain helper can create an initial dependency-failure row without jq,
+  # but refuses to extend an existing chain because it cannot verify canonical
+  # JSON/root integrity. Keep the safety decision fail-closed either way.
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append unknown "$INPUT" block "network-gate" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
+_emit_allow() {
+  _audit_decision allow "${1:-}"
+  printf '%s\n' '{"decision":"allow"}'
+  exit 0
+}
+
+_emit_block() {
+  local reason="$1" input_summary="${2:-${CMD:-}}"
+  _audit_decision block "$reason" "$input_summary"
+  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
+  exit 0
+}
+
+_emit_allow_with_warn() {
+  local msg="$1"
+  _audit_decision allow "$msg"
+  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$msg" '$m')"
+  exit 0
+}
+
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Same posture as bash-denylist.sh: without jq we cannot parse the
   # hook event. Fail-closed.
+  _audit_dependency_failure_best_effort "network-gate: jq missing — failing closed for safety. Install jq to proceed."
   printf '%s\n' '{"decision":"block","reason":"network-gate: jq missing — failing closed for safety. Install jq to proceed."}'
   exit 0
 fi
 
 if [[ -z "$INPUT" ]]; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: empty hook input — failing closed for safety."}'
-  exit 0
+  _emit_block "network-gate: empty hook input — failing closed for safety." "$INPUT"
 fi
 
-if ! TOOL_NAME="$(printf '%s' "$INPUT" | jq -er '.tool_name // empty' 2>/dev/null)"; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: malformed JSON or missing tool_name — failing closed for safety."}'
-  exit 0
+if ! TOOL_NAME="$(printf '%s' "$INPUT" | jq -er 'if (.tool_name | type) == "string" and (.tool_name | length) > 0 then .tool_name else empty end' 2>/dev/null)"; then
+  _emit_block "network-gate: malformed JSON, missing tool_name, or non-string tool_name — failing closed for safety." "$INPUT"
 fi
 
 # Pass through every tool that isn't Bash. We only inspect command strings.
 if [[ "$TOOL_NAME" != "Bash" ]]; then
-  printf '%s\n' '{"decision":"allow"}'
-  exit 0
+  _emit_allow ""
 fi
 
-if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety."}'
-  exit 0
+if ! CMD="$(printf '%s' "$INPUT" | jq -er 'if (.tool_input.command | type) == "string" and (.tool_input.command | length) > 0 then .tool_input.command else empty end' 2>/dev/null)"; then
+  _emit_block "network-gate: cannot parse hook input (malformed JSON, missing tool_input.command, or non-string command) — failing closed for safety." "$INPUT"
 fi
 if [[ -z "$CMD" ]]; then
-  printf '%s\n' '{"decision":"block","reason":"network-gate: empty Bash command — failing closed for safety."}'
-  exit 0
+  _emit_block "network-gate: empty Bash command — failing closed for safety."
 fi
 
 # ---------- bypass detection ----------
@@ -138,22 +209,6 @@ _two_factor_bypass_active() {
 # only when `--remote=URL` or `--remote URL` is present). All other subcommands — including
 # status/log/diff/add/commit/rev-parse/config/branch/cherry/remote/
 # submodule/archive (no --remote=) — are LOCAL and pass through.
-
-# Output helper.
-_emit_allow() {
-  printf '%s\n' '{"decision":"allow"}'
-  exit 0
-}
-_emit_block() {
-  local reason="$1"
-  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
-  exit 0
-}
-_emit_allow_with_warn() {
-  local msg="$1"
-  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$msg" '$m')"
-  exit 0
-}
 
 # Split the command into segments by shell separators (`;`, `&&`, `||`,
 # `|`, `&`). We then inspect each segment as if it were its own command.
@@ -1332,4 +1387,4 @@ while IFS= read -r _segment; do
   _recurse_inspect "$_segment"
 done < <(_split_segments "$CMD")
 
-_emit_allow
+_emit_allow ""

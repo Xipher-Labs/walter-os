@@ -131,9 +131,9 @@ _for_loop_subdomains() {
 @test "AC-2b: PostHog override targets its proxy and rewrites Host header" {
   [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
 
-  grep -q "posthog) printf 'http://127.0.0.1:8100'" "$TUNNEL_SCRIPT"
-  grep -q "httpHostHeader: localhost:8000" "$TUNNEL_SCRIPT"
-  grep -q "printf '    originRequest:\\\\n      httpHostHeader: localhost:8000\\\\n'" "$TUNNEL_SCRIPT"
+  grep -q "port_map_lookup posthog tunnel host_port" "$TUNNEL_SCRIPT"
+  grep -q "port_map_lookup posthog tunnel container_port" "$TUNNEL_SCRIPT"
+  grep -q "httpHostHeader: localhost:%s" "$TUNNEL_SCRIPT"
 }
 
 @test "AC-2c: tunnel script stays compatible with macOS bash 3.2" {

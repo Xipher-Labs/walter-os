@@ -47,6 +47,7 @@ jobs:
             scripts/agent-runtime-watchdog.sh \
             scripts/agent-audit-log.sh \
             scripts/agent-secret-redactor.sh \
+            scripts/release/reproduce.sh \
             scripts/agents/run.sh \
             scripts/agents/main.sh \
             scripts/agents/lib/plane.sh \
@@ -54,6 +55,7 @@ jobs:
             scripts/agents/lib/alerts.sh \
             scripts/agents/lib/metrics.sh \
             scripts/agents/lib/spend.sh \
+            scripts/walter/lib/audit-chain.sh \
             tests/lint-frontmatter.sh \
             hooks/approval-gate.sh \
             hooks/bash-denylist.sh \
@@ -121,6 +123,8 @@ jobs:
             tests/install/makefile-ci-shellcheck-parity.bats \
             tests/install/escape-helpers.bats \
             tests/install/no-eval-in-helpers.bats \
+            tests/install/workflow-pins.bats \
+            tests/install/reproducible-builds.bats \
             tests/install/yq-flavor-and-arch.bats
 
   install-dry-run:

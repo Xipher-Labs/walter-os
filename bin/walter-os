@@ -18,6 +18,7 @@
 # Subcommands:
 #   audit                       Run supply-chain audit now (foreground)
 #   status [--models]           Show audit + spend status, or model routing
+#   audit verify-chain [date]   Verify tamper-evident audit hash chain
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
@@ -31,6 +32,8 @@
 #   profile {default|high-risk} Switch MCP profile (settings.json swap)
 #   profile-bootstrap {init|status|sync-shared} [claude|codex|all]
 #                               Set up multi-account profile dirs (work + personal)
+#   onboard {device|teammate} --dry-run
+#                               Print second-device or teammate onboarding checklist
 #   secrets-identity-init       Bootstrap Infisical identity into an OS credential store
 #   secrets-keychain-init       DEPRECATED alias for secrets-identity-init
 #   secrets-status              Report current secrets session (age, expiry)
@@ -62,6 +65,9 @@
 #   pr-title <TYPE> <CATEGORY> <text>
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
+#   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
+#   repo-config {validate|defaults [balanced|hackathon]}
+#                               Validate walter-repo-config.yaml per-repo policy
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
 #                               Manage network egress allowlist (#122 A-2)
@@ -140,6 +146,15 @@ print_help() {
 # ---------- audit ----------
 
 cmd_audit() {
+  case "${1:-}" in
+    verify-chain)
+      shift
+      # shellcheck source=/dev/null
+      source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh"
+      walter_audit_verify_chain "$@"
+      return $?
+      ;;
+  esac
   exec "${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/audit.sh" "$@"
 }
 
@@ -1691,6 +1706,18 @@ _doctor_codex_mcp_probe() {
   return 0
 }
 
+_doctor_repo_config_probe() {
+  echo "Walter-OS doctor — repo config"
+  echo
+
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh"
+  walter_repo_config_validate "$repo_root"
+}
+
 # cmd_uninstall: front for `install.sh --uninstall`.
 #
 # Walter-OS Gap 4 from #191: operators who lose the repo clone need a
@@ -1952,11 +1979,13 @@ cmd_doctor() {
   # --lite: run ONLY the Lite contract probe + exit. See
   # docs/specs/walter-os-lite-entry-tier.md.
   # --codex-startup: run ONLY the Codex startup readiness probe + exit.
+  # --repo-config: run ONLY the walter-repo-config.yaml policy probe + exit.
   local tier_filter=""
   local cursor_only=0
   local antigravity_only=0
   local lite_only=0
   local codex_startup_only=0
+  local repo_config_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --tier)
@@ -1981,6 +2010,10 @@ cmd_doctor() {
         ;;
       --codex-startup)
         codex_startup_only=1
+        shift
+        ;;
+      --repo-config)
+        repo_config_only=1
         shift
         ;;
       *)
@@ -2011,6 +2044,11 @@ cmd_doctor() {
 
   if [[ "$codex_startup_only" -eq 1 ]]; then
     _doctor_codex_startup_probe
+    return $?
+  fi
+
+  if [[ "$repo_config_only" -eq 1 ]]; then
+    _doctor_repo_config_probe
     return $?
   fi
 
@@ -2103,6 +2141,7 @@ cmd_doctor() {
 
   echo "Walter-OS config:"
   tier_check 1 "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
+  tier_check 1 "repo policy valid or absent" _doctor_repo_config_probe
   tier_check 1 "env file present" test -f "${WALTER_CONFIG}/env"
   # F8 / #123: secrets runtime check is three-state (ok / warn / fail).
   # ok = Infisical configured (preferred). warn = legacy plaintext
@@ -2211,7 +2250,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2233,6 +2272,7 @@ case "$cmd" in
   sync-repos)         cmd_sync_repos "$@" ;;
   profile)            cmd_profile "$@" ;;
   profile-bootstrap)  cmd_profile_bootstrap "$@" ;;
+  onboard)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/onboard.sh" "$@" ;;
   secrets-pull)         cmd_secrets_pull "$@" ;;
   secrets-bootstrap)    cmd_secrets_bootstrap "$@" ;;
   secrets-identity-init) cmd_secrets_identity_init "$@" ;;
@@ -2255,6 +2295,8 @@ case "$cmd" in
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
+  pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
+  repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;
   uninstall)          cmd_uninstall "$@" ;;

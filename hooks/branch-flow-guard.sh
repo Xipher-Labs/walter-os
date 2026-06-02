@@ -32,6 +32,26 @@
 
 set -euo pipefail
 
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+audit_branch_flow_decision() {
+  local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$input_summary" "$decision" "branch-flow-guard" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"branch-flow-guard: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"branch-flow-guard: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
 # Source operator overlay if present. The hook is invoked from Claude Code's
 # PreToolUse layer with a minimal inherited env, so WALTER_BRANCH_FLOW set in
 # the operator's overlay (~/.config/walter-os/overlay/personal.env) is not
@@ -71,13 +91,17 @@ if [[ "$BRANCH_FLOW" != "single-tier" && "$BRANCH_FLOW" != "three-stage" ]]; the
 fi
 
 allow() {
+  audit_branch_flow_decision allow
   echo '{"decision":"allow"}'
   exit 0
 }
 
 block() {
   local reason="$1"
-  echo "{\"decision\":\"block\",\"reason\":\"${reason}\"}"
+  local reason_json
+  audit_branch_flow_decision block "$reason"
+  reason_json="$(walter_audit_json_string "$reason")"
+  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
   exit 0
 }
 

@@ -12,9 +12,12 @@ commands, expected outputs, and troubleshooting. The audience is a technical ope
 | [`control-tower-runbook.md`](control-tower-runbook.md) | Control Tower ops: start/stop, update container, SSE disconnect recovery, panic lock recovery, Council Chat troubleshooting, Grafana embed issues |
 | [`phase-v-tools-availability.md`](phase-v-tools-availability.md) | DevRel analytics tools availability: which Twitter/LinkedIn/Meta API approvals are pending, current workarounds, expected timelines |
 | [`operator-setup-runbook.md`](operator-setup-runbook.md) | Fresh operator setup walkthrough: OS credential-store secrets bootstrap, Infisical auth, Claude Code auth, multi-account bootstrap, cross-device sync wiring |
+| [`onboarding-planner.md`](onboarding-planner.md) | Read-only planner for adding a second device or teammate to an existing Walter domain |
+| [`repo-config.md`](repo-config.md) | `walter-repo-config.yaml` validation, safe defaults, and non-overridable autonomy policy limits |
 | [`onboarding-checklist.md`](onboarding-checklist.md) | One-page checklist for the operator: what to do in order on a new machine. Companion to `operator-setup-runbook.md`. <!-- TODO: stale, verify --> Service health snapshot is dated 2026-05-05; does not include Control Tower, analytics Postgres, or Council v2 Plane states. Update after Council v2 PRs merge. |
 | [`postiz-analytics-export.md`](postiz-analytics-export.md) | How to export Postiz analytics for manual ingestion into the DevRel analytics Postgres (Phase V workaround while Twitter API approval is pending) |
 | [`known-issues.md`](known-issues.md) | Active known issues on Walter-VM: claude-code-router daemon bind issue, headscale-admin `/admin/` path quirk, subscription proxy status |
+| [`anthropic-skills-delta-audit.md`](anthropic-skills-delta-audit.md) | Delta audit for upstream `anthropics/skills` versus plugin-exposed Anthropic skills |
 | [`hosting-providers-comparison.md`](hosting-providers-comparison.md) | VPS/cloud provider comparison for Walter-OS v0.2.0 adopters: specs, pricing, gotchas, and portability notes. Hetzner is default reference; 10 alternatives documented. |
 | [`knowledge-profile.md`](knowledge-profile.md) | Decision guide for Outline + Linkwarden versus Obsidian in personal, startup, and small-team installs |
 | [`universal-vs-personal-config.md`](universal-vs-personal-config.md) | What lives in the public repo vs your personal overlay (`~/.config/walter-os/overlay/`). Includes full decision table and upgrade semantics. |
