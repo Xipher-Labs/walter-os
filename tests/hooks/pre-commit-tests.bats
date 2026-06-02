@@ -46,6 +46,16 @@ input_json() {
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
 }
 
+@test "block reasons are emitted as valid JSON strings" {
+  git checkout -q -b 'feature/json"branch'
+  cat > package.json <<'JSON'
+{"scripts":{"lint":"printf 'lint failed\\n'; exit 1"}}
+JSON
+  result="$(input_json 'git commit -m "test"' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("Pre-commit")' <<<"$result" >/dev/null
+}
+
 # --------------- Fix 5: wiki-validator wired as PreToolUse hook ---------------
 
 @test "install.sh includes wiki-validator in PreToolUse hook template" {

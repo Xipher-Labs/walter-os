@@ -60,8 +60,10 @@ cd "$REPO_ROOT" || { audit_precommit_decision allow "cannot enter repository"; e
 
 block() {
   local reason="$1"
+  local reason_json
   audit_precommit_decision block "$reason"
-  echo "{\"decision\":\"block\",\"reason\":\"${reason//\"/\\\"}\"}"
+  reason_json="$(walter_audit_json_string "$reason")"
+  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
   exit 0
 }
 

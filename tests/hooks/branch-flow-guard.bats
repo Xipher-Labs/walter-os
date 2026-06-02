@@ -162,6 +162,13 @@ input_json() {
   [ "$(jq -r '.decision' <<<"$result")" = "block" ]
 }
 
+@test "block reasons are emitted as valid JSON strings" {
+  export WALTER_BRANCH_FLOW=three-stage
+  result="$(input_json 'gh pr create --base "main\bad" --title test' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("three-stage")' <<<"$result" >/dev/null
+}
+
 @test "manual-PR remote pattern allows with override flag" {
   export WALTER_MANUAL_PR_REMOTE_PATTERN=example/test
   result="$(input_json "gh pr create --allow-manual-pr --title test" | "$HOOK")"
