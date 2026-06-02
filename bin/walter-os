@@ -32,6 +32,8 @@
 #   profile {default|high-risk} Switch MCP profile (settings.json swap)
 #   profile-bootstrap {init|status|sync-shared} [claude|codex|all]
 #                               Set up multi-account profile dirs (work + personal)
+#   onboard {device|teammate} --dry-run
+#                               Print second-device or teammate onboarding checklist
 #   secrets-identity-init       Bootstrap Infisical identity into an OS credential store
 #   secrets-keychain-init       DEPRECATED alias for secrets-identity-init
 #   secrets-status              Report current secrets session (age, expiry)
@@ -2222,7 +2224,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2244,6 +2246,7 @@ case "$cmd" in
   sync-repos)         cmd_sync_repos "$@" ;;
   profile)            cmd_profile "$@" ;;
   profile-bootstrap)  cmd_profile_bootstrap "$@" ;;
+  onboard)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/onboard.sh" "$@" ;;
   secrets-pull)         cmd_secrets_pull "$@" ;;
   secrets-bootstrap)    cmd_secrets_bootstrap "$@" ;;
   secrets-identity-init) cmd_secrets_identity_init "$@" ;;
