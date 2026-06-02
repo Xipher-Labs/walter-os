@@ -20,7 +20,7 @@ workstation to an existing Walter domain.
 The checklist focuses on:
 
 - secrets identity initialization
-- profile bootstrap for Claude, Codex, or both
+- profile bootstrap for `claude`, `codex`, or `all`
 - agent memory setup
 - Syncthing folder membership
 - Headscale or Tailscale reachability
