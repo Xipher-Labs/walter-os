@@ -3,7 +3,7 @@
 #
 # Usage:
 #   walter-os repo-config validate [repo-dir|config-file]
-#   walter-os repo-config defaults
+#   walter-os repo-config defaults [balanced|hackathon]
 #   walter-os repo-config help
 set -euo pipefail
 
@@ -33,7 +33,7 @@ case "$cmd" in
     walter_repo_config_validate "${1:-$(pwd)}"
     ;;
   defaults|print-defaults)
-    walter_repo_config_defaults
+    walter_repo_config_defaults "${1:-balanced}"
     ;;
   -h|--help|help)
     print_help

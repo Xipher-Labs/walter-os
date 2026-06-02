@@ -79,6 +79,10 @@ Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isol
   defaults, and operator docs. The validator fails closed on malformed policy,
   warns on unknown keys, and prevents the policy file from relaxing protected
   branches or the hard-floor human approval categories.
+- **#239 hackathon autonomy preset.** Adds `walter-os repo-config defaults
+  hackathon`, a bounded full-autonomy template for short-lived demo projects
+  that uses prototype verification and hackathon branch eligibility while
+  preserving green CI and the non-overridable hard-floor approval categories.
 - **#24 multi-model routing preferences.** Adds `scripts/walter/lib/model-router.sh`,
   `WALTER_MODEL_*` overlay defaults, `walter-os status --models`, LiteLLM
   `metadata.domain` attribution, and operator docs for routing Codex, Claude,
