@@ -212,9 +212,11 @@ human_approval_required_for:
 ```
 
 The old standalone auto-merge marker file is superseded by ADR-0026 and the
-`auto_merge` block above. Classifier overrides, follow-up issue labels, audit
-log path, and LLM fallback caps remain future extensions; if added, they should
-extend this policy surface or reference a repo-policy extension from it.
+`auto_merge` block above. The global LLM fallback cap and audit logging remain
+part of this severity-gate spec; per-repo configurability for classifier
+overrides, follow-up issue labels, audit log path, and LLM fallback caps remains
+a future extension. If added, those controls should extend this policy surface or
+reference a repo-policy extension from it.
 
 Repos without `walter-repo-config.yaml`, or with `auto_merge.enabled: false`,
 fall back to manual operator merge as today.
