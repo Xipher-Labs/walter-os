@@ -64,6 +64,8 @@ gh release download "$tag" \
 
 checksums="${asset_dir}/checksums.sha256"
 [[ -s "$checksums" ]] || die "missing checksums.sha256"
+published_tar="${asset_dir}/walter-os-${tag}.source.tar.gz"
+[[ -s "$published_tar" ]] || die "missing source tarball"
 
 rebuilt_tar="${work_dir}/walter-os-${tag}.source.tar.gz"
 git archive --format=tar --prefix="walter-os-${tag}/" "$tag" \
@@ -71,6 +73,9 @@ git archive --format=tar --prefix="walter-os-${tag}/" "$tag" \
 
 expected_tar_hash="$(awk -v file="./walter-os-${tag}.source.tar.gz" '$2 == file { print $1 }' "$checksums")"
 [[ -n "$expected_tar_hash" ]] || die "checksums.sha256 has no source tarball entry"
+published_tar_hash="$(sha256sum "$published_tar" | awk '{ print $1 }')"
+[[ "$published_tar_hash" == "$expected_tar_hash" ]] \
+  || die "published source tarball mismatch: expected ${expected_tar_hash}, got ${published_tar_hash}"
 actual_tar_hash="$(sha256sum "$rebuilt_tar" | awk '{ print $1 }')"
 [[ "$actual_tar_hash" == "$expected_tar_hash" ]] \
   || die "source tarball mismatch: expected ${expected_tar_hash}, got ${actual_tar_hash}"

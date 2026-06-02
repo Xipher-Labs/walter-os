@@ -29,6 +29,12 @@ setup() {
   grep -Fq 'source tarball mismatch' "$SCRIPT"
 }
 
+@test "reproducible release script verifies downloaded source archive checksum" {
+  grep -Fq 'published_tar="${asset_dir}/walter-os-${tag}.source.tar.gz"' "$SCRIPT"
+  grep -Fq 'published_tar_hash="$(sha256sum "$published_tar" | awk' "$SCRIPT"
+  grep -Fq 'published source tarball mismatch' "$SCRIPT"
+}
+
 @test "reproducible release script can compare canonical SBOM when tools exist" {
   grep -Fq 'command -v syft' "$SCRIPT"
   grep -Fq 'gh release download "$tag"' "$SCRIPT"
@@ -62,6 +68,12 @@ setup() {
 
 @test "verification doc links to reproducible builds runbook" {
   grep -Fq 'reproducible-builds.md' "$VERIFY_DOC"
+}
+
+@test "verification doc warns older releases lack source and provenance assets" {
+  grep -Fq 'If you are verifying an older release' "$VERIFY_DOC"
+  grep -Fq 'source archive and' "$VERIFY_DOC"
+  grep -Fq 'SLSA provenance were not backfilled' "$VERIFY_DOC"
 }
 
 @test "release workflow keeps deterministic source and SLSA provenance" {
