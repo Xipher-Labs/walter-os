@@ -701,6 +701,13 @@ EOF
   [[ "$output" =~ "test panic reason" ]]
 }
 
+@test "Panic lock: CLI check trims trailing newline from lock reason" {
+  printf 'test panic reason\n' > "$WALTER_CONFIG/gate.lock"
+  run "$HOOK" check "git push origin feature/x" --tool Bash
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ 'Lock: "test panic reason"' ]]
+}
+
 @test "Panic lock: CLI check allows normally after lock removed" {
   touch "$WALTER_CONFIG/gate.lock"
   rm -f "$WALTER_CONFIG/gate.lock"

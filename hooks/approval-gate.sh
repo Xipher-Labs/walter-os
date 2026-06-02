@@ -592,9 +592,13 @@ check_panic_lock() {
   if [[ -f "$lock_file" ]]; then
     local lock_content
     lock_content="$(cat "$lock_file" 2>/dev/null || echo 'unknown')"
+    while [[ "$lock_content" == *$'\n' || "$lock_content" == *$'\r' ]]; do
+      lock_content="${lock_content%$'\n'}"
+      lock_content="${lock_content%$'\r'}"
+    done
     # Escape gate.lock content for safe embedding in JSON reason string.
     local lock_content_escaped
-    if command -v jq >/dev/null 2>&1; then
+    if command -v jq >/dev/null 2>&1 && jq -n true >/dev/null 2>&1; then
       lock_content_escaped="$(printf '%s' "$lock_content" | jq -Rs .)"
     else
       # Bash fallback: cover the most dangerous chars for JSON strings
