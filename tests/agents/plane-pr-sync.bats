@@ -334,3 +334,32 @@ teardown() {
   grep -q 'chmod 700' "$SCRIPT"
   grep -q 'lock_dir' "$SCRIPT"
 }
+
+@test "AC6: lock setup failure warns and continues" {
+  cat > "$MOCK_DIR/flock" <<'FLOCK_MOCK'
+#!/usr/bin/env bash
+exit 0
+FLOCK_MOCK
+  chmod +x "$MOCK_DIR/flock"
+
+  cat > "$MOCK_DIR/chmod" <<'CHMOD_MOCK'
+#!/usr/bin/env bash
+if [[ "$1" == "700" ]]; then
+  echo "simulated chmod failure" >&2
+  exit 99
+fi
+/bin/chmod "$@"
+CHMOD_MOCK
+  /bin/chmod +x "$MOCK_DIR/chmod"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"failed to secure lock dir"* ]]
+  grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
+}

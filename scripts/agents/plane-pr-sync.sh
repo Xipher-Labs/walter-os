@@ -127,15 +127,25 @@ acquire_lock() {
   lock_dir="${TMPDIR:-/tmp}/walter-os-plane-pr-sync"
   lock_key="$(printf '%s' "${repo}-${pr_number}" | tr -c 'A-Za-z0-9._-' '_')"
   lock_file="${lock_dir}/${lock_key}.lock"
-  mkdir -p "$lock_dir"
-  chmod 700 "$lock_dir"
 
   if ! command -v flock >/dev/null 2>&1; then
     echo "plane-pr-sync: WARN flock not found; continuing without concurrency lock" >&2
     return 0
   fi
 
-  exec 9>"$lock_file"
+  if ! mkdir -p "$lock_dir"; then
+    echo "plane-pr-sync: WARN failed to create lock dir; continuing without concurrency lock" >&2
+    return 0
+  fi
+  if ! chmod 700 "$lock_dir"; then
+    echo "plane-pr-sync: WARN failed to secure lock dir; continuing without concurrency lock" >&2
+    return 0
+  fi
+
+  if ! exec 9>"$lock_file"; then
+    echo "plane-pr-sync: WARN failed to open lock file; continuing without concurrency lock" >&2
+    return 0
+  fi
   if ! flock -n 9; then
     echo "plane-pr-sync: another sync is already running for ${repo}#${pr_number}" >&2
     exit 3
