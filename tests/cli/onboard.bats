@@ -69,7 +69,7 @@ assert_referenced_docs_exist() {
 }
 
 @test "device dry-run prints second-device plan without side effects" {
-  run bash "$WALTER_OS_BIN" onboard device --dry-run
+  run "$WALTER_OS_BIN" onboard device --dry-run
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"Second-device onboarding"* ]]
@@ -85,7 +85,7 @@ assert_referenced_docs_exist() {
 }
 
 @test "teammate dry-run prints teammate plan and optional modules" {
-  run bash "$WALTER_OS_BIN" onboard teammate --dry-run
+  run "$WALTER_OS_BIN" onboard teammate --dry-run
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"Teammate onboarding"* ]]
@@ -106,7 +106,7 @@ assert_referenced_docs_exist() {
 }
 
 @test "onboard requires explicit dry-run" {
-  run bash "$WALTER_OS_BIN" onboard device
+  run "$WALTER_OS_BIN" onboard device
 
   [ "$status" -eq 2 ]
   [[ "$output" == *"--dry-run"* ]]
@@ -114,7 +114,7 @@ assert_referenced_docs_exist() {
 }
 
 @test "onboard rejects unknown target" {
-  run bash "$WALTER_OS_BIN" onboard pet --dry-run
+  run "$WALTER_OS_BIN" onboard pet --dry-run
 
   [ "$status" -eq 2 ]
   [[ "$output" == *"unknown target"* ]]
