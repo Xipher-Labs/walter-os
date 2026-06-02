@@ -57,7 +57,6 @@ WALTER_ENV_ALLOWLIST=(
   WALTER_MODEL_BRAINSTORM
   WALTER_MODEL_DEFAULT
   WALTER_MODEL_OVERRIDE
-  WALTER_PHI_MODE
 )
 
 # Returns 0 if $1 is in the allowlist (built-in + operator override file).

@@ -177,13 +177,12 @@ WALTER_MODEL_PHI=local-ollama
 WALTER_MODEL_BRAINSTORM=claude,codex
 WALTER_MODEL_DEFAULT=claude
 WALTER_MODEL_OVERRIDE=gemini
-WALTER_PHI_MODE=1
 ENV
 
-  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; printf '%s|%s|%s|%s' \"\$WALTER_MODEL_BACKEND_REVIEW\" \"\$WALTER_MODEL_BRAINSTORM\" \"\$WALTER_MODEL_OVERRIDE\" \"\$WALTER_PHI_MODE\""
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; printf '%s|%s|%s' \"\$WALTER_MODEL_BACKEND_REVIEW\" \"\$WALTER_MODEL_BRAINSTORM\" \"\$WALTER_MODEL_OVERRIDE\""
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"codex|claude,codex|gemini|1"* ]]
+  [[ "$output" == *"codex|claude,codex|gemini"* ]]
   [[ "$output" != *"not in the env allowlist"* ]]
 }
 
