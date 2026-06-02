@@ -107,6 +107,16 @@ YAML
   [[ "$output" == *"auto_merge.allowed_branches includes protected branch: main"* ]]
 }
 
+@test "auto_merge.allowed_branches cannot include patterns matching protected branches" {
+  write_valid_config
+  sed -i.bak 's/"demo"/m*/' "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"auto_merge.allowed_branches pattern matches protected branch: m* -> main"* ]]
+}
+
 @test "repo-config defaults print safe effective defaults" {
   run "$WALTER_OS_BIN" repo-config defaults
 

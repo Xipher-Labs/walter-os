@@ -204,7 +204,7 @@ _walter_repo_config_validate_allowed_branches() {
   local path="$1"
   _walter_repo_config_validate_string_array "$path" ".auto_merge.allowed_branches" "auto_merge.allowed_branches"
 
-  local branch
+  local branch protected
   while IFS= read -r branch; do
     [[ -z "$branch" ]] && continue
     case "$branch" in
@@ -212,6 +212,17 @@ _walter_repo_config_validate_allowed_branches() {
         _walter_repo_config_fail "auto_merge.allowed_branches includes protected branch: ${branch}"
         ;;
     esac
+
+    # Treat allowed_branches entries as shell-style patterns because the
+    # schema intentionally allows entries like "walter/*". Reject any pattern
+    # that can match a protected branch name before later auto-merge consumers
+    # read it as authorization.
+    for protected in main master staging production release/v1; do
+      # shellcheck disable=SC2053 # RHS is intentionally a policy glob.
+      if [[ "$protected" == $branch ]]; then
+        _walter_repo_config_fail "auto_merge.allowed_branches pattern matches protected branch: ${branch} -> ${protected}"
+      fi
+    done
   done < <(yq e '.auto_merge.allowed_branches[]' "$path" 2>/dev/null || true)
 }
 
