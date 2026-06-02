@@ -53,6 +53,28 @@ setup() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: PHI accepts comma-separated local routes" {
+  run env WALTER_MODEL_PHI='ollama/llama3,127.0.0.1:11434' bash -c "source '$ROUTER'; walter_model_for phi"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "ollama/llama3,127.0.0.1:11434" ]
+}
+
+@test "model-router: PHI rejects mixed local and remote routes" {
+  run env WALTER_MODEL_PHI='ollama/llama3,codex' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: PHI mode reports phi metadata domain" {
+  run env WALTER_PHI_MODE=1 WALTER_MODEL_PHI=ollama/llama3 bash -c "source '$ROUTER'; tmp=\"\$(mktemp)\"; walter_model_for backend_review > \"\$tmp\"; model=\"\$(cat \"\$tmp\")\"; rm -f \"\$tmp\"; printf '%s|%s\n' \"\$model\" \"\$WALTER_MODEL_DOMAIN\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "ollama/llama3|phi" ]
+}
+
 @test "model-router: PHI rejects remote ollama-looking URLs" {
   run env WALTER_MODEL_PHI='https://evil.example/ollama-proxy' bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
 

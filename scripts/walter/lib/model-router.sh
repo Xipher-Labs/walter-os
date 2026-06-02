@@ -69,9 +69,21 @@ _walter_model_is_local() {
   esac
 }
 
+_walter_model_all_routes_local() {
+  local value="${1:-}"
+  local route
+  local -a routes
+
+  IFS=',' read -ra routes <<<"$value"
+  for route in "${routes[@]}"; do
+    _walter_model_is_local "$route" || return 1
+  done
+  return 0
+}
+
 walter_model_phi_lock() {
   local configured="${WALTER_MODEL_PHI:-local-ollama}"
-  if walter_model_value_valid "$configured" && _walter_model_is_local "$configured"; then
+  if walter_model_value_valid "$configured" && _walter_model_all_routes_local "$configured"; then
     echo "$configured"
     return 0
   fi
@@ -86,12 +98,14 @@ walter_model_for() {
 
   key="$(_walter_model_domain_key "$requested")"
   slug="$(_walter_model_domain_slug "$requested")"
-  export WALTER_MODEL_DOMAIN="$slug"
 
   if [[ "$key" == "PHI" || "${WALTER_PHI_MODE:-0}" == "1" ]]; then
+    export WALTER_MODEL_DOMAIN="phi"
     walter_model_phi_lock
     return 0
   fi
+
+  export WALTER_MODEL_DOMAIN="$slug"
 
   if [[ -n "${WALTER_MODEL_OVERRIDE:-}" ]]; then
     if walter_model_value_valid "$WALTER_MODEL_OVERRIDE"; then
