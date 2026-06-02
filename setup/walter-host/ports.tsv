@@ -1,0 +1,46 @@
+# service	role	host_port	container_port	protocol	exposure	deploy_group	notes
+caddy	http	80	80	tcp	public	all-in-one	Cloudflare Tunnel fan-in target and ACME HTTP-01 fallback.
+caddy	https	443	443	tcp	public	all-in-one	Direct HTTPS fallback when not using Cloudflare Tunnel.
+caddy	http3	443	443	udp	public	all-in-one	HTTP/3 listener.
+wireguard	vpn	51820	51820	udp	public	all-in-one	Public WireGuard client endpoint.
+syncthing	transfer-tcp	22000	22000	tcp	public	all-in-one	Syncthing device transfer listener.
+syncthing	transfer-udp	22000	22000	udp	public	all-in-one	Syncthing QUIC transfer listener.
+control-tower	ui	3000	3000	tcp	localhost	standalone/control-tower	Local-only UI; Cloudflare routes through Caddy in all-in-one mode.
+forgejo	ui	3000	3000	tcp	localhost	standalone/forgejo	Standalone compose default; conflicts with other standalone UIs if run together.
+uptime-kuma	ui	3001	3001	tcp	localhost	standalone/uptime-kuma	Standalone compose default.
+metabase	ui	3001	3000	tcp	localhost	standalone/metabase	Standalone compose default; remap if running with uptime-kuma.
+rocketchat	ui	3002	3000	tcp	localhost	standalone/rocketchat	Standalone compose default.
+homepage	ui	3010	3000	tcp	localhost	standalone/homepage	Standalone compose default.
+langfuse	ui	3011	3000	tcp	localhost	standalone/langfuse	Default from LANGFUSE_HOST_PORT.
+llm-proxies	claude-code-router	3456	3456	tcp	localhost	standalone/llm-proxies	Local OpenAI-compatible Claude router.
+litellm	api	4000	4000	tcp	localhost	standalone/litellm	Local LLM gateway API.
+postiz	ui	5000	3000	tcp	localhost	standalone/postiz	Standalone Postiz UI.
+postgres	db	5433	5432	tcp	localhost	standalone/postgres	Standalone shared Postgres.
+metabase	db	5433	5432	tcp	localhost	standalone/metabase	Standalone Metabase Postgres; remap if running with shared Postgres.
+n8n	ui	5678	5678	tcp	localhost	standalone/n8n	Standalone workflow UI and webhook endpoint.
+posthog	temporal	7233	7233	tcp	localhost	standalone/posthog	PostHog standalone Temporal endpoint.
+synapse	homeserver	8008	8008	tcp	localhost	standalone/synapse	Matrix homeserver.
+posthog	tunnel	8100	8000	tcp	localhost	all-in-one	Cloudflare Tunnel override for PostHog proxy; httpHostHeader uses container_port.
+posthog	proxy	8100	8000	tcp	localhost	standalone/posthog	Standalone PostHog proxy override.
+synapse	element	8081	80	tcp	localhost	standalone/synapse	Element web client.
+posthog	temporal-ui	8181	8080	tcp	localhost	standalone/posthog	PostHog standalone Temporal UI.
+drawio	ui	8083	8080	tcp	localhost	standalone/drawio	Standalone Draw.io UI.
+headscale	api	8085	8080	tcp	localhost	standalone/headscale	Headscale API and Tailscale client endpoint.
+headscale	admin	8086	80	tcp	localhost	standalone/headscale	Headscale admin UI.
+plane	proxy	8090	80	tcp	localhost	standalone/plane	Standalone Plane proxy.
+seaweedfs	s3	8333	8333	tcp	localhost	standalone/seaweedfs	Standalone SeaweedFS S3 API.
+posthog	seaweedfs-s3	8333	8333	tcp	localhost	standalone/posthog	PostHog bundled SeaweedFS S3 API.
+syncthing	ui	8384	8384	tcp	localhost	standalone/syncthing	Syncthing web UI.
+hermes-agent	api	8642	8642	tcp	localhost	standalone/hermes-agent	Hermes gateway API.
+infisical	ui	8800	8080	tcp	localhost	standalone/infisical	Standalone Infisical UI/API.
+penpot	ui	9001	8080	tcp	localhost	standalone/penpot	Standalone Penpot frontend.
+headscale	metrics	9095	9090	tcp	localhost	standalone/headscale	Headscale metrics.
+hermes-agent	dashboard	9119	9119	tcp	localhost	standalone/hermes-agent	Hermes dashboard.
+seaweedfs	master	9333	9333	tcp	localhost	standalone/seaweedfs	Standalone SeaweedFS master.
+posthog	seaweedfs-master	9333	9333	tcp	localhost	standalone/posthog	PostHog bundled SeaweedFS master.
+openclaw	ui	18789	18789	tcp	localhost	standalone/openclaw	OpenClaw control UI.
+posthog	replay-server	19000	19000	tcp	localhost	standalone/posthog	PostHog standalone replay service.
+posthog	replay-worker	19001	19001	tcp	localhost	standalone/posthog	PostHog standalone replay worker.
+chatgpt-codex-router	api	1456	1456	tcp	localhost	standalone/chatgpt-codex-router	Local ChatGPT Codex router.
+claude-sub-router	api	1457	1457	tcp	localhost	standalone/claude-sub-router	Local Claude subscription router.
+gemini-sub-router	api	1458	1458	tcp	localhost	standalone/gemini-sub-router	Local Gemini subscription router.

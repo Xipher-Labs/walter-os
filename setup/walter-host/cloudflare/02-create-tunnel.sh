@@ -34,6 +34,9 @@ set -euo pipefail
 
 DOMAIN="${1:-${WALTER_DOMAIN:-example.com}}"
 TUNNEL_NAME="${TUNNEL_NAME:-walter-vm}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WALTER_HOST_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PORT_MAP_FILE="${WALTER_PORT_MAP_FILE:-$WALTER_HOST_DIR/ports.tsv}"
 
 # ---------------------------------------------------------------------------
 # Canonical subdomain list — single source of truth for what is publicly
@@ -78,6 +81,31 @@ cf() {
   curl -sS -H "X-Auth-Email: $CF_EMAIL" -H "X-Auth-Key: $CF_KEY" -H "Content-Type: application/json" "$@"
 }
 
+port_map_lookup() {
+  local service="$1"
+  local role="$2"
+  local field="$3"
+  local column
+  case "$field" in
+    host_port) column=3 ;;
+    container_port) column=4 ;;
+    protocol) column=5 ;;
+    exposure) column=6 ;;
+    deploy_group) column=7 ;;
+    *) echo "Unknown port map field: $field" >&2; return 2 ;;
+  esac
+
+  awk -F '\t' -v service="$service" -v role="$role" -v column="$column" '
+    $0 ~ /^#/ { next }
+    $1 == service && $2 == role {
+      print $column
+      found = 1
+      exit
+    }
+    END { exit found ? 0 : 1 }
+  ' "$PORT_MAP_FILE"
+}
+
 echo "==> Check if tunnel '$TUNNEL_NAME' exists..."
 existing=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/cfd_tunnel?name=$TUNNEL_NAME&is_deleted=false")
 TUNNEL_ID=$(echo "$existing" | jq -r '.result[0].id // empty')
@@ -114,13 +142,15 @@ echo "==> Create CNAME records for service hostnames → tunnel..."
 add_cname() {
   local name="$1"
   # idempotent — check first
-  local existing=$(cf "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$name&type=CNAME" \
+  local existing
+  existing=$(cf "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$name&type=CNAME" \
     | jq -r '.result[0].id // empty')
   if [[ -n "$existing" ]]; then
     printf "  - %s (already exists)\n" "$name"
     return 0
   fi
-  local r=$(cf -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+  local r
+  r=$(cf -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
     -d "{\"type\":\"CNAME\",\"name\":\"$name\",\"content\":\"$TUNNEL_ID.cfargotunnel.com\",\"ttl\":1,\"proxied\":true}")
   if [[ "$(echo "$r" | jq -r '.success')" == "true" ]]; then
     printf "  ✓ %s\n" "$name"
@@ -148,20 +178,29 @@ mkdir -p /tmp/walter-cf
 # Caddy — cloudflared only does TLS termination and host-based fan-in.
 #
 # Per-service overrides:
-#   PostHog ships its own proxy on host port 8100. Its inner Caddy matches
-#   `Host: localhost:8000`, so the tunnel must bypass the central Caddy for
-#   this one service and rewrite the Host header. Keep the rest of the stack
-#   routed through central Caddy on host port 80.
+#   PostHog ships its own proxy; the host/container ports are read from
+#   setup/walter-host/ports.tsv. Its inner Caddy matches `Host:
+#   localhost:<container_port>`, so the tunnel must bypass the central Caddy
+#   for this one service and rewrite the Host header. Keep the rest of the
+#   stack routed through central Caddy on host port 80.
 ingress_service_for() {
   case "$1" in
-    posthog) printf 'http://127.0.0.1:8100' ;;
+    posthog)
+      local host_port
+      host_port=$(port_map_lookup posthog tunnel host_port)
+      printf 'http://127.0.0.1:%s' "$host_port"
+      ;;
     *) printf 'http://127.0.0.1:80' ;;
   esac
 }
 
 ingress_origin_request_for() {
   case "$1" in
-    posthog) printf '    originRequest:\n      httpHostHeader: localhost:8000\n' ;;
+    posthog)
+      local container_port
+      container_port=$(port_map_lookup posthog tunnel container_port)
+      printf '    originRequest:\n      httpHostHeader: localhost:%s\n' "$container_port"
+      ;;
   esac
 }
 
