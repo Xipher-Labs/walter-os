@@ -88,6 +88,14 @@ Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isol
   `metadata.domain` attribution, and operator docs for routing Codex, Claude,
   Gemini aliases, and local Ollama by task domain.
 
+### Changed
+
+- **#266 upgrade UX summary.** `walter-os upgrade` now ends with an operator
+  summary that distinguishes dry-run/local/VM outcomes, reports audit and
+  doctor status, and prints a rollback hint after local upgrades. The version
+  update notice now points operators to `walter-os upgrade --dry-run` and a
+  targeted `--target <tag>` command.
+
 ---
 
 ## [0.5.1] — 2026-05-23

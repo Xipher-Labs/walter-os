@@ -21,6 +21,11 @@ export WALTER_OS_SKIP_UPDATE_CHECK="1"
 # exercise the single-source-of-truth implementation, not a local copy.
 # -----------------------------------------------------------------------
 setup() {
+  export HOME="$BATS_TEST_TMPDIR/home"
+  export WALTER_CONFIG="$BATS_TEST_TMPDIR/walter-config"
+  export WALTER_OS_HOME="${REPO_ROOT}"
+  export WALTER_OS_SKIP_UPDATE_CHECK="1"
+  mkdir -p "$HOME" "$WALTER_CONFIG"
   # shellcheck source=scripts/walter/lib/version-compare.sh
   source "${REPO_ROOT}/scripts/walter/lib/version-compare.sh"
 }
@@ -178,6 +183,8 @@ MOCK
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "(update available:"
+  echo "$output" | grep -q "walter-os upgrade --dry-run"
+  echo "$output" | grep -q "walter-os upgrade --target v99.0.0"
 }
 
 @test "invalid WALTER_OS_UPDATE_REPO prints warning and exits 0 [AC-2]" {
