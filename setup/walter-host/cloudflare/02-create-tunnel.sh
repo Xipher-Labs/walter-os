@@ -90,7 +90,7 @@ port_map_lookup() {
   local service="$1"
   local role="$2"
   local field="$3"
-  local column
+  local column value
   case "$field" in
     host_port) column=3 ;;
     container_port) column=4 ;;
@@ -100,15 +100,19 @@ port_map_lookup() {
     *) echo "Unknown port map field: $field" >&2; return 2 ;;
   esac
 
-  awk -F '\t' -v service="$service" -v role="$role" -v column="$column" '
-    $0 ~ /^#/ { next }
+  if ! value=$(awk -F '\t' -v service="$service" -v role="$role" -v column="$column" '
+    $0 ~ /^#/ || NF == 0 { next }
     $1 == service && $2 == role {
       print $column
       found = 1
       exit
     }
     END { exit found ? 0 : 1 }
-  ' "$PORT_MAP_FILE"
+  ' "$PORT_MAP_FILE"); then
+    echo "ERROR: missing port map entry: service=$service role=$role field=$field in $PORT_MAP_FILE" >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
 }
 
 echo "==> Check if tunnel '$TUNNEL_NAME' exists..."

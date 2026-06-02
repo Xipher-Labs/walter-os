@@ -18,6 +18,7 @@ setup() {
 
   awk -F '\t' '
     $0 ~ /^#/ { next }
+    NF == 0 { next }
     NF != 8 { print "bad column count: " $0; bad = 1 }
     $3 !~ /^[0-9]+$/ { print "bad host_port: " $0; bad = 1 }
     $4 !~ /^[0-9]+$/ { print "bad container_port: " $0; bad = 1 }
@@ -67,6 +68,7 @@ setup() {
 @test "#180: tunnel PostHog override comes from ports.tsv" {
   grep -qF 'PORT_MAP_FILE=' "$TUNNEL_SCRIPT"
   grep -qF 'port map not readable' "$TUNNEL_SCRIPT"
+  grep -qF 'missing port map entry' "$TUNNEL_SCRIPT"
   grep -qF 'port_map_lookup posthog tunnel host_port' "$TUNNEL_SCRIPT"
   grep -qF 'port_map_lookup posthog tunnel container_port' "$TUNNEL_SCRIPT"
   grep -q $'^posthog\ttunnel\t8100\t8000\ttcp\tlocalhost\tall-in-one\t' "$PORT_MAP"
