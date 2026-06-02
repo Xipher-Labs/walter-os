@@ -458,7 +458,7 @@ Layer 7 — meta:
 
 | Field | Value |
 |---|---|
-| Image | `nousresearch/hermes-agent:v2026.5.7` |
+| Image | `walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION}-stt` (local flavor of `nousresearch/hermes-agent:${HERMES_AGENT_BASE_VERSION}`) |
 | Subdomain | `hermes.${WALTER_DOMAIN}` |
 | Profile | `hermes-agent` |
 | Port (API) | 127.0.0.1:8642 → hermes.${WALTER_DOMAIN} via Caddy (dashboard: 9119) |
@@ -469,7 +469,7 @@ Layer 7 — meta:
 | Startup deps | litellm (for LLM routing via Walter-Bridge) |
 | Bootstrap | Copy `.env.template` to `.env`, set `LITELLM_HERMES_KEY`, run `docker compose --profile hermes-agent up -d` |
 | Env vars required | `LITELLM_HERMES_KEY` |
-| Per-service dir | `setup/walter-host/services/hermes-agent/` (compose.yml, .env.template, SUGGESTIONS.md, README.md) |
+| Per-service dir | `setup/walter-host/services/hermes-agent/` (Dockerfile, compose.yml, .env.template, SUGGESTIONS.md, README.md) |
 | Note | Alternative to OpenClaw. MIT licensed. Skill-learning loop off by default. 20+ platform integrations. See docs/operational/agent-runtimes-comparison.md. |
 
 ### openclaw (personal AI assistant) [profile: assistant]

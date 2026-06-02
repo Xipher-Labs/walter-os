@@ -26,6 +26,10 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
     grep -q "LLM backend" "$SERVICE_DIR/.env.template"
 }
 
+@test ".env.template declares the Hermes base image version" {
+    grep -q '^HERMES_AGENT_BASE_VERSION=v[0-9]' "$SERVICE_DIR/.env.template"
+}
+
 @test ".env.template has LITELLM_HERMES_KEY" {
     grep -q "LITELLM_HERMES_KEY" "$SERVICE_DIR/.env.template"
 }
@@ -54,4 +58,47 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
     CADDY="$REPO_ROOT/setup/walter-host/caddy/Caddyfile.template"
     [ -f "$CADDY" ]
     grep -q 'hermes\.' "$CADDY"
+}
+
+@test "Dockerfile re-declares BASE_VERSION after FROM for labels" {
+    awk '
+        /^FROM / { after_from=1; next }
+        after_from && /^ARG BASE_VERSION$/ { found=1 }
+        END { exit(found ? 0 : 1) }
+    ' "$SERVICE_DIR/Dockerfile"
+}
+
+@test "Dockerfile pins faster-whisper version" {
+    grep -q 'faster-whisper==${FASTER_WHISPER_VERSION}' "$SERVICE_DIR/Dockerfile"
+    grep -q '^ARG FASTER_WHISPER_VERSION=[0-9]' "$SERVICE_DIR/Dockerfile"
+}
+
+@test "Dockerfile uses uv supported no-cache flag" {
+    grep -q -- '--no-cache' "$SERVICE_DIR/Dockerfile"
+    run grep -q -- '--no-cache-dir' "$SERVICE_DIR/Dockerfile"
+    [ "$status" -ne 0 ]
+}
+
+@test "Dockerfile persists Hugging Face cache under hermes_data volume" {
+    grep -q '^ENV HF_HOME=/opt/data/.cache/huggingface$' "$SERVICE_DIR/Dockerfile"
+}
+
+@test ".dockerignore keeps local secrets out of build context" {
+    [ -f "$SERVICE_DIR/.dockerignore" ]
+    grep -q '^\.env$' "$SERVICE_DIR/.dockerignore"
+    grep -q '^\.env\.\*$' "$SERVICE_DIR/.dockerignore"
+    grep -q '^\*\.pem$' "$SERVICE_DIR/.dockerignore"
+    grep -q '^\*\.key$' "$SERVICE_DIR/.dockerignore"
+}
+
+@test "compose.yml uses one Hermes base version variable for image and build arg" {
+    expected_version="$(sed -n 's/^HERMES_AGENT_BASE_VERSION=//p' "$SERVICE_DIR/.env.template")"
+    [ -n "$expected_version" ]
+    grep -q "^ARG BASE_VERSION=${expected_version}$" "$SERVICE_DIR/Dockerfile"
+    grep -q "image: walter-os/hermes-agent:\${HERMES_AGENT_BASE_VERSION:-${expected_version}}-stt" "$SERVICE_DIR/compose.yml"
+    grep -q "BASE_VERSION: \${HERMES_AGENT_BASE_VERSION:-${expected_version}}" "$SERVICE_DIR/compose.yml"
+}
+
+@test "services inventory documents the Walter Hermes STT image" {
+    grep -q 'walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION}-stt' "$REPO_ROOT/setup/SERVICES-INVENTORY.md"
 }
