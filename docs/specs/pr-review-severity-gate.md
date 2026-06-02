@@ -244,7 +244,8 @@ fall back to manual operator merge as today.
   `MERGE_BLOCKED:no-opt-in` (slug consistent with AC7's slug enumeration).
   The policy must be read from the default branch state that existed before
   the PR, so a PR that adds or loosens the file cannot self-authorize.
-- [ ] **AC11.** AGENTS.md has TWO blocks that mention auto-merging — both are amended in this PR's implementation:
+- [ ] **AC11.** AGENTS.md has TWO blocks that mention auto-merging — the
+  implementation must amend both:
   - Line ~336 (`## Universal disciplines` → `Things agents must NEVER do` → "Auto-merge a PR. Operator clicks merge.") → amended to "Auto-merge a PR UNLESS the bounded conditions in §4.3 (gate) + §4.4 (action sequence) of `docs/specs/pr-review-severity-gate.md` are met".
   - Line ~322 (`## Trust tiers (Council agents — Phase T+)` → "Blocked for ALL tiers" hardcoded list including "merge PRs") → annotated with the same conditional, so the approval-gate.sh hook respects bounded auto-merge when `walter-repo-config.yaml` has `auto_merge.enabled: true` and all gate conditions hold.
   Both edits link ADR 0015 in a new subsection. The implementation PR (not this spec PR) also updates `hooks/approval-gate.sh` to read `walter-repo-config.yaml` from the default branch + invoke the gate before refusing the merge action.

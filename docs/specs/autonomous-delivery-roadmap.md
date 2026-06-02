@@ -84,7 +84,7 @@ these — reference them:
 | AD-6 | **Autonomy modes (Lite / Guided / Full)** — formalize as a policy axis ORTHOGONAL to install tier; Guided is the default | v0.7.0 | 2–3d | Reads AD-5 |
 | AD-7 | **Capability tiers (evidence-based)** — graduate agent capability on objective evidence, superseding subjective "trust" framing | v0.7.0 | 3–4d | ADR-0023; extends ADR-0009 |
 | AD-8 | **Risk-based + prototype verification** — verification ∝ risk × blast-radius; explicit `prototype` tier for hackathons/MVPs | v0.7.0 | 2–3d | ADR-0024 |
-| AD-9 | **Fold auto-merge policy into repo-config** — `per-repo-auto-merge-touchfile.md` is superseded and `pr-review-severity-gate.md §4.5` now uses the `auto_merge` block from AD-5. The A-numbering drift in `oss-trust-roadmap.md` is already reconciled (`A-1` egress, `A-2` capability tokens). | v0.7.0 | 0d | Done; cleanup completed by #234 follow-up |
+| AD-9 | **Fold auto-merge policy into repo-config** — `per-repo-auto-merge-touchfile.md` is superseded and `pr-review-severity-gate.md §4.5` now uses the `auto_merge` block from AD-5. The A-numbering drift in `oss-trust-roadmap.md` is already reconciled (`A-1` egress, `A-2` capability tokens). | v0.7.0 | 0d | Done; completed by the #234 cleanup PR |
 
 ### Phase 3 — Human-review surface (v0.8.0)
 
