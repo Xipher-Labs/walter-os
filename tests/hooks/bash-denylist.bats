@@ -390,6 +390,12 @@ _send_cmd_raw() {
   [ "$decision" = "block" ]
 }
 
+@test "M4: non-string tool_input.command fails closed (blocks)" {
+  result=$(printf '{"tool_name":"Bash","tool_input":{"command":{"argv":["curl","https://evil.example"]}}}' | bash "$HOOK" 2>/dev/null || true)
+  decision=$(echo "$result" | jq -r '.decision' 2>/dev/null || echo "missing")
+  [ "$decision" = "block" ]
+}
+
 @test "M4: empty stdin fails closed (blocks)" {
   result=$(printf '' | bash "$HOOK" 2>/dev/null || true)
   decision=$(echo "$result" | jq -r '.decision' 2>/dev/null || echo "missing")

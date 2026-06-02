@@ -35,7 +35,11 @@ _audit_early_decision() {
 }
 
 _walter_bash_major="${BASH_VERSION%%.*}"
-if [[ "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
+_walter_hook_sourced=0
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  _walter_hook_sourced=1
+fi
+if [[ "$_walter_hook_sourced" == "1" && "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
   _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
 fi
 if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
@@ -65,7 +69,7 @@ if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   printf '%s\n' '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
-unset _walter_bash_major
+unset _walter_bash_major _walter_hook_sourced
 #
 # Bypass escape (two-factor): the hook allows a matched pattern only if BOTH
 #   1. the env var WALTER_DENYLIST_BYPASS=1 is set in the hook's environment, AND
@@ -143,8 +147,8 @@ fi
 # command we cannot read. Codex R2 MEDIUM M4: previously, malformed JSON or
 # jq parse failure was silently coerced to CMD="" via `// ""`, causing the
 # hook to fall through to "allow".
-if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
-  _emit_block "bash-denylist: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety." "$INPUT"
+if ! CMD="$(printf '%s' "$INPUT" | jq -er 'if (.tool_input.command | type) == "string" and (.tool_input.command | length) > 0 then .tool_input.command else empty end' 2>/dev/null)"; then
+  _emit_block "bash-denylist: cannot parse hook input (malformed JSON, missing tool_input.command, or non-string command) — failing closed for safety." "$INPUT"
 fi
 if [[ -z "$CMD" ]]; then
   _emit_block "bash-denylist: empty command in hook input — failing closed for safety."

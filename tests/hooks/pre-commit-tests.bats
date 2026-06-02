@@ -40,7 +40,13 @@ input_json() {
 @test "blocks missing command in hook JSON" {
   result="$(printf '{"tool_name":"Bash","tool_input":{}}' | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "block" ]
-  jq -e '.reason | contains("missing tool_input.command")' <<<"$result" >/dev/null
+  jq -e '.reason | contains("tool_input.command")' <<<"$result" >/dev/null
+}
+
+@test "blocks non-string command in hook JSON" {
+  result="$(printf '{"tool_name":"Bash","tool_input":{"command":["git","commit"]}}' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("tool_input.command")' <<<"$result" >/dev/null
 }
 
 @test "allows commit with --no-verify" {

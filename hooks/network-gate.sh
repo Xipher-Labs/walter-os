@@ -57,7 +57,11 @@ _audit_early_decision() {
 # `${arr[@]}` semantics differ in subtle ways. Inherit the same re-exec
 # dance bash-denylist.sh uses so this hook behaves identically.
 _walter_bash_major="${BASH_VERSION%%.*}"
-if [[ "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
+_walter_hook_sourced=0
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  _walter_hook_sourced=1
+fi
+if [[ "$_walter_hook_sourced" == "1" && "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
   _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
 fi
 if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
@@ -76,7 +80,7 @@ if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   printf '%s\n' '{"decision":"block","reason":"network-gate: requires bash >= 4.0 — install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
-unset _walter_bash_major
+unset _walter_bash_major _walter_hook_sourced
 
 # ---------- stdin parsing ----------
 
@@ -138,8 +142,8 @@ if [[ -z "$INPUT" ]]; then
   _emit_block "network-gate: empty hook input — failing closed for safety." "$INPUT"
 fi
 
-if ! TOOL_NAME="$(printf '%s' "$INPUT" | jq -er '.tool_name // empty' 2>/dev/null)"; then
-  _emit_block "network-gate: malformed JSON or missing tool_name — failing closed for safety." "$INPUT"
+if ! TOOL_NAME="$(printf '%s' "$INPUT" | jq -er 'if (.tool_name | type) == "string" and (.tool_name | length) > 0 then .tool_name else empty end' 2>/dev/null)"; then
+  _emit_block "network-gate: malformed JSON, missing tool_name, or non-string tool_name — failing closed for safety." "$INPUT"
 fi
 
 # Pass through every tool that isn't Bash. We only inspect command strings.
@@ -147,8 +151,8 @@ if [[ "$TOOL_NAME" != "Bash" ]]; then
   _emit_allow ""
 fi
 
-if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
-  _emit_block "network-gate: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety." "$INPUT"
+if ! CMD="$(printf '%s' "$INPUT" | jq -er 'if (.tool_input.command | type) == "string" and (.tool_input.command | length) > 0 then .tool_input.command else empty end' 2>/dev/null)"; then
+  _emit_block "network-gate: cannot parse hook input (malformed JSON, missing tool_input.command, or non-string command) — failing closed for safety." "$INPUT"
 fi
 if [[ -z "$CMD" ]]; then
   _emit_block "network-gate: empty Bash command — failing closed for safety."

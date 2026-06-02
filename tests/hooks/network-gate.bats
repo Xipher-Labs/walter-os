@@ -1204,3 +1204,15 @@ _call_hook_other() {
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.decision == "block"'
 }
+
+@test "AC-2: non-string tool_name → fail-CLOSED block" {
+  run bash -c "printf '{\"tool_name\":{\"name\":\"Read\"},\"tool_input\":{}}' | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "AC-2: non-string Bash command → fail-CLOSED block" {
+  run bash -c "printf '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":[\"curl\",\"https://evil.example\"]}}' | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+}
