@@ -176,6 +176,38 @@ YAML
   [[ "$output" == *"verification: risk_based"* ]]
 }
 
+@test "repo-config defaults hackathon prints bounded full-autonomy profile" {
+  run "$WALTER_OS_BIN" repo-config defaults hackathon
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"autonomy_mode: full"* ]]
+  [[ "$output" == *"profile: hackathon"* ]]
+  [[ "$output" == *"verification: prototype"* ]]
+  [[ "$output" == *"preview_deploy: true"* ]]
+  [[ "$output" == *"enabled: true"* ]]
+  [[ "$output" == *"\"hackathon/*\""* ]]
+  [[ "$output" == *"min_walter_score: 70"* ]]
+  [[ "$output" == *"max_risk: medium"* ]]
+  [[ "$output" == *"  - auth"* ]]
+  [[ "$output" == *"  - destructive_ops"* ]]
+}
+
+@test "repo-config defaults hackathon emits a valid policy file" {
+  "$WALTER_OS_BIN" repo-config defaults hackathon > "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: valid"* ]]
+}
+
+@test "repo-config defaults rejects unknown profile presets" {
+  run "$WALTER_OS_BIN" repo-config defaults sleepy
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown defaults profile: sleepy"* ]]
+}
+
 @test "repo-config subcommand preserves config-sourced WALTER_OS_HOME" {
   printf 'WALTER_OS_HOME=%q\n' "$REPO_ROOT" > "$WALTER_CONFIG/env"
   unset WALTER_OS_HOME

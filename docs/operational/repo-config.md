@@ -60,6 +60,19 @@ Print the current default template with:
 walter-os repo-config defaults
 ```
 
+Print the bounded hackathon preset with:
+
+```bash
+walter-os repo-config defaults hackathon
+```
+
+The hackathon preset is an opt-in template for short-lived, demo-driven
+projects. It sets `autonomy_mode: full`, `profile: hackathon`,
+`verification: prototype`, `preview_deploy: true`, and a lower Walter Score
+threshold while still requiring green CI and restricting auto-merge eligibility
+to `hackathon/*` source branches. It keeps the same hard-floor human approval
+categories as the balanced default.
+
 ## Validation Rules
 
 The validator fails closed for malformed YAML, invalid enum values, wrong

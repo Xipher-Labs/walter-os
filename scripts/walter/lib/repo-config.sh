@@ -6,7 +6,11 @@
 # policy surface, but it does not relax approval-gate hard limits.
 
 walter_repo_config_defaults() {
-  cat <<'YAML'
+  local profile="${1:-balanced}"
+
+  case "$profile" in
+    balanced)
+      cat <<'YAML'
 autonomy_mode: guided
 profile: balanced
 capability_tier_ceiling: 1
@@ -32,6 +36,41 @@ human_approval_required_for:
   - db_migrations
   - destructive_ops
 YAML
+      ;;
+    hackathon)
+      cat <<'YAML'
+autonomy_mode: full
+profile: hackathon
+capability_tier_ceiling: 1
+auto_merge:
+  enabled: true
+  allowed_branches:
+    - "hackathon/*"
+  forbidden_branches:
+    - main
+    - master
+    - staging
+    - production
+    - "release/*"
+  require_green_ci: true
+  min_walter_score: 70
+  max_risk: medium
+verification: prototype
+preview_deploy: true
+human_approval_required_for:
+  - auth
+  - payments
+  - secrets
+  - prod_infra
+  - db_migrations
+  - destructive_ops
+YAML
+      ;;
+    *)
+      printf 'repo-config: unknown defaults profile: %s\n' "$profile" >&2
+      return 2
+      ;;
+  esac
 }
 
 walter_repo_config_path() {

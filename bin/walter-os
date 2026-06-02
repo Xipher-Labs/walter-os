@@ -66,7 +66,7 @@
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
-#   repo-config {validate|defaults}
+#   repo-config {validate|defaults [balanced|hackathon]}
 #                               Validate walter-repo-config.yaml per-repo policy
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
