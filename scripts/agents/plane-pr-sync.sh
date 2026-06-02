@@ -113,6 +113,10 @@ require_value pr-url "$pr_url"
 require_value pr-number "$pr_number"
 require_value repo "$repo"
 require_value branch "$branch"
+if [[ ! "$pr_number" =~ ^[0-9]+$ ]]; then
+  echo "plane-pr-sync: --pr-number must be numeric" >&2
+  exit 2
+fi
 
 if [[ "$event" == "merged" ]]; then
   require_value merge-sha "$merge_sha"
@@ -124,6 +128,7 @@ acquire_lock() {
   lock_key="$(printf '%s' "${repo}-${pr_number}" | tr -c 'A-Za-z0-9._-' '_')"
   lock_file="${lock_dir}/${lock_key}.lock"
   mkdir -p "$lock_dir"
+  chmod 700 "$lock_dir"
 
   if ! command -v flock >/dev/null 2>&1; then
     echo "plane-pr-sync: WARN flock not found; continuing without concurrency lock" >&2

@@ -281,6 +281,18 @@ teardown() {
   [[ "$output" == *"missing value for --issue"* ]]
 }
 
+@test "AC4: non-numeric PR number fails closed" {
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "-7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--pr-number must be numeric"* ]]
+}
+
 @test "AC5: newline input is rejected" {
   run bash "$SCRIPT" link \
     --issue $'issue\nuuid' \
@@ -319,4 +331,6 @@ teardown() {
 @test "AC6: script declares optional flock guard" {
   grep -q 'command -v flock' "$SCRIPT"
   grep -q 'flock -n' "$SCRIPT"
+  grep -q 'chmod 700' "$SCRIPT"
+  grep -q 'lock_dir' "$SCRIPT"
 }
