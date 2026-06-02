@@ -593,11 +593,9 @@ check_panic_lock() {
     local lock_content
     lock_content="$(cat "$lock_file" 2>/dev/null || echo 'unknown')"
     # Escape gate.lock content for safe embedding in JSON reason string.
-    # Use python3 json.dumps to handle newlines, tabs, control chars, quotes.
     local lock_content_escaped
-    if command -v python3 >/dev/null 2>&1; then
-      lock_content_escaped="$(printf '%s' "$lock_content" | \
-        python3 -c "import json,sys; print(json.dumps(sys.stdin.read().rstrip()))")"
+    if command -v jq >/dev/null 2>&1; then
+      lock_content_escaped="$(printf '%s' "$lock_content" | jq -Rs .)"
     else
       # Bash fallback: cover the most dangerous chars for JSON strings
       local s="${lock_content//\\/\\\\}"
