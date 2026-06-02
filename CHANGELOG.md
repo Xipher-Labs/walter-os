@@ -69,7 +69,87 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isolation, A-4 capability tokens, A-5 read-only mounts), severity-gate runtime implementation (Phase A-F tree from `docs/specs/pr-review-severity-gate.plan.md`), and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
+Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime enforcement (#260), tamper-resistant capability mint approvals (#264), capability hook tokenization cleanup (#262), sandbox key-scan test decoupling (#263), vendored-skill pin enforcement (#255), Codex startup degradation diagnostics (#248/#259), optional app profiles (#207/#208/#210/#211/#212/#213), severity-gate runtime implementation, and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
+
+---
+
+## [0.6.0] — 2026-06-02
+
+**OSS Trust runtime-hardening release.**
+
+This release turns the v0.4.3/v0.5.x security roadmap from specs into runtime
+controls. The central change is that Walter-OS no longer relies only on
+regex hooks and operator discipline: it now has session-bound capability
+tokens, sandbox profile primitives, hidden secret mounts, append-only audit
+rows, audit telemetry wiring, and release provenance/reproducibility gates.
+
+### Added (capability tokens)
+
+- **Session state foundation (#218) and timeout hook (#219).** Adds
+  session-bound state as the base for short-lived security context.
+- **Capability key foundation (#241), capability CLI (#243), hook enforcement
+  (#244), and default skill capabilities (#245).** Adds mint/list/verify/
+  revoke flows, hook-side capability checks, protected path policy sharing,
+  default skill capability loading, and regression coverage for forged,
+  expired, copied, revoked, and malformed tokens.
+
+### Added (process isolation and secret mounts)
+
+- **Sandbox provider shim (#246).** Introduces provider selection and profile
+  materialization for Linux and macOS sandbox providers.
+- **Hook and skill sandbox profiles (#247, #249).** Adds hook-focused and
+  skill-focused sandbox profiles with fail-closed config handling.
+- **Invisible/hidden secret mounts (#250).** Adds read-only hidden mount
+  handling for sensitive paths so sandboxed skills do not inherit direct
+  access to private session keys or operator secrets.
+
+### Added (audit integrity and telemetry)
+
+- **Audit chain writer (#251).** Adds append-only JSONL audit rows with
+  redacted summaries, row self-hashes, daily root files, rotation-safety
+  checks, stricter locking, and verification coverage.
+- **Hook audit rows (#252).** Wires approval, denylist, network, branch-flow,
+  pre-commit, and wiki-validation hooks into the audit chain with coverage
+  for allow/block and dependency-failure paths.
+- **Audit telemetry dashboard (#257).** Adds opt-in Promtail/Grafana/Loki
+  telemetry for audit-chain rows, dashboard panels, deployment docs, and
+  compose validation.
+
+### Added (release integrity)
+
+- **Release integrity tests (#256).** Restores release workflow integrity
+  regression coverage.
+- **SLSA provenance and reproducible builds (#261).** Adds deterministic
+  source archive checks, SBOM reproduction support, SLSA3 provenance
+  generation, checksums verification guidance, and CI coverage for workflow
+  pinning and reproducibility docs.
+- **Node 24 workflow action migration (#285, closes #283).** Moves pinned
+  `actions/checkout`, `actions/setup-node`, and `github/codeql-action` uses to
+  Node 24-compatible SHAs while keeping full 40-character pin enforcement.
+
+### Added (release-adjacent candidates)
+
+- **Multi-model routing preferences (#215).** Adds domain-based model routing
+  defaults and PHI local-model lock behavior.
+- **Renovate self-hosted profile (#216, closes #209).** Adds an optional
+  disabled-by-default Renovate profile with conservative update defaults.
+- **macOS/Ubuntu install hardening (#217, closes #214).** Adds tested platform
+  guidance for install checks, yq flavor detection, Docker Compose, and
+  package-manager hints.
+
+### Deferred after v0.6.0
+
+- **End-to-end sandbox runtime enforcement (#260).** The v0.6.0 stack lands
+  provider/profile/mount primitives; routing all relevant hook and skill
+  entrypoints through `walter_sandbox_run` remains a follow-up.
+- **Tamper-resistant capability mint approvals (#264).** Current capability
+  minting blocks noninteractive agent/script minting; stronger operator
+  presence proofs are tracked separately.
+- **Vendored skill pin enforcement (#255).** Provenance manifests exist for
+  skill adoption work, but daily audit enforcement is a follow-up.
+- **Optional startup/team app profiles (#207/#208/#210/#211/#212/#213).**
+  Authentik, Forgejo Actions Runner, Langfuse, Listmonk, ntfy, and the
+  knowledge-profile decision remain optional profiles to implement later.
 
 ### Added
 
@@ -1101,7 +1181,9 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.6.0
+[0.5.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.1
 [0.5.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.0
 [0.4.5]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.5
 [0.4.4]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.4.4

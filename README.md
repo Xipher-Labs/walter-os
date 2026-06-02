@@ -6,15 +6,19 @@
 
 [![License: Apache-2.0 + AGPL-3.0](https://img.shields.io/badge/License-Apache--2.0%20%2B%20AGPL--3.0-blue.svg)](#license)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.5.1--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.0--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
 [![Security: default-deny egress](https://img.shields.io/badge/security-default--deny_egress-brightgreen.svg)](docs/operational/network-egress.md)
 
 </div>
 
-> **Status — alpha (v0.5.1).** Things iterate fast. **Pin to a tag** in production.
+> **Status — alpha (v0.6.0).** Things iterate fast. **Pin to a tag** in production.
 > Stability promise lands at v1.0 — see [the charter](docs/specs/walter-os-v1-0-stability-charter.md).
 > Breaking changes between minor versions are normal until then; every release is tagged + documented in [CHANGELOG.md](CHANGELOG.md).
+> v0.6.0 is the OSS Trust runtime-hardening cut: capability tokens,
+> process-isolation sandbox primitives, hidden secret mounts, audit-chain
+> rows, audit telemetry, and SLSA/reproducible-release groundwork. Release
+> readiness is tracked in [v0.6.0 release readiness](docs/operational/v0.6.0-release-readiness.md).
 
 ---
 
@@ -102,8 +106,11 @@ matter more than the positive ones.
   without $300+/mo SaaS bills; you want AI agents that handle content +
   analytics + competitive research routed through your own LiteLLM gateway
   with cost visibility; you're OK spending a one-time 4-8 hour setup window.
+  This profile is also reasonable for small teams and startups up to roughly
+  10 people when someone technical owns operations.
 - **NOT for you if**: you need uptime SLAs (single-VM setup); you want
-  managed SaaS with customer support; your team is bigger than 2-3 people.
+  managed SaaS with customer support; nobody on the team can own Docker,
+  DNS, backups, upgrades, and secrets hygiene.
 - **Pick**: Mode 2 + the founder-skills bundle, OR Mode 3 for the full
   GTM stack.
 
@@ -449,7 +456,7 @@ Rollback: `git checkout <prev-tag>` + `./install.sh --upgrade`. Symlinks are re-
 walter-os/
 ├── AGENTS.md                    # Global agent contract (loaded by all four tools)
 ├── CHANGELOG.md                 # SemVer changelog
-├── VERSION                      # Single-source semver (0.5.1)
+├── VERSION                      # Single-source semver (0.6.0)
 ├── LICENSE                      # AGPL-3.0-or-later (canonical text)
 ├── LICENSE-APACHE               # Apache-2.0 (canonical text — default tree)
 ├── NOTICE                       # Operator attribution + dual-license map
