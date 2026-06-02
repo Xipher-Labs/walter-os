@@ -5,6 +5,26 @@
 set -euo pipefail
 
 WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+PROTECTED_PATHS_LIB="${WALTER_OS_HOME}/scripts/walter/lib/protected-paths.sh"
+
+if [[ -f "$PROTECTED_PATHS_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$PROTECTED_PATHS_LIB"
+else
+  declare -a WALTER_PROTECTED_PATH_PATTERNS=(
+    '.github/workflows/*'
+    'hooks/*'
+    'AGENTS.md'
+    'install.sh'
+    'mcp/servers.json'
+    'auth/*'
+    'crypto/*'
+    '*.env'
+    '*.pem'
+    '*.key'
+    '*migration*'
+  )
+fi
 
 usage() {
   cat <<'EOF'
@@ -36,6 +56,17 @@ require_gh() {
     echo "walter-os pr-score: gh is required unless --fixture is used" >&2
     exit 3
   fi
+}
+
+is_protected_path() {
+  local path="$1" pattern
+  for pattern in "${WALTER_PROTECTED_PATH_PATTERNS[@]}"; do
+    # shellcheck disable=SC2053 # Protected path patterns are glob expressions.
+    if [[ "$path" == $pattern ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 title_is_valid() {
@@ -239,12 +270,10 @@ sensitive_paths=""
 file_paths="$(jq -r '.files[]?.path // empty' <<<"$pr_json")"
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
-  case "$path" in
-    .github/workflows/*|hooks/*|AGENTS.md|*/AGENTS.md|install.sh|mcp/servers.json|auth/*|crypto/*|*.env|*.pem|*.key|*migration*)
-      sensitive_count=$((sensitive_count + 1))
-      sensitive_paths="${sensitive_paths}${sensitive_paths:+, }${path}"
-      ;;
-  esac
+  if is_protected_path "$path"; then
+    sensitive_count=$((sensitive_count + 1))
+    sensitive_paths="${sensitive_paths}${sensitive_paths:+, }${path}"
+  fi
 done <<<"$file_paths"
 
 risk_points=20

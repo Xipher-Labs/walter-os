@@ -141,6 +141,22 @@ write_fixture() {
   [[ "$output" == *"sensitive path"* ]]
 }
 
+@test "AC3: shared protected paths force human review" {
+  local fixture="$TMP_DIR/protected-path.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"bin/walter-os"},{"path":"tests/cli/pr-score.bats"}]'
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Decision: human-review"* ]]
+  [[ "$output" == *"sensitive path"* ]]
+  [[ "$output" == *"bin/walter-os"* ]]
+}
+
 @test "AC3: conflicting PRs are blocked" {
   local fixture="$TMP_DIR/conflicting.json"
   local updated="$TMP_DIR/conflicting-updated.json"
