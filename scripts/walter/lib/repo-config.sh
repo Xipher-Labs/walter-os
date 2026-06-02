@@ -260,10 +260,16 @@ _walter_repo_config_validate_auto_merge() {
 }
 
 walter_repo_config_validate() {
+  local target="${1:-$(pwd)}"
   local path
-  path="$(walter_repo_config_path "${1:-$(pwd)}")"
+  path="$(walter_repo_config_path "$target")"
   WALTER_REPO_CONFIG_ERRORS=0
   WALTER_REPO_CONFIG_WARNINGS=0
+
+  if [[ ! -e "$target" ]]; then
+    _walter_repo_config_fail "target not found: ${target}"
+    return 1
+  fi
 
   if [[ ! -f "$path" ]]; then
     printf 'repo-config: absent at %s; safest defaults apply\n' "$path"

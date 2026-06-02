@@ -6,6 +6,8 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   WALTER_OS_BIN="$REPO_ROOT/bin/walter-os"
+  command -v yq >/dev/null 2>&1 || skip "mikefarah/yq required for repo-config validation tests"
+  yq --version 2>&1 | grep -qi 'mikefarah' || skip "mikefarah/yq required for repo-config validation tests"
   TMP_DIR="$(mktemp -d)"
   export HOME="$TMP_DIR/home"
   export WALTER_CONFIG="$TMP_DIR/config"
@@ -54,6 +56,13 @@ YAML
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"safest defaults apply"* ]]
+}
+
+@test "explicit missing target fails instead of applying defaults" {
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/missing-repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"target not found"* ]]
 }
 
 @test "valid walter-repo-config.yaml passes schema validation" {

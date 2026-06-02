@@ -18,7 +18,7 @@ fi
 source "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh"
 
 print_help() {
-  grep '^#' "$0" | sed 's/^# \{0,1\}//'
+  awk '/^[^#]/ && NR > 1 { exit } /^#( |$)/ { sub(/^# ?/, ""); print }' "$0"
 }
 
 cmd="${1:-help}"
