@@ -135,8 +135,16 @@ acquire_lock() {
     return 0
   fi
 
+  if [[ -L "$lock_dir" ]]; then
+    echo "plane-pr-sync: WARN unsafe symlink lock dir; continuing without concurrency lock" >&2
+    return 0
+  fi
   if ! mkdir -p "$lock_dir"; then
     echo "plane-pr-sync: WARN failed to create lock dir; continuing without concurrency lock" >&2
+    return 0
+  fi
+  if [[ -L "$lock_dir" || ! -O "$lock_dir" ]]; then
+    echo "plane-pr-sync: WARN unsafe lock dir ownership; continuing without concurrency lock" >&2
     return 0
   fi
   if ! chmod 700 "$lock_dir"; then
