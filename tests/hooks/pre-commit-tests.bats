@@ -6,6 +6,10 @@ setup() {
   HOOK="$REPO_ROOT/hooks/pre-commit-tests.sh"
 
   TMPDIR_TEST="$(mktemp -d)"
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
+  mkdir -p "$WALTER_CONFIG"
   cd "$TMPDIR_TEST"
   git init -q -b feature/test
   git config user.email "test@test.com"
@@ -14,6 +18,7 @@ setup() {
 }
 
 teardown() {
+  unset WALTER_CONFIG WALTER_AUDIT_DIR
   rm -rf "$TMPDIR_TEST"
 }
 
@@ -24,6 +29,39 @@ input_json() {
 @test "allows non-commit commands" {
   result="$(input_json "ls" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
+}
+
+@test "blocks malformed hook JSON" {
+  result="$(printf '{"tool_input":' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("invalid hook JSON")' <<<"$result" >/dev/null
+}
+
+@test "blocks missing command in hook JSON" {
+  result="$(printf '{"tool_name":"Bash","tool_input":{}}' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("tool_input.command")' <<<"$result" >/dev/null
+}
+
+@test "blocks non-string command in hook JSON" {
+  result="$(printf '{"tool_name":"Bash","tool_input":{"command":["git","commit"]}}' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("tool_input.command")' <<<"$result" >/dev/null
+}
+
+@test "jq-missing preserves dependency reason when audit chain exists" {
+  input_json "ls" | "$HOOK" >/dev/null
+
+  mock_bin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
+  chmod +x "$mock_bin/jq"
+
+  hook_input="$(input_json 'git commit -m "test"')"
+  result="$(printf '%s' "$hook_input" | PATH="$mock_bin:$PATH" "$HOOK")"
+  rm -rf "$mock_bin"
+
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("jq missing")' <<<"$result" >/dev/null
 }
 
 @test "allows commit with --no-verify" {
@@ -39,6 +77,16 @@ input_json() {
 @test "does not match git commit-tree" {
   result="$(input_json "git commit-tree HEAD" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
+}
+
+@test "block reasons are emitted as valid JSON strings" {
+  git checkout -q -b 'feature/json"branch'
+  cat > package.json <<'JSON'
+{"scripts":{"lint":"printf 'lint failed\\n'; exit 1"}}
+JSON
+  result="$(input_json 'git commit -m "test"' | "$HOOK")"
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("Pre-commit")' <<<"$result" >/dev/null
 }
 
 # --------------- Fix 5: wiki-validator wired as PreToolUse hook ---------------

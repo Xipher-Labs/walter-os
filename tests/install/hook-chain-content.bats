@@ -60,6 +60,49 @@ setup() {
   [ "$approval_line" -lt "$network_line" ]
 }
 
+@test "AC-3 (#122 capability): install.sh PreToolUse Bash chain includes capability-check.sh" {
+  grep -q 'hooks/capability-check.sh' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-3 (#122 capability): capability-check.sh runs AFTER approval-gate.sh" {
+  approval_line=$(grep -n 'hooks/approval-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  cap_line=$(grep -n 'hooks/capability-check.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  [ -n "$approval_line" ]
+  [ -n "$cap_line" ]
+  [ "$approval_line" -lt "$cap_line" ]
+}
+
+@test "AC-3 (#122 capability): capability-check.sh runs BEFORE network-gate.sh" {
+  cap_line=$(grep -n 'hooks/capability-check.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  network_line=$(grep -n 'hooks/network-gate.sh' "$REPO_ROOT/install.sh" \
+    | grep -v '^[[:space:]]*#' | head -1 | cut -d: -f1)
+  [ -n "$cap_line" ]
+  [ -n "$network_line" ]
+  [ "$cap_line" -lt "$network_line" ]
+}
+
+@test "AC-3 (#122 capability): edit hook matcher includes edit tools" {
+  grep -q 'matcher: "Write|Edit|MultiEdit|NotebookEdit"' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-3 (#122 capability): read hook matcher includes read tools" {
+  grep -q 'matcher: "Read|Grep|Glob|LS"' "$REPO_ROOT/install.sh"
+}
+
+@test "AC-3 (#122 capability): edit hook chain includes capability-check" {
+  sed -n '/matcher: "Write|Edit|MultiEdit|NotebookEdit"/,/wiki-validator-hook[.]sh/p' "$REPO_ROOT/install.sh" \
+    | grep -q 'hooks/capability-check.sh'
+}
+
+@test "AC-3 (#122 capability): read hook chain includes approval gate" {
+  read_chain="$(sed -n '/matcher: "Read|Grep|Glob|LS"/,/]/p' "$REPO_ROOT/install.sh")"
+
+  grep -q 'hooks/approval-gate.sh' <<< "$read_chain"
+}
+
 @test "AC-5 (#122 A-2): network-gate.sh appears BEFORE branch-flow-guard.sh" {
   # branch-flow-guard is about push-target policy, which only matters
   # for git pushes that ALREADY passed the network-gate host check.
@@ -73,4 +116,40 @@ setup() {
   [ -n "$network_line" ]
   [ -n "$branchflow_line" ]
   [ "$network_line" -lt "$branchflow_line" ]
+}
+
+@test "AC-2 (#122 A-4): install.sh registers session-timeout UserPromptSubmit hook" {
+  grep -q 'UserPromptSubmit' "$REPO_ROOT/install.sh"
+  grep -q 'hooks/session-timeout.sh' "$REPO_ROOT/install.sh"
+}
+
+@test "#260 AC-4: install.sh registers sandbox hook runner for security gates" {
+  grep -q 'scripts/walter/sandbox-hook-runner.sh' "$REPO_ROOT/install.sh"
+}
+
+@test "#260 AC-4: Bash security gates route through sandbox hook runner" {
+  bash_chain="$(sed -n '/matcher: "Bash"/,/matcher: "Read|Grep|Glob|LS"/p' "$REPO_ROOT/install.sh")"
+
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/bash-denylist.sh' <<< "$bash_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/capability-check.sh' <<< "$bash_chain"
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/network-gate.sh' <<< "$bash_chain"
+  grep -Fq "command: (\$repo + \"/hooks/approval-gate.sh\")" <<< "$bash_chain"
+  if grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/approval-gate.sh' <<< "$bash_chain"; then
+    return 1
+  fi
+}
+
+@test "#260 AC-4: read and edit security gates route through sandbox hook runner" {
+  read_chain="$(sed -n '/matcher: "Read|Grep|Glob|LS"/,/matcher: "Write|Edit|MultiEdit|NotebookEdit"/p' "$REPO_ROOT/install.sh")"
+  edit_chain="$(sed -n '/matcher: "Write|Edit|MultiEdit|NotebookEdit"/,/wiki-validator-hook[.]sh/p' "$REPO_ROOT/install.sh")"
+
+  grep -Fq "command: (\$repo + \"/hooks/approval-gate.sh\")" <<< "$read_chain"
+  grep -Fq "command: (\$repo + \"/hooks/approval-gate.sh\")" <<< "$edit_chain"
+  if grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/approval-gate.sh' <<< "$read_chain"; then
+    return 1
+  fi
+  if grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/approval-gate.sh' <<< "$edit_chain"; then
+    return 1
+  fi
+  grep -q 'scripts/walter/sandbox-hook-runner.sh.*hooks/capability-check.sh' <<< "$edit_chain"
 }

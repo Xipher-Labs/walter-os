@@ -63,8 +63,8 @@ The overlay version **takes precedence** if there is a name collision.
 
 Skills follow the `SKILL.md` format — see any skill in
 [`skills/`](../../skills/) for the template structure. The
-[`anthropic-skills:skill-creator`](../../skills/anthropic-skills/skill-creator/)
-skill walks you through authoring a new one.
+`anthropic-skills:skill-creator` plugin skill walks you through authoring a new
+one when the Anthropic skills plugin is installed.
 
 ## Layer 4 — Per-context customization
 

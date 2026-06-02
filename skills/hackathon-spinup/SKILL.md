@@ -1,6 +1,14 @@
 ---
 name: hackathon-spinup
-description: Orchestrate the full spinup of a hackathon (or any new ~/Projects-Personal/Hackatons/<name>) project from rough one-liner to deployed MVP. Triggered automatically when a new directory is created under ~/Projects-Personal/Hackatons/ OR when the user says "new hackathon project", "spin up <name>", "Colosseum submission", "MVP in 48h". Sequence: deep discovery via GPT-5.5 thinking iterations → SDD-style spec → Plane workspace + Obsidian KB scaffolding → brand identity → landing → MVP code → demo. Cuts features, never cuts tests on the critical path.
+description: >-
+  Orchestrate the full spinup of a hackathon (or any new
+  ~/Projects-Personal/Hackatons/<name>) project from rough one-liner to deployed
+  MVP. Triggered automatically when a new directory is created under
+  ~/Projects-Personal/Hackatons/ OR when the user says "new hackathon project",
+  "spin up <name>", "Colosseum submission", "MVP in 48h". Sequence: deep
+  discovery via GPT-5.5 thinking iterations → SDD-style spec → Plane workspace
+  + Obsidian KB scaffolding → brand identity → landing → MVP code → demo. Cuts
+  features, never cuts tests on the critical path.
 ---
 
 # Hackathon Spinup

@@ -1,0 +1,31 @@
+# Example operator overlay for default session capability tokens.
+#
+# Copy to ~/.config/walter-os/overlay/skill-capabilities.yml and tighten for
+# your own trusted skills. Entries are minted only when a new Walter-OS session
+# starts. Remove entries for skills you do not use.
+
+skills:
+  nuclei-cli:
+    tool: Bash
+    scope:
+      patterns:
+        - "^[[:space:]]*nuclei([[:space:]]|$)"
+      network:
+        - "*"
+    duration: 4h
+
+  hcloud-cli:
+    tool: Bash
+    scope:
+      patterns:
+        - "^[[:space:]]*hcloud([[:space:]]|$)"
+      network:
+        - "api.hetzner.cloud"
+    duration: 8h
+
+  docs-writer:
+    tool: Write
+    scope:
+      paths:
+        - "docs/**"
+    duration: 2h

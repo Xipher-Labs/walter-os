@@ -172,6 +172,37 @@ check_required_tool() {
   fi
 }
 
+openssl_supports_ed25519() {
+  local openssl_bin="$1"
+  "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1
+}
+
+resolve_openssl_bin() {
+  local candidate resolved
+  for candidate in \
+    "${WALTER_OPENSSL_BIN:-}" \
+    openssl \
+    /opt/homebrew/opt/openssl@3/bin/openssl \
+    /opt/homebrew/bin/openssl \
+    /usr/local/opt/openssl@3/bin/openssl \
+    /usr/local/bin/openssl \
+    /usr/bin/openssl; do
+    [[ -n "$candidate" ]] || continue
+    if [[ "$candidate" == */* ]]; then
+      [[ -x "$candidate" ]] || continue
+      resolved="$candidate"
+    else
+      resolved="$(command -v "$candidate" 2>/dev/null || true)"
+      [[ -n "$resolved" ]] || continue
+    fi
+    if openssl_supports_ed25519 "$resolved"; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
 check_optional_tool() {
   local tool="$1" install_hint="$2"
   if command -v "$tool" >/dev/null 2>&1; then
@@ -182,34 +213,145 @@ check_optional_tool() {
   fi
 }
 
+install_os() {
+  printf '%s' "${WALTER_INSTALL_TEST_OS_OVERRIDE:-$(uname -s)}"
+}
+
+install_arch() {
+  printf '%s' "${WALTER_INSTALL_TEST_ARCH_OVERRIDE:-$(uname -m)}"
+}
+
+linux_platform_label() {
+  local id="${WALTER_INSTALL_TEST_LINUX_ID_OVERRIDE:-}"
+  local id_like="${WALTER_INSTALL_TEST_LINUX_ID_LIKE_OVERRIDE:-}"
+
+  if [[ -z "$id" && -r /etc/os-release ]]; then
+    id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+    id_like="$(. /etc/os-release && printf '%s' "${ID_LIKE:-}")"
+  fi
+
+  case " ${id} ${id_like} " in
+    *" ubuntu "*|*" debian "*) printf '%s' "Linux (Ubuntu/Debian compatible)" ;;
+    *)                         printf '%s' "Linux" ;;
+  esac
+}
+
+check_docker_compose() {
+  local install_hint="$1"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if docker compose version >/dev/null 2>&1; then
+    ok "docker compose: $(docker compose version 2>/dev/null | head -1)"
+  else
+    err "docker compose plugin missing"
+    say "  Install: $install_hint" >&2
+    _requirement_failures=$((_requirement_failures + 1))
+  fi
+}
+
 check_requirements() {
   step "Requirements check"
+  local _openssl_bin
   _requirement_failures=0
 
-  case "$(uname -s)" in
+  local os arch
+  os="$(install_os)"
+  arch="$(install_arch)"
+
+  local git_hint curl_hint jq_hint python_hint openssl_hint yq_hint docker_hint docker_compose_hint
+  local gh_hint rg_hint bats_hint shellcheck_hint gitleaks_hint
+  local mise_hint node_hint pnpm_hint uv_hint infisical_hint
+
+  case "$os" in
     Darwin)
-      ok "OS: macOS ($(uname -m))"
+      ok "OS: macOS (${arch})"
       check_optional_tool brew "https://brew.sh"
+      git_hint="brew install git"
+      curl_hint="brew install curl"
+      jq_hint="brew install jq"
+      python_hint="brew install python"
+      openssl_hint="brew install openssl"
+      yq_hint="brew install yq  # mikefarah/yq"
+      docker_hint="Install Docker Desktop or OrbStack, or: brew install --cask docker"
+      docker_compose_hint="Bundled with Docker Desktop/OrbStack; or install Docker CLI plugins via Homebrew"
+      gh_hint="brew install gh"
+      rg_hint="brew install ripgrep"
+      bats_hint="brew install bats-core"
+      shellcheck_hint="brew install shellcheck"
+      gitleaks_hint="brew install gitleaks"
+      mise_hint="brew install mise"
+      node_hint="mise install node@22"
+      pnpm_hint="mise install pnpm@9"
+      uv_hint="mise install uv@latest  # provides uvx"
+      infisical_hint="brew install infisical/get-cli/infisical"
       ;;
     Linux)
-      ok "OS: Linux"
+      ok "OS: $(linux_platform_label)"
       check_optional_tool apt-get "Use your distribution package manager if apt-get is unavailable"
+      git_hint="sudo apt-get install -y git"
+      curl_hint="sudo apt-get install -y curl"
+      jq_hint="sudo apt-get install -y jq"
+      python_hint="sudo apt-get install -y python3"
+      openssl_hint="sudo apt-get install -y openssl"
+      yq_hint="sudo snap install yq  # mikefarah/yq; do NOT use apt install yq"
+      docker_hint="Install Docker Engine + Compose plugin: https://docs.docker.com/engine/install/ubuntu/"
+      docker_compose_hint="sudo apt-get install -y docker-compose-plugin"
+      gh_hint="see https://cli.github.com"
+      rg_hint="sudo apt-get install -y ripgrep"
+      bats_hint="sudo apt-get install -y bats shellcheck ripgrep"
+      shellcheck_hint="sudo apt-get install -y bats shellcheck ripgrep"
+      gitleaks_hint="Download from https://github.com/gitleaks/gitleaks/releases or use the upstream apt repo"
+      mise_hint="Install mise: https://mise.jdx.dev/installing-mise.html"
+      node_hint="mise install node@22 pnpm@9 uv@latest"
+      pnpm_hint="mise install node@22 pnpm@9 uv@latest"
+      uv_hint="mise install node@22 pnpm@9 uv@latest  # uv provides uvx"
+      infisical_hint="Infisical CLI docs: https://infisical.com/docs/cli/overview"
       ;;
     *)
-      err "Unsupported OS: $(uname -s). Walter-OS is tested on macOS and Linux."
+      err "Unsupported OS: $os. Walter-OS is tested on macOS and Linux."
       _requirement_failures=$((_requirement_failures + 1))
+      git_hint="install git via your OS package manager"
+      curl_hint="install curl via your OS package manager"
+      jq_hint="install jq via your OS package manager"
+      python_hint="install python3 via your OS package manager"
+      openssl_hint="install OpenSSL via your OS package manager"
+      yq_hint="install mikefarah/yq via your OS package manager"
+      docker_hint="install Docker Engine/Desktop"
+      docker_compose_hint="install the Docker Compose plugin"
+      gh_hint="see https://cli.github.com"
+      rg_hint="install ripgrep via your OS package manager"
+      bats_hint="install bats via your OS package manager"
+      shellcheck_hint="install shellcheck via your OS package manager"
+      gitleaks_hint="see https://github.com/gitleaks/gitleaks"
+      mise_hint="see https://mise.jdx.dev"
+      node_hint="use mise: mise install node@22"
+      pnpm_hint="use mise: mise install pnpm@9"
+      uv_hint="use mise: mise install uv@latest"
+      infisical_hint="see Infisical CLI docs"
       ;;
   esac
 
   say
   say "${c_b}Required for the installer:${c_reset}"
-  check_required_tool git "brew install git  # or: sudo apt-get install -y git"
-  check_required_tool curl "brew install curl  # or: sudo apt-get install -y curl"
-  check_required_tool jq "brew install jq  # or: sudo apt-get install -y jq"
+  check_required_tool git "$git_hint"
+  check_required_tool curl "$curl_hint"
+  check_required_tool jq "$jq_hint"
+  check_required_tool python3 "$python_hint"
+  if _openssl_bin="$(resolve_openssl_bin)"; then
+    ok "openssl: ${_openssl_bin}"
+  else
+    err "openssl with ED25519 support missing"
+    say "  Install: $openssl_hint" >&2
+    say "  Optional override: WALTER_OPENSSL_BIN=/path/to/openssl" >&2
+    _requirement_failures=$((_requirement_failures + 1))
+  fi
   # yq is a hard dependency for approval-gate.sh + trust-tier evaluation
   # (audit P1-05). The hook fails CLOSED if yq is missing, so a degraded
   # install is worse than no install — blocking here is correct.
-  check_required_tool yq "brew install yq  # or: sudo snap install yq (Mike Farah version required; apt's kislyuk/yq won't work)"
+  check_required_tool yq "$yq_hint"
   # Codex R3 #125: --check (which calls check_requirements) was passing on
   # any `yq` on PATH, including apt's kislyuk/yq which is the wrong tool.
   # Add the flavor check inline so --check reports the same wrong-flavor
@@ -225,19 +367,20 @@ check_requirements() {
 
   say
   say "${c_b}Required for full walter-host stack:${c_reset}"
-  check_required_tool docker "Install Docker Desktop/OrbStack on macOS, or Docker Engine on Linux"
+  check_required_tool docker "$docker_hint"
+  check_docker_compose "$docker_compose_hint"
 
   say
   say "${c_b}Expected for local development and CI parity:${c_reset}"
-  check_optional_tool gh "brew install gh  # or: see https://cli.github.com"
-  check_optional_tool rg "brew install ripgrep  # or: sudo apt-get install -y ripgrep"
-  check_optional_tool bats "brew install bats-core  # or: sudo apt-get install -y bats"
-  check_optional_tool shellcheck "brew install shellcheck  # or: sudo apt-get install -y shellcheck"
-  check_optional_tool gitleaks "brew install gitleaks  # or: sudo apt-get install -y gitleaks"
-  check_optional_tool node "Use mise: mise install node@22"
-  check_optional_tool pnpm "Use mise: mise install pnpm@9"
-  check_optional_tool python3 "brew install python  # or: sudo apt-get install -y python3"
-  check_optional_tool uvx "Use mise: mise install uv"
+  check_optional_tool gh "$gh_hint"
+  check_optional_tool rg "$rg_hint"
+  check_optional_tool bats "$bats_hint"
+  check_optional_tool shellcheck "$shellcheck_hint"
+  check_optional_tool gitleaks "$gitleaks_hint"
+  check_optional_tool mise "$mise_hint"
+  check_optional_tool node "$node_hint"
+  check_optional_tool pnpm "$pnpm_hint"
+  check_optional_tool uvx "$uv_hint"
 
   say
   say "${c_b}Expected agent CLIs:${c_reset}"
@@ -246,8 +389,8 @@ check_requirements() {
 
   say
   say "${c_b}Expected for secrets runtime:${c_reset}"
-  check_optional_tool infisical "brew install infisical/get-cli/infisical  # Linux: see Infisical CLI docs"
-  case "$(uname -s)" in
+  check_optional_tool infisical "$infisical_hint"
+  case "$os" in
     Darwin)
       check_optional_tool security "built into macOS; verify /usr/bin/security exists"
       check_optional_tool ykman "optional hardware-key tooling: brew install ykman"
@@ -260,7 +403,8 @@ check_requirements() {
       else
         warn "No Linux credential store found for secrets runtime"
         warn "  Install: sudo apt-get install -y libsecret-tools gnome-keyring"
-        warn "  Or:      sudo apt-get install -y pass gnupg"
+        warn "  Headless Ubuntu caveat: Secret Service usually needs a D-Bus session/keyring."
+        warn "  Headless fallback: configure pass + GPG with sudo apt-get install -y pass gnupg"
       fi
       ;;
   esac
@@ -448,7 +592,7 @@ load_env_local() {
 check_preflight() {
   step "Preflight"
 
-  if [[ "$(uname)" != "Darwin" ]]; then
+  if [[ "$(install_os)" != "Darwin" ]]; then
     warn "Not running on macOS. The installer will skip launchd setup; symlinks still work on Linux."
   fi
 
@@ -490,25 +634,38 @@ check_preflight() {
   #
   # OS-specific install hints: pick brew vs apt/snap based on
   # `uname -s` so the hint matches the operator's machine.
-  local _pkg_hint_jq _pkg_hint_yq
-  case "$(uname -s)" in
+  local _pkg_hint_jq _pkg_hint_yq _pkg_hint_openssl _openssl_bin
+  case "$(install_os)" in
     Darwin)
       _pkg_hint_jq="brew install jq"
       _pkg_hint_yq="brew install yq"
+      _pkg_hint_openssl="brew install openssl"
       ;;
     Linux)
       _pkg_hint_jq="sudo apt install jq  # or: sudo dnf install jq"
       _pkg_hint_yq="sudo snap install yq  # or: see https://github.com/mikefarah/yq#install"
+      _pkg_hint_openssl="sudo apt install openssl  # or: sudo dnf install openssl"
       ;;
     *)
       _pkg_hint_jq="install jq via your OS package manager"
       _pkg_hint_yq="install yq via your OS package manager"
+      _pkg_hint_openssl="install openssl via your OS package manager"
       ;;
   esac
 
   if ! command -v jq >/dev/null 2>&1; then
     err "jq required. ${_pkg_hint_jq}"
     exit 4
+  fi
+  if ! _openssl_bin="$(resolve_openssl_bin)"; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      warn "openssl with ED25519 key generation missing. Install before runtime: ${_pkg_hint_openssl}"
+      warn "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
+    else
+      err "openssl with ED25519 key generation is required for session capability keys. ${_pkg_hint_openssl}"
+      err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your OpenSSL 3 binary is not on PATH."
+      exit 4
+    fi
   fi
 
   # yq presence handling (Codex R2-R6 #125 — flavor check + ordering):
@@ -987,20 +1144,29 @@ merge_claude_hooks() {
 
   local walter_hooks
   # PreToolUse Bash chain (order matters — first hook fires first):
+  #   bash-denylist.sh, capability-check.sh, and network-gate.sh route through
+  #   sandbox-hook-runner.sh under walter-hook-default by default (#260 AC-4).
+  #   approval-gate.sh remains direct for now because it writes audit/session
+  #   state; it will move behind a split profile in a later AC-4/AC-5 slice.
+  #
   #   1. bash-denylist.sh  → CHEAP regex match. Blocks RCE patterns
   #      (curl|bash, eval$VAR, bash -c "$(...)", etc.) before any
   #      heavier check. Fails fast; fails closed when jq is missing.
   #   2. approval-gate.sh  → TIER-based approval matrix (P1-05/P1-06).
   #      Decides whether destructive ops / pushes / PRs need operator
   #      confirmation. Consults ~/.config/walter-os/agent-approvals.yml.
-  #   3. network-gate.sh   → default-deny network egress (#122 OSS Trust
+  #   3. capability-check.sh → session capability-token enforcement
+  #      (#122 capability tokens). Requires valid caps for high-blast-radius
+  #      Bash/Edit/Write operations after approval-gate policy allows them.
+  #   4. network-gate.sh   → default-deny network egress (#122 OSS Trust
   #      A-2). Blocks any outbound network call whose host isn't in the
   #      operator's egress-allowlist.txt. Composes with approval-gate
-  #      (WHAT vs WHERE). Last of the gates because it's the only one
-  #      that needs the loader to source + per-call host extraction.
-  #   4. branch-flow-guard.sh → blocks pushes that violate the
+  #      and capability-check (policy/capability vs destination). Last
+  #      of the gates because it needs the egress loader plus its own
+  #      per-call host extraction.
+  #   5. branch-flow-guard.sh → blocks pushes that violate the
   #      configured branch flow (single-tier vs three-stage).
-  #   5. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
+  #   6. pre-commit-tests.sh → runs tests/lint/typecheck on commits.
   #
   # bash-denylist + approval-gate were ABSENT from this template at
   # one point (Codex R2 MEDIUM M2 caught the regression). The bats
@@ -1016,20 +1182,37 @@ merge_claude_hooks() {
         _walter_os: true
       }]
     }],
+    UserPromptSubmit: [{
+      matcher: "*",
+      hooks: [{
+        type: "command",
+        command: ($repo + "/hooks/session-timeout.sh"),
+        _walter_os: true
+      }]
+    }],
     PreToolUse: [
       {
         matcher: "Bash",
         hooks: [
-          { type: "command", command: ($repo + "/hooks/bash-denylist.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/approval-gate.sh"),    _walter_os: true },
-          { type: "command", command: ($repo + "/hooks/network-gate.sh"),     _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/bash-denylist.sh") | @sh)),    _walter_os: true },
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh)), _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/network-gate.sh") | @sh)),     _walter_os: true },
           { type: "command", command: ($repo + "/hooks/branch-flow-guard.sh"), _walter_os: true },
           { type: "command", command: ($repo + "/hooks/pre-commit-tests.sh"),  _walter_os: true }
         ]
       },
       {
-        matcher: "Write|Edit",
+        matcher: "Read|Grep|Glob|LS",
         hooks: [
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true }
+        ]
+      },
+      {
+        matcher: "Write|Edit|MultiEdit|NotebookEdit",
+        hooks: [
+          { type: "command", command: ($repo + "/hooks/approval-gate.sh"), _walter_os: true },
+          { type: "command", command: ((($repo + "/scripts/walter/sandbox-hook-runner.sh") | @sh) + " -- " + (($repo + "/hooks/capability-check.sh") | @sh)), _walter_os: true },
           {
             type: "command",
             command: ($repo + "/hooks/wiki-validator-hook.sh"),
@@ -1309,11 +1492,11 @@ step_1() {
   wizard_step 1 "OS detect + install deps"
 
   local os
-  os="$(uname -s)"
+  os="$(install_os)"
 
   case "$os" in
     Darwin)
-      ok "macOS detected ($(uname -m))"
+      ok "macOS detected ($(install_arch))"
       _install_deps_macos
       ;;
     Linux)
@@ -1334,8 +1517,9 @@ _install_deps_macos() {
   # in Step 1 and then trip on the missing tool the next time
   # approval-gate.sh ran on a hook event (the failure surfaces as a
   # blocked hook, not a Step-1 abort; see issue #120 for the full trace).
-  local required_deps=(git curl jq yq docker bats)
-  local optional_deps=(python3)
+  local required_deps=(git curl jq python3 openssl yq docker bats)
+  local optional_deps=()
+  local _openssl_bin
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1361,7 +1545,27 @@ _install_deps_macos() {
   fi
 
   for dep in "${required_deps[@]}"; do
+    local install_dep="$dep"
+    [[ "$dep" == "python3" ]] && install_dep="python"
     [[ "$dep" == "docker" ]] && continue
+    if [[ "$dep" == "openssl" ]]; then
+      if _openssl_bin="$(resolve_openssl_bin)"; then
+        ok "openssl already installed (${_openssl_bin})"
+      elif [[ $DRY_RUN -eq 1 ]]; then
+        dry "would run: brew install openssl"
+      else
+        say "Installing openssl via Homebrew..."
+        brew install openssl
+        hash -r 2>/dev/null || true
+        if ! _openssl_bin="$(resolve_openssl_bin)"; then
+          err "OpenSSL installed, but no ED25519-capable binary was found."
+          err "Set WALTER_OPENSSL_BIN=/path/to/openssl if Homebrew installed it outside PATH."
+          exit 1
+        fi
+        ok "Installed openssl (${_openssl_bin})"
+      fi
+      continue
+    fi
     if command -v "$dep" >/dev/null 2>&1; then
       # Codex R3 #125: --step 1 bypasses check_preflight, so the macOS
       # branch must also flavor-check yq when already-installed. Without
@@ -1378,33 +1582,36 @@ _install_deps_macos() {
       ok "$dep already installed"
     else
       if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: brew install $dep"
+        dry "would run: brew install $install_dep"
       else
         say "Installing $dep via Homebrew..."
-        brew install "$dep"
+        brew install "$install_dep"
         ok "Installed $dep"
       fi
     fi
   done
 
-  for dep in "${optional_deps[@]}"; do
-    if command -v "$dep" >/dev/null 2>&1; then
-      ok "$dep already installed (optional)"
-    else
-      if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: brew install $dep (optional)"
+  if ((${#optional_deps[@]} > 0)); then
+    for dep in "${optional_deps[@]}"; do
+      if command -v "$dep" >/dev/null 2>&1; then
+        ok "$dep already installed (optional)"
       else
-        say "Installing optional dep $dep via Homebrew..."
-        brew install "$dep" || warn "$dep install failed (optional, continuing)"
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: brew install $dep (optional)"
+        else
+          say "Installing optional dep $dep via Homebrew..."
+          brew install "$dep" || warn "$dep install failed (optional, continuing)"
+        fi
       fi
-    fi
-  done
+    done
+  fi
 }
 
 _install_deps_linux() {
   # yq REQUIRED: see comment in _install_deps_macos above + issue #120.
-  local required_deps=(git curl jq yq bats)
-  local optional_deps=(python3)
+  local required_deps=(git curl jq python3 openssl yq bats)
+  local optional_deps=()
+  local _openssl_bin
 
   # Hard dependency: docker
   if ! command -v docker >/dev/null 2>&1; then
@@ -1448,20 +1655,52 @@ _install_deps_linux() {
   fi
 
   if ! command -v apt-get >/dev/null 2>&1; then
-    warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
-    warn "Install manually: ${required_deps[*]}"
+    if [[ $DRY_RUN -eq 1 ]]; then
+      dry "would require: apt-get (Ubuntu/Debian auto-install path)"
+    else
+      warn "apt-get not found. Only Debian/Ubuntu Linux is supported for auto-install."
+      warn "Install manually: ${required_deps[*]}"
+      if ! resolve_openssl_bin >/dev/null 2>&1; then
+        err "openssl with ED25519 support is REQUIRED at runtime and not installed."
+        err "  Install OpenSSL for your distro or launch with WALTER_OPENSSL_BIN=/path/to/openssl."
+        exit 1
+      fi
+      if ! command -v python3 >/dev/null 2>&1; then
+        err "python3 is REQUIRED at runtime for capability token operations and not installed."
+        err "  Install Python 3 for your distro before re-running."
+        exit 1
+      fi
+    fi
     # If yq is missing entirely on a non-Debian Linux, surface that
     # explicitly so the operator doesn't think the warn-and-return
     # means everything's OK. Codex R4 #125.
-    if ! command -v yq >/dev/null 2>&1; then
+    if [[ $DRY_RUN -ne 1 ]] && ! command -v yq >/dev/null 2>&1; then
       err "yq is REQUIRED at runtime and not installed."
       err "  Install mikefarah/yq for your distro before re-running."
       exit 1
     fi
-    return 0
+    [[ $DRY_RUN -eq 1 ]] || return 0
   fi
 
   for dep in "${required_deps[@]}"; do
+    if [[ "$dep" == "openssl" ]]; then
+      if _openssl_bin="$(resolve_openssl_bin)"; then
+        ok "openssl already installed (${_openssl_bin})"
+      elif [[ $DRY_RUN -eq 1 ]]; then
+        dry "would run: sudo apt-get install -y openssl"
+      else
+        say "Installing openssl via apt-get..."
+        sudo apt-get install -y openssl
+        hash -r 2>/dev/null || true
+        if ! _openssl_bin="$(resolve_openssl_bin)"; then
+          err "OpenSSL installed, but ED25519 key generation is still unavailable."
+          err "Set WALTER_OPENSSL_BIN=/path/to/openssl if your supported binary is outside PATH."
+          exit 1
+        fi
+        ok "Installed openssl (${_openssl_bin})"
+      fi
+      continue
+    fi
     if command -v "$dep" >/dev/null 2>&1; then
       # yq pre-installed flavor check — see _yq_is_mikefarah above.
       if [[ "$dep" == "yq" ]] && ! _yq_is_mikefarah; then
@@ -1487,7 +1726,7 @@ _install_deps_linux() {
         # arm64/aarch64 systems were previously told to download _amd64,
         # which silently installs the wrong binary (Copilot R3 #125).
         local _yq_arch
-        case "$(uname -m)" in
+        case "$(install_arch)" in
           x86_64|amd64)   _yq_arch="amd64" ;;
           aarch64|arm64)  _yq_arch="arm64" ;;
           armv7l|armv7)   _yq_arch="arm" ;;
@@ -1541,17 +1780,19 @@ _install_deps_linux() {
     fi
   done
 
-  for dep in "${optional_deps[@]}"; do
-    if command -v "$dep" >/dev/null 2>&1; then
-      ok "$dep already installed (optional)"
-    else
-      if [[ $DRY_RUN -eq 1 ]]; then
-        dry "would run: sudo apt-get install -y $dep (optional)"
+  if ((${#optional_deps[@]} > 0)); then
+    for dep in "${optional_deps[@]}"; do
+      if command -v "$dep" >/dev/null 2>&1; then
+        ok "$dep already installed (optional)"
       else
-        sudo apt-get install -y "$dep" || warn "$dep install failed (optional, continuing)"
+        if [[ $DRY_RUN -eq 1 ]]; then
+          dry "would run: sudo apt-get install -y $dep (optional)"
+        else
+          sudo apt-get install -y "$dep" || warn "$dep install failed (optional, continuing)"
+        fi
       fi
-    fi
-  done
+    done
+  fi
 }
 
 # ---------- Step 2: env var prompts [AC-3] ----------

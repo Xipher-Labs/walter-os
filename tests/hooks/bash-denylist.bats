@@ -7,6 +7,16 @@ setup() {
   HOOK="$BATS_TEST_DIRNAME/../../hooks/bash-denylist.sh"
   [[ -x "$HOOK" ]] || skip "bash-denylist.sh not executable"
   command -v jq >/dev/null 2>&1 || skip "jq required"
+  TMPDIR_TEST="$(mktemp -d)"
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
+  mkdir -p "$WALTER_CONFIG"
+}
+
+teardown() {
+  unset WALTER_CONFIG WALTER_AUDIT_DIR
+  rm -rf "$TMPDIR_TEST"
 }
 
 # Helper: construct the JSON hook event and pipe to the hook
@@ -14,13 +24,13 @@ _send_cmd() {
   local cmd="$1"
   printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' \
     "$(printf '%s' "$cmd" | jq -Rr '@json' | tr -d '"')" \
-    | "$HOOK"
+    | bash "$HOOK"
 }
 
 # Simpler helper that avoids double-escaping issues
 _send_cmd_raw() {
   local cmd="$1"
-  jq -n --arg cmd "$cmd" '{"tool_name":"Bash","tool_input":{"command":$cmd}}' | "$HOOK"
+  jq -n --arg cmd "$cmd" '{"tool_name":"Bash","tool_input":{"command":$cmd}}' | bash "$HOOK"
 }
 
 # --- Block cases ---
@@ -367,7 +377,7 @@ _send_cmd_raw() {
 @test "M4: malformed JSON input fails closed (blocks)" {
   # jq exits non-zero on syntax error. Without M4, the script
   # swallows that with `|| ""` and falls through to "allow".
-  result=$(printf 'this-is-not-json' | "$HOOK" 2>/dev/null || true)
+  result=$(printf 'this-is-not-json' | bash "$HOOK" 2>/dev/null || true)
   decision=$(echo "$result" | jq -r '.decision' 2>/dev/null || echo "missing")
   [ "$decision" = "block" ]
 }
@@ -375,13 +385,19 @@ _send_cmd_raw() {
 @test "M4: missing tool_input.command field fails closed (blocks)" {
   # Valid JSON, but no command field — jq returns empty string. We
   # cannot make a security decision about an absent command, so block.
-  result=$(printf '{"tool_name":"Bash","tool_input":{}}' | "$HOOK" 2>/dev/null || true)
+  result=$(printf '{"tool_name":"Bash","tool_input":{}}' | bash "$HOOK" 2>/dev/null || true)
+  decision=$(echo "$result" | jq -r '.decision' 2>/dev/null || echo "missing")
+  [ "$decision" = "block" ]
+}
+
+@test "M4: non-string tool_input.command fails closed (blocks)" {
+  result=$(printf '{"tool_name":"Bash","tool_input":{"command":{"argv":["curl","https://evil.example"]}}}' | bash "$HOOK" 2>/dev/null || true)
   decision=$(echo "$result" | jq -r '.decision' 2>/dev/null || echo "missing")
   [ "$decision" = "block" ]
 }
 
 @test "M4: empty stdin fails closed (blocks)" {
-  result=$(printf '' | "$HOOK" 2>/dev/null || true)
+  result=$(printf '' | bash "$HOOK" 2>/dev/null || true)
   decision=$(echo "$result" | jq -r '.decision' 2>/dev/null || echo "missing")
   [ "$decision" = "block" ]
 }
@@ -396,9 +412,8 @@ _send_cmd_raw() {
   chmod +x "$MOCK_BIN/jq"
 
   # Run hook with mock jq on PATH; capture result
-  result=$(PATH="$MOCK_BIN" \
-    echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' \
-    | "$HOOK" 2>/dev/null || echo '{"decision":"block"}')
+  result=$(echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' \
+    | PATH="$MOCK_BIN:$PATH" bash "$HOOK" 2>/dev/null || echo '{"decision":"block"}')
 
   # The hook must NOT emit allow when jq is missing
   if echo "$result" | grep -q '"allow"'; then

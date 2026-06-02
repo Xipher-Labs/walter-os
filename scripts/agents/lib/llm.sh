@@ -108,8 +108,10 @@ llm_invoke() {
   # task_id: Plane issue ID (WALTER_AGENT_PLANE_ISSUE)
   # context: work/personal/[project-b] (WALTER_AGENT_CONTEXT)
   # model_alias: short model tag (haiku/sonnet/opus) used for routing
+  # domain: model-router domain (backend_review/frontend/etc.) when present
   local task_id="${WALTER_AGENT_PLANE_ISSUE:-}"
   local context="${WALTER_AGENT_CONTEXT:-personal}"
+  local domain="${WALTER_MODEL_DOMAIN:-}"
 
   # WALTER_LLM_RAW_FILE: if set, write raw API JSON response to this file
   # before extracting text. Allows callers to read usage.total_tokens from
@@ -128,6 +130,7 @@ llm_invoke() {
         --arg task_id "$task_id" \
         --arg context "$context" \
         --arg model_alias "$model_tag" \
+        --arg domain "$domain" \
         '{model: $model, max_tokens: $max, messages: [
             {role: "system", content: $sys},
             {role: "user", content: $usr}
@@ -135,7 +138,8 @@ llm_invoke() {
             agent_id: $agent_id,
             task_id: $task_id,
             context: $context,
-            model_alias: $model_alias
+            model_alias: $model_alias,
+            domain: $domain
           }}')
 
       local raw_response
@@ -171,7 +175,8 @@ llm_invoke() {
         --arg task_id "$task_id" \
         --arg context "$context" \
         --arg model_alias "$model_tag" \
-        '{agent_id: $agent_id, task_id: $task_id, context: $context, model_alias: $model_alias}')
+        --arg domain "$domain" \
+        '{agent_id: $agent_id, task_id: $task_id, context: $context, model_alias: $model_alias, domain: $domain}')
 
       local raw_response
       raw_response=$(curl -fsS -m 600 \

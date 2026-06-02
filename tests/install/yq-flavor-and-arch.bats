@@ -40,7 +40,7 @@ setup() {
 # -----------------------------------------------------------------------
 @test "snap-missing fallback no longer hardcodes amd64 — arch detection present" {
   # _yq_arch case statement must cover at least amd64 + arm64.
-  grep -qE 'case "\$\(uname -m\)" in' "$INSTALL_SH"
+  grep -qE 'case "\$\(install_arch\)" in' "$INSTALL_SH"
   grep -qE 'aarch64\|arm64.*arm64' "$INSTALL_SH"
   grep -qE 'x86_64\|amd64.*amd64' "$INSTALL_SH"
 }
@@ -74,6 +74,25 @@ setup() {
   # must both list yq. macOS includes docker inline; Linux installs
   # docker via a separate path — assert only on `yq` being present.
   [[ $(grep -cE 'local required_deps=\([^)]*\byq\b' "$INSTALL_SH") -ge 2 ]]
+}
+
+@test "openssl is required for session capability keys" {
+  grep -qE 'resolve_openssl_bin' "$INSTALL_SH"
+  grep -qE 'WALTER_OPENSSL_BIN' "$INSTALL_SH"
+  grep -qE 'openssl with ED25519 key generation is required' "$INSTALL_SH"
+  grep -qE 'openssl_supports_ed25519' "$INSTALL_SH"
+  grep -qE 'would run: brew install openssl' "$INSTALL_SH"
+  grep -qE 'would run: sudo apt-get install -y openssl' "$INSTALL_SH"
+  grep -qE 'openssl with ED25519 support is REQUIRED at runtime' "$INSTALL_SH"
+  [[ $(grep -cE 'local required_deps=\([^)]*\bopenssl\b' "$INSTALL_SH") -ge 2 ]]
+}
+
+@test "python3 is required for capability token operations" {
+  grep -qE 'check_required_tool python3' "$INSTALL_SH"
+  [[ $(grep -cE 'local required_deps=\([^)]*\bpython3\b' "$INSTALL_SH") -ge 2 ]]
+  grep -qE '\[\[ "\$dep" == "python3" \]\] && install_dep="python"' "$INSTALL_SH"
+  grep -qE 'python3 is REQUIRED at runtime for capability token operations' "$INSTALL_SH"
+  ! grep -qE 'check_optional_tool python3' "$INSTALL_SH"
 }
 
 # -----------------------------------------------------------------------

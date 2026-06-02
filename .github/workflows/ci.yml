@@ -11,7 +11,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Run shellcheck
         run: |
           sudo apt-get update -qq
@@ -47,6 +47,7 @@ jobs:
             scripts/agent-runtime-watchdog.sh \
             scripts/agent-audit-log.sh \
             scripts/agent-secret-redactor.sh \
+            scripts/release/reproduce.sh \
             scripts/agents/run.sh \
             scripts/agents/main.sh \
             scripts/agents/lib/plane.sh \
@@ -54,6 +55,7 @@ jobs:
             scripts/agents/lib/alerts.sh \
             scripts/agents/lib/metrics.sh \
             scripts/agents/lib/spend.sh \
+            scripts/walter/lib/audit-chain.sh \
             tests/lint-frontmatter.sh \
             hooks/approval-gate.sh \
             hooks/bash-denylist.sh \
@@ -69,14 +71,14 @@ jobs:
     name: frontmatter lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - run: ./tests/lint-frontmatter.sh
 
   cross-references:
     name: cross-reference lint (policy drift)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Install jq
         run: sudo apt-get update -qq && sudo apt-get install -qq jq
       - run: ./tests/lint-cross-references.sh
@@ -85,7 +87,7 @@ jobs:
     name: bats hooks tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           # P0-05 hotfix tests rely on `git submodule status` reflecting the
           # real pinned commit (not `-` for uninit). Without recursive init,
@@ -115,21 +117,26 @@ jobs:
             tests/cloudflare/ \
             tests/github-actions/ \
             tests/compose/ \
+            tests/services/ \
             tests/scripts/secrets-identity-init.bats \
             tests/install/hook-chain-content.bats \
             tests/install/makefile-ci-shellcheck-parity.bats \
             tests/install/escape-helpers.bats \
             tests/install/no-eval-in-helpers.bats \
+            tests/install/workflow-pins.bats \
+            tests/install/reproducible-builds.bats \
             tests/install/yq-flavor-and-arch.bats
 
   install-dry-run:
     name: install.sh --dry-run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Install jq
-        run: sudo apt-get update -qq && sudo apt-get install -qq jq
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Install jq + bats
+        run: sudo apt-get update -qq && sudo apt-get install -qq jq bats
       - name: Make scripts executable
         run: chmod +x install.sh hooks/*.sh scripts/*.sh skills/*/scripts/*.sh bin/*
       - name: Run dry-run
         run: ./install.sh --dry-run
+      - name: Run Ubuntu install contract smoke test
+        run: bats tests/install/platform-contract.bats

@@ -73,6 +73,7 @@ flowchart TD
 |---|---|
 | Consistent agent behaviour across Claude / Codex / Cursor / Antigravity | One `AGENTS.md` cascade (global → context → repo), one skills library, one MCP profile |
 | Defense against prompt-injection exfil | Default-deny network egress allowlist + bash-denylist + approval-gate hooks |
+| Model choice by task strength | `WALTER_MODEL_*` routing preferences for Codex, Claude, Gemini aliases, and local Ollama |
 | A reusable rigor + branch + review discipline | TDD-by-default, configurable branch flow, 3-round Copilot + Codex + reviewer-subagent loop |
 | A homelab / self-hosted backend (optional) | 25+ services: Plane, Forgejo, Grafana, n8n, Infisical, LiteLLM, Caddy, Cloudflared, Headscale, … |
 | A clear v1.0 stability promise | Four layers frozen at v1.0 with a deprecation policy + an executable conformance suite |
@@ -245,7 +246,7 @@ flowchart LR
     Plan --> RGR{"Per-task<br/>RED → GREEN<br/>→ REFACTOR<br/>(TDD)"}
     RGR --> Commit["Commit<br/>(conventional)"]
     Commit --> Review["3-round review<br/>Copilot R1 → reviewer R2 → Codex R2"]
-    Review --> Merge{".walter-os/<br/>auto-merge<br/>file exists?"}
+    Review --> Merge{"default-branch repo config<br/>auto_merge enabled + branch eligible?"}
     Merge -->|yes| Auto["✅ agent merges"]
     Merge -->|no| Manual["👤 operator clicks Merge"]
 
@@ -263,7 +264,7 @@ flowchart LR
 | **Branch flow** | Operator-configurable via `WALTER_BRANCH_FLOW`. Default `single-tier` (feature → main); opt-in `three-stage` (feature → dev → staging → main). Direct pushes to `main`/`master`/`staging`/`production` are blocked unconditionally. |
 | **Review loop** | Copilot R1 → reviewer-subagent R2 → Codex R2 (standard, not fallback) → fix loop. Each round produces fix-commits referencing `Refs: copilot-review-round-N` / `codex-review-round-N` in the footer. |
 | **Definition of Done** | Spec ACs map 1:1 to tests, all tests pass, lint/typecheck/format clean, security scan clean, reviewer-subagent approved. The [`definition-of-done-validator`](skills/definition-of-done-validator/SKILL.md) skill enforces this before PR. |
-| **Merge policy** | **Default**: operator clicks merge. **Per-repo opt-in**: `touch .walter-os/auto-merge-authorized` in the repo root authorizes the agent to merge a PR once all gates pass (CI green + DoD validator clean + review loop converged). The touch-file is committed (so the policy travels with the repo) and is the only place where the otherwise-hardcoded "never auto-merge" rule yields. Removing the file restores manual-merge. |
+| **Merge policy** | **Default**: operator clicks merge. **Per-repo opt-in**: commit `walter-repo-config.yaml` with `auto_merge.enabled: true` and scoped `auto_merge.allowed_branches`. The policy file travels with the repo and replaces the retired touchfile approach. A PR that adds or loosens the file cannot authorize itself; future automation must read the default-branch policy that existed before the PR. See [`docs/operational/repo-config.md`](docs/operational/repo-config.md). |
 | **Commit hygiene** | Conventional commits: `feat:` / `fix:` / `chore:` / `docs:` / `refactor:` / `test:` / `perf:` / `security:`. Body explains *why*; subject ≤ 72 chars imperative. |
 
 PR titles use `[TYPE] -CATEGORY- title` (≤ 60 chars). CI gate: [`.github/workflows/pr-title-lint.yml`](.github/workflows/pr-title-lint.yml).
@@ -272,7 +273,7 @@ PR titles use `[TYPE] -CATEGORY- title` (≤ 60 chars). CI gate: [`.github/workf
 > ([`brainstorming`](https://github.com/obra/superpowers) / `writing-plans` /
 > `executing-plans` / `test-driven-development`) own the per-step methodology.
 > The Walter-OS layer adds the spec template + the review-loop + the
-> auto-merge touchfile convention.
+> per-repo `walter-repo-config.yaml` policy surface.
 
 ---
 
@@ -392,6 +393,7 @@ The README only covers the top of the funnel. Deep-dive docs by topic:
 | Symptom-cause-fix troubleshooting | [`docs/operational/troubleshooting.md`](docs/operational/troubleshooting.md) |
 | n8n workflow catalogue | [`docs/operational/n8n-workflows.md`](docs/operational/n8n-workflows.md) |
 | Full step-by-step VM install | [`docs/operational/operator-setup-runbook.md`](docs/operational/operator-setup-runbook.md) |
+| Second-device / teammate onboarding | [`docs/operational/onboarding-planner.md`](docs/operational/onboarding-planner.md) |
 | Operator contexts cascade | [`docs/operational/operator-contexts.md`](docs/operational/operator-contexts.md) |
 | Multi-device sync (Syncthing) | [`docs/operational/multi-device-sync.md`](docs/operational/multi-device-sync.md) |
 | Control Tower runbook | [`docs/operational/control-tower-runbook.md`](docs/operational/control-tower-runbook.md) |
@@ -407,13 +409,42 @@ For "how do I get help?" → [SUPPORT.md](SUPPORT.md).
 Routine update (monthly recommended):
 
 ```bash
-cd /opt/walter-os
-git pull
-./install.sh --upgrade        # idempotent — re-runs symlink + hook registration
-walter-os audit               # verify nothing drifted
+walter-os upgrade             # local checkout + install.sh --upgrade + audit + doctor
 ```
 
-Major version bumps may include breaking changes — read the [CHANGELOG](CHANGELOG.md) entry for the target version before pulling. The `quarterly-upgrade-cadence` skill formalizes the pre-bump snapshot + tier-by-tier rollout + rollback procedure.
+Preview first when you want to see every command before it mutates anything:
+
+```bash
+walter-os upgrade --dry-run
+```
+
+For the Walter-VM host, update the remote Walter-OS checkout/config explicitly:
+
+```bash
+walter-os upgrade --all --snapshot --yes
+```
+
+`--snapshot` is opt-in because VM snapshots may cost money, and non-dry-run
+snapshot upgrades require `--yes`.
+
+Docker service rollouts are never automatic. Name each service explicitly so a
+framework update does not silently migrate databases or restart production
+containers:
+
+```bash
+walter-os upgrade --all --service n8n
+```
+
+Explicit service rollouts go through the existing `walter deploy <service>`
+path, so service-specific config sync and `.env` exclusions still apply.
+
+Major version bumps may include breaking changes — read the [CHANGELOG](CHANGELOG.md) entry for the target version before pulling. To pin an upgrade to a tagged release:
+
+```bash
+walter-os upgrade --target v0.6.0
+```
+
+The `quarterly-upgrade-cadence` skill formalizes the pre-bump snapshot + tier-by-tier rollout + rollback procedure.
 
 Rollback: `git checkout <prev-tag>` + `./install.sh --upgrade`. Symlinks are re-pointed atomically.
 

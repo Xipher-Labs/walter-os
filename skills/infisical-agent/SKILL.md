@@ -1,6 +1,13 @@
 ---
 name: infisical-agent
-description: How to consume Infisical secrets from every Walter-OS surface — operator shells, walter-host Docker services, Vercel deploys, Railway services, GitHub Actions, n8n workflows, Cursor, Claude Code. The unifying principle: NEVER paste secrets into config files; always pull from Infisical at runtime via CLI / SDK / native integration. Use this skill when the user asks "how do I use this secret in <X>", "Infisical setup for Vercel", "secrets in GitHub Actions", "n8n credentials".
+description: >-
+  How to consume Infisical secrets from every Walter-OS surface — operator
+  shells, walter-host Docker services, Vercel deploys, Railway services, GitHub
+  Actions, n8n workflows, Cursor, Claude Code. The unifying principle: NEVER
+  paste secrets into config files; always pull from Infisical at runtime via CLI
+  / SDK / native integration. Use this skill when the user asks "how do I use
+  this secret in <X>", "Infisical setup for Vercel", "secrets in GitHub
+  Actions", "n8n credentials".
 ---
 
 # Infisical agent — secrets across the stack

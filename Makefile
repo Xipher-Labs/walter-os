@@ -20,6 +20,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agent-runtime-watchdog.sh \
 		scripts/agent-audit-log.sh \
 		scripts/agent-secret-redactor.sh \
+		scripts/release/reproduce.sh \
 		scripts/agents/run.sh \
 		scripts/agents/main.sh \
 		scripts/agents/lib/plane.sh \
@@ -27,6 +28,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agents/lib/alerts.sh \
 		scripts/agents/lib/metrics.sh \
 		scripts/agents/lib/spend.sh \
+		scripts/walter/lib/audit-chain.sh \
 		tests/lint-frontmatter.sh \
 		hooks/approval-gate.sh \
 		hooks/bash-denylist.sh \
@@ -50,5 +52,5 @@ audit-deps:  ## Run osv-scanner on lockfiles (soft-warn if not installed)
 	fi
 
 audit-ci:  ## (CI only) Documents tools that require OIDC context (cosign, scorecard)
-	@echo "audit-ci runs in GitHub Actions only. See .github/workflows/release-security.yml and .github/workflows/scorecard.yml."
+	@echo "audit-ci runs in GitHub Actions only. See .github/workflows/release.yml and .github/workflows/scorecard.yml."
 	@echo "Local audit tools: run 'make audit'"

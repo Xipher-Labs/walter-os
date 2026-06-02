@@ -355,13 +355,16 @@ setup() {
   grep -qE 'TDD.*Test-Driven Development|Test-Driven Development.*TDD' README.md
 }
 
-# ── Auto-merge touchfile convention ────────────────────────────────────────
+# ── Per-repo merge policy config ───────────────────────────────────────────
 
-@test "README.md documents the .walter-os/auto-merge-authorized touchfile" {
-  # Per-repo opt-in to auto-merge. Without this section operators
-  # think the rule is hardcoded "never auto-merge" forever, which
-  # is not true.
-  grep -qF ".walter-os/auto-merge-authorized" README.md
+@test "README.md documents walter-repo-config.yaml merge policy" {
+  grep -qF "walter-repo-config.yaml" README.md
+  grep -qF "auto_merge.enabled" README.md
+  grep -qF "docs/operational/repo-config.md" README.md
+}
+
+@test "README.md no longer advertises the retired auto-merge touchfile" {
+  ! grep -qF ".walter-os/auto-merge-authorized" README.md
 }
 
 # ── Per-section deep-dive callouts ─────────────────────────────────────────

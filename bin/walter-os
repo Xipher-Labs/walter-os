@@ -17,7 +17,8 @@
 #
 # Subcommands:
 #   audit                       Run supply-chain audit now (foreground)
-#   status                      Show audit + spend status
+#   status [--models]           Show audit + spend status, or model routing
+#   audit verify-chain [date]   Verify tamper-evident audit hash chain
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
@@ -26,10 +27,13 @@
 #   enable-hook <name>          Enable a hook in ~/.claude/settings.json
 #   disable-hook <name>         Disable a hook (without uninstalling)
 #   sync                        Pull + reinstall walter-os itself
+#   upgrade                     Upgrade local checkout and/or Walter-VM services
 #   sync-repos                  Pull configured personal/work repos
 #   profile {default|high-risk} Switch MCP profile (settings.json swap)
 #   profile-bootstrap {init|status|sync-shared} [claude|codex|all]
 #                               Set up multi-account profile dirs (work + personal)
+#   onboard {device|teammate} --dry-run
+#                               Print second-device or teammate onboarding checklist
 #   secrets-identity-init       Bootstrap Infisical identity into an OS credential store
 #   secrets-keychain-init       DEPRECATED alias for secrets-identity-init
 #   secrets-status              Report current secrets session (age, expiry)
@@ -61,12 +65,19 @@
 #   pr-title <TYPE> <CATEGORY> <text>
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
+#   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
+#   repo-config {validate|defaults [balanced|hackathon]}
+#                               Validate walter-repo-config.yaml per-repo policy
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
 #                               Manage network egress allowlist (#122 A-2)
 #                               See docs/operational/network-egress.md
+#   session {status|restart}    Manage time-bounded session state (#122 A-4)
+#   cap {mint|list|verify|revoke}
+#                               Manage session capability tokens (#122 A-2)
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
+#   doctor --codex-startup      Diagnose Codex skill/plugin/MCP startup health
 #   help                        Show this help
 
 set -euo pipefail
@@ -135,10 +146,24 @@ print_help() {
 # ---------- audit ----------
 
 cmd_audit() {
+  case "${1:-}" in
+    verify-chain)
+      shift
+      # shellcheck source=/dev/null
+      source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh"
+      walter_audit_verify_chain "$@"
+      return $?
+      ;;
+  esac
   exec "${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/audit.sh" "$@"
 }
 
 cmd_status() {
+  if [[ "${1:-}" == "--models" ]]; then
+    cmd_status_models
+    return $?
+  fi
+
   echo "Walter-OS status — ${TODAY}"
   echo
   echo "Repo: $WALTER_OS_HOME"
@@ -211,6 +236,45 @@ cmd_status() {
     echo "  tokens_total:     ${tokens_total:-0}"
     echo "  agents_working:   ${agents_working:-0}"
   fi
+}
+
+cmd_status_models() {
+  local router="${WALTER_OS_HOME}/scripts/walter/lib/model-router.sh"
+  if [[ ! -f "$router" ]]; then
+    echo "walter-os status --models: missing router at $router" >&2
+    return 3
+  fi
+
+  # shellcheck source=/dev/null
+  source "$router"
+
+  echo "Model routing — ${TODAY}"
+  echo
+  echo "Effective routing:"
+  walter_models_print_effective
+
+  local metrics_file="${WALTER_METRICS_FILE:-/var/lib/walter-council/metrics.prom}"
+  if [[ -f "$metrics_file" ]]; then
+    echo
+    echo "Council tokens by model:"
+    awk '
+      /^walter_council_tokens_total\{/ {
+        model = "unknown"
+        if (match($0, /model="[^"]+"/)) {
+          model = substr($0, RSTART + 7, RLENGTH - 8)
+        }
+        totals[model] += $NF
+      }
+      END {
+        for (model in totals) {
+          printf "  %-20s %d\n", model ":", totals[model]
+        }
+      }
+    ' "$metrics_file" | sort
+  fi
+
+  echo
+  echo "Set WALTER_MODEL_* values in ~/.config/walter-os/overlay/personal.env."
 }
 
 # ---------- ack ----------
@@ -514,7 +578,11 @@ cmd_disable_hook() {
 # ---------- sync ----------
 
 cmd_sync() {
-  exec "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
+  exec bash "${WALTER_OS_HOME}/scripts/sync.sh" "$@"
+}
+
+cmd_upgrade() {
+  exec bash "${WALTER_OS_HOME}/scripts/upgrade.sh" "$@"
 }
 
 cmd_sync_repos() {
@@ -1232,10 +1300,10 @@ cmd_version() {
   local latest_tag
   if [[ -n "$auth_header" ]]; then
     latest_tag="$(curl -fsSL --max-time 5 --connect-timeout 3 -H "$auth_header" "$api_url" 2>/dev/null \
-      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')"
+      | grep '"tag_name"' | head -1 | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
   else
     latest_tag="$(curl -fsSL --max-time 5 --connect-timeout 3 "$api_url" 2>/dev/null \
-      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')"
+      | grep '"tag_name"' | head -1 | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
   fi
 
   if [[ -z "$latest_tag" ]]; then
@@ -1246,6 +1314,8 @@ cmd_version() {
 
   if _version_is_newer "$latest_version" "$current"; then
     echo "(update available: v${latest_version} — https://github.com/${owner}/${repo}/releases/tag/${latest_tag})"
+    echo "Next step: walter-os upgrade --dry-run"
+    echo "Targeted upgrade: walter-os upgrade --target ${latest_tag}"
   else
     echo "(up to date)"
   fi
@@ -1455,6 +1525,201 @@ _doctor_lite_probe() {
   return 0
 }
 
+_doctor_codex_startup_probe() {
+  local issues=0
+  local warns=0
+
+  echo "Walter-OS doctor — Codex startup probe"
+  echo
+
+  local lint="${WALTER_SKILL_FRONTMATTER_LINT:-${WALTER_OS_HOME}/tests/lint-frontmatter.sh}"
+  if [[ -x "$lint" || -f "$lint" ]]; then
+    local lint_output
+    lint_output="$(mktemp)"
+    if bash "$lint" >"$lint_output" 2>&1; then
+      printf "  PASS repo skills frontmatter: valid YAML and Codex metadata limits\n"
+    else
+      printf "  FAIL repo skills frontmatter: loader-visible repo skills are invalid\n"
+      grep -E '✗|invalid|exceeds|missing' "$lint_output" | sed 's/^/    /' || true
+      issues=$((issues + 1))
+    fi
+    rm -f "$lint_output"
+  else
+    printf "  WARN repo skills frontmatter: lint command not found at %s\n" "$lint"
+    warns=$((warns + 1))
+  fi
+
+  echo
+  _doctor_codex_plugin_cache_probe && true
+  warns=$((warns + WALTER_DOCTOR_PLUGIN_WARNINGS))
+
+  echo
+  _doctor_codex_mcp_probe && true
+  warns=$((warns + WALTER_DOCTOR_MCP_WARNINGS))
+
+  echo
+  printf "Codex startup summary: %d issue(s), %d warning(s)\n" "$issues" "$warns"
+  [[ "$issues" -eq 0 ]]
+}
+
+_doctor_codex_plugin_cache_probe() {
+  WALTER_DOCTOR_PLUGIN_WARNINGS=0
+  local cache="${WALTER_CODEX_PLUGIN_CACHE:-${HOME}/.codex/plugins/cache}"
+
+  echo "Plugin-cache skills:"
+  if [[ ! -d "$cache" ]]; then
+    printf "  PASS plugin cache: not present at %s\n" "$cache"
+    return 0
+  fi
+
+  if ! command -v ruby >/dev/null 2>&1; then
+    printf "  WARN plugin cache: ruby unavailable, cannot parse managed skill metadata\n"
+    WALTER_DOCTOR_PLUGIN_WARNINGS=1
+    return 0
+  fi
+
+  local result
+  result="$(ruby - "$cache" <<'RUBY'
+require "yaml"
+
+root = ARGV.fetch(0)
+warnings = []
+
+Dir.glob(File.join(root, "**", "SKILL.md")).sort.each do |path|
+  text = File.read(path)
+  frontmatter = text.split(/^---\s*$/m, 3)[1]
+  next unless frontmatter
+
+  begin
+    data = YAML.safe_load(frontmatter, permitted_classes: [], permitted_symbols: [], aliases: false)
+  rescue Psych::Exception => e
+    warnings << "#{path}: invalid YAML frontmatter (#{e.class})"
+    next
+  end
+
+  next unless data.is_a?(Hash)
+
+  name = data["name"]
+  description = data["description"]
+  warnings << "#{path}: name exceeds 64 chars (#{name.length})" if name.is_a?(String) && name.length > 64
+  if description.is_a?(String) && description.length > 1024
+    warnings << "#{path}: description exceeds 1024 chars (#{description.length})"
+  end
+end
+
+if warnings.empty?
+  puts "PASS plugin cache metadata: no Codex loader limit warnings found"
+else
+  puts "WARN plugin cache metadata: #{warnings.length} managed issue(s)"
+  warnings.first(8).each { |warning| puts "  #{warning}" }
+  puts "  Action: update/reinstall the plugin or report upstream; do not hand-edit plugin cache files."
+end
+RUBY
+)"
+
+  printf '%s\n' "$result" | sed 's/^/  /'
+  if [[ "$result" == WARN* ]]; then
+    WALTER_DOCTOR_PLUGIN_WARNINGS=1
+  fi
+  return 0
+}
+
+_doctor_codex_mcp_probe() {
+  WALTER_DOCTOR_MCP_WARNINGS=0
+  local registry="${WALTER_MCP_REGISTRY:-${WALTER_OS_HOME}/mcp/servers.json}"
+
+  echo "MCP registry readiness:"
+  if [[ ! -f "$registry" ]]; then
+    printf "  WARN MCP registry: not found at %s\n" "$registry"
+    WALTER_DOCTOR_MCP_WARNINGS=1
+    return 0
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    printf "  WARN MCP registry: jq unavailable, cannot classify server startup risks\n"
+    WALTER_DOCTOR_MCP_WARNINGS=1
+    return 0
+  fi
+
+  local total=0
+  local rows
+  if ! rows="$(jq -c '
+    .servers
+    | to_entries[]
+    | select((.value.disabled // false) | not)
+    | select((.value.load // "default") == "default")
+    | {
+        name: .key,
+        type: (.value.type // "stdio"),
+        command: (.value.command // ""),
+        refs: ([((.value.env // {})[]?), ((.value.headers // {})[]?), ((.value.args // [])[]?)]
+          | map(tostring)
+          | join(" "))
+      }
+  ' "$registry" 2>/dev/null)"; then
+    printf "  FAIL MCP registry: invalid JSON or unexpected schema at %s\n" "$registry"
+    WALTER_DOCTOR_MCP_WARNINGS=1
+    return 0
+  fi
+
+  local row name type command refs
+  while IFS= read -r row; do
+    name="$(jq -r '.name' <<<"$row")"
+    type="$(jq -r '.type' <<<"$row")"
+    command="$(jq -r '.command' <<<"$row")"
+    refs="$(jq -r '.refs' <<<"$row")"
+    [[ -n "$name" ]] || continue
+    total=$((total + 1))
+
+    if [[ -n "$command" ]] && ! command -v "$command" >/dev/null 2>&1; then
+      printf "  WARN mcp/%s: missing command '%s'\n" "$name" "$command"
+      WALTER_DOCTOR_MCP_WARNINGS=$((WALTER_DOCTOR_MCP_WARNINGS + 1))
+    fi
+
+    local mcp_missing_vars=()
+    local var
+    while IFS= read -r var; do
+      [[ -n "$var" ]] || continue
+      var="${var#\$\{}"
+      var="${var%\}}"
+      if [[ -z "${!var:-}" ]]; then
+        mcp_missing_vars+=("$var")
+      fi
+    done < <(printf '%s\n' "${refs:-}" | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' | sort -u || true)
+
+    if [[ "${#mcp_missing_vars[@]}" -gt 0 ]]; then
+      printf "  WARN mcp/%s: missing env %s\n" "$name" "${mcp_missing_vars[*]}"
+      WALTER_DOCTOR_MCP_WARNINGS=$((WALTER_DOCTOR_MCP_WARNINGS + 1))
+    elif [[ -z "$command" && "$type" != "stdio" ]]; then
+      printf "  PASS mcp/%s: remote/%s config present\n" "$name" "$type"
+    fi
+  done <<<"$rows"
+
+  if [[ "$total" -eq 0 ]]; then
+    printf "  WARN MCP registry: no enabled default-profile servers found\n"
+    WALTER_DOCTOR_MCP_WARNINGS=$((WALTER_DOCTOR_MCP_WARNINGS + 1))
+  else
+    printf "  PASS MCP registry parsed: %d enabled default-profile server(s)\n" "$total"
+  fi
+
+  if [[ "$WALTER_DOCTOR_MCP_WARNINGS" -gt 0 ]]; then
+    printf "  Action: install missing commands, populate env/tokens, or treat the MCP as optional/local-service dependent.\n"
+  fi
+  return 0
+}
+
+_doctor_repo_config_probe() {
+  echo "Walter-OS doctor — repo config"
+  echo
+
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh"
+  walter_repo_config_validate "$repo_root"
+}
+
 # cmd_uninstall: front for `install.sh --uninstall`.
 #
 # Walter-OS Gap 4 from #191: operators who lose the repo clone need a
@@ -1595,6 +1860,7 @@ cmd_egress() {
       _egress_validate_host "$host" || return $?
       # Source loader fresh per invocation so each test sees the current
       # on-disk allowlist (no caching).
+      # shellcheck source=/dev/null
       # shellcheck disable=SC1090
       source "${WALTER_OS_HOME}/scripts/walter/lib/egress-loader.sh"
       if walter_egress_host_allowed "$host"; then
@@ -1714,10 +1980,14 @@ cmd_doctor() {
   # checks). See docs/specs/cursor-adapter-completion.md.
   # --lite: run ONLY the Lite contract probe + exit. See
   # docs/specs/walter-os-lite-entry-tier.md.
+  # --codex-startup: run ONLY the Codex startup readiness probe + exit.
+  # --repo-config: run ONLY the walter-repo-config.yaml policy probe + exit.
   local tier_filter=""
   local cursor_only=0
   local antigravity_only=0
   local lite_only=0
+  local codex_startup_only=0
+  local repo_config_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --tier)
@@ -1738,6 +2008,14 @@ cmd_doctor() {
         ;;
       --lite)
         lite_only=1
+        shift
+        ;;
+      --codex-startup)
+        codex_startup_only=1
+        shift
+        ;;
+      --repo-config)
+        repo_config_only=1
         shift
         ;;
       *)
@@ -1763,6 +2041,16 @@ cmd_doctor() {
 
   if [[ "$lite_only" -eq 1 ]]; then
     _doctor_lite_probe
+    return $?
+  fi
+
+  if [[ "$codex_startup_only" -eq 1 ]]; then
+    _doctor_codex_startup_probe
+    return $?
+  fi
+
+  if [[ "$repo_config_only" -eq 1 ]]; then
+    _doctor_repo_config_probe
     return $?
   fi
 
@@ -1855,6 +2143,7 @@ cmd_doctor() {
 
   echo "Walter-OS config:"
   tier_check 1 "WALTER_OS_HOME exists" test -d "$WALTER_OS_HOME"
+  tier_check 1 "repo policy valid or absent" _doctor_repo_config_probe
   tier_check 1 "env file present" test -f "${WALTER_CONFIG}/env"
   # F8 / #123: secrets runtime check is three-state (ok / warn / fail).
   # ok = Infisical configured (preferred). warn = legacy plaintext
@@ -1963,7 +2252,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -1981,9 +2270,11 @@ case "$cmd" in
   enable-hook)    cmd_enable_hook "$@" ;;
   disable-hook)   cmd_disable_hook "$@" ;;
   sync)               cmd_sync "$@" ;;
+  upgrade)            cmd_upgrade "$@" ;;
   sync-repos)         cmd_sync_repos "$@" ;;
   profile)            cmd_profile "$@" ;;
   profile-bootstrap)  cmd_profile_bootstrap "$@" ;;
+  onboard)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/onboard.sh" "$@" ;;
   secrets-pull)         cmd_secrets_pull "$@" ;;
   secrets-bootstrap)    cmd_secrets_bootstrap "$@" ;;
   secrets-identity-init) cmd_secrets_identity_init "$@" ;;
@@ -2001,9 +2292,13 @@ case "$cmd" in
   bridge)             exec "${WALTER_OS_HOME}/scripts/walter/subcommands/bridge.sh" "$@" ;;
   overlay)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/overlay.sh" "$@" ;;
   egress)             cmd_egress "$@" ;;
+  session)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/session.sh" "$@" ;;
+  cap)                exec "${WALTER_OS_HOME}/scripts/walter/subcommands/cap.sh" "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
+  pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
+  repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;
   uninstall)          cmd_uninstall "$@" ;;

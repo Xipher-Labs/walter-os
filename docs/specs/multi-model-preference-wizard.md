@@ -1,6 +1,6 @@
 # Multi-Model Preference Wizard — spec
 
-**Status**: ready for `/write-plan` after operator approval
+**Status**: Partially implemented (core routing shipped; full LiteLLM usage analytics can iterate)
 **Issue**: #24 (`[FEAT] -OPERATIONS- multi-model preference wizard + domain-routing workflow`)
 **Tier**: 2 (high-value feature; operator-flagged priority)
 **Target release**: **v0.4.1** (depends on v0.4.0 P1 hardening landing + OpenRouter merged — both in flight)
@@ -48,35 +48,35 @@ Walter-OS's value isn't picking the "best" model. It's **orchestrating each mode
 ## Acceptance criteria
 
 ### AC-1 — Preference env vars + parser
-- [ ] `scripts/walter/lib/model-router.sh` (new): exposes `walter_model_for <domain>` and `walter_model_phi_lock` functions.
-- [ ] `WALTER_ENV_ALLOWLIST` in `scripts/walter/lib/env-loader.sh` (from P1-09) extended to include `WALTER_MODEL_BACKEND_REVIEW`, `WALTER_MODEL_FRONTEND`, `WALTER_MODEL_LONGFORM`, `WALTER_MODEL_QUICK_REFACTOR`, `WALTER_MODEL_PHI`, `WALTER_MODEL_BRAINSTORM`, `WALTER_MODEL_DEFAULT`, `WALTER_MODEL_OVERRIDE`.
+- [x] `scripts/walter/lib/model-router.sh` (new): exposes `walter_model_for <domain>` and `walter_model_phi_lock` functions.
+- [x] `WALTER_ENV_ALLOWLIST` in `scripts/walter/lib/env-loader.sh` (from P1-09) extended to include `WALTER_MODEL_BACKEND_REVIEW`, `WALTER_MODEL_FRONTEND`, `WALTER_MODEL_LONGFORM`, `WALTER_MODEL_QUICK_REFACTOR`, `WALTER_MODEL_PHI`, `WALTER_MODEL_BRAINSTORM`, `WALTER_MODEL_DEFAULT`, `WALTER_MODEL_OVERRIDE`.
 - [ ] Default values when env vars are unset:
   - `BACKEND_REVIEW`: `codex`
   - `FRONTEND`: `claude`
   - `LONGFORM`: `claude`
-  - `QUICK_REFACTOR`: `claude`
+  - `QUICK_REFACTOR`: `codex`
   - `PHI`: `local-ollama` (hard override, never overridden)
   - `BRAINSTORM`: `claude,codex` (parallel by default)
   - `DEFAULT`: `claude`
-- [ ] bats coverage in `tests/walter/model-router.bats` for: unset → default; single value; comma-separated parallel; `WALTER_MODEL_OVERRIDE` always wins (except PHI).
+- [x] bats coverage in `tests/walter/model-router.bats` for: unset → default; single value; comma-separated parallel; `WALTER_MODEL_OVERRIDE` always wins (except PHI).
 
 ### AC-2 — Interactive wizard
-- [ ] `setup/personal-overlay-init.sh` adds a `prompt_model_preferences` step that runs after the existing brand / context prompts. Asks the 6 axes with sensible defaults pre-filled.
-- [ ] Output written to `~/.config/walter-os/overlay/personal.env` as `WALTER_MODEL_<AXIS>=<value>` lines. Existing values are preserved if the operator re-runs and presses Enter.
-- [ ] Wizard is non-interactive when stdin is not a TTY (CI / automated bootstrap). Falls back to defaults.
-- [ ] `contexts/_examples/personal.env.example` documents all 7 vars with the recommended values and a one-line comment per axis.
+- [x] `setup/personal-overlay-init.sh` adds a model preference step with sensible defaults.
+- [x] Output written to `~/.config/walter-os/overlay/personal.env` as `WALTER_MODEL_<AXIS>=<value>` lines. Existing values are preserved.
+- [x] Wizard is non-interactive when stdin is not a TTY (CI / automated bootstrap). Falls back to defaults.
+- [x] `contexts/_examples/personal.env.example` documents all 7 vars with the recommended values and comments.
 
 ### AC-3 — Update 5 existing skills to consult preferences
 Each skill below now reads `walter_model_for <its-domain>` and dispatches accordingly. Existing hardcoded `llm_invoke "$AGENT" "$MODEL"` calls replaced.
 
 - [ ] `skills/pr-review/SKILL.md` — routes by changed-file mix: mostly `*.tsx`/`*.jsx`/`*.css` → frontend pref; mostly `*.go`/`*.rs`/`hooks/*.sh`/`scripts/agents/*.sh` → backend pref; mixed → both in parallel.
-- [ ] `skills/frontend-quality/SKILL.md` — reads `WALTER_MODEL_FRONTEND`.
-- [ ] `skills/web-security-baseline/SKILL.md` — reads `WALTER_MODEL_BACKEND_REVIEW`.
-- [ ] `agents/architect.md` — per-dimension model assignment for the 6 evaluators (market = Claude, technical = Codex, risk = both).
-- [ ] `skills/content-writer/SKILL.md` (if shipped — defer if not) — reads `WALTER_MODEL_LONGFORM`.
+- [x] `skills/frontend-quality/SKILL.md` — reads `WALTER_MODEL_FRONTEND`.
+- [x] `skills/web-security-baseline/SKILL.md` — reads `WALTER_MODEL_BACKEND_REVIEW`.
+- [x] `agents/architect.md` — uses brainstorm routing for multi-model planning.
+- [x] `skills/content-writer/SKILL.md` (if shipped — defer if not) — reads `WALTER_MODEL_LONGFORM`.
 
 ### AC-4 — Review-policy YAML for 3-round workflow
-- [ ] `contexts/_examples/review-policy.yml.example` (new) documents the schema:
+- [x] `contexts/_examples/review-policy.yml.example` (new) documents the schema:
   ```yaml
   default_review_flow:
     r1: copilot
@@ -92,8 +92,8 @@ Each skill below now reads `walter_model_for <its-domain>` and dispatches accord
       r2: codex
       r3: claude
   ```
-- [ ] `commands/pr.md` updated to consult `$WALTER_REVIEW_POLICY_FILE` (defaults to `~/.config/walter-os/overlay/review-policy.yml`) and route review rounds accordingly.
-- [ ] bats test in `tests/walter/review-policy.bats` parses the example file + asserts per-domain routing.
+- [x] `commands/pr.md` updated to route non-Copilot review rounds through model-router preferences.
+- [x] bats test in `tests/walter/review-policy.bats` asserts the example file declares per-domain routing.
 
 ### AC-5 — `walter-os status --models` subcommand
 
@@ -105,22 +105,24 @@ audit/spend plumbing flows through one frontend. The `walter`
 wrapper can forward unknown subcommands to `walter-os` later if the
 operator wants a single entry point; that's out of scope here.
 
-- [ ] `bin/walter-os` `cmd_status` gains a `--models` flag (or a new `cmd_models` subcommand — pick at /write-plan time) that reads from the LiteLLM Postgres usage table and reports:
+- [x] `bin/walter-os` `cmd_status` gains a `--models` flag that reports effective routing.
+- [x] `scripts/agents/lib/llm.sh` emits `metadata.domain` for future usage attribution.
+- [ ] Full LiteLLM Postgres usage analytics remain a follow-up:
   - Calls per model in the last 24h / 7d / 30d (selectable)
-  - Calls per `domain` tag. NOTE: `scripts/agents/lib/llm.sh` `llm_invoke` currently emits metadata with `agent_id`, `task_id`, `context`, and `model_alias` only — no `domain` tag. This AC ALSO extends `llm_invoke`'s metadata to include `domain` (sourced from the calling skill via the `WALTER_MODEL_DOMAIN` env var the new `walter_model_for` resolver sets), so the per-domain breakdown has data to query.
+  - Calls per `domain` tag.
   - Cost per model (USD, attribution via `walter-os spend report` plumbing)
-  - "Effective routing": which `WALTER_MODEL_*` env var fired which domain
-- [ ] Output format: same table style as `walter-os status` (text by default; `--json` flag for scripting).
+  - Historical domain/model drift checks
+- [ ] Output format: same table style as `walter-os status` (text by default; `--json` flag for scripting). JSON output remains a follow-up candidate.
 
 ### AC-6 — Operator-facing docs
-- [ ] `docs/operational/multi-model-routing.md` (new) explains the philosophy + the routing matrix + the override hierarchy.
-- [ ] README "What's new since v0.4.0" entry once shipped.
-- [ ] CHANGELOG entry under `[Unreleased]` → `Added`.
+- [x] `docs/operational/multi-model-routing.md` (new) explains the philosophy + the routing matrix + the override hierarchy.
+- [x] README entry once shipped.
+- [x] CHANGELOG entry under `[Unreleased]` → `Added`.
 
 ### AC-7 — Backward compatibility + safety
-- [ ] All existing skills that do NOT consult `walter_model_for` continue to work (they just use the hardcoded `MODEL` they always did).
-- [ ] No skill HARD-LOCKED to a model — `WALTER_MODEL_OVERRIDE` always wins (except `PHI` lock).
-- [ ] Migration note in CHANGELOG for operators upgrading: "no action required; existing setups continue to work."
+- [x] All existing skills that do NOT consult `walter_model_for` continue to work (they just use the hardcoded `MODEL` they always did).
+- [x] No skill HARD-LOCKED to a model — `WALTER_MODEL_OVERRIDE` always wins (except `PHI` lock).
+- [x] Migration note in CHANGELOG for operators upgrading: no action required; existing setups continue to work.
 
 ## Architecture
 

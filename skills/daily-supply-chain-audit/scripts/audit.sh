@@ -683,19 +683,36 @@ check_pinning() {
   # Previous jq-based filter falsely flagged every npx server because its regex
   # matched the `-y` flag — see commit history for the rewrite.
   local settings="${CLAUDE_HOME}/settings.json"
-  [[ -f "$settings" ]] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
 
   local helper="${BASH_SOURCE[0]%/*}/check-pinning.py"
   [[ -f "$helper" ]] || return 0
 
-  local unpinned
-  unpinned="$(python3 "$helper" "$settings" 2>/dev/null | paste -sd, -)"
+  local unpinned=""
+  if [[ -f "$settings" ]]; then
+    unpinned="$(python3 "$helper" "$settings" 2>/dev/null | paste -sd, -)"
+  fi
 
   if [[ -n "$unpinned" ]]; then
     finding high "unpinned-mcps" \
       "MCP servers without pinned versions: ${unpinned}" \
       "Use exact semver only ('package@x.y.z' for npm, 'package==x.y.z' for uvx, or 'pkg#<commit-sha>' for git). Ranges, dist-tags ('@latest', '@beta'), and PEP-440 operators other than '==' are rejected."
+  fi
+
+  local walter_home="${WALTER_OS_HOME:-}"
+  if [[ -z "$walter_home" ]]; then
+    walter_home="$(cd "${BASH_SOURCE[0]%/*}/../../.." && pwd)"
+  fi
+  local manifest="${walter_home}/skills/daily-supply-chain-audit/assets/pinned-refs.toml"
+  local skills_root="${walter_home}/skills"
+  if [[ -n "$walter_home" && -d "$skills_root" ]]; then
+    local vendored_findings
+    vendored_findings="$(python3 "$helper" --vendored-skills "$manifest" "$skills_root" 2>/dev/null | paste -sd';' -)"
+    if [[ -n "$vendored_findings" ]]; then
+      finding high "vendored-skill-pin-drift" \
+        "Vendored skill pin manifest issues: ${vendored_findings}" \
+        "Review the vendored skill change, update skills/daily-supply-chain-audit/assets/pinned-refs.toml with the upstream commit SHA and local content hash, then rerun walter-os audit."
+    fi
   fi
 }
 

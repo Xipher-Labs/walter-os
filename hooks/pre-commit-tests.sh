@@ -11,34 +11,83 @@
 
 set -uo pipefail
 
-INPUT="$(cat)"
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
 
-if command -v jq >/dev/null 2>&1; then
-  CMD="$(echo "$INPUT" | jq -r '.tool_input.command // ""')"
-else
-  CMD="$(echo "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+audit_precommit_decision() {
+  local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$input_summary" "$decision" "pre-commit-tests" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"pre-commit-tests: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"pre-commit-tests: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
+audit_precommit_dependency_failure_best_effort() {
+  local reason="$1" input_summary="${2:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$input_summary" block "pre-commit-tests" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
+emit_precommit_block() {
+  local reason="$1" input_summary="${2:-${CMD:-}}" reason_json
+  audit_precommit_decision block "$reason" "$input_summary"
+  reason_json="$(walter_audit_json_string "$reason")"
+  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
+  exit 0
+}
+
+INPUT="$(cat)"
+CMD=""
+
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
+  reason="pre-commit-tests: jq missing, failing closed"
+  audit_precommit_dependency_failure_best_effort "$reason" "$INPUT"
+  reason_json="$(walter_audit_json_string "$reason")"
+  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
+  exit 0
+fi
+
+if [[ -z "$INPUT" ]] || ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
+  emit_precommit_block "pre-commit-tests: invalid hook JSON, failing closed" "$INPUT"
+fi
+
+CMD="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input.command | type) == "string" and (.tool_input.command | length) > 0 then .tool_input.command else empty end')"
+if [[ -z "$CMD" ]]; then
+  emit_precommit_block "pre-commit-tests: missing or non-string tool_input.command, failing closed" "$INPUT"
 fi
 
 # Only act on `git commit` (not commit-tree, commit-graph, etc.)
 if ! echo "$CMD" | grep -qE '^[[:space:]]*git[[:space:]]+commit([[:space:]]|$)'; then
+  audit_precommit_decision allow "not a git commit"
   echo '{"decision":"allow"}'
   exit 0
 fi
 
 # Skip if --no-verify is in the command (operator's explicit override)
 if echo "$CMD" | grep -q -- '--no-verify'; then
+  audit_precommit_decision allow "git commit --no-verify"
   echo '{"decision":"allow"}'
   exit 0
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
-[[ -z "$REPO_ROOT" ]] && { echo '{"decision":"allow"}'; exit 0; }
+[[ -z "$REPO_ROOT" ]] && { audit_precommit_decision allow "outside git repository"; echo '{"decision":"allow"}'; exit 0; }
 
-cd "$REPO_ROOT" || { echo '{"decision":"allow"}'; exit 0; }
+cd "$REPO_ROOT" || { audit_precommit_decision allow "cannot enter repository"; echo '{"decision":"allow"}'; exit 0; }
 
 block() {
-  echo "{\"decision\":\"block\",\"reason\":\"${1//\"/\\\"}\"}"
-  exit 0
+  local reason="$1"
+  emit_precommit_block "$reason"
 }
 
 # ---------- branch-aware scaling ----------
@@ -114,4 +163,5 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
   fi
 fi
 
+audit_precommit_decision allow "pre-commit checks passed"
 echo '{"decision":"allow"}'

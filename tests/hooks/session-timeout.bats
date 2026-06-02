@@ -1,0 +1,269 @@
+#!/usr/bin/env bats
+# tests/hooks/session-timeout.bats
+# shellcheck disable=SC2030,SC2031
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  HOOK="$REPO_ROOT/hooks/session-timeout.sh"
+  TMP_HOME="$(mktemp -d)"
+  export HOME="$TMP_HOME"
+  export WALTER_CONFIG="$TMP_HOME/.config/walter-os"
+  export WALTER_OS_HOME="$REPO_ROOT"
+  export WALTER_SESSION_TEST_CLOCK=1
+  export WALTER_SESSION_MAX_HOURS=8
+  export WALTER_SESSION_MAX_IDLE_MIN=60
+  REPO_UNDER_TEST="$TMP_HOME/work/repo"
+  mkdir -p "$WALTER_CONFIG" "$REPO_UNDER_TEST"
+}
+
+teardown() {
+  chmod -R u+w "$TMP_HOME" 2>/dev/null || true
+  case "$TMP_HOME" in
+    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
+  esac
+}
+
+_event() {
+  jq -nc --arg cwd "$REPO_UNDER_TEST" '{cwd:$cwd, prompt:"hello"}'
+}
+
+_call_hook() {
+  _event | bash "$HOOK"
+}
+
+_call_restart_hook() {
+  jq -nc --arg cwd "$REPO_UNDER_TEST" '{cwd:$cwd, prompt:"/session restart"}' | bash "$HOOK"
+}
+
+@test "UserPromptSubmit hook starts and allows a fresh session" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+}
+
+@test "UserPromptSubmit hook auto-mints default skill capabilities on fresh session" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  docs-writer:
+    tool: Write
+    scope:
+      paths: ["docs/**"]
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+  [ "$(find "$caps_dir" -type f -name 'cap-*.paseto' | wc -l | tr -d ' ')" = "1" ]
+}
+
+@test "UserPromptSubmit hook removes fresh session when default skill minting fails" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope: {}
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'default skill capability minting failed'
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  [ ! -f "$state_file" ]
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  [ ! -f "$state_file" ]
+}
+
+@test "UserPromptSubmit hook surfaces sanitized default skill minting errors" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  mkdir -p "$WALTER_CONFIG/overlay"
+  cat > "$WALTER_CONFIG/overlay/skill-capabilities.yml" <<'YAML'
+skills:
+  bad-skill:
+    tool: Bash
+    scope: {}
+    duration: 2h
+YAML
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"default skill capability minting failed"* ]]
+  [[ "$reason" == *"invalid capability entry for skill: bad-skill"* ]]
+  [[ "$reason" != *"$TMP_HOME"* ]]
+}
+
+@test "UserPromptSubmit hook sanitizes glob-like HOME and config paths literally" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  glob_home="$TMP_HOME/glob-home-[abc]"
+  glob_config="$glob_home/.config/walter-os"
+  mkdir -p "$glob_config/overlay" "$glob_home/work/repo"
+  export HOME="$glob_home"
+  export WALTER_CONFIG="$glob_config"
+  REPO_UNDER_TEST="$glob_home/work/repo"
+  printf 'skills: [\n' > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"invalid YAML"* ]]
+  [[ "$reason" != *"$glob_home"* ]]
+  [[ "$reason" != *"$glob_config"* ]]
+}
+
+@test "UserPromptSubmit hook sanitizes extglob-like paths literally" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  extglob_home="$TMP_HOME/extglob-home-@(prod|dev)"
+  extglob_config="$extglob_home/.config/walter-os"
+  mkdir -p "$extglob_config/overlay" "$extglob_home/work/repo"
+  export HOME="$extglob_home"
+  export WALTER_CONFIG="$extglob_config"
+  REPO_UNDER_TEST="$extglob_home/work/repo"
+  printf 'skills: [\n' > "$WALTER_CONFIG/overlay/skill-capabilities.yml"
+
+  run bash -O extglob -c 'jq -nc --arg cwd "$1" '\''{cwd:$cwd, prompt:"hello"}'\'' | bash "$2"' _ "$REPO_UNDER_TEST" "$HOOK"
+
+  [ "$status" -eq 0 ]
+  reason="$(echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"invalid YAML"* ]]
+  [[ "$reason" != *"$extglob_home"* ]]
+  [[ "$reason" != *"$extglob_config"* ]]
+}
+
+@test "UserPromptSubmit hook allows active session within limits" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  _call_hook >/dev/null
+
+  export WALTER_SESSION_NOW_EPOCH=1767227400
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+}
+
+@test "UserPromptSubmit hook blocks after max hours" {
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  _call_hook >/dev/null
+
+  export WALTER_SESSION_NOW_EPOCH=1767254401
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'max-hours=8h'
+}
+
+@test "UserPromptSubmit hook blocks after idle timeout" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  _call_hook >/dev/null
+
+  export WALTER_SESSION_NOW_EPOCH=1767231001
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'max-idle=60m'
+}
+
+@test "UserPromptSubmit hook applies PHI max-hours cap" {
+  export WALTER_PHI_MODE=1
+  export WALTER_SESSION_MAX_HOURS=12
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  mkdir -p "$(dirname "$state_file")"
+  jq -n \
+    --arg started_at "2026-01-01T00:00:00Z" \
+    --arg last_activity_at "2026-01-01T03:50:00Z" \
+    --arg repo_path "$REPO_UNDER_TEST" \
+    '{session_id:"phi", started_at:$started_at, last_activity_at:$last_activity_at, repo_path:$repo_path, extensions:[]}' > "$state_file"
+
+  export WALTER_SESSION_NOW_EPOCH=1767240001
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'max-hours=4h'
+}
+
+@test "UserPromptSubmit hook fails closed on malformed state" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  mkdir -p "$(dirname "$state_file")"
+  printf '{}\n' > "$state_file"
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'malformed-state'
+}
+
+@test "UserPromptSubmit hook fails closed on non-object JSON input" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run bash -c "printf '[]' | bash '$HOOK'"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'non-object hook input'
+}
+
+@test "UserPromptSubmit hook maps status 12 without JSON to state-write" {
+  fake_home="$TMP_HOME/fake-walter"
+  mkdir -p "$fake_home/scripts/walter/lib"
+  cat > "$fake_home/scripts/walter/lib/session-state.sh" <<'EOF'
+walter_session_touch() {
+  return 12
+}
+EOF
+
+  export WALTER_OS_HOME="$fake_home"
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+
+  run _call_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'state-write'
+}
+
+@test "UserPromptSubmit hook allows restart prompt after expiry" {
+  export WALTER_SESSION_MAX_IDLE_MIN=600
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  _call_hook >/dev/null
+  state_file="$(bash -c "source '$REPO_ROOT/scripts/walter/lib/session-state.sh'; walter_session_state_file '$REPO_UNDER_TEST'")"
+  [ -f "$state_file" ]
+
+  export WALTER_SESSION_NOW_EPOCH=1767254401
+  run _call_restart_hook
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
+  [ ! -f "$state_file" ]
+}

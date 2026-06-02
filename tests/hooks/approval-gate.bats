@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016,SC2030,SC2031,SC2088,SC2317
 # Tests for hooks/approval-gate.sh — both PreToolUse hook mode (JSON
 # stdin/stdout) and CLI mode (`check <command>`). Coverage targets the
 # 14 categories of §7.1 of the multi-agent-autonomy spec.
@@ -8,8 +9,12 @@ setup() {
   [[ -x "$HOOK" ]] || skip "approval-gate.sh not executable"
   command -v jq >/dev/null 2>&1 || skip "jq required"
 
-  # Isolate from operator's real config + Plane creds
-  export WALTER_CONFIG=/tmp/walter-os-test-$$
+  # Isolate from operator's real config, audit chain, and Plane creds.
+  TMPDIR_TEST="$(mktemp -d)"
+  export TMPDIR_TEST
+  export HOME="$TMPDIR_TEST/home"
+  export WALTER_CONFIG="$HOME/.config/walter-os"
+  export WALTER_AUDIT_DIR="$WALTER_CONFIG/audit"
   export WALTER_AGENT_PLANE_ISSUE=
   export WALTER_AGENT_NAME=test-agent
   unset PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT
@@ -64,7 +69,9 @@ YQ
 }
 
 teardown() {
+  unset WALTER_AUDIT_DIR
   rm -rf "$WALTER_CONFIG"
+  rm -rf "$TMPDIR_TEST"
 }
 
 # ---------- CLI mode: blocked ----------
@@ -98,6 +105,357 @@ teardown() {
 @test "CLI: hcloud server delete is blocked" {
   run "$HOOK" check "hcloud server delete walter-vm"
   [[ "$status" -eq 7 ]]
+}
+
+@test "CLI: Edit on capability verifier library is blocked" {
+  run "$HOOK" check "scripts/walter/lib/capability-token.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
+@test "CLI: Edit on default skill capability loader is blocked" {
+  run "$HOOK" check "scripts/walter/lib/skill-cap-loader.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
+@test "CLI: Edit on capability minting entrypoint is blocked" {
+  run "$HOOK" check "scripts/walter/subcommands/cap.sh" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
+@test "CLI: walter-os cap mint is blocked for operator approval" {
+  run "$HOOK" check "walter-os cap mint Bash --patterns '.*' --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
+@test "CLI: direct cap.sh mint entrypoint is blocked for operator approval" {
+  run "$HOOK" check "bash scripts/walter/subcommands/cap.sh mint Bash --patterns '.*' --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
+@test "CLI: quoted walter-os cap mint is blocked for operator approval" {
+  run "$HOOK" check '"walter-os" cap mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: quoted cap.sh mint entrypoint is blocked for operator approval" {
+  run "$HOOK" check './scripts/walter/subcommands/"cap.sh" mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution walter-os cap mint is blocked" {
+  run "$HOOK" check 'token=$(walter-os cap mint Bash --patterns ".*" --duration 5m)'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: capability mint inside gh pr comment is not tier-overridden" {
+  run "$HOOK" check 'gh pr comment 1 --body "$(walter-os cap mint Bash --duration 5m)"'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: line-continuation walter-os cap mint is blocked" {
+  run "$HOOK" check $'walter-os cap \\\nmint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: ANSI-C quoted walter-os cap mint is blocked" {
+  run "$HOOK" check "walter-os cap \$'mint' Bash --patterns '.*' --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: IFS-separated walter-os cap mint is blocked" {
+  run "$HOOK" check 'walter-os${IFS}cap${IFS}mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: IFS-separated cap.sh mint is blocked" {
+  run "$HOOK" check 'scripts/walter/subcommands/cap.sh${IFS}mint Bash --patterns ".*" --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: python subprocess walter-os cap mint is blocked" {
+  run "$HOOK" check 'python3 -c '\''import subprocess; subprocess.run(["bin/walter-os","cap","mint","Bash","--duration","5m"])'\'''
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution cap.sh mint is blocked" {
+  run "$HOOK" check 'token=$(scripts/walter/subcommands/cap.sh mint Bash --patterns ".*" --duration 5m)'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: direct capability signing helper is blocked for operator approval" {
+  run "$HOOK" check "source scripts/walter/lib/capability-token.sh; walter_cap_sign_claims state.json '{}'"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked ]]
+}
+
+@test "CLI: default skill capability loader is blocked for operator approval" {
+  run "$HOOK" check "source scripts/walter/lib/skill-cap-loader.sh; walter_skill_caps_mint_defaults ."
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution capability signing helper is blocked" {
+  run "$HOOK" check 'token=$(walter_cap_sign_claims state.json "{}")'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: sourcing capability token helper is blocked" {
+  run "$HOOK" check 'source scripts/walter/lib/capability-token.sh; f=walter_cap_sign_claims; $f state.json "{}"'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: capability private key path lookup is blocked" {
+  run "$HOOK" check "jq -r .capability_private_key_path ~/.config/walter-os/state/current.json"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: raw openssl signing with session key is blocked" {
+  run "$HOOK" check "openssl pkeyutl -sign -inkey ~/.config/walter-os/state/session-abc.key -rawin -in payload -out sig"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: session public key access is blocked with state directory access" {
+  run "$HOOK" check "cat ~/.config/walter-os/state/session-abc.pub"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: Read tool on capability private key is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/session-abc.key" --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: Read tool on session state JSON is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/session-abc.json" --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: Write tool on session state JSON is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/session-abc.json" --tool Write
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: archive of Walter state directory is blocked" {
+  run "$HOOK" check "tar -czf /tmp/state.tgz ~/.config/walter-os/state"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: glob read of Walter state keys is blocked" {
+  run "$HOOK" check 'cat "$WALTER_CONFIG"/state/*.key'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: capability bearer token read is blocked" {
+  run "$HOOK" check "$WALTER_CONFIG/state/caps-abc/cap-token.paseto" --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: capability bearer token glob is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/state/caps-abc/cap-*.paseto'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: broad Walter state JSON glob is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/state/*.json'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: recursive Walter state token read is blocked" {
+  run "$HOOK" check 'find ~/.config/walter-os/state -name "cap-*.paseto" -exec cat {} \;'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: broad Walter state wildcard read is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/state/*'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: Read tool on Walter state directory is blocked" {
+  run "$HOOK" check '~/.config/walter-os/state' --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: derived state directory relative session key is blocked" {
+  run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; openssl pkeyutl -sign -inkey session-abc.key -rawin -in payload -out sig'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: derived state directory relative session JSON is blocked" {
+  run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; cat ./session-abc.json'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: relative capability bearer token path is blocked" {
+  run "$HOOK" check 'cd "$(dirname "$(walter-os session status | jq -r .state_file)")"; cat caps-abc/cap-token.paseto'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: escaped Walter state directory is blocked" {
+  run "$HOOK" check 'cat ~/.config/walter-os/st\ate/*.key'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: ordinary repo state JSON is allowed" {
+  run "$HOOK" check "fixtures/state/session-export.json" --tool Read
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: walter-os cap list remains allowed" {
+  run "$HOOK" check "walter-os cap list"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: walter-os cap verify remains allowed" {
+  run "$HOOK" check "walter-os cap verify /tmp/cap-test.paseto"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: cap.sh verify with variable token file remains allowed" {
+  run "$HOOK" check 'scripts/walter/subcommands/cap.sh verify "$token_file"'
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: ambiguous variable cap subcommand is blocked" {
+  run "$HOOK" check 'walter-os cap $subcommand'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: braced variable walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'sub=mint; walter-os cap ${sub} Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: braced variable cap.sh subcommand is blocked" {
+  run "$HOOK" check 'sub=mint; scripts/walter/subcommands/cap.sh ${sub} Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'walter-os cap "$(printf mint)" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: positional walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'set -- mint; walter-os cap "$@" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution cap.sh subcommand is blocked" {
+  run "$HOOK" check 'scripts/walter/subcommands/cap.sh "$(printf mint)" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: partial command-substitution cap.sh mint is blocked" {
+  run "$HOOK" check 'bash scripts/walter/subcommands/cap.sh mi$(printf nt) Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: backtick walter-os cap subcommand is blocked" {
+  run "$HOOK" check 'walter-os cap `printf mint` Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: expanded walter-os cap word with mint is blocked" {
+  run "$HOOK" check 'p=p; walter-os ca$p mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: indirect walter-os command with cap mint is blocked" {
+  run "$HOOK" check 'cmd=walter-os; $cmd cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: command-substitution walter-os command name is blocked" {
+  run "$HOOK" check '$(printf walter-os) cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: split command-substitution walter-os command name is blocked" {
+  run "$HOOK" check 'walt$(printf er-os) cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: split variable walter-os command name is blocked" {
+  run "$HOOK" check 'part=er-os; walt$part cap mint Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: expanded cap word with dynamic subcommand is blocked" {
+  run "$HOOK" check 'p=p; walter-os ca$p "$(printf mint)" Bash --duration 5m'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|blocked|mints[[:space:]]capability ]]
+}
+
+@test "CLI: expanded Walter state path with key filename is blocked" {
+  run "$HOOK" check 'd=state; cat "$HOME/.config/walter-os/$d/session-abc.key"'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: variable Walter root with state key glob is blocked" {
+  run "$HOOK" check 'd="$HOME/.config/walter-os"; openssl pkeyutl -sign -inkey "$d/state/"*.key -rawin -in payload -out sig'
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: ordinary Walter state file is blocked conservatively" {
+  run "$HOOK" check '~/.config/walter-os/state/decision-journal.json' --tool Read
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|private[[:space:]]key ]]
+}
+
+@test "CLI: walter-os command with ordinary variable argument is allowed" {
+  run "$HOOK" check 'walter-os session status "$repo"'
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: walter-os non-cap command with mint argument is allowed" {
+  run "$HOOK" check 'walter-os session status mint'
+  [[ "$status" -eq 0 ]]
 }
 
 @test "CLI: dd if= is blocked" {
@@ -164,6 +522,11 @@ teardown() {
   [[ "$status" -eq 7 ]]
 }
 
+@test "CLI: Edit on walter-os dispatcher is blocked" {
+  run "$HOOK" check "bin/walter-os" --tool Edit
+  [[ "$status" -eq 7 ]]
+}
+
 @test "CLI: Edit on .env file is blocked" {
   run "$HOOK" check ".env.local" --tool Edit
   [[ "$status" -eq 7 ]]
@@ -192,8 +555,54 @@ teardown() {
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
 }
 
-@test "Hook: Read tool returns allow regardless of path" {
+@test "Hook: Read tool returns allow for non-sensitive path" {
   result=$(echo '{"tool_name":"Read","tool_input":{"file_path":"hooks/branch-flow-guard.sh"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: Read tool blocks capability private key material" {
+  result=$(echo '{"tool_name":"Read","tool_input":{"file_path":"~/.config/walter-os/state/session-abc.key"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Glob tool blocks capability state discovery" {
+  result=$(echo '{"tool_name":"Glob","tool_input":{"pattern":"~/.config/walter-os/state/session-*.json"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Grep pattern mentioning capability key metadata is allowed on repo paths" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"capability_private_key_path","path":"hooks"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: Grep target path blocks capability session material" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"session","path":"~/.config/walter-os/state/session-abc.key"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Grep split path plus key glob blocks capability session material" {
+  result=$(echo '{"tool_name":"Grep","tool_input":{"pattern":"anything","path":"~/.config/walter-os/state","glob":"*.key"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Glob split caps path plus token pattern blocks bearer tokens" {
+  result=$(echo '{"tool_name":"Glob","tool_input":{"path":"~/.config/walter-os/state/caps-abc","pattern":"cap-*.paseto"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Write tool blocks capability state mutation" {
+  result=$(echo '{"tool_name":"Write","tool_input":{"file_path":"~/.config/walter-os/state/session-abc.json"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+  [[ $(echo "$result" | jq -r '.reason') =~ "private key" ]]
+}
+
+@test "Hook: Read tool allows ordinary repo state fixtures" {
+  result=$(echo '{"tool_name":"Read","tool_input":{"file_path":"fixtures/state/session-export.json"}}' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
 }
 
@@ -202,9 +611,41 @@ teardown() {
   [[ $(echo "$result" | jq -r '.decision') == "block" ]]
 }
 
+@test "Hook: NotebookEdit blocks protected notebook_path" {
+  result=$(echo '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"personal/health/notes.ipynb"}}' | "$HOOK")
+  [[ $(echo "$result" | jq -r '.decision') == "block" ]]
+}
+
 @test "Hook: empty stdin allows" {
   result=$(echo '' | "$HOOK")
   [[ $(echo "$result" | jq -r '.decision') == "allow" ]]
+}
+
+@test "Hook: missing protected-path policy emits JSON block" {
+  policy="$BATS_TEST_DIRNAME/../../scripts/walter/lib/protected-paths.sh"
+  backup="${policy}.bak.$$"
+  mv "$policy" "$backup"
+
+  run bash -c "printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo ok\"}}' | '$HOOK'"
+  mv "$backup" "$policy"
+
+  [[ "$status" -eq 0 ]]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("missing Walter-OS protected path policy")'
+}
+
+@test "Hook: invalid protected-path policy emits JSON block" {
+  policy="$BATS_TEST_DIRNAME/../../scripts/walter/lib/protected-paths.sh"
+  backup="${policy}.bak.$$"
+  mv "$policy" "$backup"
+  printf '%s\n' 'if broken' > "$policy"
+
+  run bash -c "printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo ok\"}}' | '$HOOK'"
+  mv "$backup" "$policy"
+
+  [[ "$status" -eq 0 ]]
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("protected path policy")'
 }
 
 # ---------- Standing approvals ----------
@@ -258,6 +699,13 @@ EOF
   run "$HOOK" check "git push origin feature/x" --tool Bash
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ "test panic reason" ]]
+}
+
+@test "Panic lock: CLI check trims trailing newline from lock reason" {
+  printf 'test panic reason\n' > "$WALTER_CONFIG/gate.lock"
+  run "$HOOK" check "git push origin feature/x" --tool Bash
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ 'Lock: "test panic reason"' ]]
 }
 
 @test "Panic lock: CLI check allows normally after lock removed" {
@@ -341,6 +789,25 @@ EOF
   # the lint-fixes standing approval fires because target ends in .ts — must allow.
   PATH="$WALTER_CONFIG/mock-bin:$PATH" run "$HOOK" check "auth/index.ts" --tool Edit
   [[ "$status" -eq 0 ]]
+}
+
+@test "Capability terminal: Plane approval cannot allow cap mint" {
+  mkdir -p "$WALTER_CONFIG/mock-bin"
+  cat > "$WALTER_CONFIG/mock-bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '{"label_names":["approved-by-operator"]}\n'
+EOF
+  chmod +x "$WALTER_CONFIG/mock-bin/curl"
+
+  export WALTER_AGENT_PLANE_ISSUE="TEST-999"
+  export PLANE_API_TOKEN="test-token"
+  export PLANE_API_URL="https://plane.test"
+  export PLANE_WORKSPACE="workspace"
+  export PLANE_PROJECT="project"
+
+  PATH="$WALTER_CONFIG/mock-bin:$PATH" run "$HOOK" check "walter-os cap mint Bash --duration 5m"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ capability-token-mint|mints[[:space:]]capability ]]
 }
 
 # ---------- P0-03: fail-closed on missing jq ----------
@@ -442,12 +909,12 @@ EOF
 @test "P1-05: hook mode fails CLOSED when yq is missing" {
   command -v jq >/dev/null 2>&1 || skip "jq required"
 
-  # Build a minimal PATH that has every binary the hook NEEDS at startup
-  # (bash, jq, grep, sed, cat, rm, mkdir, printf, echo) but does NOT
-  # include yq. `command -v yq` then returns false.
+  # Build a minimal PATH that has every binary the hook and strict audit
+  # append path need, but does NOT include yq. `command -v yq` then
+  # returns false while the yq-missing decision can still be audited.
   local stub_dir
   stub_dir="$(mktemp -d)"
-  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr; do
+  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr chmod date tail od stat shasum sha256sum ps sleep perl cut dirname mv; do
     if [ -x "$(command -v "$bin" 2>/dev/null)" ]; then
       ln -sf "$(command -v "$bin")" "$stub_dir/$bin"
     fi

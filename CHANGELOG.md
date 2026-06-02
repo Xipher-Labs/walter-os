@@ -148,6 +148,35 @@ rows, audit telemetry wiring, and release provenance/reproducibility gates.
   Authentik, Forgejo Actions Runner, Langfuse, Listmonk, ntfy, and the
   knowledge-profile decision remain optional profiles to implement later.
 
+### Added
+
+- **#230 per-repo autonomy policy.** Adds the committed
+  `walter-repo-config.yaml` schema primitive, `walter-os repo-config
+  validate|defaults`, `walter-os doctor --repo-config`, conservative repo
+  defaults, and operator docs. The validator fails closed on malformed policy,
+  warns on unknown keys, and prevents the policy file from relaxing protected
+  branches or the hard-floor human approval categories.
+- **#239 hackathon autonomy preset.** Adds `walter-os repo-config defaults
+  hackathon`, a bounded full-autonomy template for short-lived demo projects
+  that uses prototype verification and hackathon branch eligibility while
+  preserving green CI and the non-overridable hard-floor approval categories.
+- **#24 multi-model routing preferences.** Adds `scripts/walter/lib/model-router.sh`,
+  `WALTER_MODEL_*` overlay defaults, `walter-os status --models`, LiteLLM
+  `metadata.domain` attribution, and operator docs for routing Codex, Claude,
+  Gemini aliases, and local Ollama by task domain.
+
+### Changed
+
+- **#234 auto-merge policy docs.** Retires the old auto-merge touchfile
+  narrative in favor of the committed `walter-repo-config.yaml`
+  `auto_merge` policy block, keeping one source of truth for per-repo
+  autonomy settings.
+- **#266 upgrade UX summary.** `walter-os upgrade` now ends with an operator
+  summary that distinguishes dry-run/local/VM outcomes, reports audit and
+  doctor status, and prints a rollback hint after local upgrades. The version
+  update notice now points operators to `walter-os upgrade --dry-run` and a
+  targeted `--target <tag>` command.
+
 ---
 
 ## [0.5.1] — 2026-05-23

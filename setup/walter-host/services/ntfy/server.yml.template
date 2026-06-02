@@ -1,0 +1,16 @@
+# Copy this file to server.yml and replace ${WALTER_DOMAIN} before starting.
+# The ntfy Docker image does not create /etc/ntfy/server.yml by default.
+
+base-url: "https://ntfy.${WALTER_DOMAIN}"
+listen-http: ":80"
+
+# Secure by default: no anonymous read or write access.
+auth-default-access: deny-all
+auth-file: "/var/lib/ntfy/user.db"
+
+# Persistent cache and attachment storage.
+cache-file: "/var/cache/ntfy/cache.db"
+attachment-cache-dir: "/var/cache/ntfy/attachments"
+attachment-total-size-limit: "5G"
+attachment-file-size-limit: "100M"
+attachment-expiry-duration: "3h"

@@ -1,6 +1,14 @@
 ---
 name: frontend-quality
-description: Enforce frontend quality bar — accessibility (WCAG 2.2 AA), performance (Core Web Vitals: LCP/INP/CLS), semantic HTML, image optimization, bundle size, mobile-first, loading/empty/error states. Use this skill on any PR that touches React/Next.js/Astro/Svelte/Vue components, CSS/Tailwind, layout files, or anything in `app/`, `components/`, `pages/`, `src/`. Critical for [Project A] (Argentine mobile users on slow 3G/4G) and [Company] docs site (developer audience expects fast). Auto-triggers on `*.tsx`, `*.jsx`, `*.svelte`, `*.vue`, `*.astro`, `*.css`.
+description: >-
+  Enforce frontend quality bar — accessibility (WCAG 2.2 AA), performance (Core
+  Web Vitals: LCP/INP/CLS), semantic HTML, image optimization, bundle size,
+  mobile-first, loading/empty/error states. Use this skill on any PR that
+  touches React/Next.js/Astro/Svelte/Vue components, CSS/Tailwind, layout files,
+  or anything in `app/`, `components/`, `pages/`, `src/`. Critical for [Project
+  A] (Argentine mobile users on slow 3G/4G) and [Company] docs site (developer
+  audience expects fast). Auto-triggers on `*.tsx`, `*.jsx`, `*.svelte`,
+  `*.vue`, `*.astro`, `*.css`.
 ---
 
 # Frontend Quality
@@ -9,6 +17,19 @@ Quality bar for any user-facing web UI. Hard requirements (a11y, perf,
 mobile-first), not stylistic preferences. Reviews catch the bugs that
 matter to real users — slow pages, broken keyboard nav, layouts that
 shift while loading.
+
+## Model Routing
+
+Use the operator's frontend preference when a model needs to critique or rewrite
+UI, UX, visual hierarchy, accessibility copy, or interaction details:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+frontend_model="$(walter_model_for frontend)"
+```
+
+Default preference is Claude. The operator may point the alias at another
+LiteLLM route in `~/.config/walter-os/overlay/personal.env`.
 
 This skill auto-triggers on frontend-touching diffs. For a build-from-zero
 landing page, use `landing-page-fast` (which includes these rules but

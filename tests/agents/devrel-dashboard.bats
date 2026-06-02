@@ -58,7 +58,13 @@ setup() {
 }
 
 @test "Control Tower nav includes Content link" {
-  [[ -f "$CT_DIR/app/layout.tsx" ]] || [[ -f "$CT_DIR/app/page.tsx" ]]
+  # The #181 redesign consolidated the previously-inline per-page nav into a
+  # single shared TopNav component (one source of truth). The Content link now
+  # lives there rather than in each page.tsx/layout.tsx. Check the nav source
+  # of truth first, then fall back to the legacy inline locations so this test
+  # passes both pre- and post-redesign.
+  local topnav="$CT_DIR/app/components/ui/TopNav.tsx"
+  grep -qi "/content" "$topnav" 2>/dev/null || \
   grep -qi "content\|/content" "$CT_DIR/app/page.tsx" 2>/dev/null || \
   grep -qi "content\|/content" "$CT_DIR/app/layout.tsx" 2>/dev/null
 }

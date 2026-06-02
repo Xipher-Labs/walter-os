@@ -1,0 +1,20 @@
+log:
+  level: info
+
+runner:
+  file: /data/.runner
+  capacity: 1
+  timeout: 3h
+  fetch_timeout: 5s
+  fetch_interval: 2s
+
+cache:
+  enabled: true
+  dir: /data/cache
+
+container:
+  network: ""
+  privileged: false
+  options: ""
+  valid_volumes: []
+  docker_host: ""

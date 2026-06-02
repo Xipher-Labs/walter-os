@@ -14,11 +14,41 @@
 # PreToolUse chain treats that as fail-open. Codex caught this in
 # the bash-3.2-related fixes already shipped for approval-gate.sh
 # (P1-05 side fix); same class of bug here.
-if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
+WALTER_HOOK_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WALTER_OS_HOME="$WALTER_HOOK_REPO_ROOT"
+if [[ -f "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh" || true
+fi
+
+_audit_early_decision() {
+  local decision="$1" reason="${2:-}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
+_walter_bash_major="${BASH_VERSION%%.*}"
+_walter_hook_sourced=0
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  _walter_hook_sourced=1
+fi
+if [[ "$_walter_hook_sourced" == "1" && "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
+  _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
+fi
+if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   # One-shot guard: if we already attempted a re-exec and ended up back in
   # bash < 4, stop. Without this, a candidate path that itself resolves to
   # bash 3.2 (e.g., symlink chain) would loop forever. Codex review of #81.
   if [[ "${WALTER_BASH_DENYLIST_REEXEC:-0}" == "1" ]]; then
+    _reason="bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 at /opt/homebrew/bin/bash or /usr/local/bin/bash (the two paths this hook probes)."
+    _audit_early_decision block "$_reason"
     printf '%s\n' '{"decision":"block","reason":"bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 at /opt/homebrew/bin/bash or /usr/local/bin/bash (the two paths this hook probes)."}'
     exit 0
   fi
@@ -34,9 +64,12 @@ if [[ -n "${BASH_VERSION:-}" && "${BASH_VERSION%%.*}" -lt 4 ]]; then
   # No newer bash available — emit fail-CLOSED block so the hook does
   # not silently fail-open. Use printf to stay consistent with the rest
   # of the hook's JSON-output convention.
+  _reason="bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."
+  _audit_early_decision block "$_reason"
   printf '%s\n' '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
+unset _walter_bash_major _walter_hook_sourced
 #
 # Bypass escape (two-factor): the hook allows a matched pattern only if BOTH
 #   1. the env var WALTER_DENYLIST_BYPASS=1 is set in the hook's environment, AND
@@ -55,11 +88,56 @@ set -uo pipefail
 # Read the tool call from stdin
 INPUT="$(cat)"
 
+_audit_decision() {
+  local decision="$1" reason="${2:-}" input_summary="${3:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$input_summary" "$decision" "bash-denylist" "$reason" >/dev/null 2>&1 || {
+      printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain append failed; refusing unaudited decision"}'
+      exit 0
+    }
+  else
+    printf '%s\n' '{"decision":"block","reason":"bash-denylist: audit-chain writer unavailable; refusing unaudited decision"}'
+    exit 0
+  fi
+}
+
+_audit_dependency_failure_best_effort() {
+  local reason="$1"
+  # jq-missing blocks happen before normal JSON tooling is available. The
+  # audit-chain helper can create an initial dependency-failure row without jq,
+  # but refuses to extend an existing chain because it cannot verify canonical
+  # JSON/root integrity. Keep the safety decision fail-closed either way.
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$INPUT" block "bash-denylist" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
+_emit_allow() {
+  _audit_decision allow "${1:-}"
+  printf '{"decision":"allow"}\n'
+  exit 0
+}
+
+_emit_allow_with_warn() {
+  local message="$1"
+  _audit_decision allow "$message"
+  printf '{"decision":"allow","systemMessage":%s}\n' "$(jq -n --arg m "$message" '$m')"
+  exit 0
+}
+
+_emit_block() {
+  local reason="$1" input_summary="${2:-${CMD:-}}"
+  _audit_decision block "$reason" "$input_summary"
+  printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
+  exit 0
+}
+
 # Extract command (using jq if available, fail-closed otherwise)
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   # Fail CLOSED — without jq we cannot parse the hook event.
   # Allowing all ops when jq is missing would let an attacker bypass the hook
   # by shadowing jq on PATH. See approval-gate.sh P0-03 for the same pattern.
+  _audit_dependency_failure_best_effort "bash-denylist: jq missing — failing closed for safety. Install jq to proceed."
   printf '{"decision":"block","reason":"bash-denylist: jq missing — failing closed for safety. Install jq to proceed."}\n'
   exit 0
 fi
@@ -69,13 +147,11 @@ fi
 # command we cannot read. Codex R2 MEDIUM M4: previously, malformed JSON or
 # jq parse failure was silently coerced to CMD="" via `// ""`, causing the
 # hook to fall through to "allow".
-if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
-  printf '{"decision":"block","reason":"bash-denylist: cannot parse hook input (malformed JSON or missing tool_input.command) — failing closed for safety."}\n'
-  exit 0
+if ! CMD="$(printf '%s' "$INPUT" | jq -er 'if (.tool_input.command | type) == "string" and (.tool_input.command | length) > 0 then .tool_input.command else empty end' 2>/dev/null)"; then
+  _emit_block "bash-denylist: cannot parse hook input (malformed JSON, missing tool_input.command, or non-string command) — failing closed for safety." "$INPUT"
 fi
 if [[ -z "$CMD" ]]; then
-  printf '{"decision":"block","reason":"bash-denylist: empty command in hook input — failing closed for safety."}\n'
-  exit 0
+  _emit_block "bash-denylist: empty command in hook input — failing closed for safety."
 fi
 
 # Two-factor bypass: requires WALTER_DENYLIST_BYPASS=1 (operator opt-in via env)
@@ -83,8 +159,7 @@ fi
 # Either alone does NOT bypass. See header comment for rationale (Codex R2 M1).
 if [[ "${WALTER_DENYLIST_BYPASS:-0}" == "1" ]] \
   && echo "$CMD" | grep -qF -- '--allow-denylist-pattern'; then
-  printf '{"decision":"allow","systemMessage":"bash-denylist: two-factor bypass used (WALTER_DENYLIST_BYPASS=1 + --allow-denylist-pattern). Command allowed with operator acknowledgment."}\n'
-  exit 0
+  _emit_allow_with_warn "bash-denylist: two-factor bypass used (WALTER_DENYLIST_BYPASS=1 + --allow-denylist-pattern). Command allowed with operator acknowledgment."
 fi
 
 # ---------- denylist patterns ----------
@@ -186,11 +261,9 @@ for pattern_name in "${!DENYLIST_PATTERNS[@]}"; do
     truncated="${CMD:0:120}"
     # Use jq to safely construct the JSON reason (handles special chars)
     reason="bash-denylist: command matches blocked pattern '${pattern_name}': ${truncated}"
-    printf '{"decision":"block","reason":%s}\n' "$(jq -n --arg r "$reason" '$r')"
-    exit 0
+    _emit_block "$reason"
   fi
 done
 
 # No pattern matched — allow
-printf '{"decision":"allow"}\n'
-exit 0
+_emit_allow ""

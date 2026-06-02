@@ -1,0 +1,80 @@
+# Walter-VM - optional Listmonk devrel/newsletter profile.
+#
+# URL: https://listmonk.${WALTER_DOMAIN}
+# Caddy should proxy listmonk.${WALTER_DOMAIN} -> listmonk:9000 on walter_net.
+# Disabled by default; start with:
+#   docker compose --env-file .env --profile listmonk up -d
+
+services:
+  listmonk:
+    image: listmonk/listmonk:v6.1.0
+    container_name: listmonk
+    restart: unless-stopped
+    profiles: [listmonk]
+    depends_on:
+      listmonk-db:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        ./listmonk --install --idempotent --yes &&
+        ./listmonk --upgrade --yes &&
+        ./listmonk
+    environment:
+      LISTMONK_app__address: 0.0.0.0:9000
+      LISTMONK_db__host: listmonk-db
+      LISTMONK_db__port: 5432
+      LISTMONK_db__user: listmonk
+      LISTMONK_db__password: ${LISTMONK_POSTGRES_PASSWORD:?required - set in .env or Infisical}
+      LISTMONK_db__database: listmonk
+      LISTMONK_db__ssl_mode: disable
+      LISTMONK_db__max_open: 25
+      LISTMONK_db__max_idle: 25
+      LISTMONK_db__max_lifetime: 300s
+      LISTMONK_ADMIN_USER: ${LISTMONK_ADMIN_USER:?required - first-boot admin username}
+      LISTMONK_ADMIN_PASSWORD: ${LISTMONK_ADMIN_PASSWORD:?required - first-boot admin password}
+      TZ: ${WALTER_TIMEZONE:-UTC}
+    expose:
+      - "9000"
+    volumes:
+      - listmonk_uploads:/listmonk/uploads
+    networks:
+      - listmonk_net
+      - walter_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  listmonk-db:
+    image: postgres:17-alpine
+    container_name: listmonk-db
+    restart: unless-stopped
+    profiles: [listmonk]
+    environment:
+      POSTGRES_USER: listmonk
+      POSTGRES_PASSWORD: ${LISTMONK_POSTGRES_PASSWORD:?required - set in .env or Infisical}
+      POSTGRES_DB: listmonk
+    volumes:
+      - listmonk_pg:/var/lib/postgresql/data
+    networks:
+      - listmonk_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U listmonk -d listmonk"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  listmonk_pg:
+  listmonk_uploads:
+
+networks:
+  listmonk_net:
+    driver: bridge
+  walter_net:
+    external: true
+    name: walter_net

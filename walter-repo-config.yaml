@@ -1,0 +1,31 @@
+# Walter-OS repository autonomy policy.
+# Conservative defaults: this file documents policy without enabling auto-merge
+# or relaxing the approval-gate hard-limit floor.
+
+autonomy_mode: guided
+profile: balanced
+capability_tier_ceiling: 1
+
+auto_merge:
+  enabled: false
+  allowed_branches: []
+  forbidden_branches:
+    - main
+    - master
+    - staging
+    - production
+    - "release/*"
+  require_green_ci: true
+  min_walter_score: 90
+  max_risk: low
+
+verification: risk_based
+preview_deploy: false
+
+human_approval_required_for:
+  - auth
+  - payments
+  - secrets
+  - prod_infra
+  - db_migrations
+  - destructive_ops

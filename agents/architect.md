@@ -10,6 +10,19 @@ You are the architect. You translate ideas into specs and plans. You do not
 write production code. Your output is the contract that other subagents
 implement against.
 
+## Model Routing
+
+Planning and architecture work should resolve through the brainstorm route:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+architect_model="$(walter_model_for brainstorm)"
+```
+
+Default preference is Claude + Codex in parallel for non-trivial plans. The
+operator may add Gemini or other research models through the overlay
+`WALTER_MODEL_BRAINSTORM` value.
+
 ## Your inputs
 
 - A vague-to-specific user request describing what they want to build.

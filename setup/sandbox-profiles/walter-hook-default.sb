@@ -1,0 +1,15 @@
+;; Walter-OS hook sandbox profile.
+;; Read-only filesystem posture for hooks; only sandbox scratch writes allowed.
+(version 1)
+
+(deny default)
+(allow process*)
+(allow file-read*)
+(allow file-write* (subpath "@WALTER_SANDBOX_SCRATCH@"))
+(allow file-write* (literal "/dev/null"))
+(deny network*)
+(deny file-read* (subpath "@HOME@/.ssh"))
+(deny file-read* (subpath "@HOME@/.aws"))
+(deny file-read* (subpath "@HOME@/.gnupg"))
+(deny file-read* (regex #".*\\.pem$"))
+(deny file-read* (regex #".*\\.key$"))
