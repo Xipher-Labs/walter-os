@@ -38,6 +38,19 @@ require_gh() {
   fi
 }
 
+title_is_valid() {
+  local candidate="$1"
+  local validator="${WALTER_OS_HOME}/hooks/pr-title-validator.sh"
+  if [[ -x "$validator" ]]; then
+    "$validator" "$candidate" >/dev/null 2>&1
+    return $?
+  fi
+
+  local title_regex
+  title_regex='^\[(FEAT|FIX|DOCS|CHORE|TEST)\] -(SECURITY|BUSINESS|COMPLIANCE|OPERATIONS|TECHNICAL|CUSTOMER|CONTENT|LEARNING)- [^[:space:]].{0,58}[^[:space:].]$'
+  grep -qE "$title_regex" <<<"$candidate"
+}
+
 json_output=0
 fixture=""
 pr_ref=""
@@ -178,8 +191,7 @@ fi
 
 title_points=0
 title_ok=0
-title_regex='^\[(FEAT|FIX|DOCS|CHORE|TEST)\] -(SECURITY|BUSINESS|COMPLIANCE|OPERATIONS|TECHNICAL|CUSTOMER|CONTENT|LEARNING)- [^[:space:]].{0,58}[^[:space:].]$'
-if grep -qE "$title_regex" <<<"$title"; then
+if title_is_valid "$title"; then
   title_ok=1
   title_points=10
 fi
