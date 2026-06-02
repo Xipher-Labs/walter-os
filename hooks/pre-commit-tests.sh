@@ -31,6 +31,13 @@ audit_precommit_decision() {
   fi
 }
 
+audit_precommit_dependency_failure_best_effort() {
+  local reason="$1" input_summary="${2:-${CMD:-}}"
+  if declare -F walter_audit_append >/dev/null 2>&1; then
+    walter_audit_append Bash "$input_summary" block "pre-commit-tests" "$reason" >/dev/null 2>&1 || true
+  fi
+}
+
 emit_precommit_block() {
   local reason="$1" input_summary="${2:-${CMD:-}}" reason_json
   audit_precommit_decision block "$reason" "$input_summary"
@@ -43,7 +50,11 @@ INPUT="$(cat)"
 CMD=""
 
 if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
-  emit_precommit_block "pre-commit-tests: jq missing, failing closed" "$INPUT"
+  reason="pre-commit-tests: jq missing, failing closed"
+  audit_precommit_dependency_failure_best_effort "$reason" "$INPUT"
+  reason_json="$(walter_audit_json_string "$reason")"
+  echo "{\"decision\":\"block\",\"reason\":${reason_json}}"
+  exit 0
 fi
 
 if [[ -z "$INPUT" ]] || ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then

@@ -49,6 +49,21 @@ input_json() {
   jq -e '.reason | contains("tool_input.command")' <<<"$result" >/dev/null
 }
 
+@test "jq-missing preserves dependency reason when audit chain exists" {
+  input_json "ls" | "$HOOK" >/dev/null
+
+  mock_bin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
+  chmod +x "$mock_bin/jq"
+
+  hook_input="$(input_json 'git commit -m "test"')"
+  result="$(printf '%s' "$hook_input" | PATH="$mock_bin:$PATH" "$HOOK")"
+  rm -rf "$mock_bin"
+
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+  jq -e '.reason | contains("jq missing")' <<<"$result" >/dev/null
+}
+
 @test "allows commit with --no-verify" {
   result="$(input_json "git commit -m foo --no-verify" | "$HOOK")"
   [ "$(jq -r '.decision' <<<"$result")" = "allow" ]
