@@ -141,6 +141,42 @@ write_fixture() {
   [[ "$output" == *"sensitive path"* ]]
 }
 
+@test "AC3: conflicting PRs are blocked" {
+  local fixture="$TMP_DIR/conflicting.json"
+  local updated="$TMP_DIR/conflicting-updated.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq '.mergeable = "CONFLICTING"' "$fixture" > "$updated"
+  mv "$updated" "$fixture"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Decision: block"* ]]
+  [[ "$output" == *"PR is not mergeable"* ]]
+}
+
+@test "AC3: unknown mergeability prevents policy auto-merge" {
+  local fixture="$TMP_DIR/unknown-mergeable.json"
+  local updated="$TMP_DIR/unknown-mergeable-updated.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq '.mergeable = "UNKNOWN"' "$fixture" > "$updated"
+  mv "$updated" "$fixture"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Decision: human-review"* ]]
+  [[ "$output" == *"PR mergeability is unknown"* ]]
+}
+
 @test "AC3: outdated unresolved review threads are ignored" {
   local fixture="$TMP_DIR/outdated-thread.json"
   local updated="$TMP_DIR/outdated-thread-updated.json"

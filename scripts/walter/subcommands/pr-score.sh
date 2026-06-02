@@ -106,7 +106,7 @@ fetch_pr_json() {
 
   local pr_json repo_json owner repo number threads_json
   if ! pr_json="$(gh pr view "${view_args[@]}" \
-      --json number,title,body,mergeable,reviewRequests,comments,latestReviews,statusCheckRollup,files)"; then
+      --json number,title,body,mergeable,reviewRequests,statusCheckRollup,files)"; then
     echo "walter-os pr-score: failed to read PR data with gh" >&2
     exit 3
   fi
@@ -163,6 +163,7 @@ add_finding() {
 
 title="$(jq -r '.title // ""' <<<"$pr_json")"
 body="$(jq -r '.body // ""' <<<"$pr_json")"
+mergeable="$(jq -r '.mergeable // "UNKNOWN"' <<<"$pr_json")"
 
 checks_total="$(jq '[.statusCheckRollup[]?] | length' <<<"$pr_json")"
 checks_failed="$(jq '[.statusCheckRollup[]? | select((.status // "") == "COMPLETED") | select((.conclusion // "") != "") | select((.conclusion // "") != "SUCCESS" and (.conclusion // "") != "SKIPPED" and (.conclusion // "") != "NEUTRAL")] | length' <<<"$pr_json")"
@@ -196,6 +197,17 @@ elif [[ "$review_requests" -gt 0 ]]; then
   review_points=10
   add_finding "pending review requests: $review_requests"
 fi
+
+case "$mergeable" in
+  MERGEABLE)
+    ;;
+  CONFLICTING)
+    add_finding "PR is not mergeable: conflicts must be resolved"
+    ;;
+  *)
+    add_finding "PR mergeability is unknown"
+    ;;
+esac
 
 title_points=0
 title_ok=0
@@ -245,10 +257,10 @@ score=$((checks_points + review_points + title_points + link_points + verificati
 
 decision="human-review"
 exit_code=0
-if [[ "$checks_failed" -gt 0 || "$title_ok" -eq 0 || "$score" -lt 70 ]]; then
+if [[ "$checks_failed" -gt 0 || "$title_ok" -eq 0 || "$mergeable" == "CONFLICTING" || "$score" -lt 70 ]]; then
   decision="block"
   exit_code=1
-elif [[ "$checks_pending" -eq 0 && "$unresolved_threads" -eq 0 && "$review_requests" -eq 0 && "$review_threads_total" -le "$review_threads_fetched" && "$sensitive_count" -eq 0 && "$score" -ge 90 ]]; then
+elif [[ "$checks_pending" -eq 0 && "$unresolved_threads" -eq 0 && "$review_requests" -eq 0 && "$review_threads_total" -le "$review_threads_fetched" && "$mergeable" == "MERGEABLE" && "$sensitive_count" -eq 0 && "$score" -ge 90 ]]; then
   decision="policy-auto-merge"
 fi
 
