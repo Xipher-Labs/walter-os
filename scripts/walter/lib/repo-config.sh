@@ -212,12 +212,23 @@ _walter_repo_config_validate_allowed_branches() {
         _walter_repo_config_fail "auto_merge.allowed_branches includes protected branch: ${branch}"
         ;;
     esac
+    case "$branch" in
+      *release/*)
+        _walter_repo_config_fail "auto_merge.allowed_branches includes protected branch namespace: ${branch}"
+        ;;
+    esac
 
     # Treat allowed_branches entries as shell-style patterns because the
     # schema intentionally allows entries like "walter/*". Reject any pattern
     # that can match a protected branch name before later auto-merge consumers
     # read it as authorization.
-    for protected in main master staging production release/v1; do
+    for protected in \
+      main master staging production \
+      release/0 release/1 release/9 \
+      release/a release/b release/c release/d release/e release/f release/g \
+      release/h release/i release/j release/k release/l release/m release/n \
+      release/o release/p release/q release/r release/s release/t release/u \
+      release/v release/w release/x release/y release/z release/v1 release/prod; do
       # shellcheck disable=SC2053 # RHS is intentionally a policy glob.
       if [[ "$protected" == $branch ]]; then
         _walter_repo_config_fail "auto_merge.allowed_branches pattern matches protected branch: ${branch} -> ${protected}"
