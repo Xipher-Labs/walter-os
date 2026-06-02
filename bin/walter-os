@@ -63,6 +63,7 @@
 #   pr-title <TYPE> <CATEGORY> <text>
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
+#   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
 #                               Manage network egress allowlist (#122 A-2)
@@ -2221,7 +2222,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap)
+    sync|upgrade|sync-repos|profile-bootstrap|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2265,6 +2266,7 @@ case "$cmd" in
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
+  pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;
   uninstall)          cmd_uninstall "$@" ;;
