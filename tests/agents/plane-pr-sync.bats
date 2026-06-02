@@ -24,12 +24,20 @@ printf 'curl %s\n' "$*" >> "$CALL_LOG"
 args="$*"
 if echo "$args" | grep -q "/states/"; then
   echo '{"results":[{"id":"state-review","name":"review"},{"id":"state-done","name":"done"}]}'
-elif echo "$args" | grep -q "/comments/" && echo "$args" | grep -q -- "-X GET"; then
-  if [[ "${PLANE_FAIL_COMMENT_FETCH:-0}" == "1" ]]; then
-    echo "simulated Plane comment fetch failure" >&2
-    exit 97
+elif echo "$args" | grep -q "/comments/"; then
+  if echo "$args" | grep -q -- "-X GET"; then
+    if [[ "${PLANE_FAIL_COMMENT_FETCH:-0}" == "1" ]]; then
+      echo "simulated Plane comment fetch failure" >&2
+      exit 97
+    fi
+    if [[ "${PLANE_MALFORMED_COMMENTS:-0}" == "1" ]]; then
+      echo 'not-json'
+      exit 0
+    fi
+    echo '{"results":[]}'
+  else
+    echo '{"ok":true}'
   fi
-  echo '{"results":[]}'
 else
   echo '{"ok":true}'
 fi
@@ -167,6 +175,23 @@ teardown() {
 
   [ "$status" -eq 3 ]
   [[ "$output" == *"failed to inspect Plane comments"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC3: malformed Plane comments abort before state changes" {
+  export PLANE_MALFORMED_COMMENTS=1
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"failed to parse Plane comments"* ]]
   if grep -q 'state-review' "$CALL_LOG"; then
     return 1
   fi

@@ -123,7 +123,7 @@ _plane_check_env || exit $?
 
 plane_comment_once() {
   local marker="$1" body="$2"
-  local existing
+  local existing jq_status
   if ! existing="$(_plane_curl GET "/issues/$issue/comments/")"; then
     echo "plane-pr-sync: failed to inspect Plane comments; aborting" >&2
     exit 3
@@ -132,6 +132,12 @@ plane_comment_once() {
       '[.results[]? | ((.comment_stripped // .comment_html // "") | contains($marker))] | any' \
       >/dev/null <<<"$existing"; then
     return 0
+  else
+    jq_status=$?
+  fi
+  if [[ "$jq_status" -gt 1 ]]; then
+    echo "plane-pr-sync: failed to parse Plane comments; aborting" >&2
+    exit 3
   fi
   plane_issue_comment "$issue" "$body"
 }
