@@ -239,7 +239,7 @@ flowchart LR
     Plan --> RGR{"Per-task<br/>RED → GREEN<br/>→ REFACTOR<br/>(TDD)"}
     RGR --> Commit["Commit<br/>(conventional)"]
     Commit --> Review["3-round review<br/>Copilot R1 → reviewer R2 → Codex R2"]
-    Review --> Merge{"walter-repo-config.yaml<br/>auto_merge.enabled?"}
+    Review --> Merge{"default-branch repo config<br/>auto_merge enabled + branch eligible?"}
     Merge -->|yes| Auto["✅ agent merges"]
     Merge -->|no| Manual["👤 operator clicks Merge"]
 
