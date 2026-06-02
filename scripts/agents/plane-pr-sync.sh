@@ -21,7 +21,7 @@ EOF
 
 if [[ ! -f "$PLANE_LIB" ]]; then
   echo "plane-pr-sync: missing Plane helper: $PLANE_LIB" >&2
-  exit 2
+  exit 3
 fi
 # shellcheck source=/dev/null
 source "$PLANE_LIB"

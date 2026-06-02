@@ -186,6 +186,21 @@ teardown() {
   fi
 }
 
+@test "AC3: missing Plane helper is setup failure" {
+  local missing_home="$MOCK_DIR/missing-home"
+  mkdir -p "$missing_home"
+
+  run env WALTER_OS_HOME="$missing_home" bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"missing Plane helper"* ]]
+}
+
 @test "AC3: Plane comment fetch failure aborts before state changes" {
   export PLANE_FAIL_COMMENT_FETCH=1
 
