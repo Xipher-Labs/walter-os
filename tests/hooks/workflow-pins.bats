@@ -5,6 +5,9 @@
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 WORKFLOWS_DIR="$REPO_ROOT/.github/workflows"
+NODE24_CHECKOUT_SHA="93cb6efe18208431cddfb8368fd83d5badbf9bfd"
+NODE24_SETUP_NODE_SHA="a0853c24544627f65ddf259abe73b1d18a591444"
+NODE24_CODEQL_SHA="7211b7c8077ea37d8641b6271f6a365a22a5fbfa"
 
 @test "A-4: no workflow file uses actions/checkout@v<N> (floating tag)" {
   run grep -rn 'uses:[[:space:]]*actions/checkout@v[0-9]' "$WORKFLOWS_DIR"
@@ -33,10 +36,28 @@ WORKFLOWS_DIR="$REPO_ROOT/.github/workflows"
   echo "$output" | grep -qE 'actions/checkout@[0-9a-f]{40}'
 }
 
+@test "issue #283: actions/checkout uses pinned Node 24-compatible v5 SHA" {
+  run grep -rn 'uses:[[:space:]]*actions/checkout@' "$WORKFLOWS_DIR"
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -v "actions/checkout@${NODE24_CHECKOUT_SHA}"
+}
+
 @test "A-4: control-tower.yml uses pinned SHA for actions/setup-node" {
   run grep 'actions/setup-node@' "$WORKFLOWS_DIR/control-tower.yml"
   [ "$status" -eq 0 ]
   echo "$output" | grep -qE 'actions/setup-node@[0-9a-f]{40}'
+}
+
+@test "issue #283: actions/setup-node uses pinned Node 24-compatible v5 SHA" {
+  run grep -rn 'uses:[[:space:]]*actions/setup-node@' "$WORKFLOWS_DIR"
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -v "actions/setup-node@${NODE24_SETUP_NODE_SHA}"
+}
+
+@test "issue #283: github/codeql-action uses pinned Node 24-compatible v4 SHA" {
+  run grep -rn 'uses:[[:space:]]*github/codeql-action/' "$WORKFLOWS_DIR"
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -v "github/codeql-action/.*@${NODE24_CODEQL_SHA}"
 }
 
 @test "A-4: control-tower.yml uses pinned SHA for pnpm/action-setup" {

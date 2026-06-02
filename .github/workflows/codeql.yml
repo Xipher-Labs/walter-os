@@ -43,12 +43,12 @@ jobs:
       matrix:
         language: [javascript-typescript]
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        # actions/checkout v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        # actions/checkout v5
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@bc0b696b4103f5fe60f15749af68a046868d511a
-        # github/codeql-action (latest bundle commit)
+        uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+        # github/codeql-action v4
         with:
           languages: ${{ matrix.language }}
           # security-extended catches more injection patterns than
@@ -64,11 +64,11 @@ jobs:
               - apps/control-tower
 
       - name: Autobuild (Next.js TypeScript)
-        uses: github/codeql-action/autobuild@bc0b696b4103f5fe60f15749af68a046868d511a
-        # github/codeql-action (latest bundle commit)
+        uses: github/codeql-action/autobuild@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+        # github/codeql-action v4
 
       - name: Analyze
-        uses: github/codeql-action/analyze@bc0b696b4103f5fe60f15749af68a046868d511a
-        # github/codeql-action (latest bundle commit)
+        uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+        # github/codeql-action v4
         with:
           category: /language:${{ matrix.language }}
