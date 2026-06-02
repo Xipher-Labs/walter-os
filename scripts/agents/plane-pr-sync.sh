@@ -133,13 +133,23 @@ plane_comment_once() {
   plane_issue_comment "$issue" "$body"
 }
 
-forgejo_comment() {
-  local body="$1"
+forgejo_comment_once() {
+  local marker="$1" body="$2" existing
   if ! command -v tea >/dev/null 2>&1; then
     echo "plane-pr-sync: WARN tea not found; skipped Forgejo PR comment" >&2
     return 0
   fi
-  tea issues comment "$pr_number" --repo "$repo" --comment "$body" >/dev/null
+  if existing="$(tea issue "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
+    if jq -e --arg marker "$marker" '.. | strings | select(contains($marker))' \
+        >/dev/null <<<"$existing"; then
+      return 0
+    fi
+  else
+    echo "plane-pr-sync: WARN could not inspect Forgejo PR comments; attempting comment" >&2
+  fi
+  if ! tea issues comment "$pr_number" --repo "$repo" --comment "$body" >/dev/null 2>&1; then
+    echo "plane-pr-sync: WARN Forgejo PR comment failed; continuing" >&2
+  fi
 }
 
 short_sha() {
@@ -153,13 +163,13 @@ case "$event" in
     comment="${marker} PR linked: ${pr_url} (branch: ${branch}). Moving Plane issue to review."
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "review"
-    forgejo_comment "$comment"
+    forgejo_comment_once "$marker" "$comment"
     ;;
   merged)
     comment="${marker} PR merged: ${pr_url} at $(short_sha "$merge_sha"). Moving Plane issue to done."
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "done"
-    forgejo_comment "$comment"
+    forgejo_comment_once "$marker" "$comment"
     ;;
 esac
 

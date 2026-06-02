@@ -8,7 +8,9 @@ setup() {
   SCRIPT="$REPO_ROOT/scripts/agents/plane-pr-sync.sh"
   MOCK_DIR="$(mktemp -d)"
   CALL_LOG="$MOCK_DIR/calls.log"
+  ORIGINAL_PATH="$PATH"
   export CALL_LOG
+  export ORIGINAL_PATH
   export PATH="$MOCK_DIR:$PATH"
   export WALTER_OS_HOME="$REPO_ROOT"
   export PLANE_API_TOKEN="test-token"
@@ -33,18 +35,42 @@ CURL_MOCK
   cat > "$MOCK_DIR/tea" <<'TEA_MOCK'
 #!/usr/bin/env bash
 printf 'tea %s\n' "$*" >> "$CALL_LOG"
+if [[ " $* " == *" issue "* && " $* " == *" --comments "* && " $* " == *" --output json "* ]]; then
+  printf '{"comments":[{"body":"%s"}]}\n' "${TEA_EXISTING_COMMENTS:-}"
+  exit 0
+fi
 case " $* " in
   *" merge "*|*" push "*)
     echo "forbidden tea command" >&2
     exit 99
     ;;
+  *" issues comment "*)
+    if [[ "${TEA_FAIL_COMMENT:-0}" == "1" ]]; then
+      echo "simulated tea comment failure" >&2
+      exit 98
+    fi
+    ;;
 esac
 exit 0
 TEA_MOCK
   chmod +x "$MOCK_DIR/tea"
+
+  cat > "$MOCK_DIR/git" <<'GIT_MOCK'
+#!/usr/bin/env bash
+printf 'git %s\n' "$*" >> "$CALL_LOG"
+case " $* " in
+  *" merge "*|*" push "*)
+    echo "forbidden git command" >&2
+    exit 99
+    ;;
+esac
+exit 0
+GIT_MOCK
+  chmod +x "$MOCK_DIR/git"
 }
 
 teardown() {
+  export PATH="$ORIGINAL_PATH"
   rm -rf "$MOCK_DIR"
 }
 
@@ -60,6 +86,38 @@ teardown() {
   grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
   grep -q 'state-review' "$CALL_LOG"
   grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"
+}
+
+@test "AC1: Forgejo comments are idempotent" {
+  export TEA_EXISTING_COMMENTS="[walter-pr-sync:acme/app#7:link] already posted"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  grep -q 'tea issue 7 --repo acme/app --comments --output json' "$CALL_LOG"
+  if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: Forgejo comment failure warns and continues" {
+  export TEA_FAIL_COMMENT=1
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN Forgejo PR comment failed"* ]]
+  grep -q 'state-review' "$CALL_LOG"
 }
 
 @test "AC2: merged comments with merge sha and moves Plane to done" {
