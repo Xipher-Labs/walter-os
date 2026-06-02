@@ -41,6 +41,36 @@ Nothing else. Even `80`/`443` can be closed in UFW after Tunnel is verified.
 Auth: Cloudflare Access policy = "email domain ends in `${WALTER_DOMAIN}`".
 Login methods: Google (via Workspace) OR One-Time PIN to email.
 
+## Path-scoped bypasses
+
+Some services need inbound callbacks from systems that cannot complete an
+interactive Cloudflare Access login. Examples:
+
+- `postiz.${WALTER_DOMAIN}/integrations/social/*` for social OAuth callbacks.
+- `n8n.${WALTER_DOMAIN}/webhook/*` for external automation webhooks.
+
+`04-create-access.sh` creates narrow bypass Access apps for those paths only.
+The rest of each subdomain remains protected by the normal email-domain Access
+policy. The script is idempotent: re-running it updates the existing path app
+and its bypass policy instead of creating duplicates.
+
+Defaults:
+
+```bash
+postiz:/integrations/social/*
+n8n:/webhook/*
+```
+
+Add more path bypasses with whitespace or newline-separated entries:
+
+```bash
+export WALTER_CF_ACCESS_BYPASS_PATHS='postiz:/api/oauth/* n8n:/webhook-test/*'
+./04-create-access.sh "$WALTER_DOMAIN" "$WALTER_AUTH_DOMAIN" otp
+```
+
+Keep entries as narrow as possible. Do not bypass a whole service hostname
+unless that service has its own strong authentication in front of every route.
+
 ## Files
 
 - `01-create-zone.sh` — create `${WALTER_DOMAIN}` zone in CF + import existing DNS
