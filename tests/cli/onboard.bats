@@ -42,18 +42,30 @@ assert_no_mutations() {
 
 assert_no_secret_values() {
   local text="$1"
-  [[ "$text" != *"token="* ]]
-  [[ "$text" != *"api_key"* ]]
-  [[ "$text" != *"secret="* ]]
-  [[ "$text" != *"password="* ]]
-  [[ "$text" != *"-----BEGIN"* ]]
+  local pattern
+  for pattern in "token=" "api_key" "secret=" "password=" "-----BEGIN"; do
+    if [[ "$text" == *"$pattern"* ]]; then
+      echo "secret-like output found: $pattern" >&2
+      return 1
+    fi
+  done
 }
 
 assert_referenced_docs_exist() {
   local text="$1" path
+  local found=0
   while IFS= read -r path; do
-    [[ -f "$REPO_ROOT/$path" ]]
-  done < <(grep -Eo 'docs/[^ ]+\\.md' <<<"$text" | sort -u)
+    found=1
+    if [[ ! -f "$REPO_ROOT/$path" ]]; then
+      echo "missing referenced doc: $path" >&2
+      return 1
+    fi
+  done < <(grep -Eo 'docs/[^[:space:]]+\.md' <<<"$text" | sort -u || true)
+
+  if [[ "$found" -ne 1 ]]; then
+    echo "no documentation paths found in output" >&2
+    return 1
+  fi
 }
 
 @test "device dry-run prints second-device plan without side effects" {
