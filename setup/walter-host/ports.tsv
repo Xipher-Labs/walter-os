@@ -3,6 +3,7 @@ caddy	http	80	80	tcp	public	all-in-one	Cloudflare Tunnel fan-in target and ACME 
 caddy	https	443	443	tcp	public	all-in-one	Direct HTTPS fallback when not using Cloudflare Tunnel.
 caddy	http3	443	443	udp	public	all-in-one	HTTP/3 listener.
 wireguard	vpn	51820	51820	udp	public	all-in-one	Public WireGuard client endpoint.
+wireguard	ui	51821	51821	tcp	localhost	standalone/wireguard	Standalone WireGuard admin UI behind Cloudflare/Caddy.
 syncthing	transfer-tcp	22000	22000	tcp	public	all-in-one	Syncthing device transfer listener.
 syncthing	transfer-udp	22000	22000	udp	public	all-in-one	Syncthing QUIC transfer listener.
 control-tower	ui	3000	3000	tcp	localhost	standalone/control-tower	Local-only UI; Cloudflare routes through Caddy in all-in-one mode.
@@ -10,6 +11,7 @@ forgejo	ui	3000	3000	tcp	localhost	standalone/forgejo	Standalone compose default
 uptime-kuma	ui	3001	3001	tcp	localhost	standalone/uptime-kuma	Standalone compose default.
 metabase	ui	3001	3000	tcp	localhost	standalone/metabase	Standalone compose default; remap if running with uptime-kuma.
 rocketchat	ui	3002	3000	tcp	localhost	standalone/rocketchat	Standalone compose default.
+grafana	ui	3030	3000	tcp	localhost	standalone/observability	Standalone observability Grafana UI.
 homepage	ui	3010	3000	tcp	localhost	standalone/homepage	Standalone compose default.
 langfuse	ui	3011	3000	tcp	localhost	standalone/langfuse	Default from LANGFUSE_HOST_PORT.
 llm-proxies	claude-code-router	3456	3456	tcp	localhost	standalone/llm-proxies	Local OpenAI-compatible Claude router.

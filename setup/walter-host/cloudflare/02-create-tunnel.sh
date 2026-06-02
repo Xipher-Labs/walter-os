@@ -37,6 +37,11 @@ TUNNEL_NAME="${TUNNEL_NAME:-walter-vm}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WALTER_HOST_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PORT_MAP_FILE="${WALTER_PORT_MAP_FILE:-$WALTER_HOST_DIR/ports.tsv}"
+if [[ ! -r "$PORT_MAP_FILE" ]]; then
+  echo "ERROR: port map not readable: $PORT_MAP_FILE" >&2
+  echo "Set WALTER_PORT_MAP_FILE or restore setup/walter-host/ports.tsv." >&2
+  exit 2
+fi
 
 # ---------------------------------------------------------------------------
 # Canonical subdomain list — single source of truth for what is publicly

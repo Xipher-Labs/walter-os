@@ -66,9 +66,15 @@ setup() {
 
 @test "#180: tunnel PostHog override comes from ports.tsv" {
   grep -qF 'PORT_MAP_FILE=' "$TUNNEL_SCRIPT"
+  grep -qF 'port map not readable' "$TUNNEL_SCRIPT"
   grep -qF 'port_map_lookup posthog tunnel host_port' "$TUNNEL_SCRIPT"
   grep -qF 'port_map_lookup posthog tunnel container_port' "$TUNNEL_SCRIPT"
   grep -q $'^posthog\ttunnel\t8100\t8000\ttcp\tlocalhost\tall-in-one\t' "$PORT_MAP"
+}
+
+@test "#180: known standalone published ports are listed" {
+  grep -q $'^wireguard\tui\t51821\t51821\ttcp\tlocalhost\tstandalone/wireguard\t' "$PORT_MAP"
+  grep -q $'^grafana\tui\t3030\t3000\ttcp\tlocalhost\tstandalone/observability\t' "$PORT_MAP"
 }
 
 @test "#180: runbook documents ranges and standalone collision rule" {
