@@ -144,7 +144,7 @@ fi
 
 # Pass through every tool that isn't Bash. We only inspect command strings.
 if [[ "$TOOL_NAME" != "Bash" ]]; then
-  _emit_allow
+  _emit_allow ""
 fi
 
 if ! CMD="$(printf '%s' "$INPUT" | jq -er '.tool_input.command // empty' 2>/dev/null)"; then
@@ -1383,4 +1383,4 @@ while IFS= read -r _segment; do
   _recurse_inspect "$_segment"
 done < <(_split_segments "$CMD")
 
-_emit_allow
+_emit_allow ""

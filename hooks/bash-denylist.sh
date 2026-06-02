@@ -262,4 +262,4 @@ for pattern_name in "${!DENYLIST_PATTERNS[@]}"; do
 done
 
 # No pattern matched — allow
-_emit_allow
+_emit_allow ""
