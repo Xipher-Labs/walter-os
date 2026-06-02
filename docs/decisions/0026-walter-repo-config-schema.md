@@ -1,6 +1,6 @@
 # ADR-0026: `walter-repo-config.yaml` — unified per-repo policy file
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-05-24
 **Deciders**: Operator
 **Part of**: `docs/specs/autonomous-delivery-roadmap.md` (AD-5)

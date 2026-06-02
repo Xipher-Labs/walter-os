@@ -73,6 +73,12 @@ Target release: **v0.5.2+** — remaining OSS Trust epic items (A-3 process isol
 
 ### Added
 
+- **#230 per-repo autonomy policy.** Adds the committed
+  `walter-repo-config.yaml` schema primitive, `walter-os repo-config
+  validate|defaults`, `walter-os doctor --repo-config`, conservative repo
+  defaults, and operator docs. The validator fails closed on malformed policy,
+  warns on unknown keys, and prevents the policy file from relaxing protected
+  branches or the hard-floor human approval categories.
 - **#24 multi-model routing preferences.** Adds `scripts/walter/lib/model-router.sh`,
   `WALTER_MODEL_*` overlay defaults, `walter-os status --models`, LiteLLM
   `metadata.domain` attribution, and operator docs for routing Codex, Claude,

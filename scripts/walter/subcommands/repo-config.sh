@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# walter-os repo-config — validate walter-repo-config.yaml policy files.
+#
+# Usage:
+#   walter-os repo-config validate [repo-dir|config-file]
+#   walter-os repo-config defaults
+#   walter-os repo-config help
+set -euo pipefail
+
+WALTER_OS_HOME="${WALTER_OS_HOME:-${HOME}/walter-os}"
+
+if [[ ! -f "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh" ]]; then
+  echo "repo-config: library not found under WALTER_OS_HOME=${WALTER_OS_HOME}" >&2
+  exit 2
+fi
+
+# shellcheck source=/dev/null
+source "${WALTER_OS_HOME}/scripts/walter/lib/repo-config.sh"
+
+print_help() {
+  grep '^#' "$0" | sed 's/^# \{0,1\}//'
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  validate)
+    walter_repo_config_validate "${1:-$(pwd)}"
+    ;;
+  defaults|print-defaults)
+    walter_repo_config_defaults
+    ;;
+  -h|--help|help)
+    print_help
+    ;;
+  *)
+    echo "repo-config: unknown command: $cmd" >&2
+    print_help >&2
+    exit 2
+    ;;
+esac
