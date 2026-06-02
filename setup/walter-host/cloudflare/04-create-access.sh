@@ -75,6 +75,68 @@ echo "==> Create/update Access app per service..."
 # — Tailscale clients can't do interactive Google OAuth on the control
 # plane. The HS admin UI is a separate Caddy site ('headscale-admin')
 # and IS protected here.
+
+# Path-scoped bypass Access apps for external callbacks that cannot complete
+# an interactive CF Access login (OAuth redirects, webhooks, etc.).
+#
+# Format: "subdomain:/path/*". Add operator-specific entries by exporting
+# WALTER_CF_ACCESS_BYPASS_PATHS with whitespace or newline-separated entries:
+#   WALTER_CF_ACCESS_BYPASS_PATHS="postiz:/integrations/social/* n8n:/webhook/*"
+BYPASS_PATHS=(
+  "postiz:/integrations/social/*"
+  "n8n:/webhook/*"
+)
+
+if [[ -n "${WALTER_CF_ACCESS_BYPASS_PATHS:-}" ]]; then
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] && BYPASS_PATHS+=("$entry")
+  done < <(printf '%s\n' "$WALTER_CF_ACCESS_BYPASS_PATHS" | tr '[:space:]' '\n')
+fi
+
+slugify_access_path() {
+  printf '%s' "$1" \
+    | sed -E 's#^/##; s#\*#wildcard#g; s#[^A-Za-z0-9]+#-#g; s#^-+|-+$##g' \
+    | tr '[:upper:]' '[:lower:]'
+}
+
+bypass_paths_for_sub() {
+  local sub="$1" entry entry_sub entry_path
+  for entry in "${BYPASS_PATHS[@]}"; do
+    entry_sub="${entry%%:*}"
+    entry_path="${entry#*:}"
+    [[ "$entry_sub" == "$sub" && "$entry_path" == /* ]] && printf '%s\n' "$entry_path"
+  done
+}
+
+access_app_payload() {
+  local name="$1" domain="$2" auto_redirect="$3"
+  jq -cn \
+    --arg name "$name" \
+    --arg domain "$domain" \
+    --argjson allowed_idps "$ALLOWED_IDPS" \
+    --argjson auto_redirect "$auto_redirect" \
+    '{
+      name: $name,
+      domain: $domain,
+      type: "self_hosted",
+      session_duration: "24h",
+      allowed_idps: $allowed_idps,
+      auto_redirect_to_identity: $auto_redirect
+    }'
+}
+
+access_bypass_policy_payload() {
+  local name="$1"
+  jq -cn \
+    --arg name "$name" \
+    '{
+      name: $name,
+      decision: "bypass",
+      include: [{everyone: {}}],
+      precedence: 1
+    }'
+}
+
 for sub in vault llm plane git status home secrets uptime \
            n8n grafana penpot draw chat sync element claw headscale-admin vpn \
            tower metabase postiz; do
@@ -141,6 +203,52 @@ for sub in vault llm plane git status home secrets uptime \
   [[ "$(echo "$pol" | jq -r '.success')" == "true" ]] \
     && printf "    ✓ policy: allow @%s\n" "$AUTH_DOMAIN" \
     || printf "    ✗ policy — %s\n" "$(echo "$pol" | jq -c '.errors')"
+
+  while IFS= read -r bypass_path; do
+    [[ -z "$bypass_path" ]] && continue
+
+    bypass_domain="${hostname}${bypass_path}"
+    bypass_slug="$(slugify_access_path "$bypass_path")"
+    bypass_name="Walter-VM ${sub} bypass (${bypass_slug})"
+
+    existing_apps=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps")
+    bypass_app_id=$(echo "$existing_apps" | jq -r --arg d "$bypass_domain" '.result[]? | select(.domain==$d) | .id' | head -1)
+
+    bypass_app_payload="$(access_app_payload "$bypass_name" "$bypass_domain" "false")"
+
+    if [[ -n "$bypass_app_id" ]]; then
+      bypass_resp=$(cf -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps/$bypass_app_id" -d "$bypass_app_payload")
+      if [[ "$(echo "$bypass_resp" | jq -r '.success')" == "true" ]]; then
+        printf "    ✓ bypass app: %s (updated)\n" "$bypass_domain"
+      else
+        printf "    ✗ bypass app: %s update — %s\n" "$bypass_domain" "$(echo "$bypass_resp" | jq -c '.errors')"
+        continue
+      fi
+    else
+      bypass_resp=$(cf -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps" -d "$bypass_app_payload")
+      bypass_app_id=$(echo "$bypass_resp" | jq -r '.result.id // empty')
+      if [[ -n "$bypass_app_id" ]]; then
+        printf "    ✓ bypass app: %s (created)\n" "$bypass_domain"
+      else
+        printf "    ✗ bypass app: %s — %s\n" "$bypass_domain" "$(echo "$bypass_resp" | jq -c '.errors')"
+        continue
+      fi
+    fi
+
+    bypass_policy_name="Bypass ${bypass_path}"
+    bypass_pol_list=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps/$bypass_app_id/policies")
+    bypass_pol_id=$(echo "$bypass_pol_list" | jq -r --arg n "$bypass_policy_name" '.result[]? | select(.name==$n) | .id' | head -1)
+    bypass_pol_payload="$(access_bypass_policy_payload "$bypass_policy_name")"
+
+    if [[ -n "$bypass_pol_id" ]]; then
+      bypass_pol=$(cf -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps/$bypass_app_id/policies/$bypass_pol_id" -d "$bypass_pol_payload")
+    else
+      bypass_pol=$(cf -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps/$bypass_app_id/policies" -d "$bypass_pol_payload")
+    fi
+    [[ "$(echo "$bypass_pol" | jq -r '.success')" == "true" ]] \
+      && printf "      ✓ policy: bypass %s\n" "$bypass_path" \
+      || printf "      ✗ bypass policy — %s\n" "$(echo "$bypass_pol" | jq -c '.errors')"
+  done < <(bypass_paths_for_sub "$sub")
 done
 
 echo
