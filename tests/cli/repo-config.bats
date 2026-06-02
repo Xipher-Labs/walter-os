@@ -136,6 +136,16 @@ YAML
   [[ "$output" == *"auto_merge.allowed_branches includes protected branch namespace: release/[!v]*"* ]]
 }
 
+@test "auto_merge.allowed_branches globs require safe literal prefixes" {
+  write_valid_config
+  sed -i.bak 's/"demo"/"*v2*"/' "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"auto_merge.allowed_branches glob has no safe literal prefix: *v2*"* ]]
+}
+
 @test "repo-config defaults print safe effective defaults" {
   run "$WALTER_OS_BIN" repo-config defaults
 

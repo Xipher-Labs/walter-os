@@ -204,7 +204,7 @@ _walter_repo_config_validate_allowed_branches() {
   local path="$1"
   _walter_repo_config_validate_string_array "$path" ".auto_merge.allowed_branches" "auto_merge.allowed_branches"
 
-  local branch protected
+  local branch prefix protected protected_prefix
   while IFS= read -r branch; do
     [[ -z "$branch" ]] && continue
     case "$branch" in
@@ -213,8 +213,26 @@ _walter_repo_config_validate_allowed_branches() {
         ;;
     esac
     case "$branch" in
-      *release/*)
+      release/*)
         _walter_repo_config_fail "auto_merge.allowed_branches includes protected branch namespace: ${branch}"
+        ;;
+    esac
+    case "$branch" in
+      *'*'*|*'?'*|*'['*)
+        prefix="$branch"
+        prefix="${prefix%%\**}"
+        prefix="${prefix%%\?*}"
+        prefix="${prefix%%\[*}"
+        if [[ -z "$prefix" ]]; then
+          _walter_repo_config_fail "auto_merge.allowed_branches glob has no safe literal prefix: ${branch}"
+        else
+          for protected_prefix in main master staging production release/; do
+            if [[ "$protected_prefix" == "$prefix"* ]] || [[ "$prefix" == release/* ]]; then
+              _walter_repo_config_fail "auto_merge.allowed_branches glob prefix intersects protected branches: ${branch} -> ${protected_prefix}"
+              break
+            fi
+          done
+        fi
         ;;
     esac
 
