@@ -208,7 +208,7 @@ _walter_repo_config_validate_allowed_branches() {
   while IFS= read -r branch; do
     [[ -z "$branch" ]] && continue
     case "$branch" in
-      '*'|'**'|main|master|staging|production|release|release/*)
+      \*|\*\*|main|master|staging|production|release)
         _walter_repo_config_fail "auto_merge.allowed_branches includes protected branch: ${branch}"
         ;;
     esac
@@ -218,7 +218,7 @@ _walter_repo_config_validate_allowed_branches() {
         ;;
     esac
     case "$branch" in
-      *'*'*|*'?'*|*'['*)
+      *\**|*\?*|*\[*)
         prefix="$branch"
         prefix="${prefix%%\**}"
         prefix="${prefix%%\?*}"

@@ -74,6 +74,26 @@ YAML
   [[ "$output" == *"repo-config: valid"* ]]
 }
 
+@test "safe literal branch names are allowed even when they prefix protected names" {
+  write_valid_config
+  sed -i.bak 's/"demo"/"m"/' "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: valid"* ]]
+}
+
+@test "safe branch globs with literal prefixes are allowed" {
+  write_valid_config
+  sed -i.bak 's|"demo"|"feature/*"|' "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: valid"* ]]
+}
+
 @test "invalid autonomy_mode fails closed" {
   write_valid_config
   sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \
