@@ -220,7 +220,7 @@ if [[ "$title_ok" -eq 0 ]]; then
 fi
 
 link_points=0
-if grep -Eiq '(Closes|Fixes|Resolves|Refs):?[[:space:]]+#?[0-9]+' <<<"$body"; then
+if grep -Eiq '(^|[^[:alnum:]_])(Closes|Fixes|Resolves|Refs):?[[:space:]]+#?[0-9]+' <<<"$body"; then
   link_points=10
 else
   add_finding "missing issue reference in PR body"

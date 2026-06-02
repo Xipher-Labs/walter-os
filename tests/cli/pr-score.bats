@@ -247,6 +247,22 @@ write_fixture() {
   echo "$output" | jq -e '.findings | index("missing issue reference in PR body") | not'
 }
 
+@test "AC4: issue references do not match keyword substrings" {
+  local fixture="$TMP_DIR/link-substring.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]' \
+    $'## Verification\n- bats tests/cli/pr-score.bats\n\npreferences #236'
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.components.issue_links.points == 0'
+  echo "$output" | jq -e '.findings | index("missing issue reference in PR body")'
+}
+
 @test "AC4: --fixture cannot be combined with a PR reference" {
   local fixture="$TMP_DIR/clean.json"
   write_fixture \
