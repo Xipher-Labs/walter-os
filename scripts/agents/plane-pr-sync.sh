@@ -45,6 +45,15 @@ if [[ -z "$event" ]]; then
 fi
 shift
 
+case "$event" in
+  link|merged) ;;
+  *)
+    echo "plane-pr-sync: unknown event: $event" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 issue=""
 pr_url=""
 pr_number=""
@@ -105,15 +114,6 @@ require_value pr-number "$pr_number"
 require_value repo "$repo"
 require_value branch "$branch"
 
-case "$event" in
-  link|merged) ;;
-  *)
-    echo "plane-pr-sync: unknown event: $event" >&2
-    usage >&2
-    exit 2
-    ;;
-esac
-
 if [[ "$event" == "merged" ]]; then
   require_value merge-sha "$merge_sha"
 fi
@@ -124,7 +124,10 @@ _plane_check_env || exit $?
 plane_comment_once() {
   local marker="$1" body="$2"
   local existing
-  existing="$(_plane_curl GET "/issues/$issue/comments/" 2>/dev/null || printf '{"results":[]}')"
+  if ! existing="$(_plane_curl GET "/issues/$issue/comments/")"; then
+    echo "plane-pr-sync: failed to inspect Plane comments; aborting" >&2
+    exit 3
+  fi
   if jq -e --arg marker "$marker" \
       '[.results[]? | ((.comment_stripped // .comment_html // "") | contains($marker))] | any' \
       >/dev/null <<<"$existing"; then
@@ -139,7 +142,7 @@ forgejo_comment_once() {
     echo "plane-pr-sync: WARN tea not found; skipped Forgejo PR comment" >&2
     return 0
   fi
-  if existing="$(tea issue "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
+  if existing="$(tea issues "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
     if jq -e --arg marker "$marker" '.. | strings | select(contains($marker))' \
         >/dev/null <<<"$existing"; then
       return 0

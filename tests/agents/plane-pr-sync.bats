@@ -25,6 +25,10 @@ args="$*"
 if echo "$args" | grep -q "/states/"; then
   echo '{"results":[{"id":"state-review","name":"review"},{"id":"state-done","name":"done"}]}'
 elif echo "$args" | grep -q "/comments/" && echo "$args" | grep -q -- "-X GET"; then
+  if [[ "${PLANE_FAIL_COMMENT_FETCH:-0}" == "1" ]]; then
+    echo "simulated Plane comment fetch failure" >&2
+    exit 97
+  fi
   echo '{"results":[]}'
 else
   echo '{"ok":true}'
@@ -35,7 +39,7 @@ CURL_MOCK
   cat > "$MOCK_DIR/tea" <<'TEA_MOCK'
 #!/usr/bin/env bash
 printf 'tea %s\n' "$*" >> "$CALL_LOG"
-if [[ " $* " == *" issue "* && " $* " == *" --comments "* && " $* " == *" --output json "* ]]; then
+if [[ " $* " == *" issues "* && " $* " == *" --comments "* && " $* " == *" --output json "* ]]; then
   printf '{"comments":[{"body":"%s"}]}\n' "${TEA_EXISTING_COMMENTS:-}"
   exit 0
 fi
@@ -99,7 +103,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 0 ]
-  grep -q 'tea issue 7 --repo acme/app --comments --output json' "$CALL_LOG"
+  grep -q 'tea issues 7 --repo acme/app --comments --output json' "$CALL_LOG"
   if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
     return 1
   fi
@@ -151,6 +155,23 @@ teardown() {
   fi
 }
 
+@test "AC3: Plane comment fetch failure aborts before state changes" {
+  export PLANE_FAIL_COMMENT_FETCH=1
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"failed to inspect Plane comments"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
 @test "AC4: unknown event fails closed" {
   run bash "$SCRIPT" closed \
     --issue "issue-uuid" \
@@ -160,6 +181,15 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown event: closed"* ]]
+}
+
+@test "AC4: unknown event fails before required options" {
+  run bash "$SCRIPT" closed
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown event: closed"* ]]
+  [[ "$output" != *"missing --issue"* ]]
 }
 
 @test "AC4: missing event fails closed" {
