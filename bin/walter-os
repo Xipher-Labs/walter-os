@@ -71,6 +71,7 @@
 #                               Manage session capability tokens (#122 A-2)
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
+#   doctor --codex-startup      Diagnose Codex skill/plugin/MCP startup health
 #   help                        Show this help
 
 set -euo pipefail
@@ -1507,6 +1508,189 @@ _doctor_lite_probe() {
   return 0
 }
 
+_doctor_codex_startup_probe() {
+  local issues=0
+  local warns=0
+
+  echo "Walter-OS doctor — Codex startup probe"
+  echo
+
+  local lint="${WALTER_SKILL_FRONTMATTER_LINT:-${WALTER_OS_HOME}/tests/lint-frontmatter.sh}"
+  if [[ -x "$lint" || -f "$lint" ]]; then
+    local lint_output
+    lint_output="$(mktemp)"
+    if bash "$lint" >"$lint_output" 2>&1; then
+      printf "  PASS repo skills frontmatter: valid YAML and Codex metadata limits\n"
+    else
+      printf "  FAIL repo skills frontmatter: loader-visible repo skills are invalid\n"
+      grep -E '✗|invalid|exceeds|missing' "$lint_output" | sed 's/^/    /' || true
+      issues=$((issues + 1))
+    fi
+    rm -f "$lint_output"
+  else
+    printf "  WARN repo skills frontmatter: lint command not found at %s\n" "$lint"
+    warns=$((warns + 1))
+  fi
+
+  echo
+  _doctor_codex_plugin_cache_probe && true
+  warns=$((warns + WALTER_DOCTOR_PLUGIN_WARNINGS))
+
+  echo
+  _doctor_codex_mcp_probe && true
+  warns=$((warns + WALTER_DOCTOR_MCP_WARNINGS))
+
+  echo
+  printf "Codex startup summary: %d issue(s), %d warning(s)\n" "$issues" "$warns"
+  [[ "$issues" -eq 0 ]]
+}
+
+_doctor_codex_plugin_cache_probe() {
+  WALTER_DOCTOR_PLUGIN_WARNINGS=0
+  local cache="${WALTER_CODEX_PLUGIN_CACHE:-${HOME}/.codex/plugins/cache}"
+
+  echo "Plugin-cache skills:"
+  if [[ ! -d "$cache" ]]; then
+    printf "  PASS plugin cache: not present at %s\n" "$cache"
+    return 0
+  fi
+
+  if ! command -v ruby >/dev/null 2>&1; then
+    printf "  WARN plugin cache: ruby unavailable, cannot parse managed skill metadata\n"
+    WALTER_DOCTOR_PLUGIN_WARNINGS=1
+    return 0
+  fi
+
+  local result
+  result="$(ruby - "$cache" <<'RUBY'
+require "yaml"
+
+root = ARGV.fetch(0)
+warnings = []
+
+Dir.glob(File.join(root, "**", "SKILL.md")).sort.each do |path|
+  text = File.read(path)
+  frontmatter = text.split(/^---\s*$/m, 3)[1]
+  next unless frontmatter
+
+  begin
+    data = YAML.safe_load(frontmatter, permitted_classes: [], permitted_symbols: [], aliases: false)
+  rescue Psych::Exception => e
+    warnings << "#{path}: invalid YAML frontmatter (#{e.class})"
+    next
+  end
+
+  next unless data.is_a?(Hash)
+
+  name = data["name"]
+  description = data["description"]
+  warnings << "#{path}: name exceeds 64 chars (#{name.length})" if name.is_a?(String) && name.length > 64
+  if description.is_a?(String) && description.length > 1024
+    warnings << "#{path}: description exceeds 1024 chars (#{description.length})"
+  end
+end
+
+if warnings.empty?
+  puts "PASS plugin cache metadata: no Codex loader limit warnings found"
+else
+  puts "WARN plugin cache metadata: #{warnings.length} managed issue(s)"
+  warnings.first(8).each { |warning| puts "  #{warning}" }
+  puts "  Action: update/reinstall the plugin or report upstream; do not hand-edit plugin cache files."
+end
+RUBY
+)"
+
+  printf '%s\n' "$result" | sed 's/^/  /'
+  if [[ "$result" == WARN* ]]; then
+    WALTER_DOCTOR_PLUGIN_WARNINGS=1
+  fi
+  return 0
+}
+
+_doctor_codex_mcp_probe() {
+  WALTER_DOCTOR_MCP_WARNINGS=0
+  local registry="${WALTER_MCP_REGISTRY:-${WALTER_OS_HOME}/mcp/servers.json}"
+
+  echo "MCP registry readiness:"
+  if [[ ! -f "$registry" ]]; then
+    printf "  WARN MCP registry: not found at %s\n" "$registry"
+    WALTER_DOCTOR_MCP_WARNINGS=1
+    return 0
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    printf "  WARN MCP registry: jq unavailable, cannot classify server startup risks\n"
+    WALTER_DOCTOR_MCP_WARNINGS=1
+    return 0
+  fi
+
+  local total=0
+  local rows
+  if ! rows="$(jq -c '
+    .servers
+    | to_entries[]
+    | select((.value.disabled // false) | not)
+    | select((.value.load // "default") == "default")
+    | {
+        name: .key,
+        type: (.value.type // "stdio"),
+        command: (.value.command // ""),
+        refs: ([((.value.env // {})[]?), ((.value.headers // {})[]?), ((.value.args // [])[]?)]
+          | map(tostring)
+          | join(" "))
+      }
+  ' "$registry" 2>/dev/null)"; then
+    printf "  FAIL MCP registry: invalid JSON or unexpected schema at %s\n" "$registry"
+    WALTER_DOCTOR_MCP_WARNINGS=1
+    return 0
+  fi
+
+  local row name type command refs
+  while IFS= read -r row; do
+    name="$(jq -r '.name' <<<"$row")"
+    type="$(jq -r '.type' <<<"$row")"
+    command="$(jq -r '.command' <<<"$row")"
+    refs="$(jq -r '.refs' <<<"$row")"
+    [[ -n "$name" ]] || continue
+    total=$((total + 1))
+
+    if [[ -n "$command" ]] && ! command -v "$command" >/dev/null 2>&1; then
+      printf "  WARN mcp/%s: missing command '%s'\n" "$name" "$command"
+      WALTER_DOCTOR_MCP_WARNINGS=$((WALTER_DOCTOR_MCP_WARNINGS + 1))
+    fi
+
+    local mcp_missing_vars=()
+    local var
+    while IFS= read -r var; do
+      [[ -n "$var" ]] || continue
+      var="${var#\$\{}"
+      var="${var%\}}"
+      if [[ -z "${!var:-}" ]]; then
+        mcp_missing_vars+=("$var")
+      fi
+    done < <(printf '%s\n' "${refs:-}" | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' | sort -u || true)
+
+    if [[ "${#mcp_missing_vars[@]}" -gt 0 ]]; then
+      printf "  WARN mcp/%s: missing env %s\n" "$name" "${mcp_missing_vars[*]}"
+      WALTER_DOCTOR_MCP_WARNINGS=$((WALTER_DOCTOR_MCP_WARNINGS + 1))
+    elif [[ -z "$command" && "$type" != "stdio" ]]; then
+      printf "  PASS mcp/%s: remote/%s config present\n" "$name" "$type"
+    fi
+  done <<<"$rows"
+
+  if [[ "$total" -eq 0 ]]; then
+    printf "  WARN MCP registry: no enabled default-profile servers found\n"
+    WALTER_DOCTOR_MCP_WARNINGS=$((WALTER_DOCTOR_MCP_WARNINGS + 1))
+  else
+    printf "  PASS MCP registry parsed: %d enabled default-profile server(s)\n" "$total"
+  fi
+
+  if [[ "$WALTER_DOCTOR_MCP_WARNINGS" -gt 0 ]]; then
+    printf "  Action: install missing commands, populate env/tokens, or treat the MCP as optional/local-service dependent.\n"
+  fi
+  return 0
+}
+
 # cmd_uninstall: front for `install.sh --uninstall`.
 #
 # Walter-OS Gap 4 from #191: operators who lose the repo clone need a
@@ -1767,10 +1951,12 @@ cmd_doctor() {
   # checks). See docs/specs/cursor-adapter-completion.md.
   # --lite: run ONLY the Lite contract probe + exit. See
   # docs/specs/walter-os-lite-entry-tier.md.
+  # --codex-startup: run ONLY the Codex startup readiness probe + exit.
   local tier_filter=""
   local cursor_only=0
   local antigravity_only=0
   local lite_only=0
+  local codex_startup_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --tier)
@@ -1791,6 +1977,10 @@ cmd_doctor() {
         ;;
       --lite)
         lite_only=1
+        shift
+        ;;
+      --codex-startup)
+        codex_startup_only=1
         shift
         ;;
       *)
@@ -1816,6 +2006,11 @@ cmd_doctor() {
 
   if [[ "$lite_only" -eq 1 ]]; then
     _doctor_lite_probe
+    return $?
+  fi
+
+  if [[ "$codex_startup_only" -eq 1 ]]; then
+    _doctor_codex_startup_probe
     return $?
   fi
 
