@@ -88,6 +88,8 @@ if command -v syft >/dev/null 2>&1; then
   gh release download "$tag" \
     --pattern "walter-os-${tag}.sbom.cdx.json" \
     --dir "$asset_dir"
+  published_sbom="${asset_dir}/walter-os-${tag}.sbom.cdx.json"
+  [[ -s "$published_sbom" ]] || die "missing SBOM"
   rebuilt_sbom="${work_dir}/walter-os-${tag}.sbom.cdx.json"
   sbom_root="${work_dir}/sbom-root"
   mkdir -p "$sbom_root"
@@ -104,6 +106,9 @@ if command -v syft >/dev/null 2>&1; then
   ' "${rebuilt_sbom}.raw" > "$rebuilt_sbom"
   expected_sbom_hash="$(awk -v file="./walter-os-${tag}.sbom.cdx.json" '$2 == file { print $1 }' "$checksums")"
   [[ -n "$expected_sbom_hash" ]] || die "checksums.sha256 has no SBOM entry"
+  published_sbom_hash="$(sha256sum "$published_sbom" | awk '{ print $1 }')"
+  [[ "$published_sbom_hash" == "$expected_sbom_hash" ]] \
+    || die "published SBOM mismatch: expected ${expected_sbom_hash}, got ${published_sbom_hash}"
   actual_sbom_hash="$(sha256sum "$rebuilt_sbom" | awk '{ print $1 }')"
   [[ "$actual_sbom_hash" == "$expected_sbom_hash" ]] \
     || die "SBOM mismatch: expected ${expected_sbom_hash}, got ${actual_sbom_hash}"

@@ -35,6 +35,12 @@ setup() {
   grep -Fq 'published source tarball mismatch' "$SCRIPT"
 }
 
+@test "reproducible release script verifies downloaded SBOM checksum when tools exist" {
+  grep -Fq 'published_sbom="${asset_dir}/walter-os-${tag}.sbom.cdx.json"' "$SCRIPT"
+  grep -Fq 'published_sbom_hash="$(sha256sum "$published_sbom" | awk' "$SCRIPT"
+  grep -Fq 'published SBOM mismatch' "$SCRIPT"
+}
+
 @test "reproducible release script can compare canonical SBOM when tools exist" {
   grep -Fq 'command -v syft' "$SCRIPT"
   grep -Fq 'gh release download "$tag"' "$SCRIPT"
