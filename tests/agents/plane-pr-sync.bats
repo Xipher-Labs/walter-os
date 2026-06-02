@@ -11,9 +11,20 @@ setup() {
   MOCK_DIR="$(mktemp -d)"
   CALL_LOG="$MOCK_DIR/calls.log"
   ORIGINAL_PATH="$PATH"
+  if [[ -v TMPDIR ]]; then
+    ORIGINAL_TMPDIR="$TMPDIR"
+    TMPDIR_WAS_SET=1
+  else
+    ORIGINAL_TMPDIR=""
+    TMPDIR_WAS_SET=0
+  fi
   export CALL_LOG
   export ORIGINAL_PATH
+  export ORIGINAL_TMPDIR
+  export TMPDIR_WAS_SET
   export PATH="$MOCK_DIR:$PATH"
+  mkdir -p "$MOCK_DIR/tmp"
+  export TMPDIR="$MOCK_DIR/tmp"
   export WALTER_OS_HOME="$REPO_ROOT"
   export PLANE_API_TOKEN="test-token"
   export PLANE_API_URL="http://plane.test/api/v1"
@@ -89,7 +100,16 @@ GIT_MOCK
 
 teardown() {
   export PATH="$ORIGINAL_PATH"
+  if [[ "$TMPDIR_WAS_SET" == "1" ]]; then
+    export TMPDIR="$ORIGINAL_TMPDIR"
+  else
+    unset TMPDIR
+  fi
   rm -rf "$MOCK_DIR"
+}
+
+combined_output() {
+  printf '%s\n%s\n' "$output" "${stderr:-}"
 }
 
 @test "AC1: link comments on Plane, moves to review, and comments on Forgejo" {
@@ -151,7 +171,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"WARN Forgejo PR comment failed"* ]]
+  [[ "$(combined_output)" == *"WARN Forgejo PR comment failed"* ]]
   grep -q 'state-review' "$CALL_LOG"
 }
 
@@ -198,7 +218,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 3 ]
-  [[ "$output" == *"missing Plane helper"* ]]
+  [[ "$(combined_output)" == *"missing Plane helper"* ]]
 }
 
 @test "AC3: Plane comment fetch failure aborts before state changes" {
@@ -212,7 +232,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 3 ]
-  [[ "$output" == *"failed to inspect Plane comments"* ]]
+  [[ "$(combined_output)" == *"failed to inspect Plane comments"* ]]
   if grep -q 'state-review' "$CALL_LOG"; then
     return 1
   fi
@@ -229,7 +249,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 3 ]
-  [[ "$output" == *"failed to parse Plane comments"* ]]
+  [[ "$(combined_output)" == *"failed to parse Plane comments"* ]]
   if grep -q 'state-review' "$CALL_LOG"; then
     return 1
   fi
@@ -244,22 +264,22 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 2 ]
-  [[ "$output" == *"unknown event: closed"* ]]
+  [[ "$(combined_output)" == *"unknown event: closed"* ]]
 }
 
 @test "AC4: unknown event fails before required options" {
   run bash "$SCRIPT" closed
 
   [ "$status" -eq 2 ]
-  [[ "$output" == *"unknown event: closed"* ]]
-  [[ "$output" != *"missing --issue"* ]]
+  [[ "$(combined_output)" == *"unknown event: closed"* ]]
+  [[ "$(combined_output)" != *"missing --issue"* ]]
 }
 
 @test "AC4: missing event fails closed" {
   run bash "$SCRIPT"
 
   [ "$status" -eq 2 ]
-  [[ "$output" == *"missing event"* ]]
+  [[ "$(combined_output)" == *"missing event"* ]]
 }
 
 @test "AC4: explicit help exits cleanly" {
@@ -278,7 +298,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 2 ]
-  [[ "$output" == *"missing value for --issue"* ]]
+  [[ "$(combined_output)" == *"missing value for --issue"* ]]
 }
 
 @test "AC4: non-numeric PR number fails closed" {
@@ -290,7 +310,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 2 ]
-  [[ "$output" == *"--pr-number must be numeric"* ]]
+  [[ "$(combined_output)" == *"--pr-number must be numeric"* ]]
 }
 
 @test "AC5: newline input is rejected" {
@@ -302,7 +322,7 @@ teardown() {
     --branch "feature/thing"
 
   [ "$status" -eq 2 ]
-  [[ "$output" == *"newline"* ]]
+  [[ "$(combined_output)" == *"newline"* ]]
 }
 
 @test "AC6: script never invokes merge or push" {
@@ -360,7 +380,7 @@ CHMOD_MOCK
     --branch "feature/thing"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"failed to secure lock dir"* ]]
+  [[ "$(combined_output)" == *"failed to secure lock dir"* ]]
   grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
 }
 
@@ -381,7 +401,7 @@ FLOCK_MOCK
     --branch "feature/thing"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"unsafe symlink lock dir"* ]]
+  [[ "$(combined_output)" == *"unsafe symlink lock dir"* ]]
   grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
 }
 
@@ -402,6 +422,6 @@ FLOCK_MOCK
     --branch "feature/thing"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"unsafe lock file"* ]]
+  [[ "$(combined_output)" == *"unsafe lock file"* ]]
   grep -q 'walter-pr-sync:acme/app#7:link' "$CALL_LOG"
 }
