@@ -141,6 +141,19 @@ YAML
   [[ "$output" == *"missing hard-floor approval: secrets"* ]]
 }
 
+@test "full autonomy cannot omit the hard-limit approval list" {
+  write_valid_config
+  sed -i.bak 's/autonomy_mode: guided/autonomy_mode: full/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+  sed -i.bak '/^human_approval_required_for:/,$d' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing hard-floor approval list: human_approval_required_for"* ]]
+}
+
 @test "auto_merge.allowed_branches cannot include protected branches" {
   write_valid_config
   sed -i.bak 's/"demo"/main/' "$TMP_DIR/repo/walter-repo-config.yaml"

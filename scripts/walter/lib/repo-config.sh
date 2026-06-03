@@ -245,7 +245,10 @@ _walter_repo_config_validate_auto_merge_keys() {
 
 _walter_repo_config_validate_human_approvals() {
   local path="$1"
-  _walter_repo_config_has "$path" "human_approval_required_for" || return 0
+  if ! _walter_repo_config_has "$path" "human_approval_required_for"; then
+    _walter_repo_config_fail "missing hard-floor approval list: human_approval_required_for"
+    return 0
+  fi
   _walter_repo_config_validate_string_array "$path" ".human_approval_required_for" "human_approval_required_for"
 
   local approvals required item
