@@ -14,6 +14,9 @@
  * U-r2-4: control-tower.yml — CI workflow missing `main` in push branches.
  *          Merges to main do not trigger the build. Fix: add main.
  *
+ * U-r2-5: control-tower.yml — smoke tests assert the update badge, so the
+ *          version env must be present during both smoke build and run.
+ *
  * Refs: docs/specs/walter-council-v2.md
  */
 import { describe, it, expect } from "vitest";
@@ -94,5 +97,22 @@ describe("U-r2-4: control-tower CI workflow covers main branch", () => {
     const src = readFileSync(workflowPath, "utf-8");
     // branches list must include main
     expect(src).toMatch(/branches\s*:[\s\S]*main/);
+  });
+});
+
+// ---- U-r2-5: CI smoke workflow sets version env before build and run ----
+
+describe("U-r2-5: control-tower smoke workflow carries version env", () => {
+  it("sets version/update env in the smoke build and test steps", () => {
+    const workflowPath = resolve(
+      __dirname,
+      "../../../../.github/workflows/control-tower.yml"
+    );
+    const src = readFileSync(workflowPath, "utf-8");
+
+    expect(src.split("WALTER_VERSION:").length - 1).toBeGreaterThanOrEqual(2);
+    expect(
+      src.split("WALTER_UPDATE_AVAILABLE:").length - 1
+    ).toBeGreaterThanOrEqual(2);
   });
 });
