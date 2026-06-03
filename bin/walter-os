@@ -66,8 +66,8 @@
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
-#   post-merge-check [--commit SHA] [--json]
-#                               Classify post-merge health evidence (read-only)
+#   post-merge-check [--commit SHA] [--json] [--record-feature-state ID]
+#                               Classify post-merge health evidence
 #   feature-state {init|validate|record-post-merge}
 #                               Manage .walter/features/<id>/state.yaml ledgers
 #   repo-config {validate|defaults [balanced|hackathon]}

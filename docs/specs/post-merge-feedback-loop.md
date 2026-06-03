@@ -10,27 +10,30 @@ rollback.
 
 ## Goals
 
-- Add `walter-os post-merge-check` as the first read-only AD-13 primitive.
+- Add `walter-os post-merge-check` as the first AD-13 primitive.
 - Classify post-merge evidence into `healthy`, `investigate`,
   `rollback-recommended`, or `human-escalation`.
 - Consume observable evidence: GitHub Actions runs for a merge commit, optional
   telemetry alerts, and fix-attempt counters.
 - Enforce a max-fix-attempts cap before future automation can loop.
 - Return JSON output for later n8n, Plane, or feature-ledger integration.
+- Optionally record the classification to the AD-2 feature-state ledger when
+  explicitly requested.
 
 ## Non-Goals
 
 - Do not open fix PRs in this slice.
 - Do not revert commits or run rollback commands.
-- Do not update `.walter/features/**` ledgers until #227 lands.
+- Do not update `.walter/features/**` ledgers unless `--record-feature-state`
+  is passed explicitly.
 - Do not bypass the approval-gate hard-limit floor.
 
 ## Decisions
 
-### D1 — Read-only first slice
+### D1 — Read-only by default
 
-The initial primitive only classifies evidence. It exits with deterministic
-codes that automation can use later:
+The primitive classifies evidence without side effects by default. It exits with
+deterministic codes that automation can use later:
 
 | Decision | Exit | Meaning |
 |---|---:|---|
@@ -57,7 +60,15 @@ Future PRs can use this primitive from n8n, Plane automation, or the eventual
 feature-state ledger. That later layer may open fix PRs or update state, but
 those mutating steps stay out of this slice.
 
-### D4 — Structured signals for automation
+### D4 — Opt-in feature-state recording
+
+When called with `--record-feature-state <id>`, the CLI appends the
+classification to `.walter/features/<id>/state.yaml` through
+`walter-os feature-state record-post-merge`. This records only bounded local
+state: `decision`, `next_action`, `merge_sha`, and `source`. It does not open
+fix PRs, execute rollback commands, or relax approval-gate hard limits.
+
+### D5 — Structured signals for automation
 
 Human-readable `findings` are not a machine contract. JSON output also includes
 `signals.pending_runs`, `signals.failed_runs`,
@@ -76,6 +87,10 @@ automation can consume the classifier without parsing free-form text.
 - AC5: `--json` emits `decision`, `next_action`, `counts`, `signals`, and
   `findings`.
 - AC6: `walter-os help` documents `post-merge-check`.
+- AC7: `--record-feature-state <id>` appends the classification to the local
+  feature-state ledger and preserves the health-decision exit code.
+- AC8: Feature-state recording failures use runtime exit code `4` and do not
+  masquerade as health decisions.
 
 ## Related
 
