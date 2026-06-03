@@ -120,6 +120,22 @@ write_fixture() {
   echo "$output" | jq -e '.next_action == "wait-or-investigate"'
 }
 
+@test "AC5: --json emits structured signal arrays" {
+  local fixture="$TMP_DIR/structured-signals.json"
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci, docs","status":"completed","conclusion":"failure"},{"workflowName":"production-deploy","status":"completed","conclusion":"failure"},{"workflowName":"readme-lint","status":"in_progress","conclusion":null}]' \
+    '[{"source":"grafana","severity":"high","summary":"api, elevated errors"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check --fixture "$fixture" --json
+
+  [ "$status" -eq 2 ]
+  echo "$output" | jq -e '.signals.pending_runs == ["readme-lint"]'
+  echo "$output" | jq -e '.signals.failed_runs == ["ci, docs", "production-deploy"]'
+  echo "$output" | jq -e '.signals.high_impact_failed_runs == ["production-deploy"]'
+  echo "$output" | jq -e '.signals.critical_alerts == ["api, elevated errors"]'
+}
+
 @test "regression: comma-bearing run and alert names do not inflate counts" {
   local fixture="$TMP_DIR/comma-names.json"
   write_fixture \
@@ -151,6 +167,13 @@ EOF
 
   [ "$status" -eq 4 ]
   [[ "$output" == *"unable to inspect GitHub Actions runs"* ]]
+}
+
+@test "regression: unreadable fixture is a usage error" {
+  run bash "$WALTER_OS_BIN" post-merge-check --fixture "$TMP_DIR/missing.json"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"fixture is not readable"* ]]
 }
 
 @test "AC6: help documents post-merge-check" {

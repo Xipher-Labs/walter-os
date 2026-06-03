@@ -57,6 +57,13 @@ Future PRs can use this primitive from n8n, Plane automation, or the eventual
 feature-state ledger. That later layer may open fix PRs or update state, but
 those mutating steps stay out of this slice.
 
+### D4 — Structured signals for automation
+
+Human-readable `findings` are not a machine contract. JSON output also includes
+`signals.pending_runs`, `signals.failed_runs`,
+`signals.high_impact_failed_runs`, and `signals.critical_alerts` arrays so
+automation can consume the classifier without parsing free-form text.
+
 ## Acceptance Criteria
 
 - AC1: All completed successful/skipped/neutral runs with no high/critical
@@ -66,7 +73,8 @@ those mutating steps stay out of this slice.
   `rollback-recommended`.
 - AC4: Failed evidence with `fix_attempts >= max_fix_attempts` returns
   `human-escalation`.
-- AC5: `--json` emits `decision`, `next_action`, `counts`, and `findings`.
+- AC5: `--json` emits `decision`, `next_action`, `counts`, `signals`, and
+  `findings`.
 - AC6: `walter-os help` documents `post-merge-check`.
 
 ## Related

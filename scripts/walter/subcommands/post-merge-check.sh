@@ -96,7 +96,8 @@ fi
 
 if [[ -n "$fixture" ]]; then
   if [[ ! -r "$fixture" ]]; then
-    runtime_error "fixture is not readable: $fixture"
+    echo "walter-os post-merge-check: fixture is not readable: $fixture" >&2
+    exit "$USAGE_ERROR_EXIT"
   fi
   evidence_json="$(cat "$fixture")"
 else
@@ -231,13 +232,26 @@ counts_json="$(jq -nc \
     max_fix_attempts: $max_fix_attempts
   }')"
 
+signals_json="$(jq -nc \
+  --argjson pending_runs "$pending_names_json" \
+  --argjson failed_runs "$failed_names_json" \
+  --argjson high_impact_failed_runs "$high_impact_failed_names_json" \
+  --argjson critical_alerts "$critical_alerts_json" \
+  '{
+    pending_runs: $pending_runs,
+    failed_runs: $failed_runs,
+    high_impact_failed_runs: $high_impact_failed_runs,
+    critical_alerts: $critical_alerts
+  }')"
+
 if [[ "$json_output" -eq 1 ]]; then
   jq -nc \
     --arg decision "$decision" \
     --arg next_action "$next_action" \
     --argjson counts "$counts_json" \
+    --argjson signals "$signals_json" \
     --argjson findings "$findings_json" \
-    '{decision: $decision, next_action: $next_action, counts: $counts, findings: $findings}'
+    '{decision: $decision, next_action: $next_action, counts: $counts, signals: $signals, findings: $findings}'
   exit "$exit_code"
 fi
 
