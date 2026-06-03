@@ -2,7 +2,8 @@
  * Control Tower smoke tests.
  * Tests: (1) page loads, (2) agent board renders 6 cards, (3) SSE connects,
  * (4) timeline renders, (5) cost dashboard renders,
- * (6) HA Status renders, (7) mode toggle visible, (8) nav links work.
+ * (6) HA Status renders, (7) mode toggle visible, (8) nav links work,
+ * (9) mobile nav does not create horizontal overflow.
  *
  * Tailscale enforcement is disabled in test env (TAILSCALE_ENFORCE=false).
  * Control Tower token auth is satisfied by the Playwright context header.
@@ -134,14 +135,34 @@ test.describe("Control Tower smoke tests", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
-  test("(9) Council Chat page loads", async ({ page }) => {
+  test("(9) TopNav fits without horizontal overflow on mobile", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const metrics = await page.evaluate(() => {
+      const nav = document.querySelector("nav");
+      return {
+        innerWidth: window.innerWidth,
+        docScrollWidth: document.documentElement.scrollWidth,
+        navScrollWidth: nav?.scrollWidth ?? 0,
+        navClientWidth: nav?.clientWidth ?? 0,
+      };
+    });
+
+    expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
+    expect(metrics.navScrollWidth).toBeLessThanOrEqual(metrics.navClientWidth);
+  });
+
+  test("(10) Council Chat page loads", async ({ page }) => {
     await page.goto("/council");
     await expect(page.locator("h1")).toContainText("Council Chat");
     await expect(page.locator("textarea")).toBeVisible();
     await expect(page.locator("button", { hasText: "Send to Council" })).toBeVisible();
   });
 
-  test("(10) History page loads with the shared nav rendered", async ({
+  test("(11) History page loads with the shared nav rendered", async ({
     page,
   }) => {
     await page.goto("/history");

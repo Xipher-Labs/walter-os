@@ -73,6 +73,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Control Tower mobile nav polish (#311).** Lets the shared TopNav wrap on
+  narrow viewports so the dashboard no longer creates horizontal page overflow
+  on phone-width screens.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
