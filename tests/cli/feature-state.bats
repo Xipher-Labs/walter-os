@@ -142,6 +142,16 @@ yaml_query() {
   [[ "$output" == *"state file cannot declare policy key: brief.auto_merge"* ]]
 }
 
+@test "validate rejects repo-config policy keys" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  printf '\nautonomy_mode: full\n' >> "$(ledger_path AD-2)"
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"state file cannot declare policy key: autonomy_mode"* ]]
+}
+
 @test "validate rejects missing required fields" {
   bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
   ruby -ryaml -e '

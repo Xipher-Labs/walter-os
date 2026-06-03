@@ -22,6 +22,7 @@ walter_feature_state_validate_id() {
 
 walter_feature_state_repo_root() {
   local repo="${1:-}"
+  local git_root
   if [[ -n "$repo" ]]; then
     printf '%s\n' "${repo%/}"
     return 0
@@ -141,11 +142,15 @@ POLICY_KEYS = %w[
   approval_gate
   approval_overrides
   approval_policy
+  autonomy_mode
   auto_merge
   capability_tier_ceiling
   hard_limit_overrides
   human_approval_required_for
   permissions
+  preview_deploy
+  profile
+  verification
 ].freeze
 
 def reject_policy_keys!(value, trail = [])
@@ -283,7 +288,6 @@ walter_feature_state_validate_target() {
 
 _walter_feature_state_record_post_merge_unlocked() {
   ruby <<'RUBY'
-require "fileutils"
 require "time"
 require "yaml"
 
@@ -298,11 +302,15 @@ POLICY_KEYS = %w[
   approval_gate
   approval_overrides
   approval_policy
+  autonomy_mode
   auto_merge
   capability_tier_ceiling
   hard_limit_overrides
   human_approval_required_for
   permissions
+  preview_deploy
+  profile
+  verification
 ].freeze
 
 def reject_policy_keys!(value, trail = [])
