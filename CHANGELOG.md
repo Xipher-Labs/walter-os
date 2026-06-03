@@ -77,6 +77,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
   max-fix-attempts escalation cap.
+- **Release operations doctor (#307).** Adds a read-only
+  `walter-os release doctor` check for release version, changelog, tag,
+  PR-review, status-check, issue-link, and stacked-PR hygiene.
 - **Plane ↔ Forgejo PR sync wiring (#237).** Adds a safe
   `plane-pr-sync-trigger.sh` adapter for Forgejo/Gitea `pull_request` payloads,
   records stable `walter-plane-issue:<id>` markers in PR comments, documents

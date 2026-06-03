@@ -38,7 +38,8 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		hooks/pre-commit-tests.sh \
 		setup/walter-host/services/openclaw/deploy.sh \
 		skills/daily-supply-chain-audit/scripts/audit.sh \
-		scripts/walter/subcommands/bridge.sh
+		scripts/walter/subcommands/bridge.sh \
+		scripts/walter/subcommands/release.sh
 
 audit-secrets:  ## Run gitleaks on the working tree
 	@command -v gitleaks >/dev/null 2>&1 || { echo "ERROR: gitleaks not installed. See https://github.com/gitleaks/gitleaks"; exit 1; }

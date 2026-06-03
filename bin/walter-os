@@ -68,6 +68,8 @@
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
 #   post-merge-check [--commit SHA] [--json]
 #                               Classify post-merge health evidence (read-only)
+#   release doctor --target vX.Y.Z|X.Y.Z [--json]
+#                               Check release readiness without mutating state
 #   repo-config {validate|defaults [balanced|hackathon]}
 #                               Validate walter-repo-config.yaml per-repo policy
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
@@ -2254,7 +2256,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|release|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2301,6 +2303,7 @@ case "$cmd" in
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
   pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
   post-merge-check)   exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/post-merge-check.sh" "$@" ;;
+  release)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/release.sh" "$@" ;;
   repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;

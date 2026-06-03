@@ -65,7 +65,8 @@ jobs:
             hooks/pre-commit-tests.sh \
             setup/walter-host/services/openclaw/deploy.sh \
             skills/daily-supply-chain-audit/scripts/audit.sh \
-            scripts/walter/subcommands/bridge.sh
+            scripts/walter/subcommands/bridge.sh \
+            scripts/walter/subcommands/release.sh
 
   frontmatter:
     name: frontmatter lint
