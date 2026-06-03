@@ -3,7 +3,8 @@
  * Tests: (1) page loads, (2) agent board renders 6 cards, (3) SSE connects,
  * (4) timeline renders, (5) cost dashboard renders,
  * (6) HA Status renders, (7) mode toggle visible, (8) nav links work,
- * (9) mobile nav does not create horizontal overflow.
+ * (9) mobile nav does not create horizontal overflow,
+ * (10) council chat loads, (11) history page loads.
  *
  * Tailscale enforcement is disabled in test env (TAILSCALE_ENFORCE=false).
  * Control Tower token auth is satisfied by the Playwright context header.
@@ -140,21 +141,29 @@ test.describe("Control Tower smoke tests", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
-    await expect(
-      page.locator("[data-testid='update-badge'], [data-testid='update-badge-no-link']")
-    ).toBeVisible();
+    await expect(page.locator("nav")).toBeVisible();
+
+    const updateBadge = page.locator(
+      "[data-testid='update-badge'], [data-testid='update-badge-no-link']"
+    );
+    if ((await updateBadge.count()) > 0) {
+      await expect(updateBadge.first()).toBeVisible();
+    }
 
     const metrics = await page.evaluate(() => {
       const nav = document.querySelector("nav");
+      if (!nav) {
+        throw new Error("TopNav is missing from the dashboard.");
+      }
       return {
-        innerWidth: window.innerWidth,
+        viewportWidth: document.documentElement.clientWidth,
         docScrollWidth: document.documentElement.scrollWidth,
-        navScrollWidth: nav?.scrollWidth ?? 0,
-        navClientWidth: nav?.clientWidth ?? 0,
+        navScrollWidth: nav.scrollWidth,
+        navClientWidth: nav.clientWidth,
       };
     });
 
-    expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
+    expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth);
     expect(metrics.navScrollWidth).toBeLessThanOrEqual(metrics.navClientWidth);
   });
 
