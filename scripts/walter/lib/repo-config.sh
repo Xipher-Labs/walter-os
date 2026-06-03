@@ -97,7 +97,8 @@ walter_repo_config_print_mode_contract() {
       summary="full = policy-bounded autonomy for eligible non-protected paths; protected actions still require humans"
       ;;
     *)
-      summary="unknown mode; safest guided semantics apply until validation succeeds"
+      mode="guided"
+      summary="unknown mode requested; safest guided semantics apply until validation succeeds"
       ;;
   esac
 

@@ -108,6 +108,14 @@ YAML
   [[ "$output" == *"invalid autonomy_mode"* ]]
 }
 
+@test "mode contract helper normalizes unknown modes to guided" {
+  run bash -c "source '$REPO_ROOT/scripts/walter/lib/repo-config.sh'; walter_repo_config_print_mode_contract sleepy"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"effective autonomy_mode: guided"* ]]
+  [[ "$output" == *"unknown mode requested; safest guided semantics apply"* ]]
+}
+
 @test "unknown top-level keys warn but do not fail" {
   write_valid_config
   printf '\nexperimental_knob: true\n' >> "$TMP_DIR/repo/walter-repo-config.yaml"
