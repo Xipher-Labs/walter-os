@@ -75,8 +75,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 - **Vercel agent-skills bridge refresh (#223).** Re-pins
   `external/vercel-agent-skills` to upstream `4ec6f84`, documents the new
-  `vercel-optimize` and `writing-guidelines` skills, and keeps both out of the
-  global Walter-OS skill surface pending dedicated safety/network review.
+  `vercel-optimize` and `writing-guidelines` upstream entries, and keeps both
+  out of the global Walter-OS skill surface pending dedicated safety/network
+  review.
 
 ---
 
