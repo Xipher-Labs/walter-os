@@ -163,33 +163,33 @@ RECURSIVE_POLICY_KEYS = %w[
   permissions
 ].freeze
 
-def reject_policy_keys!(value, trail = [])
+def reject_policy_keys!(value, state_path, trail = [])
   case value
   when Hash
     value.each do |key, child|
       key_name = key.to_s
-      path = trail + [key_name]
+      key_path = trail + [key_name]
       if RECURSIVE_POLICY_KEYS.include?(key_name)
-        warn "feature-state: invalid: state file cannot declare policy key: #{path.join(".")}"
+        warn "feature-state: invalid: #{state_path}: state file cannot declare policy key: #{key_path.join(".")}"
         exit 1
       end
-      reject_policy_keys!(child, path)
+      reject_policy_keys!(child, state_path, key_path)
     end
   when Array
     value.each_with_index do |child, index|
-      reject_policy_keys!(child, trail + [index.to_s])
+      reject_policy_keys!(child, state_path, trail + [index.to_s])
     end
   end
 end
 
 TOP_LEVEL_POLICY_KEYS.each do |key|
   if state.key?(key)
-    warn "feature-state: invalid: state file cannot declare policy key: #{key}"
+    warn "feature-state: invalid: #{path}: state file cannot declare policy key: #{key}"
     exit 1
   end
 end
 
-reject_policy_keys!(state)
+reject_policy_keys!(state, path)
 
 required = %w[
   schema_version
@@ -333,21 +333,21 @@ RECURSIVE_POLICY_KEYS = %w[
   permissions
 ].freeze
 
-def reject_policy_keys!(value, trail = [])
+def reject_policy_keys!(value, state_path, trail = [])
   case value
   when Hash
     value.each do |key, child|
       key_name = key.to_s
-      state_path = trail + [key_name]
+      key_path = trail + [key_name]
       if RECURSIVE_POLICY_KEYS.include?(key_name)
-        warn "feature-state: invalid: state file cannot declare policy key: #{state_path.join(".")}"
+        warn "feature-state: invalid: #{state_path}: state file cannot declare policy key: #{key_path.join(".")}"
         exit 1
       end
-      reject_policy_keys!(child, state_path)
+      reject_policy_keys!(child, state_path, key_path)
     end
   when Array
     value.each_with_index do |child, index|
-      reject_policy_keys!(child, trail + [index.to_s])
+      reject_policy_keys!(child, state_path, trail + [index.to_s])
     end
   end
 end
@@ -377,10 +377,10 @@ def validate_state!(path, state)
     exit 1
   end
 
-  reject_policy_keys!(state)
+  reject_policy_keys!(state, path)
   TOP_LEVEL_POLICY_KEYS.each do |key|
     if state.key?(key)
-      warn "feature-state: invalid: state file cannot declare policy key: #{key}"
+      warn "feature-state: invalid: #{path}: state file cannot declare policy key: #{key}"
       exit 1
     end
   end

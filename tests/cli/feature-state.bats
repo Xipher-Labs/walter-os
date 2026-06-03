@@ -135,6 +135,7 @@ yaml_query() {
   run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
 
   [ "$status" -eq 1 ]
+  [[ "$output" == *"$(ledger_path AD-2)"* ]]
   [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
 }
 
@@ -150,6 +151,7 @@ yaml_query() {
   run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
 
   [ "$status" -eq 1 ]
+  [[ "$output" == *"$(ledger_path AD-2)"* ]]
   [[ "$output" == *"state file cannot declare policy key: brief.auto_merge"* ]]
 }
 
@@ -160,6 +162,7 @@ yaml_query() {
   run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
 
   [ "$status" -eq 1 ]
+  [[ "$output" == *"$(ledger_path AD-2)"* ]]
   [[ "$output" == *"state file cannot declare policy key: autonomy_mode"* ]]
 }
 
@@ -230,6 +233,7 @@ YAML
     --commit abc123def456
 
   [ "$status" -eq 1 ]
+  [[ "$output" == *"$(ledger_path AD-13)"* ]]
   [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
   [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
 }
