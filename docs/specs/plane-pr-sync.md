@@ -54,6 +54,8 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
 - AC13: Payload fields containing control characters are rejected before sync.
 - AC14: The signed adapter calls `plane-pr-sync.sh` via argv arrays and never
   calls merge, push, or approval commands.
+- AC15: Signed webhooks require `WALTER_FORGEJO_WEBHOOK_REPOS`; events from
+  repos outside the allowlist fail closed.
 
 ## Trigger Wrapper
 
@@ -98,6 +100,12 @@ HMAC-SHA256 over the raw payload bytes before it parses JSON, fetches PR
 comments, or calls the Plane sync primitive. The webhook secret is read from
 `WALTER_FORGEJO_WEBHOOK_SECRET` by default; use `--secret-env` only to point at
 another environment variable name. Do not pass the secret on argv.
+
+Set `WALTER_FORGEJO_WEBHOOK_REPOS` to a comma-separated allowlist of
+`owner/repo` names accepted by this webhook secret. The adapter fails closed
+when the allowlist is missing or the payload repo is not listed. This prevents an
+org-level webhook or reused secret from moving Plane issues from an unexpected
+repository.
 
 After signature verification, only `pull_request.action == "closed"` with
 `pull_request.merged == true` is actionable. Closed-unmerged events are no-op.

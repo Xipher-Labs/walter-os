@@ -16,6 +16,7 @@ setup() {
   export ORIGINAL_PATH
   export WALTER_FORGEJO_WEBHOOK_SECRET="test-webhook-secret"
   export WALTER_PLANE_PR_SYNC_SCRIPT="$MOCK_DIR/plane-pr-sync.sh"
+  export WALTER_FORGEJO_WEBHOOK_REPOS="acme/app"
   export PATH="$MOCK_DIR:$PATH"
 
   cat > "$WALTER_PLANE_PR_SYNC_SCRIPT" <<'SYNC_MOCK'
@@ -235,6 +236,99 @@ JSON
   if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
     return 1
   fi
+}
+
+@test "multiple marker occurrences in one comment fail closed before sync" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"body":"[walter-plane-issue:first] and [walter-plane-issue:second]"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 2 ]
+  [[ "$(combined_output)" == *"ambiguous walter-plane-issue markers"* ]]
+  if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "duplicate marker occurrences fail closed before sync" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"body":"[walter-plane-issue:issue-uuid]"},{"body":"again [walter-plane-issue:issue-uuid]"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 2 ]
+  [[ "$(combined_output)" == *"ambiguous walter-plane-issue markers"* ]]
+  if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "missing repo allowlist fails closed before comments or sync" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+  unset WALTER_FORGEJO_WEBHOOK_REPOS
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 2 ]
+  [[ "$(combined_output)" == *"missing WALTER_FORGEJO_WEBHOOK_REPOS allowlist"* ]]
+  if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "repo allowlist entries trim spaces before comparison" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+  export WALTER_FORGEJO_WEBHOOK_REPOS="other/repo, acme/app "
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 0 ]
+  assert_log_contains 'plane-pr-sync merged --issue issue-uuid'
+}
+
+@test "payload and comments cannot both read from stdin" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file - --comments-file - < "$payload"
+
+  [ "$status" -eq 2 ]
+  [[ "$(combined_output)" == *"--comments-file - cannot be used when payload is read from stdin"* ]]
+  [ ! -f "$CALL_LOG" ]
 }
 
 @test "payload fields containing control characters are rejected before sync" {

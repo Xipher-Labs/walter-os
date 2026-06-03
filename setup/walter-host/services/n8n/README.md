@@ -225,6 +225,16 @@ Map `FORGEJO_EVENT` from `X-Gitea-Event` or `X-Forgejo-Event`. Map
 shared secret in n8n/Infisical as `WALTER_FORGEJO_WEBHOOK_SECRET`; the adapter
 reads the secret from the environment and never from argv.
 
+Set `WALTER_FORGEJO_WEBHOOK_REPOS` to the comma-separated `owner/repo` names
+accepted by that webhook secret, for example:
+
+```bash
+export WALTER_FORGEJO_WEBHOOK_REPOS="Xipher-Labs/walter-os"
+```
+
+The allowlist is mandatory. A signed payload from any repo outside the allowlist
+fails closed before comment fetches or Plane mutation.
+
 `plane-pr-sync-webhook.sh` verifies HMAC-SHA256 over the raw payload before JSON
 parsing, comment fetches, or Plane/Forgejo mutation. It only acts on
 `pull_request.closed` events with `merged == true`; closed-unmerged PRs are

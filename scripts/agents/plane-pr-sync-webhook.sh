@@ -40,11 +40,6 @@ fail_runtime() {
   exit 3
 }
 
-fail_signature() {
-  echo "plane-pr-sync-webhook: $1" >&2
-  exit 4
-}
-
 require_option_value() {
   local flag="$1" value="${2:-}"
   if [[ -z "$value" || "$value" == --* ]]; then
@@ -71,6 +66,13 @@ reject_control() {
   if [[ "$control_status" -ne 1 ]]; then
     fail_runtime "control-character validation failed"
   fi
+}
+
+trim_ascii_space() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
 }
 
 require_value() {
@@ -104,6 +106,10 @@ require_command python3
 reject_control "event" "$event"
 reject_control "signature" "$signature"
 reject_control "secret-env" "$secret_env"
+
+if [[ "$comments_file" == "-" && ( "$payload_file" == "-" || -z "$payload_file" ) ]]; then
+  fail_usage "--comments-file - cannot be used when payload is read from stdin"
+fi
 
 if [[ "$event" != "pull_request" ]]; then
   fail_usage "unsupported event: $event"
@@ -239,18 +245,25 @@ if [[ ! "$pr_number" =~ ^[0-9]+$ ]]; then
   fail_usage "pull_request.number must be numeric"
 fi
 
-if [[ -n "${WALTER_FORGEJO_WEBHOOK_REPOS:-}" ]]; then
-  repo_allowed=0
-  IFS=',' read -r -a allowed_repos <<<"$WALTER_FORGEJO_WEBHOOK_REPOS"
-  for allowed_repo in "${allowed_repos[@]}"; do
-    if [[ "$repo" == "$allowed_repo" ]]; then
-      repo_allowed=1
-      break
-    fi
-  done
-  if [[ "$repo_allowed" -ne 1 ]]; then
-    fail_usage "repo is not allowlisted: $repo"
+if [[ -z "${WALTER_FORGEJO_WEBHOOK_REPOS:-}" ]]; then
+  fail_usage "missing WALTER_FORGEJO_WEBHOOK_REPOS allowlist"
+fi
+
+reject_control "repo allowlist" "$WALTER_FORGEJO_WEBHOOK_REPOS"
+repo_allowed=0
+IFS=',' read -r -a allowed_repos <<<"$WALTER_FORGEJO_WEBHOOK_REPOS"
+for allowed_repo in "${allowed_repos[@]}"; do
+  allowed_repo="$(trim_ascii_space "$allowed_repo")"
+  if [[ -z "$allowed_repo" ]]; then
+    continue
   fi
+  if [[ "$repo" == "$allowed_repo" ]]; then
+    repo_allowed=1
+    break
+  fi
+done
+if [[ "$repo_allowed" -ne 1 ]]; then
+  fail_usage "repo is not allowlisted: $repo"
 fi
 
 read_comments_json() {
@@ -278,7 +291,7 @@ if ! jq -e . >/dev/null 2>&1 <<<"$comments_json"; then
 fi
 
 markers_json="$(
-  jq -c '[.. | strings | capture("\\[walter-plane-issue:(?<id>[^]\\r\\n\\]]+)\\]")? | .id] | unique' \
+  jq -c '[.. | strings | scan("\\[walter-plane-issue:([^]\\r\\n\\]]+)\\]") | .[0]]' \
     <<<"$comments_json"
 )"
 marker_count="$(jq -r 'length' <<<"$markers_json")"
