@@ -127,6 +127,51 @@ yaml_query() {
   [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
 }
 
+@test "validate rejects nested policy-like hard-limit override keys" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["brief"]["auto_merge"] = true
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-2)"
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"state file cannot declare policy key: brief.auto_merge"* ]]
+}
+
+@test "validate rejects missing required fields" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state.delete("tasks")
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-2)"
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing required field(s): tasks"* ]]
+}
+
+@test "record-post-merge refuses to mutate invalid ledgers" {
+  bash "$WALTER_OS_BIN" feature-state init AD-13 --repo "$TMP_DIR/repo" >/dev/null
+  printf '\nhard_limit_overrides:\n  approval_gate: relaxed\n' >> "$(ledger_path AD-13)"
+
+  run bash "$WALTER_OS_BIN" feature-state record-post-merge AD-13 \
+    --repo "$TMP_DIR/repo" \
+    --decision investigate \
+    --next-action open-fix-pr-candidate \
+    --commit abc123def456
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
+  [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
+}
+
 @test "help documents feature-state" {
   run bash "$WALTER_OS_BIN" help
 

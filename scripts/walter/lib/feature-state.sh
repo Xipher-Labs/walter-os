@@ -39,20 +39,6 @@ walter_feature_state_path() {
   printf '%s/.walter/features/%s/state.yaml\n' "${repo%/}" "$id"
 }
 
-_walter_feature_state_with_lock() {
-  local lock_file="$1"
-  shift
-
-  if command -v flock >/dev/null 2>&1; then
-    (
-      flock -x 200
-      "$@"
-    ) 200>"$lock_file"
-  else
-    "$@"
-  fi
-}
-
 _walter_feature_state_init_unlocked() {
   ruby <<'RUBY'
 require "fileutils"
@@ -60,44 +46,49 @@ require "time"
 require "yaml"
 
 path = ENV.fetch("FEATURE_STATE_PATH")
+lock_path = ENV.fetch("FEATURE_LOCK_PATH")
 force = ENV.fetch("FEATURE_FORCE", "0") == "1"
 
-if File.exist?(path) && !force
-  warn "feature-state: already exists: #{path}"
-  exit 1
-end
-
-now = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-state = {
-  "schema_version" => 1,
-  "id" => ENV.fetch("FEATURE_ID"),
-  "title" => ENV.fetch("FEATURE_TITLE", ""),
-  "issue" => ENV.fetch("FEATURE_ISSUE", ""),
-  "stage" => "idea",
-  "created_at" => now,
-  "updated_at" => now,
-  "idea" => ENV.fetch("FEATURE_IDEA", ""),
-  "brief" => {
-    "summary" => "",
-    "links" => []
-  },
-  "spec" => {
-    "path" => ENV.fetch("FEATURE_SPEC_PATH", ""),
-    "status" => "not-started"
-  },
-  "acceptance_criteria" => [],
-  "tasks" => [],
-  "decisions" => [],
-  "risks" => [],
-  "prs" => [],
-  "post_merge" => []
-}
-
 FileUtils.mkdir_p(File.dirname(path))
-tmp = "#{path}.tmp.#{$$}"
-File.write(tmp, state.to_yaml)
-File.rename(tmp, path)
-puts "feature-state: initialized #{path}"
+File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
+  lock.flock(File::LOCK_EX)
+
+  if File.exist?(path) && !force
+    warn "feature-state: already exists: #{path}"
+    exit 1
+  end
+
+  now = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+  state = {
+    "schema_version" => 1,
+    "id" => ENV.fetch("FEATURE_ID"),
+    "title" => ENV.fetch("FEATURE_TITLE", ""),
+    "issue" => ENV.fetch("FEATURE_ISSUE", ""),
+    "stage" => "idea",
+    "created_at" => now,
+    "updated_at" => now,
+    "idea" => ENV.fetch("FEATURE_IDEA", ""),
+    "brief" => {
+      "summary" => "",
+      "links" => []
+    },
+    "spec" => {
+      "path" => ENV.fetch("FEATURE_SPEC_PATH", ""),
+      "status" => "not-started"
+    },
+    "acceptance_criteria" => [],
+    "tasks" => [],
+    "decisions" => [],
+    "risks" => [],
+    "prs" => [],
+    "post_merge" => []
+  }
+
+  tmp = "#{path}.tmp.#{$$}"
+  File.write(tmp, state.to_yaml)
+  File.rename(tmp, path)
+  puts "feature-state: initialized #{path}"
+end
 RUBY
 }
 
@@ -119,7 +110,8 @@ walter_feature_state_init() {
   FEATURE_IDEA="$idea" \
   FEATURE_SPEC_PATH="$spec_path" \
   FEATURE_FORCE="$force" \
-    _walter_feature_state_with_lock "$lock_file" _walter_feature_state_init_unlocked
+  FEATURE_LOCK_PATH="$lock_file" \
+    _walter_feature_state_init_unlocked
 }
 
 _walter_feature_state_validate_file() {
@@ -145,7 +137,7 @@ unless state.is_a?(Hash)
   exit 1
 end
 
-policy_keys = %w[
+POLICY_KEYS = %w[
   approval_gate
   approval_overrides
   approval_policy
@@ -154,14 +146,28 @@ policy_keys = %w[
   hard_limit_overrides
   human_approval_required_for
   permissions
-]
+].freeze
 
-policy_keys.each do |key|
-  if state.key?(key)
-    warn "feature-state: invalid: state file cannot declare policy key: #{key}"
-    exit 1
+def reject_policy_keys!(value, trail = [])
+  case value
+  when Hash
+    value.each do |key, child|
+      key_name = key.to_s
+      path = trail + [key_name]
+      if POLICY_KEYS.include?(key_name)
+        warn "feature-state: invalid: state file cannot declare policy key: #{path.join(".")}"
+        exit 1
+      end
+      reject_policy_keys!(child, path)
+    end
+  when Array
+    value.each_with_index do |child, index|
+      reject_policy_keys!(child, trail + [index.to_s])
+    end
   end
 end
+
+reject_policy_keys!(state)
 
 required = %w[
   schema_version
@@ -282,30 +288,138 @@ require "time"
 require "yaml"
 
 path = ENV.fetch("FEATURE_STATE_PATH")
+lock_path = ENV.fetch("FEATURE_LOCK_PATH")
 decision = ENV.fetch("FEATURE_DECISION")
 next_action = ENV.fetch("FEATURE_NEXT_ACTION")
 merge_sha = ENV.fetch("FEATURE_MERGE_SHA")
 source = ENV.fetch("FEATURE_SOURCE")
 
-begin
+POLICY_KEYS = %w[
+  approval_gate
+  approval_overrides
+  approval_policy
+  auto_merge
+  capability_tier_ceiling
+  hard_limit_overrides
+  human_approval_required_for
+  permissions
+].freeze
+
+def reject_policy_keys!(value, trail = [])
+  case value
+  when Hash
+    value.each do |key, child|
+      key_name = key.to_s
+      state_path = trail + [key_name]
+      if POLICY_KEYS.include?(key_name)
+        warn "feature-state: invalid: state file cannot declare policy key: #{state_path.join(".")}"
+        exit 1
+      end
+      reject_policy_keys!(child, state_path)
+    end
+  when Array
+    value.each_with_index do |child, index|
+      reject_policy_keys!(child, trail + [index.to_s])
+    end
+  end
+end
+
+def load_state!(path)
+  raw = File.read(path)
   begin
-    state = YAML.safe_load(File.read(path), aliases: false)
+    YAML.safe_load(raw, aliases: false)
   rescue ArgumentError
-    state = YAML.safe_load(File.read(path))
+    YAML.safe_load(raw)
   end
 rescue StandardError => e
   warn "feature-state: invalid: #{path}: #{e.message}"
   exit 1
 end
 
-unless state.is_a?(Hash)
-  warn "feature-state: invalid: #{path}: expected YAML mapping"
-  exit 1
-end
+def validate_state!(path, state)
+  unless state.is_a?(Hash)
+    warn "feature-state: invalid: #{path}: expected YAML mapping"
+    exit 1
+  end
 
-unless state["post_merge"].is_a?(Array)
-  warn "feature-state: invalid: #{path}: post_merge must be an array"
-  exit 1
+  reject_policy_keys!(state)
+
+  required = %w[
+    schema_version
+    id
+    title
+    issue
+    stage
+    created_at
+    updated_at
+    idea
+    brief
+    spec
+    acceptance_criteria
+    tasks
+    decisions
+    risks
+    prs
+    post_merge
+  ]
+
+  missing = required.reject { |key| state.key?(key) }
+  unless missing.empty?
+    warn "feature-state: invalid: #{path}: missing required field(s): #{missing.join(", ")}"
+    exit 1
+  end
+
+  unless state["schema_version"] == 1
+    warn "feature-state: invalid: #{path}: schema_version must be 1"
+    exit 1
+  end
+
+  unless state["id"].is_a?(String) && state["id"].match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,79}\z/) && !state["id"].include?("..")
+    warn "feature-state: invalid: #{path}: invalid id"
+    exit 1
+  end
+
+  path_id = File.basename(File.dirname(path))
+  if path_id != state["id"]
+    warn "feature-state: invalid: #{path}: id does not match directory name"
+    exit 1
+  end
+
+  unless state["title"].is_a?(String) && state["issue"].is_a?(String) && state["idea"].is_a?(String)
+    warn "feature-state: invalid: #{path}: title, issue, and idea must be strings"
+    exit 1
+  end
+
+  unless state["brief"].is_a?(Hash) && state["spec"].is_a?(Hash)
+    warn "feature-state: invalid: #{path}: brief and spec must be mappings"
+    exit 1
+  end
+
+  %w[acceptance_criteria tasks decisions risks prs post_merge].each do |key|
+    unless state[key].is_a?(Array)
+      warn "feature-state: invalid: #{path}: #{key} must be an array"
+      exit 1
+    end
+  end
+
+  valid_stages = %w[
+    idea
+    brief
+    spec
+    tasks
+    implementation
+    review
+    merged
+    post-merge-healthy
+    post-merge-investigate
+    rollback-recommended
+    human-escalation
+  ]
+
+  unless valid_stages.include?(state["stage"])
+    warn "feature-state: invalid: #{path}: invalid stage: #{state["stage"]}"
+    exit 1
+  end
 end
 
 stage = case decision
@@ -322,21 +436,28 @@ stage = case decision
           exit 64
         end
 
-now = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-state["post_merge"] << {
-  "recorded_at" => now,
-  "decision" => decision,
-  "next_action" => next_action,
-  "merge_sha" => merge_sha,
-  "source" => source
-}
-state["stage"] = stage
-state["updated_at"] = now
+File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
+  lock.flock(File::LOCK_EX)
 
-tmp = "#{path}.tmp.#{$$}"
-File.write(tmp, state.to_yaml)
-File.rename(tmp, path)
-puts "feature-state: recorded post-merge event #{path}"
+  state = load_state!(path)
+  validate_state!(path, state)
+
+  now = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+  state["post_merge"] << {
+    "recorded_at" => now,
+    "decision" => decision,
+    "next_action" => next_action,
+    "merge_sha" => merge_sha,
+    "source" => source
+  }
+  state["stage"] = stage
+  state["updated_at"] = now
+
+  tmp = "#{path}.tmp.#{$$}"
+  File.write(tmp, state.to_yaml)
+  File.rename(tmp, path)
+  puts "feature-state: recorded post-merge event #{path}"
+end
 RUBY
 }
 
@@ -366,5 +487,6 @@ walter_feature_state_record_post_merge() {
   FEATURE_NEXT_ACTION="$next_action" \
   FEATURE_MERGE_SHA="$merge_sha" \
   FEATURE_SOURCE="$source" \
-    _walter_feature_state_with_lock "$lock_file" _walter_feature_state_record_post_merge_unlocked
+  FEATURE_LOCK_PATH="$lock_file" \
+    _walter_feature_state_record_post_merge_unlocked
 }
