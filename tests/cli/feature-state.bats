@@ -163,6 +163,21 @@ yaml_query() {
   [[ "$output" == *"state file cannot declare policy key: autonomy_mode"* ]]
 }
 
+@test "validate allows task verification metadata" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["tasks"] << {"id" => "T1", "verification" => ["bats tests/cli/feature-state.bats"]}
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-2)"
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"feature-state: valid"* ]]
+}
+
 @test "validate rejects missing required fields" {
   bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
   ruby -ryaml -e '
@@ -191,6 +206,29 @@ yaml_query() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
   [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
+}
+
+@test "record-post-merge preserves task verification metadata" {
+  bash "$WALTER_OS_BIN" feature-state init AD-13 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["tasks"] << {"id" => "T1", "verification" => ["bats tests/cli/feature-state.bats"]}
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-13)"
+
+  run bash "$WALTER_OS_BIN" feature-state record-post-merge AD-13 \
+    --repo "$TMP_DIR/repo" \
+    --decision healthy \
+    --next-action no-action \
+    --commit abc123def456
+
+  [ "$status" -eq 0 ]
+  ruby -ryaml -e '
+    state = YAML.safe_load(File.read(ARGV[0]))
+    abort "verification missing" unless state["tasks"][0]["verification"][0].include?("feature-state")
+    abort "post merge missing" unless state["post_merge"].length == 1
+  ' "$(ledger_path AD-13)"
 }
 
 @test "help documents feature-state" {

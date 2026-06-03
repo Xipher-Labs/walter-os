@@ -138,19 +138,22 @@ unless state.is_a?(Hash)
   exit 1
 end
 
-POLICY_KEYS = %w[
-  approval_gate
-  approval_overrides
-  approval_policy
+TOP_LEVEL_POLICY_KEYS = %w[
   autonomy_mode
-  auto_merge
   capability_tier_ceiling
-  hard_limit_overrides
   human_approval_required_for
-  permissions
   preview_deploy
   profile
   verification
+].freeze
+
+RECURSIVE_POLICY_KEYS = %w[
+  approval_gate
+  approval_overrides
+  approval_policy
+  auto_merge
+  hard_limit_overrides
+  permissions
 ].freeze
 
 def reject_policy_keys!(value, trail = [])
@@ -159,7 +162,7 @@ def reject_policy_keys!(value, trail = [])
     value.each do |key, child|
       key_name = key.to_s
       path = trail + [key_name]
-      if POLICY_KEYS.include?(key_name)
+      if RECURSIVE_POLICY_KEYS.include?(key_name)
         warn "feature-state: invalid: state file cannot declare policy key: #{path.join(".")}"
         exit 1
       end
@@ -169,6 +172,13 @@ def reject_policy_keys!(value, trail = [])
     value.each_with_index do |child, index|
       reject_policy_keys!(child, trail + [index.to_s])
     end
+  end
+end
+
+TOP_LEVEL_POLICY_KEYS.each do |key|
+  if state.key?(key)
+    warn "feature-state: invalid: state file cannot declare policy key: #{key}"
+    exit 1
   end
 end
 
@@ -298,19 +308,22 @@ next_action = ENV.fetch("FEATURE_NEXT_ACTION")
 merge_sha = ENV.fetch("FEATURE_MERGE_SHA")
 source = ENV.fetch("FEATURE_SOURCE")
 
-POLICY_KEYS = %w[
-  approval_gate
-  approval_overrides
-  approval_policy
+TOP_LEVEL_POLICY_KEYS = %w[
   autonomy_mode
-  auto_merge
   capability_tier_ceiling
-  hard_limit_overrides
   human_approval_required_for
-  permissions
   preview_deploy
   profile
   verification
+].freeze
+
+RECURSIVE_POLICY_KEYS = %w[
+  approval_gate
+  approval_overrides
+  approval_policy
+  auto_merge
+  hard_limit_overrides
+  permissions
 ].freeze
 
 def reject_policy_keys!(value, trail = [])
@@ -319,7 +332,7 @@ def reject_policy_keys!(value, trail = [])
     value.each do |key, child|
       key_name = key.to_s
       state_path = trail + [key_name]
-      if POLICY_KEYS.include?(key_name)
+      if RECURSIVE_POLICY_KEYS.include?(key_name)
         warn "feature-state: invalid: state file cannot declare policy key: #{state_path.join(".")}"
         exit 1
       end
@@ -351,6 +364,12 @@ def validate_state!(path, state)
   end
 
   reject_policy_keys!(state)
+  TOP_LEVEL_POLICY_KEYS.each do |key|
+    if state.key?(key)
+      warn "feature-state: invalid: state file cannot declare policy key: #{key}"
+      exit 1
+    end
+  end
 
   required = %w[
     schema_version
