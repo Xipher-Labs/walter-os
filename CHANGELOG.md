@@ -73,6 +73,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
+  `walter-repo-config.yaml` policy axis, reports the effective mode during
+  validation, and keeps the hard-limit floor non-overridable in every mode.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
