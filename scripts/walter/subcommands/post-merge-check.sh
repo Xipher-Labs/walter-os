@@ -285,6 +285,7 @@ record_feature_state_if_requested() {
 
   # shellcheck source=/dev/null
   source "${WALTER_OS_HOME}/scripts/walter/lib/feature-state.sh"
+  walter_feature_state_validate_id "$record_feature_id"
 
   local repo output status
   repo="$(walter_feature_state_repo_root "$record_repo")"

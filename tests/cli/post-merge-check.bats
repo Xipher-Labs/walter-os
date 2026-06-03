@@ -169,6 +169,7 @@ write_fixture() {
 }
 
 @test "AD-13: feature-state recording failures use runtime exit code" {
+  command -v ruby >/dev/null 2>&1 || skip "ruby required for feature-state YAML tests"
   local fixture="$TMP_DIR/missing-ledger.json"
   write_fixture \
     "$fixture" \
