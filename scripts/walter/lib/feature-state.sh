@@ -232,8 +232,8 @@ if path_id != state["id"]
   exit 1
 end
 
-unless state["title"].is_a?(String) && state["issue"].is_a?(String) && state["idea"].is_a?(String)
-  warn "feature-state: invalid: #{path}: title, issue, and idea must be strings"
+unless state["title"].is_a?(String) && state["idea"].is_a?(String) && (state["issue"].is_a?(String) || state["issue"].is_a?(Integer))
+  warn "feature-state: invalid: #{path}: title and idea must be strings; issue must be a string or integer"
   exit 1
 end
 
@@ -426,8 +426,8 @@ def validate_state!(path, state)
     exit 1
   end
 
-  unless state["title"].is_a?(String) && state["issue"].is_a?(String) && state["idea"].is_a?(String)
-    warn "feature-state: invalid: #{path}: title, issue, and idea must be strings"
+unless state["title"].is_a?(String) && state["idea"].is_a?(String) && (state["issue"].is_a?(String) || state["issue"].is_a?(Integer))
+  warn "feature-state: invalid: #{path}: title and idea must be strings; issue must be a string or integer"
     exit 1
   end
 
@@ -506,6 +506,11 @@ walter_feature_state_record_post_merge() {
   local repo="$1" id="$2" decision="$3" next_action="$4" merge_sha="$5" source="$6"
   walter_feature_state_require_ruby || return $?
   walter_feature_state_validate_id "$id" || return $?
+
+  if [[ -z "$next_action" || -z "$merge_sha" ]]; then
+    printf 'feature-state: record-post-merge requires non-empty next_action and merge_sha\n' >&2
+    return 64
+  fi
 
   case "$decision" in
     healthy|investigate|rollback-recommended|human-escalation) ;;

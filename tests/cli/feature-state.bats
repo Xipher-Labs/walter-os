@@ -181,6 +181,21 @@ yaml_query() {
   [[ "$output" == *"feature-state: valid"* ]]
 }
 
+@test "validate accepts numeric YAML issue values" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["issue"] = 227
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-2)"
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"feature-state: valid"* ]]
+}
+
 @test "validate rejects YAML aliases" {
   bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
   cat >"$(ledger_path AD-2)" <<'YAML'
@@ -290,6 +305,38 @@ YAML
     abort "verification missing" unless state["tasks"][0]["verification"][0].include?("feature-state")
     abort "post merge missing" unless state["post_merge"].length == 1
   ' "$(ledger_path AD-13)"
+}
+
+@test "record-post-merge accepts numeric YAML issue values" {
+  bash "$WALTER_OS_BIN" feature-state init AD-13 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["issue"] = 238
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-13)"
+
+  run bash "$WALTER_OS_BIN" feature-state record-post-merge AD-13 \
+    --repo "$TMP_DIR/repo" \
+    --decision healthy \
+    --next-action no-action \
+    --commit abc123def456
+
+  [ "$status" -eq 0 ]
+  [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "1" ]]
+}
+
+@test "record-post-merge library rejects empty event fields" {
+  bash "$WALTER_OS_BIN" feature-state init AD-13 --repo "$TMP_DIR/repo" >/dev/null
+
+  run bash -c '
+    source "$1"
+    walter_feature_state_record_post_merge "$2" AD-13 healthy "" abc123def456 post-merge-check
+  ' bash "$REPO_ROOT/scripts/walter/lib/feature-state.sh" "$TMP_DIR/repo"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"requires non-empty next_action and merge_sha"* ]]
+  [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
 }
 
 @test "help documents feature-state" {
