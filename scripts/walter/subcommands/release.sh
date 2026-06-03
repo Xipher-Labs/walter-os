@@ -158,9 +158,10 @@ collect_evidence() {
   local changelog_versions='[]'
   local tags='[]'
   local prs='[]'
-  local repo_json owner repo repo_slug origin_url repo_ref all_pr_list pr_list pr_count index pr number threads
+  local repo_json owner repo repo_slug origin_url repo_ref all_pr_list pr_list pr_count index pr number threads pr_with_threads
   local local_tags remote_tags
   local pr_list_limit=1000
+  local -a pr_objects=()
 
   if [[ -r "$version_file" ]]; then
     version="$(tr -d '[:space:]' < "$version_file")"
@@ -210,12 +211,21 @@ collect_evidence() {
     if ! threads="$(fetch_review_threads "$owner" "$repo" "$number")"; then
       runtime_error "failed to read review threads for PR #$number"
     fi
-    prs="$(jq -c --argjson pr "$pr" --argjson threads "$threads" \
-      '. + [$pr + {
+    if ! pr_with_threads="$(jq -nc --argjson pr "$pr" --argjson threads "$threads" \
+      '$pr + {
         reviewThreads: ($threads.nodes // []),
         reviewThreadsTotalCount: ($threads.totalCount // ($threads.nodes // [] | length))
-      }]' <<<"$prs")"
+      }')"; then
+      runtime_error "failed to merge review-thread evidence for PR #$number"
+    fi
+    pr_objects+=("$pr_with_threads")
   done
+
+  if ((${#pr_objects[@]} > 0)); then
+    if ! prs="$(printf '%s\n' "${pr_objects[@]}" | jq -s -c '.')"; then
+      runtime_error "failed to assemble PR evidence"
+    fi
+  fi
 
   jq -nc \
     --arg version "$version" \
@@ -254,12 +264,14 @@ cmd_doctor() {
         exit 0
         ;;
       -*)
+        echo "walter-os release doctor: unknown option: $1" >&2
         usage >&2
-        usage_error "unknown option: $1"
+        exit "$USAGE_ERROR_EXIT"
         ;;
       *)
+        echo "walter-os release doctor: unexpected argument: $1" >&2
         usage >&2
-        usage_error "unexpected argument: $1"
+        exit "$USAGE_ERROR_EXIT"
         ;;
     esac
   done
