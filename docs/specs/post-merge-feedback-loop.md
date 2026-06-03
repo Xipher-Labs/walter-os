@@ -39,6 +39,11 @@ codes that automation can use later:
 | `rollback-recommended` | 2 | High-impact signal; operator should consider rollback. |
 | `human-escalation` | 3 | Fix-attempt cap reached; stop automated looping. |
 
+Non-decision errors use codes outside that range. Runtime or dependency
+failures, such as missing `jq`/`gh` or GitHub API failures, exit `4`; malformed
+CLI usage exits `64`. Automation must treat those as tooling failures, not as
+post-merge health decisions.
+
 ### D2 — Conservative rollback recommendations
 
 The CLI recommends rollback only for high-impact failed workflows

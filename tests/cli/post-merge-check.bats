@@ -120,6 +120,39 @@ write_fixture() {
   echo "$output" | jq -e '.next_action == "wait-or-investigate"'
 }
 
+@test "regression: comma-bearing run and alert names do not inflate counts" {
+  local fixture="$TMP_DIR/comma-names.json"
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci, docs","status":"completed","conclusion":"failure"},{"workflowName":"release, production","status":"completed","conclusion":"failure"}]' \
+    '[{"source":"grafana","severity":"critical","summary":"api, elevated errors"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check --fixture "$fixture" --json
+
+  [ "$status" -eq 2 ]
+  echo "$output" | jq -e '.counts.failed_runs == 2'
+  echo "$output" | jq -e '.counts.high_impact_failed_runs == 1'
+  echo "$output" | jq -e '.counts.critical_alerts == 1'
+  echo "$output" | jq -e '.findings | index("failed runs: ci, docs, release, production")'
+}
+
+@test "regression: gh runtime failures use a non-decision exit code" {
+  local fake_bin="$TMP_DIR/bin"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+echo "simulated gh outage" >&2
+exit 42
+EOF
+  chmod +x "$fake_bin/gh"
+
+  cd "$REPO_ROOT"
+  run env PATH="$fake_bin:$PATH" bash "$WALTER_OS_BIN" post-merge-check --commit abc123
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"unable to inspect GitHub Actions runs"* ]]
+}
+
 @test "AC6: help documents post-merge-check" {
   run bash "$WALTER_OS_BIN" help
 
