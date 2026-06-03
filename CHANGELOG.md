@@ -196,6 +196,13 @@ rows, audit telemetry wiring, and release provenance/reproducibility gates.
   update notice now points operators to `walter-os upgrade --dry-run` and a
   targeted `--target <tag>` command.
 
+### Fixed
+
+- **Control Tower `/api/spend` local-dev fallback (#312).** Network and
+  fetch failures now return the same safe zero-agent fallback payload as
+  non-2xx LiteLLM responses, so local development no longer accepts a
+  500 response when LiteLLM is unavailable.
+
 ---
 
 ## [0.5.1] — 2026-05-23

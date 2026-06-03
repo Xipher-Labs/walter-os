@@ -3,12 +3,48 @@
  * U-new-1: Authorization header must not be sent as "Bearer undefined"
  *          when LITELLM_API_KEY is unset.
  */
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { GET } from "../../app/api/spend/route";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const knownAgents = ["triage", "researcher", "coder", "reviewer", "janitor", "liaison"];
+
+async function expectFallbackSpendResponse(response: Response): Promise<unknown> {
+  const body = (await response.json()) as {
+    agents: {
+      agent: string;
+      model: string;
+      tokens_in: number;
+      tokens_out: number;
+      cost_usd: number;
+      budget_pct: number;
+    }[];
+    days: number;
+    source: string;
+  };
+
+  expect(response.status).toBe(200);
+  expect(body.source).toBe("fallback");
+  expect(body.days).toBe(7);
+  expect(body.agents.map((agent) => agent.agent).sort()).toEqual(
+    [...knownAgents].sort()
+  );
+  expect(
+    body.agents.every(
+      (agent) =>
+        agent.model === "unknown" &&
+        agent.tokens_in === 0 &&
+        agent.tokens_out === 0 &&
+        agent.cost_usd === 0 &&
+        agent.budget_pct === 0
+    )
+  ).toBe(true);
+
+  return body;
+}
 
 // We test the header-building logic in isolation by extracting it.
 // The actual fetch() call in the route uses these headers.
@@ -37,6 +73,34 @@ describe("spend route header building", () => {
   it("U-new-1: omits Authorization header when LITELLM_API_KEY is empty string", () => {
     const headers = buildLitellmHeaders("");
     expect(headers["Authorization"]).toBeUndefined();
+  });
+});
+
+describe("GET /api/spend fallback behavior", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns the safe zero-agent fallback when LiteLLM fetch fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const response = await GET(new Request("http://localhost/api/spend?days=7"));
+
+    await expectFallbackSpendResponse(response);
+  });
+
+  it("uses the same safe zero-agent fallback for fetch failures and non-2xx responses", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const nonOkResponse = await GET(new Request("http://localhost/api/spend?days=7"));
+    const nonOkBody = await expectFallbackSpendResponse(nonOkResponse);
+
+    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    const fetchFailureResponse = await GET(
+      new Request("http://localhost/api/spend?days=7")
+    );
+    const fetchFailureBody = await expectFallbackSpendResponse(fetchFailureResponse);
+
+    expect(fetchFailureBody).toEqual(nonOkBody);
   });
 });
 

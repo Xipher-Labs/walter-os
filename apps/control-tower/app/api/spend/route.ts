@@ -29,6 +29,20 @@ const AGENT_BUDGETS: Record<string, number> = {
   liaison: 2.0,
 };
 
+function fallbackSpendResponse(days: number): Response {
+  const fallback: AgentSpend[] = Object.keys(AGENT_BUDGETS).map((agent) => ({
+    agent,
+    model: "unknown",
+    tokens_in: 0,
+    tokens_out: 0,
+    cost_usd: 0,
+    daily_budget_usd: AGENT_BUDGETS[agent],
+    budget_pct: 0,
+  }));
+
+  return Response.json({ agents: fallback, days, source: "fallback" });
+}
+
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const days = parseInt(url.searchParams.get("days") ?? "7", 10) || 7;
@@ -66,18 +80,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!res.ok) {
       // Return zero-rows for all known agents on LiteLLM error
       // (allows the UI to render even when LiteLLM is down)
-      const fallback: AgentSpend[] = Object.keys(AGENT_BUDGETS).map(
-        (agent) => ({
-          agent,
-          model: "unknown",
-          tokens_in: 0,
-          tokens_out: 0,
-          cost_usd: 0,
-          daily_budget_usd: AGENT_BUDGETS[agent],
-          budget_pct: 0,
-        })
-      );
-      return Response.json({ agents: fallback, days, source: "fallback" });
+      return fallbackSpendResponse(days);
     }
 
     // LiteLLM returns [{tag: "agent_id:coder", spend: 0.12, ...}, ...]
@@ -144,10 +147,7 @@ export async function GET(request: Request): Promise<Response> {
       .sort((a, b) => b.cost_usd - a.cost_usd);
 
     return Response.json({ agents, days, source: "litellm" });
-  } catch (err) {
-    return Response.json(
-      { error: "Failed to fetch spend data", detail: String(err) },
-      { status: 500 }
-    );
+  } catch {
+    return fallbackSpendResponse(days);
   }
 }
