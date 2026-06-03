@@ -181,6 +181,7 @@ write_fixture() {
 
   [ "$status" -eq 4 ]
   [[ "$output" == *"unable to record feature state"* ]]
+  [[ "$output" == *"feature-state exit 1"* ]]
   [[ "$output" == *".walter/features/AD-13/state.yaml"* ]]
 }
 

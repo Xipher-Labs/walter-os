@@ -293,9 +293,10 @@ record_feature_state_if_requested() {
       printf '%s\n' "$output"
     fi
     return 0
+  else
+    status=$?
   fi
 
-  status=$?
   {
     printf 'walter-os post-merge-check: unable to record feature state'
     printf ' (feature-state exit %s)\n' "$status"
