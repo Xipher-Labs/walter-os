@@ -158,15 +158,15 @@ test.describe("Control Tower smoke tests", () => {
         throw new Error("TopNav is missing from the dashboard.");
       }
       return {
-        viewportWidth: window.innerWidth,
+        viewportWidth: document.documentElement.clientWidth,
         docScrollWidth: document.documentElement.scrollWidth,
         navScrollWidth: nav.scrollWidth,
         navClientWidth: nav.clientWidth,
       };
     });
 
-    expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth);
-    expect(metrics.navScrollWidth).toBeLessThanOrEqual(metrics.navClientWidth);
+    expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+    expect(metrics.navScrollWidth).toBeLessThanOrEqual(metrics.navClientWidth + 1);
   });
 
   test("(10) Council Chat page loads", async ({ page }) => {

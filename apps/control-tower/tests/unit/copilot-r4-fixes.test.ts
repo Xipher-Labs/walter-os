@@ -114,7 +114,9 @@ describe("U-r2-5: control-tower smoke workflow carries version env", () => {
     const smokeJobStart = src.indexOf("  smoke-tests:");
     expect(smokeJobStart).toBeGreaterThanOrEqual(0);
     const smokeJob = src.slice(smokeJobStart);
-    const beforeSteps = smokeJob.slice(0, smokeJob.indexOf("    steps:"));
+    const stepsStart = smokeJob.indexOf("    steps:");
+    expect(stepsStart).toBeGreaterThanOrEqual(0);
+    const beforeSteps = smokeJob.slice(0, stepsStart);
     const hasJobLevelEnv = requiredEnvKeys.every((key) =>
       beforeSteps.includes(key)
     );
