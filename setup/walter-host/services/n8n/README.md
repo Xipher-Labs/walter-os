@@ -254,8 +254,14 @@ arrays. Repeated copies of the same marker are accepted for webhook redelivery;
 missing markers or multiple distinct markers fail closed. PR title/body text is
 not a marker source.
 
-`plane-pr-sync.sh link` writes the stable marker into Forgejo comments. Public
-merge webhooks should depend on that marker, not on arbitrary PR body text.
+`plane-pr-sync.sh link` writes the stable marker into Forgejo comments before it
+moves Plane to review. If `tea` is missing, comment inspection fails, or the
+marker comment cannot be written, link fails closed instead of leaving a Plane
+issue in review without a trusted PR binding. Public merge webhooks should
+depend on that marker, not on arbitrary PR body text. When
+`WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS` contains a non-empty comma-separated
+list, existing markers from other authors do not satisfy the link-stage binding
+check.
 
 Neither adapter is a public HTTP listener. The full n8n workflow JSON remains
 out of scope until the CLI adapters are proven in operator use.
