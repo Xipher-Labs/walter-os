@@ -23,6 +23,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/release/reproduce.sh \
 		scripts/agents/run.sh \
 		scripts/agents/main.sh \
+		scripts/agents/plane-pr-sync-webhook.sh \
 		scripts/agents/lib/plane.sh \
 		scripts/agents/lib/llm.sh \
 		scripts/agents/lib/alerts.sh \

@@ -11,6 +11,8 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
 - Add `scripts/agents/plane-pr-sync.sh` as an idempotent sync primitive.
 - Add `scripts/agents/plane-pr-sync-trigger.sh` as a small event adapter that
   n8n, webhooks, or cron can call without rebuilding argv in workflow JSON.
+- Add `scripts/agents/plane-pr-sync-webhook.sh` as a signed Forgejo/Gitea
+  `pull_request` webhook adapter for public webhook entrypoints.
 - Support `link` and `merged` events.
 - Post a Plane comment with a stable marker and move the issue to `review` or
   `done`.
@@ -22,8 +24,8 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
 
 - Do not add a full n8n workflow JSON yet.
 - Do not parse arbitrary PR bodies.
-- Do not expose a public webhook listener in this PR. Public webhooks must verify
-  the Forgejo/Gitea HMAC signature before invoking this script.
+- Do not expose a public webhook listener in this PR. The signed adapter is a
+  CLI bridge for n8n or another HTTP entrypoint; it does not listen on a port.
 - Do not update `.walter/` feature ledgers until #227 lands.
 
 ## Acceptance Criteria
@@ -39,6 +41,19 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
 - AC7: `plane-pr-sync-trigger.sh` maps Forgejo/Gitea `pull_request` payloads to
   the sync primitive, treats closed-unmerged PRs as no-op, rejects unsupported
   events/actions, and rejects newline-bearing payload fields.
+- AC8: `plane-pr-sync-webhook.sh` verifies the Forgejo/Gitea HMAC-SHA256
+  signature against the original raw request body before JSON parsing, comment
+  fetches, or Plane/Forgejo mutation.
+- AC9: A valid signed `pull_request` `closed` event with `merged == true`
+  resolves exactly one `walter-plane-issue:<id>` marker from PR comments and
+  moves the linked Plane issue to `done`.
+- AC10: Missing or invalid HMAC signatures fail before any Plane or Forgejo
+  mutation.
+- AC11: Closed-unmerged PR events are a no-op before marker lookup.
+- AC12: Missing or ambiguous Plane issue markers fail closed.
+- AC13: Payload fields containing control characters are rejected before sync.
+- AC14: The signed adapter calls `plane-pr-sync.sh` via argv arrays and never
+  calls merge, push, or approval commands.
 
 ## Trigger Wrapper
 
@@ -63,11 +78,40 @@ Supported `pull_request.action` mappings:
 
 The wrapper never parses arbitrary PR bodies to discover the Plane issue. n8n or
 cron must pass the Plane issue from trusted workflow state, a prior Plane event,
-or another operator-controlled source. For future public Forgejo webhooks, first
-verify the webhook HMAC, then resolve the Plane issue from the
-`walter-plane-issue:<id>` marker written by the `link` comment.
+or another operator-controlled source.
+
+## Signed Webhook Adapter
+
+`plane-pr-sync-webhook.sh` handles the public Forgejo/Gitea merge-webhook path.
+It is still a CLI adapter, not an HTTP server. n8n or another webhook entrypoint
+must pass the event header, signature header, and original raw request body:
+
+```bash
+scripts/agents/plane-pr-sync-webhook.sh \
+  --event "$FORGEJO_EVENT" \
+  --signature "$FORGEJO_SIGNATURE" \
+  --payload-file "$RAW_FORGEJO_PAYLOAD"
+```
+
+The adapter verifies `X-Gitea-Signature` / `X-Forgejo-Signature` as an
+HMAC-SHA256 over the raw payload bytes before it parses JSON, fetches PR
+comments, or calls the Plane sync primitive. The webhook secret is read from
+`WALTER_FORGEJO_WEBHOOK_SECRET` by default; use `--secret-env` only to point at
+another environment variable name. Do not pass the secret on argv.
+
+After signature verification, only `pull_request.action == "closed"` with
+`pull_request.merged == true` is actionable. Closed-unmerged events are no-op.
+For merged events, the adapter fetches PR comments with `tea issues view` and
+requires exactly one `walter-plane-issue:<id>` marker. Missing or ambiguous
+markers fail closed so PR body text cannot spoof the issue binding.
+
+For test fixtures or an n8n workflow that already fetched comments safely, pass
+`--comments-file "$COMMENTS_JSON"` to avoid a live `tea` call. The production
+path should prefer `tea` so the marker source is Forgejo state written by the
+trusted `link` flow.
 
 ## Related
 
 - Issue: #237
+- Issue: #302
 - Roadmap: `docs/specs/autonomous-delivery-roadmap.md` AD-12
