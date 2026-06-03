@@ -57,13 +57,13 @@ require_command() {
 reject_control() {
   local name="$1" value="$2" control_status
   set +e
-  CONTROL_VALUE="$value" python3 -c 'import os, sys; value = os.environ.get("CONTROL_VALUE", ""); sys.exit(0 if any(ord(char) < 32 or ord(char) == 127 for char in value) else 1)'
+  CONTROL_VALUE="$value" python3 -c 'import os, sys; value = os.environ.get("CONTROL_VALUE", ""); sys.exit(42 if any(ord(char) < 32 or ord(char) == 127 for char in value) else 0)'
   control_status=$?
   set -e
-  if [[ "$control_status" -eq 0 ]]; then
+  if [[ "$control_status" -eq 42 ]]; then
     fail_usage "$name contains control characters"
   fi
-  if [[ "$control_status" -ne 1 ]]; then
+  if [[ "$control_status" -ne 0 ]]; then
     fail_runtime "control-character validation failed"
   fi
 }
