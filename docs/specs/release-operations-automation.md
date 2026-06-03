@@ -53,8 +53,9 @@ Malformed usage exits `64`; runtime/dependency failures exit `4`.
 
 Hard blockers include version drift, missing changelog entry, tag already
 existing for the target version, failed or pending checks, pending review
-requests, unresolved review threads, merge conflicts, and issue-closing hygiene
-problems.
+requests, missing or non-approved review decisions, unresolved review threads,
+incomplete review-thread pagination, merge conflicts, unknown mergeability, and
+issue-closing hygiene problems.
 
 Warnings include stacked PRs that are otherwise healthy but require ordered
 merge/retargeting after their base PR lands.
@@ -74,8 +75,9 @@ completion, but it can flag structurally risky cases:
 - AC1: `walter-os help` documents `release doctor`.
 - AC2: clean evidence returns `ready` with exit 0.
 - AC3: version, changelog, or tag drift returns `block`.
-- AC4: failed/pending checks, pending review requests, unresolved review
-  threads, or conflicts return `block`.
+- AC4: failed/pending checks, pending review requests, missing or non-approved
+  review decisions, unresolved review threads, incomplete review-thread
+  pagination, conflicts, or unknown mergeability return `block`.
 - AC5: stacked PRs return `warn` and include merge-order/retarget guidance.
 - AC6: issue-closing hygiene problems return `block`.
 - AC7: `--json` emits `decision`, `counts`, `findings`, `warnings`, and
