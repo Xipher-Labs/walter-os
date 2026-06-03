@@ -30,6 +30,8 @@ Options:
   --fixture <path>              Read post-merge evidence JSON from a file for tests.
   --record-feature-state <id>   Append the decision to a feature-state ledger.
   --repo <dir>                  Repository containing .walter/features/.
+                                --repo requires --record-feature-state; recording
+                                uses the current git repository by default.
 EOF
 }
 

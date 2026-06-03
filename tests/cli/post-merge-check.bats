@@ -262,3 +262,11 @@ EOF
   [[ "$output" == *"post-merge-check"* ]]
   [[ "$output" == *"record-feature-state"* ]]
 }
+
+@test "AD-13: subcommand help documents --repo recording dependency" {
+  run bash "$WALTER_OS_BIN" post-merge-check --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--repo requires --record-feature-state"* ]]
+  [[ "$output" == *"current git repository by default"* ]]
+}
