@@ -6,12 +6,12 @@ container executes → PR opened → Telegram bot pings.
 
 ## URL
 
-**https://n8n.${WALTER_DOMAIN}** — behind Cloudflare Tunnel + Cloudflare Access
+**`https://n8n.${WALTER_DOMAIN}`** — behind Cloudflare Tunnel + Cloudflare Access
 (Google IdP, allow `@${WALTER_DOMAIN}`).
 
 ## Stack
 
-- **n8n** 1.65.2 (pinned, not `latest` — predictable)
+- **n8n** 2.18.7 (pinned, not `latest` — predictable)
 - **Postgres** 16-alpine (separate from Plane's pg, isolated)
 - Persistence via named Docker volumes (`n8n_data`, `n8n_pg`)
 - File workspace at `./files` (bind-mounted, included in restic backups)
@@ -189,9 +189,35 @@ Application: n8n.${WALTER_DOMAIN}
 Each external service still authenticates via its own webhook signature
 (GitHub HMAC, Plane bearer token, etc.) — n8n nodes verify those signatures.
 
+### Plane PR sync trigger
+
+For the Plane ↔ Forgejo PR lifecycle, prefer calling the Walter-OS adapter from
+an Execute Command node instead of assembling shell commands from raw webhook
+JSON:
+
+```bash
+scripts/agents/plane-pr-sync-trigger.sh \
+  --event pull_request \
+  --issue "$PLANE_ISSUE_ID" \
+  --payload-file "$FORGEJO_PAYLOAD_JSON"
+```
+
+The adapter validates the payload shape, rejects unsupported events/actions,
+rejects newline-bearing fields, and calls `plane-pr-sync.sh` using argv arrays.
+It maps opened/reopened/synchronized PRs to `link`, merged PR closures to
+`merged`, and closed-unmerged PRs to no-op.
+
+Do not expose this script as a public HTTP listener by itself. The n8n workflow
+or webhook entrypoint must verify the Forgejo/Gitea webhook signature before it
+passes a payload to the adapter. The Plane issue ID should come from trusted
+workflow state or a prior Plane event, not from parsing arbitrary PR body text.
+`plane-pr-sync.sh link` writes a stable `walter-plane-issue:<id>` marker into
+Forgejo comments so a future signed-webhook adapter can resolve the issue
+without body parsing.
+
 ## Versioning / upgrades
 
-Pinned to `n8n:1.65.2`. To upgrade:
+Pinned to `n8n:2.18.7`. To upgrade:
 1. Read the [release notes](https://github.com/n8n-io/n8n/releases) — they
    sometimes have breaking workflow-format changes.
 2. Edit `compose.yml` → bump tag.
@@ -201,16 +227,19 @@ Pinned to `n8n:1.65.2`. To upgrade:
 ## Troubleshooting
 
 ### 502 Bad Gateway via Cloudflare
+
 - cloudflared service down: `ssh walter-vm 'sudo systemctl status cloudflared'`
 - n8n container down: `ssh walter-vm 'docker ps | grep n8n'`
 - Network issue: `ssh walter-vm 'docker logs --tail 30 n8n'`
 
 ### Workflows fail with "Encryption key mismatch"
+
 - The `.env` was regenerated but the DB has credentials from an older key.
 - Restore the original `N8N_ENCRYPTION_KEY` from Infisical, or re-create
   credentials via the UI (slow but recoverable).
 
 ### n8n won't start, complains about Postgres
+
 - `docker logs n8n-pg`
 - If volume corrupted: stop, restore from restic, restart.
 

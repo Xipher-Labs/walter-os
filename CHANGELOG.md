@@ -73,6 +73,10 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Plane ↔ Forgejo PR sync wiring (#237).** Adds a safe
+  `plane-pr-sync-trigger.sh` adapter for Forgejo/Gitea `pull_request` payloads,
+  records stable `walter-plane-issue:<id>` markers in PR comments, documents
+  n8n usage, and keeps public webhook/HMAC listener work out of scope.
 - **Vercel agent-skills bridge refresh (#223).** Re-pins
   `external/vercel-agent-skills` to upstream `4ec6f84`, documents the new
   `vercel-optimize` and `writing-guidelines` upstream entries, and keeps both
