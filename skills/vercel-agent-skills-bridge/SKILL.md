@@ -12,6 +12,17 @@ plugin format) and source directories.
 
 Walter-OS doesn't blindly import everything. Some overlap, some don't fit.
 
+## Current vetted pin
+
+- Submodule: `external/vercel-agent-skills`
+- Previous pin: `ce3e64e468f8fa09a2d075d102771838061fdac0`
+- Current vetted pin: `4ec6f84b61cd3c931046c3e6e398f3ae7de372f7`
+- Delta reviewed for #223: 26 upstream commits, including the new
+  `vercel-optimize` and `writing-guidelines` upstream directories.
+- Hook baseline impact: no files under a `hooks/` path changed in this
+  upstream delta, so `walter-os baseline-external-hooks` is not required for
+  this refresh.
+
 ## Vercel skills inventory + Walter-OS decision
 
 | Vercel skill | Walter-OS decision | Why |
@@ -22,7 +33,28 @@ Walter-OS doesn't blindly import everything. Some overlap, some don't fit.
 | `react-native-skills` | **Install for [Project B] context** | RN expertise; [Project B] frontend. Load only under context=projects-personal. |
 | `react-view-transitions` | **Skip** | Niche; install per-project as needed, not globally. |
 | `vercel-cli-with-tokens` | **Already covered** by skills/vercel-cli/ | Walter-OS version is more operator-specific. |
+| `vercel-optimize` | **Evaluate manually; don't install globally yet** | High operational surface: Vercel CLI v53+, linked project context, usage/metrics/contract reads, Observability Plus assumptions, and many local `.mjs` helper scripts. Useful for Vercel cost/performance audits, but should be opt-in per project after a dedicated safety review. |
 | `web-design-guidelines` | **Reference, don't install** | Overlaps with skills/brand-creation + skills/frontend-quality. |
+| `writing-guidelines` | **Reference, don't install globally yet** | Vercel-specific writing handbook checker that fetches a live remote guideline URL before each review. Useful for Vercel-style docs/prose audits, but overlaps with Walter-OS content/readme skills and should stay opt-in until the source/licensing and network-fetch behavior are reviewed. |
+
+## Latest upstream delta (#223)
+
+The `ce3e64e` → `4ec6f84` refresh adds:
+
+- `vercel-optimize`: a large cost/performance optimization workflow with
+  metric collection, code scanners, report rendering, and extensive test
+  fixtures under `packages/vercel-optimize-tests`.
+- `writing-guidelines`: a compact prose-review upstream entry that loads Vercel's
+  writing handbook from a raw GitHub URL.
+- Updates to `react-best-practices`, `react-view-transitions`, and
+  `vercel-cli-with-tokens`.
+- Repository-level upstream metadata (`skills.sh.json`) and README/AGENTS
+  updates.
+
+This refresh intentionally does **not** add new symlinks under `skills/`.
+Adding a symlink makes the skill part of Walter-OS's discoverable skill
+surface and should be done in a follow-up PR with trigger-format checks,
+license/network review, and project-specific loading guidance.
 
 ## Installation pattern
 
@@ -82,5 +114,5 @@ re-evaluate.
 
 ## References
 
-- https://github.com/vercel-labs/agent-skills
-- https://vercel.com/blog (Vercel announcements re: skills)
+- [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills)
+- [Vercel blog](https://vercel.com/blog) (Vercel announcements re: skills)
