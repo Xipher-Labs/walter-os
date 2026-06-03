@@ -103,16 +103,37 @@ describe("U-r2-4: control-tower CI workflow covers main branch", () => {
 // ---- U-r2-5: CI smoke workflow sets version env before build and run ----
 
 describe("U-r2-5: control-tower smoke workflow carries version env", () => {
-  it("sets version/update env in the smoke build and test steps", () => {
+  it("sets version/update env for both smoke build and test execution", () => {
     const workflowPath = resolve(
       __dirname,
       "../../../../.github/workflows/control-tower.yml"
     );
     const src = readFileSync(workflowPath, "utf-8");
+    const requiredEnvKeys = ["WALTER_VERSION:", "WALTER_UPDATE_AVAILABLE:"];
 
-    expect(src.split("WALTER_VERSION:").length - 1).toBeGreaterThanOrEqual(2);
-    expect(
-      src.split("WALTER_UPDATE_AVAILABLE:").length - 1
-    ).toBeGreaterThanOrEqual(2);
+    const smokeJobStart = src.indexOf("  smoke-tests:");
+    expect(smokeJobStart).toBeGreaterThanOrEqual(0);
+    const smokeJob = src.slice(smokeJobStart);
+    const beforeSteps = smokeJob.slice(0, smokeJob.indexOf("    steps:"));
+    const hasJobLevelEnv = requiredEnvKeys.every((key) =>
+      beforeSteps.includes(key)
+    );
+
+    const buildStepStart = smokeJob.indexOf("- name: Build for smoke tests");
+    const runStepStart = smokeJob.indexOf("- name: Run smoke tests");
+    expect(buildStepStart).toBeGreaterThanOrEqual(0);
+    expect(runStepStart).toBeGreaterThanOrEqual(0);
+    const stepBlock = (start: number) => {
+      const block = smokeJob.slice(start);
+      const nextStep = block.indexOf("\n      - name:", 1);
+      return nextStep === -1 ? block : block.slice(0, nextStep);
+    };
+    const buildStep = stepBlock(buildStepStart);
+    const runStep = stepBlock(runStepStart);
+    const hasStepLevelEnv = requiredEnvKeys.every(
+      (key) => buildStep.includes(key) && runStep.includes(key)
+    );
+
+    expect(hasJobLevelEnv || hasStepLevelEnv).toBe(true);
   });
 });
