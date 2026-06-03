@@ -71,6 +71,13 @@ requires the one-minor-version notice cycle.
 
 Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime enforcement (#260), tamper-resistant capability mint approvals (#264), capability hook tokenization cleanup (#262), sandbox key-scan test decoupling (#263), vendored-skill pin enforcement (#255), Codex startup degradation diagnostics (#248/#259), optional app profiles (#207/#208/#210/#211/#212/#213), severity-gate runtime implementation, and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
 
+### Changed
+
+- **Vercel agent-skills bridge refresh (#223).** Re-pins
+  `external/vercel-agent-skills` to upstream `4ec6f84`, documents the new
+  `vercel-optimize` and `writing-guidelines` skills, and keeps both out of the
+  global Walter-OS skill surface pending dedicated safety/network review.
+
 ---
 
 ## [0.6.0] — 2026-06-02
