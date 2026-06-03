@@ -291,17 +291,29 @@ if ! jq -e . >/dev/null 2>&1 <<<"$comments_json"; then
 fi
 
 markers_json="$(
-  jq -c '[.. | strings | scan("\\[walter-plane-issue:([^]\\r\\n\\]]+)\\]") | .[0]]' \
-    <<<"$comments_json"
+  jq -c '
+    def comment_bodies:
+      if type == "array" then
+        .[]? | (.body? // .Body? // empty)
+      elif type == "object" then
+        (.comments[]? | (.body? // .Body? // empty)),
+        (.Comments[]? | (.body? // .Body? // empty))
+      else
+        empty
+      end;
+    [comment_bodies | strings | scan("\\[walter-plane-issue:([^]\\r\\n\\]]+)\\]") | .[0]]
+  ' <<<"$comments_json"
 )"
-marker_count="$(jq -r 'length' <<<"$markers_json")"
-if [[ "$marker_count" -eq 0 ]]; then
+marker_occurrence_count="$(jq -r 'length' <<<"$markers_json")"
+if [[ "$marker_occurrence_count" -eq 0 ]]; then
   fail_usage "missing walter-plane-issue marker"
 fi
-if [[ "$marker_count" -gt 1 ]]; then
+distinct_markers_json="$(jq -c 'unique' <<<"$markers_json")"
+distinct_marker_count="$(jq -r 'length' <<<"$distinct_markers_json")"
+if [[ "$distinct_marker_count" -gt 1 ]]; then
   fail_usage "ambiguous walter-plane-issue markers"
 fi
-issue="$(jq -r '.[0]' <<<"$markers_json")"
+issue="$(jq -r '.[0]' <<<"$distinct_markers_json")"
 reject_control "issue marker" "$issue"
 
 sync_args=(

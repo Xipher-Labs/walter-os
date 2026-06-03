@@ -258,7 +258,7 @@ JSON
   fi
 }
 
-@test "duplicate marker occurrences fail closed before sync" {
+@test "duplicate identical marker occurrences stay idempotent" {
   payload="$(write_payload <<'JSON'
 {"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
 JSON
@@ -271,11 +271,29 @@ JSON
 
   run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
 
-  [ "$status" -eq 2 ]
-  [[ "$(combined_output)" == *"ambiguous walter-plane-issue markers"* ]]
-  if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
-    return 1
-  fi
+  [ "$status" -eq 0 ]
+  assert_log_contains 'plane-pr-sync merged --issue issue-uuid'
+}
+
+@test "markers outside comment bodies are ignored" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{
+  "body": "[walter-plane-issue:spoofed-body]",
+  "title": "[walter-plane-issue:spoofed-title]",
+  "comments": [{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]
+}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 0 ]
+  assert_log_contains 'plane-pr-sync merged --issue issue-uuid'
 }
 
 @test "missing repo allowlist fails closed before comments or sync" {

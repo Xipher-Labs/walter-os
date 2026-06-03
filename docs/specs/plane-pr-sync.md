@@ -45,12 +45,12 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
   signature against the original raw request body before JSON parsing, comment
   fetches, or Plane/Forgejo mutation.
 - AC9: A valid signed `pull_request` `closed` event with `merged == true`
-  resolves exactly one `walter-plane-issue:<id>` marker from PR comments and
-  moves the linked Plane issue to `done`.
+  resolves exactly one distinct `walter-plane-issue:<id>` marker from PR comment
+  bodies and moves the linked Plane issue to `done`.
 - AC10: Missing or invalid HMAC signatures fail before any Plane or Forgejo
   mutation.
 - AC11: Closed-unmerged PR events are a no-op before marker lookup.
-- AC12: Missing or ambiguous Plane issue markers fail closed.
+- AC12: Missing markers or multiple distinct Plane issue markers fail closed.
 - AC13: Payload fields containing control characters are rejected before sync.
 - AC14: The signed adapter calls `plane-pr-sync.sh` via argv arrays and never
   calls merge, push, or approval commands.
@@ -110,8 +110,10 @@ repository.
 After signature verification, only `pull_request.action == "closed"` with
 `pull_request.merged == true` is actionable. Closed-unmerged events are no-op.
 For merged events, the adapter fetches PR comments with `tea issues view` and
-requires exactly one `walter-plane-issue:<id>` marker. Missing or ambiguous
-markers fail closed so PR body text cannot spoof the issue binding.
+requires exactly one distinct `walter-plane-issue:<id>` marker from comment
+bodies. Repeated copies of the same marker are accepted for webhook redelivery,
+but multiple distinct markers fail closed. PR title/body text is not a marker
+source and cannot spoof the issue binding.
 
 For test fixtures or an n8n workflow that already fetched comments safely, pass
 `--comments-file "$COMMENTS_JSON"` to avoid a live `tea` call. The production
