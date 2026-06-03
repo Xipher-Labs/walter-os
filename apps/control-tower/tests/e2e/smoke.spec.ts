@@ -146,7 +146,9 @@ test.describe("Control Tower smoke tests", () => {
     const updateBadge = page.locator(
       "[data-testid='update-badge'], [data-testid='update-badge-no-link']"
     );
-    if ((await updateBadge.count()) > 0) {
+    if (process.env.WALTER_UPDATE_AVAILABLE) {
+      await expect(updateBadge.first()).toBeVisible();
+    } else if ((await updateBadge.count()) > 0) {
       await expect(updateBadge.first()).toBeVisible();
     }
 
