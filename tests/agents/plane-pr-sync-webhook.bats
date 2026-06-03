@@ -17,6 +17,7 @@ setup() {
   export WALTER_FORGEJO_WEBHOOK_SECRET="test-webhook-secret"
   export WALTER_PLANE_PR_SYNC_SCRIPT="$MOCK_DIR/plane-pr-sync.sh"
   export WALTER_FORGEJO_WEBHOOK_REPOS="acme/app"
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
   export PATH="$MOCK_DIR:$PATH"
 
   cat > "$WALTER_PLANE_PR_SYNC_SCRIPT" <<'SYNC_MOCK'
@@ -108,7 +109,7 @@ signature_for() {
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
 JSON
 )"
   export TEA_COMMENTS_FILE="$comments"
@@ -137,7 +138,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
 JSON
 )"
   export TEA_COMMENTS_FILE="$comments"
@@ -204,7 +205,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"no marker here"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"no marker here"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
@@ -224,7 +225,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:first]"},{"body":"[walter-plane-issue:second]"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:first]"},{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:second]"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
@@ -244,7 +245,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:first] and [walter-plane-issue:second]"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:first] and [walter-plane-issue:second]"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
@@ -264,7 +265,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid]"},{"body":"again [walter-plane-issue:issue-uuid]"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid]"},{"author":{"login":"walter-bot"},"body":"again [walter-plane-issue:issue-uuid]"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
@@ -284,7 +285,7 @@ JSON
 {
   "body": "[walter-plane-issue:spoofed-body]",
   "title": "[walter-plane-issue:spoofed-title]",
-  "comments": [{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]
+  "comments": [{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]
 }
 JSON
 )"
@@ -296,13 +297,33 @@ JSON
   assert_log_contains 'plane-pr-sync merged --issue issue-uuid'
 }
 
+@test "markers from untrusted comment authors are ignored" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"author":{"login":"contributor"},"body":"[walter-plane-issue:spoofed]"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 2 ]
+  [[ "$(combined_output)" == *"missing walter-plane-issue marker"* ]]
+  if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
 @test "missing repo allowlist fails closed before comments or sync" {
   payload="$(write_payload <<'JSON'
 {"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
@@ -317,17 +338,56 @@ JSON
   fi
 }
 
+@test "missing trusted comment author allowlist fails closed before comments or sync" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+  unset WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 2 ]
+  [[ "$(combined_output)" == *"missing WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS allowlist"* ]]
+  if [[ -f "$CALL_LOG" ]] && grep -q 'plane-pr-sync' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
 @test "repo allowlist entries trim spaces before comparison" {
   payload="$(write_payload <<'JSON'
 {"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
   export WALTER_FORGEJO_WEBHOOK_REPOS="other/repo, acme/app "
+
+  run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
+
+  [ "$status" -eq 0 ]
+  assert_log_contains 'plane-pr-sync merged --issue issue-uuid'
+}
+
+@test "trusted comment author allowlist entries trim spaces before comparison" {
+  payload="$(write_payload <<'JSON'
+{"action":"closed","repository":{"full_name":"acme/app"},"pull_request":{"number":7,"html_url":"https://git.example.test/acme/app/pulls/7","head":{"ref":"feature/thing"},"merged":true,"merged_commit_sha":"abcdef1234567890"}}
+JSON
+)"
+  comments="$(write_comments <<'JSON'
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+JSON
+)"
+  signature="$(signature_for "$payload")"
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="other-bot, walter-bot "
 
   run bash "$SCRIPT" --event pull_request --signature "$signature" --payload-file "$payload" --comments-file "$comments"
 
@@ -365,7 +425,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"
@@ -385,7 +445,7 @@ JSON
 JSON
 )"
   comments="$(write_comments <<'JSON'
-{"comments":[{"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
+{"comments":[{"author":{"login":"walter-bot"},"body":"[walter-plane-issue:issue-uuid] linked by Walter"}]}
 JSON
 )"
   signature="$(signature_for "$payload")"

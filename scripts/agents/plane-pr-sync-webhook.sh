@@ -27,6 +27,11 @@ Headers:
 Secret:
   Defaults to WALTER_FORGEJO_WEBHOOK_SECRET. Use --secret-env to point at a
   different environment variable. Do not pass secrets on argv.
+
+Trust boundary:
+  WALTER_FORGEJO_WEBHOOK_REPOS must list accepted owner/repo names.
+  WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS must list trusted comment author
+  logins whose walter-plane-issue markers may bind Plane issues.
 EOF
 }
 
@@ -266,6 +271,24 @@ if [[ "$repo_allowed" -ne 1 ]]; then
   fail_usage "repo is not allowlisted: $repo"
 fi
 
+if [[ -z "${WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS:-}" ]]; then
+  fail_usage "missing WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS allowlist"
+fi
+
+reject_control "comment author allowlist" "$WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS"
+trusted_authors_json="$(
+  jq -Rn --arg authors "$WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS" '
+    $authors
+    | split(",")
+    | map(gsub("^\\s+|\\s+$"; ""))
+    | map(select(length > 0))
+  '
+)"
+trusted_author_count="$(jq -r 'length' <<<"$trusted_authors_json")"
+if [[ "$trusted_author_count" -eq 0 ]]; then
+  fail_usage "empty WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS allowlist"
+fi
+
 read_comments_json() {
   if [[ -n "$comments_file" ]]; then
     if [[ "$comments_file" == "-" ]]; then
@@ -291,17 +314,29 @@ if ! jq -e . >/dev/null 2>&1 <<<"$comments_json"; then
 fi
 
 markers_json="$(
-  jq -c '
-    def comment_bodies:
+  TRUSTED_COMMENT_AUTHORS="$trusted_authors_json" jq -c '
+    ($ENV.TRUSTED_COMMENT_AUTHORS | fromjson) as $trusted_authors |
+    def comment_author:
+      .user.login? //
+      .author.login? //
+      .author.username? //
+      .poster.login? //
+      .poster.username? //
+      .username? //
+      .user? //
+      .author? //
+      empty;
+    def trusted_comment_bodies:
       if type == "array" then
-        .[]? | (.body? // .Body? // empty)
+        .[]?
       elif type == "object" then
-        (.comments[]? | (.body? // .Body? // empty)),
-        (.Comments[]? | (.body? // .Body? // empty))
+        .comments[]?, .Comments[]?
       else
         empty
-      end;
-    [comment_bodies | strings | scan("\\[walter-plane-issue:([^]\\r\\n\\]]+)\\]") | .[0]]
+      end
+      | select((comment_author | strings) as $login | ($trusted_authors | index($login)))
+      | (.body? // .Body? // empty);
+    [trusted_comment_bodies | strings | scan("\\[walter-plane-issue:([^]\\r\\n\\]]+)\\]") | .[0]]
   ' <<<"$comments_json"
 )"
 marker_occurrence_count="$(jq -r 'length' <<<"$markers_json")"

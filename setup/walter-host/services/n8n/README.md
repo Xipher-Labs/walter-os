@@ -235,14 +235,24 @@ export WALTER_FORGEJO_WEBHOOK_REPOS="Xipher-Labs/walter-os"
 The allowlist is mandatory. A signed payload from any repo outside the allowlist
 fails closed before comment fetches or Plane mutation.
 
+Set `WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS` to the comma-separated Forgejo/Gitea
+logins whose PR comments may bind Plane issues, for example:
+
+```bash
+export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
+```
+
+This should be the automation account used by `plane-pr-sync.sh link`. Markers
+from other comment authors are ignored.
+
 `plane-pr-sync-webhook.sh` verifies HMAC-SHA256 over the raw payload before JSON
 parsing, comment fetches, or Plane/Forgejo mutation. It only acts on
 `pull_request.closed` events with `merged == true`; closed-unmerged PRs are
 no-op. For merged PRs it resolves exactly one `walter-plane-issue:<id>` marker
-from Forgejo comment bodies, then calls `plane-pr-sync.sh` with argv arrays.
-Repeated copies of the same marker are accepted for webhook redelivery; missing
-markers or multiple distinct markers fail closed. PR title/body text is not a
-marker source.
+from trusted Forgejo comment bodies, then calls `plane-pr-sync.sh` with argv
+arrays. Repeated copies of the same marker are accepted for webhook redelivery;
+missing markers or multiple distinct markers fail closed. PR title/body text is
+not a marker source.
 
 `plane-pr-sync.sh link` writes the stable marker into Forgejo comments. Public
 merge webhooks should depend on that marker, not on arbitrary PR body text.

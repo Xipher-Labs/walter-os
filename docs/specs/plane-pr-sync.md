@@ -56,6 +56,8 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
   calls merge, push, or approval commands.
 - AC15: Signed webhooks require `WALTER_FORGEJO_WEBHOOK_REPOS`; events from
   repos outside the allowlist fail closed.
+- AC16: Signed webhooks require `WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS`; Plane
+  issue markers from comments by other authors are ignored.
 
 ## Trigger Wrapper
 
@@ -107,13 +109,19 @@ when the allowlist is missing or the payload repo is not listed. This prevents a
 org-level webhook or reused secret from moving Plane issues from an unexpected
 repository.
 
+Set `WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS` to a comma-separated allowlist of
+Forgejo/Gitea logins allowed to bind Plane issue markers. This should be the
+automation account used by `plane-pr-sync.sh link`, not a human contributor
+account. Markers written by other authors are ignored.
+
 After signature verification, only `pull_request.action == "closed"` with
 `pull_request.merged == true` is actionable. Closed-unmerged events are no-op.
 For merged events, the adapter fetches PR comments with `tea issues view` and
 requires exactly one distinct `walter-plane-issue:<id>` marker from comment
-bodies. Repeated copies of the same marker are accepted for webhook redelivery,
-but multiple distinct markers fail closed. PR title/body text is not a marker
-source and cannot spoof the issue binding.
+bodies by trusted authors. Repeated copies of the same marker are accepted for
+webhook redelivery, but multiple distinct markers fail closed. PR title/body
+text and comments by untrusted authors are not marker sources and cannot spoof
+the issue binding.
 
 For test fixtures or an n8n workflow that already fetched comments safely, pass
 `--comments-file "$COMMENTS_JSON"` to avoid a live `tea` call. The production
