@@ -121,13 +121,20 @@ require "yaml"
 
 path = ENV.fetch("FEATURE_STATE_PATH")
 
+def safe_load_state(raw)
+  YAML.safe_load(
+    raw,
+    permitted_classes: [],
+    permitted_symbols: [],
+    aliases: false
+  )
+rescue ArgumentError
+  YAML.safe_load(raw, [], [], false)
+end
+
 begin
   raw = File.read(path)
-  begin
-    state = YAML.safe_load(raw, aliases: false)
-  rescue ArgumentError
-    state = YAML.safe_load(raw)
-  end
+  state = safe_load_state(raw)
 rescue StandardError => e
   warn "feature-state: invalid: #{path}: #{e.message}"
   exit 1
@@ -347,14 +354,21 @@ end
 
 def load_state!(path)
   raw = File.read(path)
-  begin
-    YAML.safe_load(raw, aliases: false)
-  rescue ArgumentError
-    YAML.safe_load(raw)
-  end
+  safe_load_state(raw)
 rescue StandardError => e
   warn "feature-state: invalid: #{path}: #{e.message}"
   exit 1
+end
+
+def safe_load_state(raw)
+  YAML.safe_load(
+    raw,
+    permitted_classes: [],
+    permitted_symbols: [],
+    aliases: false
+  )
+rescue ArgumentError
+  YAML.safe_load(raw, [], [], false)
 end
 
 def validate_state!(path, state)

@@ -178,6 +178,32 @@ yaml_query() {
   [[ "$output" == *"feature-state: valid"* ]]
 }
 
+@test "validate rejects YAML aliases" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  cat >"$(ledger_path AD-2)" <<'YAML'
+schema_version: 1
+id: AD-2
+title: &title Persistent feature-state ledger
+issue: 227
+idea: *title
+brief: {}
+spec:
+  path: docs/specs/feature-state-ledger.md
+stage: idea
+acceptance_criteria: []
+tasks: []
+decisions: []
+risks: []
+prs: []
+post_merge: []
+YAML
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unknown alias"* || "$output" == *"aliases"* ]]
+}
+
 @test "validate rejects missing required fields" {
   bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
   ruby -ryaml -e '
@@ -206,6 +232,37 @@ yaml_query() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
   [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
+}
+
+@test "record-post-merge rejects YAML aliases before mutation" {
+  bash "$WALTER_OS_BIN" feature-state init AD-13 --repo "$TMP_DIR/repo" >/dev/null
+  cat >"$(ledger_path AD-13)" <<'YAML'
+schema_version: 1
+id: AD-13
+title: &title Post-merge health
+issue: 238
+idea: *title
+brief: {}
+spec:
+  path: docs/specs/autonomous-delivery-roadmap.md
+stage: idea
+acceptance_criteria: []
+tasks: []
+decisions: []
+risks: []
+prs: []
+post_merge: []
+YAML
+
+  run bash "$WALTER_OS_BIN" feature-state record-post-merge AD-13 \
+    --repo "$TMP_DIR/repo" \
+    --decision healthy \
+    --next-action no-action \
+    --commit abc123def456
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unknown alias"* || "$output" == *"aliases"* ]]
+  grep -q 'post_merge: \[\]' "$(ledger_path AD-13)"
 }
 
 @test "record-post-merge preserves task verification metadata" {
