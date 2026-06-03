@@ -64,7 +64,9 @@ those mutating steps stay out of this slice.
 
 When called with `--record-feature-state <id>`, the CLI appends the
 classification to `.walter/features/<id>/state.yaml` through
-`walter-os feature-state record-post-merge`. This records only bounded local
+`walter-os feature-state record-post-merge`. The ledger path is resolved from
+the current git repository by default, or from `--repo <dir>` when the caller
+needs to record state for a specific checkout. This records only bounded local
 state: `decision`, `next_action`, `merge_sha`, and `source`. It does not open
 fix PRs, execute rollback commands, or relax approval-gate hard limits.
 
