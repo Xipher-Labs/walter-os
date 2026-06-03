@@ -68,21 +68,23 @@ export async function GET(request: Request): Promise<Response> {
     litellmHeaders["Authorization"] = `Bearer ${apiKey}`;
   }
 
+  let res: Response;
   try {
-    const res = await fetch(
-      `${litellmUrl}/spend/tags?${params.toString()}`,
-      {
-        headers: litellmHeaders,
-        signal: AbortSignal.timeout(8000),
-      }
-    );
+    res = await fetch(`${litellmUrl}/spend/tags?${params.toString()}`, {
+      headers: litellmHeaders,
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    return fallbackSpendResponse(days);
+  }
 
-    if (!res.ok) {
-      // Return zero-rows for all known agents on LiteLLM error
-      // (allows the UI to render even when LiteLLM is down)
-      return fallbackSpendResponse(days);
-    }
+  if (!res.ok) {
+    // Return zero-rows for all known agents on LiteLLM error
+    // (allows the UI to render even when LiteLLM is down)
+    return fallbackSpendResponse(days);
+  }
 
+  try {
     // LiteLLM returns [{tag: "agent_id:coder", spend: 0.12, ...}, ...]
     // Normalize to our shape
     const raw = (await res.json()) as {
@@ -147,7 +149,10 @@ export async function GET(request: Request): Promise<Response> {
       .sort((a, b) => b.cost_usd - a.cost_usd);
 
     return Response.json({ agents, days, source: "litellm" });
-  } catch {
-    return fallbackSpendResponse(days);
+  } catch (err) {
+    return Response.json(
+      { error: "Failed to process spend data", detail: String(err) },
+      { status: 500 }
+    );
   }
 }

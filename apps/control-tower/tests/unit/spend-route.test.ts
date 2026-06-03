@@ -102,6 +102,22 @@ describe("GET /api/spend fallback behavior", () => {
 
     expect(fetchFailureBody).toEqual(nonOkBody);
   });
+
+  it("does not hide malformed successful LiteLLM responses behind fallback data", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("{", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+    const response = await GET(new Request("http://localhost/api/spend?days=7"));
+    const body = (await response.json()) as { error?: string; source?: string };
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe("Failed to process spend data");
+    expect(body.source).toBeUndefined();
+  });
 });
 
 describe("spend route.ts static analysis", () => {
