@@ -100,7 +100,7 @@ case "$cmd" in
     ;;
 
   validate)
-    walter_feature_state_validate_target "${1:-$(pwd)}"
+    walter_feature_state_validate_target "${1:-$(walter_feature_state_repo_root)}"
     ;;
 
   record-post-merge)

@@ -73,6 +73,17 @@ yaml_query() {
   [[ "$output" == *".walter/features/AD-2/state.yaml"* ]]
 }
 
+@test "validate defaults to the git repo root from nested directories" {
+  git -C "$TMP_DIR/repo" init -q
+  mkdir -p "$TMP_DIR/repo/nested/path"
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+
+  run bash -c "cd '$TMP_DIR/repo/nested/path' && '$WALTER_OS_BIN' feature-state validate"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *".walter/features/AD-2/state.yaml"* ]]
+}
+
 @test "init refuses to overwrite an existing ledger unless forced" {
   bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
 
