@@ -91,6 +91,16 @@ healthy_prs='[
   [[ "$output" == *"Decision: ready"* ]]
 }
 
+@test "AC2: fixture directory is rejected as usage error" {
+  local fixture="$TMP_DIR/fixture-dir"
+  mkdir -p "$fixture"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"fixture is not a regular file"* ]]
+}
+
 @test "AC3: version drift blocks release" {
   local fixture="$TMP_DIR/version-drift.json"
   write_fixture "$fixture" "0.6.0" '["0.6.1"]' '["v0.6.0"]' "$healthy_prs"

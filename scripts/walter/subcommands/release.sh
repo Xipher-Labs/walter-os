@@ -274,6 +274,7 @@ cmd_doctor() {
   local evidence_json
 
   if [[ -n "$fixture" ]]; then
+    [[ -f "$fixture" ]] || usage_error "fixture is not a regular file: $fixture"
     [[ -r "$fixture" ]] || usage_error "fixture is not readable: $fixture"
     evidence_json="$(cat -- "$fixture")"
   else
