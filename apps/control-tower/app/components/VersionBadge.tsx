@@ -40,9 +40,9 @@ export default function VersionBadge() {
   if (!version) return null;
 
   return (
-    <div className="flex items-center gap-2 text-xs font-mono">
+    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-mono">
       <span
-        className="text-zinc-400 dark:text-zinc-500"
+        className="shrink-0 text-zinc-400 dark:text-zinc-500"
         data-testid="version-label"
       >
         v{version}
@@ -54,7 +54,7 @@ export default function VersionBadge() {
             href={CHANGELOG_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+            className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-full
                        bg-amber-100 dark:bg-amber-900/40
                        text-amber-800 dark:text-amber-300
                        border border-amber-300 dark:border-amber-700
@@ -62,21 +62,31 @@ export default function VersionBadge() {
                        transition-colors"
             data-testid="update-badge"
           >
-            Update available: v{updateAvailable} → changelog
+            <span className="min-w-0 truncate sm:hidden">
+              Update: v{updateAvailable}
+            </span>
+            <span className="hidden sm:inline">
+              Update available: v{updateAvailable} → changelog
+            </span>
           </a>
         ) : (
           // Operator hasn't set NEXT_PUBLIC_WALTER_REPO_URL. Render the
           // text badge without a link so the user still sees the update
           // notice; no hardcoded URL leaks into the page.
           <span
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+            className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-full
                        bg-amber-100 dark:bg-amber-900/40
                        text-amber-800 dark:text-amber-300
                        border border-amber-300 dark:border-amber-700"
             data-testid="update-badge-no-link"
             title="Set NEXT_PUBLIC_WALTER_REPO_URL to enable the changelog link"
           >
-            Update available: v{updateAvailable}
+            <span className="min-w-0 truncate sm:hidden">
+              Update: v{updateAvailable}
+            </span>
+            <span className="hidden sm:inline">
+              Update available: v{updateAvailable}
+            </span>
           </span>
         )
       )}

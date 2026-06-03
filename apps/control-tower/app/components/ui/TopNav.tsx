@@ -58,7 +58,7 @@ export default function TopNav({
             );
           })}
           {showVersion && (
-            <span className="ml-1 border-l border-border pl-3 sm:ml-2">
+            <span className="ml-1 min-w-0 max-w-full border-l border-border pl-3 sm:ml-2">
               <VersionBadge />
             </span>
           )}

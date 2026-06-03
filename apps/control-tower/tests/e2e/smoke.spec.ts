@@ -140,6 +140,9 @@ test.describe("Control Tower smoke tests", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
+    await expect(
+      page.locator("[data-testid='update-badge'], [data-testid='update-badge-no-link']")
+    ).toBeVisible();
 
     const metrics = await page.evaluate(() => {
       const nav = document.querySelector("nav");
