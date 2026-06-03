@@ -111,6 +111,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$record_repo" && -z "$record_feature_id" ]]; then
+  echo "walter-os post-merge-check: --repo requires --record-feature-state" >&2
+  exit "$USAGE_ERROR_EXIT"
+fi
+
 require_jq
 
 if [[ -n "$fixture" && -n "$commit_ref" ]]; then
