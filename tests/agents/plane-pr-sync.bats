@@ -126,6 +126,18 @@ combined_output() {
   grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"
 }
 
+@test "AC1: Forgejo link comment stores stable Plane issue marker" {
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  grep -q 'walter-plane-issue:issue-uuid' "$CALL_LOG"
+}
+
 @test "AC1: Forgejo comments are idempotent" {
   export TEA_EXISTING_COMMENTS="[walter-pr-sync:acme/app#7:link] already posted"
 
@@ -186,6 +198,7 @@ combined_output() {
 
   [ "$status" -eq 0 ]
   grep -q 'walter-pr-sync:acme/app#7:merged' "$CALL_LOG"
+  grep -q 'walter-plane-issue:issue-uuid' "$CALL_LOG"
   grep -q 'abcdef123456' "$CALL_LOG"
   grep -q 'state-done' "$CALL_LOG"
 }

@@ -218,13 +218,13 @@ marker="[walter-pr-sync:${repo}#${pr_number}:${event}]"
 
 case "$event" in
   link)
-    comment="${marker} PR linked: ${pr_url} (branch: ${branch}). Requesting Plane issue move to review."
+    comment="${marker} [walter-plane-issue:${issue}] PR linked: ${pr_url} (branch: ${branch}). Requesting Plane issue move to review."
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "review"
     forgejo_comment_once "$marker" "$comment"
     ;;
   merged)
-    comment="${marker} PR merged: ${pr_url} at $(short_sha "$merge_sha"). Requesting Plane issue move to done."
+    comment="${marker} [walter-plane-issue:${issue}] PR merged: ${pr_url} at $(short_sha "$merge_sha"). Requesting Plane issue move to done."
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "done"
     forgejo_comment_once "$marker" "$comment"
