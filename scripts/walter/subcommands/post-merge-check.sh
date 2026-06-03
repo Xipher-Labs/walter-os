@@ -306,6 +306,11 @@ record_feature_state_if_requested() {
       done <<<"$output"
     fi
   } >&2
+
+  if [[ "$status" -eq "$USAGE_ERROR_EXIT" ]]; then
+    exit "$USAGE_ERROR_EXIT"
+  fi
+
   exit "$RUNTIME_ERROR_EXIT"
 }
 

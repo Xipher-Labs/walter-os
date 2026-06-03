@@ -185,6 +185,21 @@ write_fixture() {
   [[ "$output" == *".walter/features/AD-13/state.yaml"* ]]
 }
 
+@test "AD-13: invalid feature id remains a usage error" {
+  local fixture="$TMP_DIR/invalid-feature-id.json"
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci","status":"completed","conclusion":"success"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check \
+    --fixture "$fixture" \
+    --record-feature-state ../escape \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"invalid feature id"* ]]
+}
+
 @test "regression: comma-bearing run and alert names do not inflate counts" {
   local fixture="$TMP_DIR/comma-names.json"
   write_fixture \
