@@ -158,9 +158,14 @@ RECURSIVE_POLICY_KEYS = %w[
   approval_gate
   approval_overrides
   approval_policy
+  autonomy_mode
   auto_merge
+  capability_tier_ceiling
   hard_limit_overrides
+  human_approval_required_for
   permissions
+  preview_deploy
+  profile
 ].freeze
 
 def reject_policy_keys!(value, state_path, trail = [])
@@ -328,9 +333,14 @@ RECURSIVE_POLICY_KEYS = %w[
   approval_gate
   approval_overrides
   approval_policy
+  autonomy_mode
   auto_merge
+  capability_tier_ceiling
   hard_limit_overrides
+  human_approval_required_for
   permissions
+  preview_deploy
+  profile
 ].freeze
 
 def reject_policy_keys!(value, state_path, trail = [])
@@ -426,8 +436,8 @@ def validate_state!(path, state)
     exit 1
   end
 
-unless state["title"].is_a?(String) && state["idea"].is_a?(String) && (state["issue"].is_a?(String) || state["issue"].is_a?(Integer))
-  warn "feature-state: invalid: #{path}: title and idea must be strings; issue must be a string or integer"
+  unless state["title"].is_a?(String) && state["idea"].is_a?(String) && (state["issue"].is_a?(String) || state["issue"].is_a?(Integer))
+    warn "feature-state: invalid: #{path}: title and idea must be strings; issue must be a string or integer"
     exit 1
   end
 

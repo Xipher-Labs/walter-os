@@ -155,6 +155,23 @@ yaml_query() {
   [[ "$output" == *"state file cannot declare policy key: brief.auto_merge"* ]]
 }
 
+@test "validate rejects nested repo-config policy keys" {
+  bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["brief"]["autonomy_mode"] = "full"
+    state["tasks"] << {"id" => "T1", "profile" => "high-risk"}
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-2)"
+
+  run bash "$WALTER_OS_BIN" feature-state validate "$(ledger_path AD-2)"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$(ledger_path AD-2)"* ]]
+  [[ "$output" == *"state file cannot declare policy key: brief.autonomy_mode"* ]]
+}
+
 @test "validate rejects repo-config policy keys" {
   bash "$WALTER_OS_BIN" feature-state init AD-2 --repo "$TMP_DIR/repo" >/dev/null
   printf '\nautonomy_mode: full\n' >> "$(ledger_path AD-2)"
@@ -250,6 +267,26 @@ YAML
   [ "$status" -eq 1 ]
   [[ "$output" == *"$(ledger_path AD-13)"* ]]
   [[ "$output" == *"state file cannot declare policy key: hard_limit_overrides"* ]]
+  [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
+}
+
+@test "record-post-merge rejects nested repo-config policy keys" {
+  bash "$WALTER_OS_BIN" feature-state init AD-13 --repo "$TMP_DIR/repo" >/dev/null
+  ruby -ryaml -e '
+    path = ARGV[0]
+    state = YAML.safe_load(File.read(path))
+    state["tasks"] << {"id" => "T1", "profile" => "high-risk"}
+    File.write(path, state.to_yaml)
+  ' "$(ledger_path AD-13)"
+
+  run bash "$WALTER_OS_BIN" feature-state record-post-merge AD-13 \
+    --repo "$TMP_DIR/repo" \
+    --decision healthy \
+    --next-action no-action \
+    --commit abc123def456
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"state file cannot declare policy key: tasks.0.profile"* ]]
   [[ "$(yaml_query "$(ledger_path AD-13)" post_merge)" == "0" ]]
 }
 
