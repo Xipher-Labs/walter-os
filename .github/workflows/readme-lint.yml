@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "README.md"
+      - "CHANGELOG.md"
       - "tests/oss/**"
       - ".markdownlint.json"
       - "skills/**"
@@ -21,6 +22,7 @@ on:
   pull_request:
     paths:
       - "README.md"
+      - "CHANGELOG.md"
       - "tests/oss/**"
       - ".markdownlint.json"
       - "skills/**"
@@ -90,8 +92,8 @@ jobs:
       - name: Install markdownlint-cli
         run: npm install -g markdownlint-cli
 
-      - name: Run markdownlint on README.md
-        run: markdownlint --config .markdownlint.json README.md
+      - name: Run markdownlint on README.md and CHANGELOG.md
+        run: markdownlint --config .markdownlint.json README.md CHANGELOG.md
 
   readme-cross-links:
     name: Cross-link resolution belt-and-suspenders

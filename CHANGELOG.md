@@ -313,8 +313,8 @@ Fifteen merged PRs since v0.4.5 operationalise the OSS Trust roadmap filed in PR
 ## [0.4.5] — 2026-05-21
 
 **v0.4.4 follow-up batch + bash-5.2 compat fix.** Closes the four
-follow-up issues filed during the v0.4.4 cross-review cycle (#132 spec,
-#133, #134, #136), hardens the test scaffolding behind v0.4.4's escape
+follow-up issues filed during the v0.4.4 cross-review cycle (spec #132,
+issues #133, #134, #136), hardens the test scaffolding behind v0.4.4's escape
 helpers, and lands a real production-bug fix that the new tests caught.
 
 ### Added
@@ -372,7 +372,7 @@ helpers, and lands a real production-bug fix that the new tests caught.
   render coverage gap, canary-not-in-injected-payload, and the bash 5.2
   `patsub_replacement` find via CI itself.
 - Branch protection was relaxed twice during this cycle for the merges
-  + restored both times.
+  and restored both times.
 
 ### Related follow-up issues (still open)
 
@@ -425,8 +425,8 @@ classified, traced, and committed under that framework's discipline.
 - **`docs/operational/observability.md`** (PR #131 / F10): explicit
   per-service host-privileges table for the observability stack
   (prometheus, loki, promtail, node-exporter, cadvisor, grafana) with
-  caveats on docker.sock effective daemon control + `privileged: true`
-  + `/dev/kmsg` write.
+  caveats on docker.sock effective daemon control, `privileged: true`,
+  and `/dev/kmsg` write.
 - **install.sh argv-form helpers** (PR #128, closes #119): `run_args`
   replaces the eval-based `run` helper at 10 call sites; `run_sh` uses
   `printf | bash -s` (no inner eval); `write_file` uses `printf '%s\n'`
@@ -530,7 +530,7 @@ A–E layers + the P2 hardening epic.
   classifies `walter-os cap mint` as high-tier.
 - **`docs/specs/oss-trust-v0.5.0-small-batch.md`** (#89) — OSS
   Trust C-3 (pre-commit) + D-1 (GHSA) + E-3 (`@types/*` allowlist)
-  + E-4 (`justify revoke`).
+  and E-4 (`justify revoke`).
 - **`docs/specs/audit-chain-merkle-and-receipts.md`** (#90) — OSS
   Trust B-1 + B-2. Linear hash chain (NOT a Merkle tree despite
   the filename — historical shorthand) + per-row Ed25519
@@ -543,7 +543,7 @@ A–E layers + the P2 hardening epic.
   solo-operator setups.
 - **`docs/specs/process-isolation-sandbox.md`** (#92) — OSS Trust
   A-3. Per-OS sandbox wrappers (nsjail / sandbox-exec / firejail)
-  + uniform shim `scripts/walter/lib/sandbox.sh` + provider-
+  plus uniform shim `scripts/walter/lib/sandbox.sh` and provider-
   binary integrity baseline in daily-audit.
 - **`docs/specs/read-only-mounts.md`** (#93) — OSS Trust A-5.
   Invisible bind-mount of secret-bearing paths during high-tier
@@ -749,7 +749,7 @@ PRs #55–#59 and land as the bundle epic completes.)
   test `tests/oss/services-n8n-auth.bats` (5 tests) pins the
   invariant. The phrase "second factor" was misleading (this is not
   MFA, it's a second independent credential check); compose comments
-  + README + audit doc all switched to "second auth layer" / "defense-
+  plus README and audit doc all switched to "second auth layer" / "defense-
   in-depth layer" to avoid implying multi-factor.
 
 - **Audit P1-05 closed.** `hooks/approval-gate.sh` now hard-fails with
@@ -770,7 +770,7 @@ PRs #55–#59 and land as the bundle epic completes.)
   is consulted ONLY when `WALTER_AGENT_ALLOW_OVERRIDE=1` is set in
   the same shell, and also emits a WARN every invocation. Three new
   bats tests in `tests/hooks/approval-gate.bats` (P1-05 fail-closed
-  + two P1-06 lockdown cases) pin the behavior.
+  and two P1-06 lockdown cases) pin the behavior.
 
 - **Audit P1-07 closed.** External submodule hook scripts (the
   `external/**/hooks/scripts/*.{sh,py,js}` tree — bash, Python, and
@@ -822,6 +822,7 @@ PRs #55–#59 and land as the bundle epic completes.)
   `tests/oss/*.bats` allowlist back to the full `tests/oss/` glob,
   and added `tests/audit/` to the matrix (picks up the new P1-07
   external-hook-integrity bats test).
+
 ### Changed (build / release pipeline)
 
 - Consolidated `.github/workflows/release-security.yml` into
