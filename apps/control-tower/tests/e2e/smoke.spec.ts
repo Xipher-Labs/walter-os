@@ -158,7 +158,7 @@ test.describe("Control Tower smoke tests", () => {
         throw new Error("TopNav is missing from the dashboard.");
       }
       return {
-        viewportWidth: document.documentElement.clientWidth,
+        viewportWidth: window.innerWidth,
         docScrollWidth: document.documentElement.scrollWidth,
         navScrollWidth: nav.scrollWidth,
         navClientWidth: nav.clientWidth,
