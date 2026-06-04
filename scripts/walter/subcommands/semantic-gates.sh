@@ -22,8 +22,8 @@ abs_path() {
     (cd "$target" && pwd -P)
   else
     local dir base
-    dir="$(dirname "$target")"
-    base="$(basename "$target")"
+    dir="$(dirname -- "$target")"
+    base="$(basename -- "$target")"
     (cd "$dir" && printf '%s/%s\n' "$(pwd -P)" "$base")
   fi
 }
@@ -291,8 +291,23 @@ while [[ $# -gt 0 ]]; do
       print_help
       exit 0
       ;;
+    --)
+      shift
+      [[ $# -ge 1 ]] || usage_error "missing spec file"
+      if [[ -n "$spec_arg" ]]; then
+        usage_error "unexpected argument: $1"
+      fi
+      spec_arg="$1"
+      shift
+      [[ $# -eq 0 ]] || usage_error "unexpected argument: $1"
+      ;;
     -*)
-      usage_error "unknown option: $1"
+      if [[ -z "$spec_arg" && -f "$1" ]]; then
+        spec_arg="$1"
+        shift
+      else
+        usage_error "unknown option: $1"
+      fi
       ;;
     *)
       if [[ -n "$spec_arg" ]]; then
@@ -320,7 +335,14 @@ else
   repo_dir="$(abs_path "$repo_arg")"
 fi
 
-tests_dir="${tests_arg:-${repo_dir}/tests}"
+if [[ -z "$tests_arg" ]]; then
+  tests_dir="${repo_dir}/tests"
+else
+  case "$tests_arg" in
+    /*) tests_dir="$tests_arg" ;;
+    *) tests_dir="${repo_dir}/${tests_arg}" ;;
+  esac
+fi
 tests_dir="$(abs_path "$tests_dir" 2>/dev/null || printf '%s\n' "$tests_dir")"
 
 spec_rel="$spec_file"

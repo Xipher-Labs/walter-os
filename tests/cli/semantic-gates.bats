@@ -191,6 +191,41 @@ BATS
   [[ "$output" == *"tests/cli/dash-spec.bats"* ]]
 }
 
+@test "semantic-gates accepts dash-prefixed relative specs" {
+  write_valid_spec
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md" "$TMP_DIR/repo/-dash-spec.md"
+  cat > "$TMP_DIR/repo/tests/cli/dash-spec.bats" <<'BATS'
+#!/usr/bin/env bats
+# Refs: -dash-spec.md
+BATS
+  cd "$TMP_DIR/repo"
+
+  run "$WALTER_OS_BIN" semantic-gates -dash-spec.md --repo .
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"test-relevance: pass"* ]]
+  [[ "$output" == *"tests/cli/dash-spec.bats"* ]]
+
+  run "$WALTER_OS_BIN" semantic-gates --repo . -- -dash-spec.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"test-relevance: pass"* ]]
+  [[ "$output" == *"tests/cli/dash-spec.bats"* ]]
+}
+
+@test "semantic-gates resolves relative custom test dirs from repo root" {
+  write_valid_spec
+  write_referencing_test
+  cd "$TMP_DIR"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo" --tests-dir tests/cli
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"test-relevance: pass"* ]]
+  [[ "$output" == *"tests/cli/example-feature.bats"* ]]
+}
+
 @test "semantic-gates fails when architecture review section is empty" {
   cat > "$TMP_DIR/repo/docs/specs/example-feature.md" <<'MARKDOWN'
 # Example feature - spec
