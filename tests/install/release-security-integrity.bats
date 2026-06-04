@@ -19,6 +19,8 @@ setup() {
 
 @test "release workflow header documents release security and provenance jobs" {
   grep -Fq '# Three jobs run in sequence:' "$WORKFLOW"
+  grep -Fq "#   1. \`release\`" "$WORKFLOW"
+  grep -Fq "#   2. \`security\`" "$WORKFLOW"
   grep -Fq "#   3. \`provenance\`" "$WORKFLOW"
 }
 
