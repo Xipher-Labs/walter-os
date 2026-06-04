@@ -478,9 +478,8 @@ check_tool_definitions() {
   #   - command / args changed → HIGH (different binary or version)
   #   - trust level changed → MEDIUM
   #
-  # Phase 2 (follow-up, not in this MVP): connect to each running MCP via
-  # stdio JSON-RPC, listTools, snapshot {name, schema, description} per
-  # tool, diff against baseline. Requires walter-os to ship an MCP client.
+  # The runtime stdio tools/list drift check runs after the static registry
+  # comparison so registry drift cannot mask tool-definition drift.
   # Registry path resolution (Copilot R3 #129): prefer the explicit
   # WALTER_OS_HOME env var, then walk up from the script's own location
   # (handles `audit.sh` run from a non-default checkout), then fall back
