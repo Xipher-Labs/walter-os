@@ -790,6 +790,10 @@ walter_audit_verify_chain_from_loki_live() {
       return 2
       ;;
   esac
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "walter-audit-chain: curl required for live Loki verification" >&2
+    return 3
+  fi
 
   timeout="${WALTER_AUDIT_LOKI_TIMEOUT_SECONDS:-10}"
   _walter_audit_loki_positive_int "$timeout" "WALTER_AUDIT_LOKI_TIMEOUT_SECONDS" || return $?

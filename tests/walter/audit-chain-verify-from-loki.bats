@@ -210,6 +210,18 @@ SH
   [[ "$output" == *"choose either --mock-loki or --loki-url"* ]]
 }
 
+@test "live Loki verification reports missing curl explicitly" {
+  mkdir -p "$TMP_HOME/no-curl-bin"
+
+  run env \
+    PATH="$TMP_HOME/no-curl-bin" \
+    WALTER_AUDIT_LOKI_URL="http://loki.example:3100" \
+    "$BASH" -c "source '$AUDIT_LIB'; walter_audit_verify_chain_from_loki_live 2026-06-04"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"curl required for live Loki verification"* ]]
+}
+
 @test "verify-chain --from-loki reports live Loki authentication failures" {
   _make_chain
   _make_loki_fixture
