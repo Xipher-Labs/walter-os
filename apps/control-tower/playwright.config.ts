@@ -4,6 +4,7 @@ const controlTowerE2EToken =
   process.env.CONTROL_TOWER_ADMIN_TOKEN ?? "control-tower-e2e-token";
 const webServerPort = process.env.PORT ?? "3000";
 const baseURL = process.env.BASE_URL ?? `http://localhost:${webServerPort}`;
+const litellmMockPort = process.env.LITELLM_MOCK_PORT ?? "4010";
 
 /**
  * Playwright config for Control Tower E2E smoke tests.
@@ -36,6 +37,9 @@ export default defineConfig({
     ? undefined
     : {
         command:
+          "node tests/e2e/mock-litellm.mjs & " +
+          "mock_litellm_pid=$!; " +
+          "trap 'kill $mock_litellm_pid 2>/dev/null || true' EXIT; " +
           "rm -rf .next/standalone/apps/control-tower/.next/static .next/standalone/apps/control-tower/public && " +
           "mkdir -p .next/standalone/apps/control-tower/.next && " +
           "cp -R .next/static .next/standalone/apps/control-tower/.next/static && " +
@@ -53,6 +57,9 @@ export default defineConfig({
           WALTER_COUNCIL_DATA_DIR: "/tmp/test-council-data",
           WALTER_COUNCIL_LOG_DIR: "/tmp/test-council-logs",
           WALTER_CONFIG_DIR: "/tmp/test-walter-config",
+          LITELLM_MOCK_PORT: litellmMockPort,
+          LITELLM_BASE_URL: `http://127.0.0.1:${litellmMockPort}`,
+          LITELLM_API_KEY: "control-tower-e2e-key",
         },
       },
 

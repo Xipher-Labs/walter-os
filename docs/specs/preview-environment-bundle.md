@@ -16,6 +16,8 @@ artifact format for preview evidence.
   existing preview URL.
 - Package an existing preview URL, seed manifest, and screenshots into a
   local report bundle with deterministic layout and artifact hashes.
+- Surface local preview plans, screenshots, and report bundles in Control Tower
+  so the operator can see review readiness without reading `.walter/` by hand.
 - Fail closed unless `walter-repo-config.yaml` explicitly enables
   `preview_deploy: true`.
 - Reject secret-like artifacts so production secrets are not copied into preview
@@ -57,6 +59,13 @@ URLs, requires a safe screenshot name, rejects overwrites, and emits artifact
 JSON when `--json` is passed. It captures an existing preview URL only; it does
 not deploy, auto-install packages, or mint credentials.
 
+Control Tower exposes read-only preview evidence through
+`GET /api/preview-evidence`. The route reads `WALTER_PREVIEW_ROOT` when
+configured and otherwise defaults to the repository `.walter/previews`
+directory. The dashboard shows each `preview-pr-<number>` directory as
+`Bundle ready`, `Dry-run plan`, `Screenshot only`, or `Needs attention`,
+preserving the same safety invariants as PR Score.
+
 `walter-os preview plan --dry-run` writes:
 
 ```text
@@ -92,6 +101,8 @@ opt-in per repo.
   providers, or with secret-like seed artifacts.
 - AC8: `walter-os preview capture` writes a screenshot artifact for an existing
   HTTP(S) preview URL and refuses unsafe names, missing `npx`, and overwrites.
+- AC9: Control Tower reads preview evidence without deploying or minting
+  credentials and renders complete, planned, partial, and invalid states.
 
 ## Related
 

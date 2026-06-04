@@ -1,0 +1,17 @@
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { resolvePreviewRoot } from "../../app/api/preview-evidence/route";
+
+describe("preview evidence route", () => {
+  it("uses WALTER_PREVIEW_ROOT when the operator configures one", () => {
+    expect(
+      resolvePreviewRoot("/repo/apps/control-tower", "../previews")
+    ).toBe(resolve("/repo/apps/previews"));
+  });
+
+  it("defaults to the repository .walter previews directory", () => {
+    expect(resolvePreviewRoot("/repo/apps/control-tower", undefined)).toBe(
+      resolve("/repo/.walter/previews")
+    );
+  });
+});

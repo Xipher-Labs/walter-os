@@ -5,6 +5,7 @@ import CostDashboard from "@/app/components/CostDashboard";
 import HAStatus from "@/app/components/HAStatus";
 import AlertFeed from "@/app/components/AlertFeed";
 import ModeIndicator from "@/app/components/ModeIndicator";
+import PreviewEvidencePanel from "@/app/components/PreviewEvidencePanel";
 import TopNav from "@/app/components/ui/TopNav";
 
 /**
@@ -59,6 +60,11 @@ export default function DashboardPage() {
           </div>
           <div className="md:col-span-1 xl:col-span-7">
             <CostDashboard />
+          </div>
+
+          {/* Review readiness: per-PR preview plans, captures, and bundles. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <PreviewEvidencePanel />
           </div>
 
           {/* Tall feed: decision timeline. */}
