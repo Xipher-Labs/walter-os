@@ -495,7 +495,7 @@ SH
 
   [ "$status" -eq 2 ]
   [[ "$output" == *"invalid root hash"* ]]
-  [ ! -s "$(_chain_path)" ]
+  [ ! -e "$(_chain_path)" ]
 }
 
 @test "B-1: append preserves caller RETURN traps" {

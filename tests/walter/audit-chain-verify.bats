@@ -456,12 +456,14 @@ SH
   _make_chain
   original_root="$(cat "$(_root_path)")"
   printf '%064d' 0 > "$(_root_path)"
+  tampered_root="$(cat "$(_root_path)")"
 
   run bash "$WALTER_OS_BIN" audit close-day 2026-05-31
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"root hash mismatch"* ]]
-  [ "$(cat "$(_root_path)")" != "$original_root" ]
+  [ "$tampered_root" != "$original_root" ]
+  [ "$(cat "$(_root_path)")" = "$tampered_root" ]
 }
 
 @test "B-2: close-day fails when final row cannot be read" {
