@@ -534,11 +534,13 @@ walter_repo_config_verification_plan() {
     return 1
   fi
 
-  local config_path verification path path_risk="low" effective_risk hard_floor="no" ui_change="no"
+  local config_path verification policy_status path path_risk="low" effective_risk hard_floor="no" ui_change="no"
   config_path="$(walter_repo_config_path "$target")"
   verification="risk_based"
+  policy_status="defaulted_missing"
   if [[ -f "$config_path" ]]; then
     verification="$(yq e '.verification // "risk_based"' "$config_path" 2>/dev/null || printf 'risk_based')"
+    policy_status="configured"
   fi
 
   for path in "${paths[@]}"; do
@@ -567,6 +569,7 @@ walter_repo_config_verification_plan() {
 
   printf 'repo-config: verification plan\n'
   printf 'policy: %s\n' "$config_path"
+  printf 'policy_status: %s\n' "$policy_status"
   printf 'verification: %s\n' "$verification"
   printf 'input_risk: %s\n' "$input_risk"
   printf 'path_risk: %s\n' "$path_risk"
