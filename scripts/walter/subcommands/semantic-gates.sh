@@ -135,7 +135,7 @@ check_spec_completeness() {
 check_ac_testability() {
   local ac_body ac_lines weak_lines observable_pattern
   ac_body="$(section_body "^(Acceptance criteria|Acceptance Criteria)")"
-  ac_lines="$(printf '%s\n' "$ac_body" | grep -Ei '^[[:space:]]*[-*][[:space:]]+\[[ xX]?\][[:space:]]*(AC-[0-9]+|[A-Z]+-[0-9]+|[A-Za-z0-9 _/-]+:)' || true)"
+  ac_lines="$(printf '%s\n' "$ac_body" | grep -Ei '^[[:space:]]*[-*][[:space:]]+\[[ xX]?\][[:space:]]+.+$' || true)"
 
   if [[ -z "$ac_lines" ]]; then
     add_failure "ac-testability" "missing checkbox AC bullets"

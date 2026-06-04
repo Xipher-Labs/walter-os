@@ -253,6 +253,37 @@ GO
   [[ "$output" == *"ac-testability: pass"* ]]
 }
 
+@test "semantic-gates accepts unlabeled checkbox acceptance criteria" {
+  write_valid_spec
+  write_referencing_test
+  awk '
+    /^## Acceptance criteria$/ {
+      print
+      print ""
+      print "- [ ] bats tests/cli/semantic-gates.bats exits 0."
+      print "- [ ] JSON output validates with jq."
+      skip = 1
+      next
+    }
+    skip && /^## Test plan$/ {
+      skip = 0
+      print ""
+      print
+      next
+    }
+    !skip { print }
+  ' "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    > "$TMP_DIR/repo/docs/specs/example-feature.md.tmp"
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md.tmp" \
+    "$TMP_DIR/repo/docs/specs/example-feature.md"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ac-testability: pass"* ]]
+}
+
 @test "semantic-gates rejects repo directories outside the spec path" {
   write_valid_spec
   write_referencing_test
