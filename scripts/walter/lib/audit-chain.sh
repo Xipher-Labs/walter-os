@@ -162,14 +162,18 @@ _walter_audit_session_state_file() {
 }
 
 _walter_audit_current_session_id() {
-  local state_file session_id
+  local state_file session_id from_state=0
   if [[ -n "${WALTER_SESSION_ID:-}" ]]; then
     session_id="$WALTER_SESSION_ID"
   else
+    from_state=1
     state_file="$(_walter_audit_session_state_file)" || return 1
     [[ -f "$state_file" ]] || return 1
     if _walter_audit_jq_available; then
-      session_id="$(jq -r '.session_id // empty' "$state_file" 2>/dev/null || true)"
+      session_id="$(jq -er 'if (.session_id | type) == "string" then .session_id else empty end' "$state_file" 2>/dev/null)" || {
+        echo "walter-audit-chain: invalid session state: $state_file" >&2
+        return 4
+      }
     else
       _walter_audit_require_python3 || return 3
       session_id="$(python3 - "$state_file" 2>/dev/null <<'PY'
@@ -183,16 +187,23 @@ except (OSError, json.JSONDecodeError):
     raise SystemExit(1)
 
 session_id = state.get("session_id", "")
-if isinstance(session_id, str):
-    print(session_id, end="")
+if not isinstance(session_id, str) or not session_id:
+    raise SystemExit(1)
+print(session_id, end="")
 PY
 )" || {
         echo "walter-audit-chain: invalid session state: $state_file" >&2
-        return 1
+        return 4
       }
     fi
   fi
-  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  if [[ ! "$session_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    if [[ "$from_state" -eq 1 ]]; then
+      echo "walter-audit-chain: invalid session state: $state_file" >&2
+      return 4
+    fi
+    return 1
+  fi
   printf '%s' "$session_id"
 }
 
@@ -261,6 +272,7 @@ _walter_audit_sign_row() {
     session_status="$?"
     if [[ "$session_status" -ne 0 ]]; then
       [[ "$session_status" -eq 3 ]] && return 3
+      [[ "$session_status" -eq 4 ]] && return 1
       echo "walter-audit-chain: active session id required for signed audit row" >&2
       return 2
     fi
@@ -611,7 +623,7 @@ _walter_audit_verify_row_signature() {
     return 1
   }
   if [[ -z "$sig" ]]; then
-    echo "walter-audit-chain: row ${row_number}: missing sig" >&2
+    echo "walter-audit-chain: row ${row_number}: missing sig (legacy unsigned audit chain; rotate or start a fresh chain for this date before enforcing signed verification)" >&2
     return 1
   fi
   if [[ ! "$sig" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
@@ -842,6 +854,7 @@ walter_audit_append() {
     exec 9>&-
     _walter_audit_release_lock "$lock_path"
     [[ "$session_status" -eq 3 ]] && return 3
+    [[ "$session_status" -eq 4 ]] && return 1
     echo "walter-audit-chain: active session id required for signed audit row" >&2
     return 2
   fi

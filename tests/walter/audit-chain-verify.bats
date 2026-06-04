@@ -198,6 +198,20 @@ _resign_row() {
   [[ "$output" == *"row 1: invalid sig format"* ]]
 }
 
+@test "B-2: unsigned legacy rows report rotation guidance" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)" | jq -cS 'del(.sig)')"
+  second="$(sed -n '2p' "$(_chain_path)")"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 1: missing sig"* ]]
+  [[ "$output" == *"legacy unsigned audit chain"* ]]
+  [[ "$output" == *"rotate"* ]]
+}
+
 @test "B-2: missing public key fails with row number" {
   _make_chain
   rm -f "$(_public_key_path)"
@@ -222,23 +236,24 @@ _resign_row() {
 
 @test "B-2: verifier caches ED25519-capable openssl probe" {
   _make_chain
+  openssl_bin="$(bash -c "source '$SESSION_LIB'; _walter_session_openssl")"
   counter="$TMP_HOME/openssl-probe-count"
 
   run bash -c "
     source '$AUDIT_LIB'
     counter='$counter'
-    _walter_session_openssl_supports_ed25519() {
+    _walter_session_openssl() {
       current=0
       [[ -f \"\$counter\" ]] && current=\"\$(cat \"\$counter\")\"
       printf '%s' \"\$((current + 1))\" > \"\$counter\"
-      command \"\$1\" genpkey -algorithm ED25519 >/dev/null 2>&1
+      printf '%s' '$openssl_bin'
     }
     walter_audit_verify_chain 2026-05-31 >/dev/null
-    printf 'probe_count=%s' \"\$(cat \"\$counter\")\"
+    printf 'resolver_count=%s' \"\$(cat \"\$counter\")\"
   "
 
   [ "$status" -eq 0 ]
-  [ "$output" = "probe_count=1" ]
+  [ "$output" = "resolver_count=1" ]
 }
 
 @test "B-2: verifier fails closed when temp directory creation fails" {
