@@ -183,6 +183,34 @@ teardown() {
   [ "$status" -eq 2 ]
 }
 
+@test "audit helper discovery handles relative audit.sh source paths" {
+  RELATIVE_RUNNER="$TMP_HOME/relative-helper-discovery.sh"
+  cat > "$RELATIVE_RUNNER" <<'RUNNER'
+#!/usr/bin/env bash
+set -euo pipefail
+unset WALTER_OS_HOME
+cd "$REPO_ROOT"
+source skills/daily-supply-chain-audit/scripts/audit.sh
+_mcp_tool_snapshot_helper
+RUNNER
+  chmod +x "$RELATIVE_RUNNER"
+
+  run env REPO_ROOT="$REPO_ROOT" HOME="$HOME" WALTER_CONFIG="$WALTER_CONFIG" \
+    CLAUDE_HOME="$CLAUDE_HOME" bash "$RELATIVE_RUNNER"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs" ]
+}
+
+@test "runtime snapshot remediation commands keep approved registry gate" {
+  run bash -c "grep -n 'Run: node \\$helper --settings \\$settings' '$AUDIT' | grep -v -- '--approved-registry'"
+  [ "$status" -eq 1 ]
+}
+
+@test "audit path fallbacks do not expand empty WALTER_OS_HOME to root" {
+  run grep -n '\${WALTER_OS_HOME:-}/' "$AUDIT"
+  [ "$status" -eq 1 ]
+}
+
 @test "unchanged stdio tool definitions emit no finding after baseline" {
   "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
 
@@ -378,6 +406,9 @@ JS
   run jq -s 'map(select(.severity == "high" and .id == "mcp-tool-probe-errors")) | length' "$AUDIT_FINDINGS"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
+  run jq -r 'select(.severity == "high" and .id == "mcp-tool-probe-errors") | .action' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--approved-registry"* ]]
 }
 
 @test "disabled approved stdio MCP is not executed by tool probe" {

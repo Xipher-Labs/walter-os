@@ -372,7 +372,9 @@ check_mcp_scanners() {
 # registry drift and stdio tools/list drift for approved default-profile MCPs.)
 
 _mcp_tool_snapshot_helper() {
-  local script_root="${BASH_SOURCE[0]%/skills/*}"
+  local script_dir script_root
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_root="${script_dir%/skills/daily-supply-chain-audit/scripts}"
   local -a candidates=()
   if [[ -n "${WALTER_OS_HOME:-}" ]]; then
     candidates+=("${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs")
@@ -431,7 +433,7 @@ check_mcp_runtime_tool_definitions() {
     rm -f "$snapshot_tmp"
     finding high "mcp-tool-snapshot-failed" \
       "Failed to snapshot stdio MCP tool definitions from $settings" \
-      "Run: node $helper --settings $settings"
+      "Run: node $helper --settings $settings --approved-registry $server_baseline"
     return 0
   fi
 
@@ -440,7 +442,7 @@ check_mcp_runtime_tool_definitions() {
   if [[ "$error_count" -gt 0 ]]; then
     finding high "mcp-tool-probe-errors" \
       "MCP tool snapshot reported $error_count stdio probe error(s)" \
-      "Run: node $helper --settings $settings | jq '.errors'"
+      "Run: node $helper --settings $settings --approved-registry $server_baseline | jq '.errors'"
   fi
 
   local current_servers
@@ -448,7 +450,7 @@ check_mcp_runtime_tool_definitions() {
     rm -f "$snapshot_tmp"
     finding high "mcp-tool-snapshot-unparseable" \
       "MCP tool snapshot helper returned invalid JSON" \
-      "Run: node $helper --settings $settings"
+      "Run: node $helper --settings $settings --approved-registry $server_baseline"
     return 0
   fi
 
@@ -487,11 +489,18 @@ check_tool_definitions() {
   # file, emit an INFO finding rather than silently returning — a
   # missing registry should be visible in the audit report.
   local registry=""
-  local script_root="${BASH_SOURCE[0]%/skills/*}"
-  for candidate in \
-      "${WALTER_OS_HOME:-}/mcp/servers.json" \
-      "${script_root}/mcp/servers.json" \
-      "${HOME}/walter-os/mcp/servers.json"; do
+  local script_dir script_root
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_root="${script_dir%/skills/daily-supply-chain-audit/scripts}"
+  local -a registry_candidates=()
+  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
+    registry_candidates+=("${WALTER_OS_HOME}/mcp/servers.json")
+  fi
+  registry_candidates+=(
+    "${script_root}/mcp/servers.json"
+    "${HOME}/walter-os/mcp/servers.json"
+  )
+  for candidate in "${registry_candidates[@]}"; do
     if [[ -n "$candidate" && -f "$candidate" ]]; then
       registry="$candidate"
       break
