@@ -16,18 +16,28 @@ if [[ -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" ]]; then
 elif ! declare -p WALTER_PROTECTED_PATH_PATTERNS >/dev/null 2>&1; then
   declare -a WALTER_PROTECTED_PATH_PATTERNS=(
     'hooks/*.sh'
+    '.claude/settings.json'
     '.github/workflows/*'
     'install.sh'
     'bin/walter-os'
     'AGENTS.md'
     'CLAUDE.md'
     'mcp/servers.json'
+    'scripts/walter/lib/capability-token.sh'
+    'scripts/walter/lib/skill-cap-loader.sh'
+    'scripts/walter/lib/session-state.sh'
+    'scripts/walter/lib/protected-paths.sh'
+    'scripts/walter/subcommands/cap.sh'
+    'agents/*.md'
+    'skills/*/SKILL.md'
     'auth/*'
     'crypto/*'
     'personal/health/*'
     '*.key'
     '*.pem'
     '*.crt'
+    '.ssh/*'
+    '*/.ssh/*'
     '*.env'
     '*.env.*'
   )
@@ -169,8 +179,8 @@ _walter_repo_config_path_is_hard_floor() {
     done
   fi
 
-  case "$path" in
-    *migration*)
+  case "$normalized" in
+    migrations/*|*/migrations/*)
       return 0
       ;;
   esac
