@@ -145,6 +145,16 @@ SH
   [[ "$output" == *"no audit-chain rows found"* ]]
 }
 
+@test "verify-chain --from-loki rejects path-traversal dates" {
+  _make_chain
+  _make_loki_fixture
+
+  run bash "$WALTER_OS_BIN" audit verify-chain --from-loki --mock-loki "$(_fixture_path)" "../../bad"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid Loki date"* ]]
+}
+
 @test "verify-chain --from-loki requires a live Loki URL when no fixture is provided" {
   run bash "$WALTER_OS_BIN" audit verify-chain --from-loki 2026-06-04
 
@@ -173,6 +183,27 @@ SH
   grep -q '/loki/api/v1/query_range' "$(_curl_args_path)"
   grep -q '{app="walter-os", kind="audit-chain"}' "$(_curl_args_path)"
   grep -q 'Authorization: Bearer super-secret-token' "$(_curl_args_path)"
+}
+
+@test "verify-chain --from-loki computes live range without python3" {
+  _make_chain
+  _make_loki_fixture
+  _write_mock_curl
+  cat > "$TMP_HOME/bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$TMP_HOME/bin/python3"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_LOKI_FIXTURE="$(_fixture_path)" \
+    WALTER_AUDIT_LOKI_URL="http://loki.example:3100" \
+    bash "$WALTER_OS_BIN" audit verify-chain --from-loki 2026-06-04
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"from live Loki"* ]]
 }
 
 @test "verify-chain --from-loki accepts an explicit Loki URL" {
