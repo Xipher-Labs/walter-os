@@ -39,8 +39,8 @@ Map the AD-1 delivery roles onto the existing Council lanes and subagents:
 | Product | Clarify intent, user value, non-goals, and acceptance criteria. | `triage`, orchestrator, `agents/architect.md` |
 | Architect | Produce approach, tradeoffs, risks, and specs. | `researcher`, `agents/architect.md` |
 | Builder | Implement the approved plan with strict TDD. | `coder`, `agents/implementer.md` |
-| Tester | Prove acceptance criteria, edge cases, and regression coverage. | `coder`, DoD validator |
-| Security | Check egress, secrets, auth, supply chain, and hard-limit paths. | `security-auditor` |
+| Tester | Prove acceptance criteria, edge cases, and regression coverage. | `coder`, `definition-of-done-validator` |
+| Security | Check egress, secrets, auth, supply chain, and hard-limit paths. | `agents/security-auditor.md` |
 | Reviewer | Review diff against spec and Definition of Done. | `reviewer`, `agents/reviewer.md` |
 | Release | Prepare changelog, version notes, rollback notes, and release checks. | `liaison`, release tooling |
 
