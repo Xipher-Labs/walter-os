@@ -388,6 +388,23 @@ SH
   fi
 }
 
+@test "B-2: signing reports missing python3 as dependency failure" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$TMP_HOME/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
+  if [[ -f "$(_chain_path)" ]]; then
+    [ ! -s "$(_chain_path)" ]
+  fi
+}
+
 @test "B-2: signing failure reports an actionable error" {
   private_key="$(jq -r '.capability_private_key_path' "$state_file")"
   printf '%s' 'not-a-private-key' > "$private_key"

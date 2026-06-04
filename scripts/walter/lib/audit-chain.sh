@@ -255,7 +255,7 @@ PY
 
 _walter_audit_sign_row() {
   local row_json="$1" session_id="${2:-}" session_status private_key openssl_bin tmp_dir payload_file sig_file sig
-  _walter_audit_require_python3 || return 1
+  _walter_audit_require_python3 || return 3
   if [[ -z "$session_id" ]]; then
     session_id="$(_walter_audit_current_session_id)"
     session_status="$?"
