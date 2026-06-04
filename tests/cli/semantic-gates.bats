@@ -64,14 +64,16 @@ MARKDOWN
 }
 
 write_referencing_test() {
-  cat > "$TMP_DIR/repo/tests/cli/example-feature.bats" <<'BATS'
+  local fixture="$TMP_DIR/repo/tests/cli/example-feature.bats"
+  cat > "$fixture" <<'BATS'
 #!/usr/bin/env bats
 # Refs: docs/specs/example-feature.md
 
-@test "AC-1: example feature has test evidence" {
-  true
-}
 BATS
+  printf '%s\n' \
+    '@test "AC-1: example feature has test evidence" {' \
+    '  true' \
+    '}' >> "$fixture"
 }
 
 remove_acceptance_criteria() {
@@ -201,6 +203,8 @@ MARKDOWN
   write_valid_spec
   cat > "$TMP_DIR/repo/tests/cli/example_feature_test.go" <<'GO'
 package example
+
+import "testing"
 
 // Refs: docs/specs/example-feature.md
 func TestExampleFeature(t *testing.T) {}
