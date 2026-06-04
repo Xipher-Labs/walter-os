@@ -128,6 +128,10 @@ sandbox + egress + rollback can raise to `supervised_autonomy`; branch
 protection + history can raise to `bounded_autonomy` only for low-risk,
 non-hard-floor changes.
 
+`coverage` is accepted as recorded evidence for operators and future scoring,
+but it is not a promotion rule by itself in this planner. Submitting only
+`--evidence coverage` does not raise the computed `evidence_tier`.
+
 Hard-floor paths still cap effective capability at `assisted` and require a
 human gate even when all evidence is present. Production deploys, secrets,
 protected branch merges, schema migrations, destructive operations, auth,
