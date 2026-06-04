@@ -646,18 +646,51 @@ _walter_audit_remove_loki_tmp() {
   esac
 }
 
-walter_audit_verify_chain_from_loki_fixture() {
-  [[ "$#" -ge 1 && "$#" -le 2 ]] || {
-    echo "walter-audit-chain: usage: walter_audit_verify_chain_from_loki_fixture <fixture> [date]" >&2
+_walter_audit_trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
+}
+
+_walter_audit_loki_positive_int() {
+  local value="$1" label="$2"
+  if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "walter-audit-chain: ${label} must be a positive integer" >&2
+    return 2
+  fi
+}
+
+_walter_audit_loki_range_ns() {
+  local date_value="$1"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "walter-audit-chain: python3 required for Loki date range calculation" >&2
+    return 3
+  fi
+  python3 - "$date_value" <<'PY'
+from datetime import datetime, timedelta, timezone
+import sys
+
+date_value = sys.argv[1]
+try:
+    start = datetime.strptime(date_value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+except ValueError:
+    print(f"walter-audit-chain: invalid Loki date: {date_value}", file=sys.stderr)
+    sys.exit(2)
+end = start + timedelta(days=1)
+print(int(start.timestamp() * 1_000_000_000))
+print(int(end.timestamp() * 1_000_000_000))
+PY
+}
+
+_walter_audit_verify_chain_from_loki_response() {
+  [[ "$#" -eq 4 ]] || {
+    echo "walter-audit-chain: usage: _walter_audit_verify_chain_from_loki_response <response> <date> <source-label> <success-label>" >&2
     return 2
   }
-  local fixture="$1" date_value="${2:-$(walter_audit_date)}"
+  local response_file="$1" date_value="$2" source_label="$3" success_label="$4"
   local tmp_config tmp_audit values_count previous_line root_hash verify_status
 
-  if [[ ! -f "$fixture" ]]; then
-    echo "walter-audit-chain: Loki fixture not found: $fixture" >&2
-    return 1
-  fi
   if ! _walter_audit_jq_available; then
     echo "walter-audit-chain: jq required" >&2
     return 3
@@ -670,26 +703,26 @@ walter_audit_verify_chain_from_loki_fixture() {
     return 1
   }
 
-  values_count="$(jq '[.data.result[]?.values[]?] | length' "$fixture" 2>/dev/null)" || {
+  values_count="$(jq '[.data.result[]?.values[]?] | length' "$response_file" 2>/dev/null)" || {
     _walter_audit_remove_loki_tmp "$tmp_config"
-    echo "walter-audit-chain: invalid Loki fixture JSON: $fixture" >&2
+    echo "walter-audit-chain: invalid Loki response JSON: $source_label" >&2
     return 1
   }
   if [[ "$values_count" -eq 0 ]]; then
     _walter_audit_remove_loki_tmp "$tmp_config"
-    echo "walter-audit-chain: no audit-chain rows found in Loki fixture: $fixture" >&2
+    echo "walter-audit-chain: no audit-chain rows found in Loki response: $source_label" >&2
     return 1
   fi
 
   jq -r '[.data.result[]?.values[]?] | sort_by(.[0]) | .[][1]' \
-    "$fixture" > "${tmp_audit}/chain-${date_value}.jsonl" || {
+    "$response_file" > "${tmp_audit}/chain-${date_value}.jsonl" || {
       _walter_audit_remove_loki_tmp "$tmp_config"
-      echo "walter-audit-chain: failed to extract Loki fixture rows: $fixture" >&2
+      echo "walter-audit-chain: failed to extract Loki response rows: $source_label" >&2
       return 1
     }
   if [[ ! -s "${tmp_audit}/chain-${date_value}.jsonl" ]]; then
     _walter_audit_remove_loki_tmp "$tmp_config"
-    echo "walter-audit-chain: no audit-chain rows found in Loki fixture: $fixture" >&2
+    echo "walter-audit-chain: no audit-chain rows found in Loki response: $source_label" >&2
     return 1
   fi
 
@@ -705,5 +738,111 @@ walter_audit_verify_chain_from_loki_fixture() {
   _walter_audit_remove_loki_tmp "$tmp_config"
   [[ "$verify_status" -eq 0 ]] || return "$verify_status"
 
-  printf 'ok: verified from Loki fixture: %s\n' "$fixture"
+  printf 'ok: verified %s\n' "$success_label"
+}
+
+walter_audit_verify_chain_from_loki_fixture() {
+  [[ "$#" -ge 1 && "$#" -le 2 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_chain_from_loki_fixture <fixture> [date]" >&2
+    return 2
+  }
+  local fixture="$1" date_value="${2:-$(walter_audit_date)}"
+
+  if [[ ! -f "$fixture" ]]; then
+    echo "walter-audit-chain: Loki fixture not found: $fixture" >&2
+    return 1
+  fi
+  _walter_audit_verify_chain_from_loki_response \
+    "$fixture" \
+    "$date_value" \
+    "Loki fixture: $fixture" \
+    "from Loki fixture: $fixture"
+}
+
+walter_audit_verify_chain_from_loki_live() {
+  [[ "$#" -le 2 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_chain_from_loki_live [date] [url]" >&2
+    return 2
+  }
+  local date_value="${1:-$(walter_audit_date)}" configured_url="${2:-${WALTER_AUDIT_LOKI_URL:-}}"
+  local loki_url endpoint token timeout limit query range_ns start_ns end_ns tmp_response tmp_error http_status curl_status verify_status errexit_was_set=0
+  local -a curl_args
+
+  loki_url="$(_walter_audit_trim "$configured_url")"
+  if [[ -z "$loki_url" ]]; then
+    echo "walter-audit-chain: WALTER_AUDIT_LOKI_URL required for live Loki verification" >&2
+    return 2
+  fi
+  case "$loki_url" in
+    http://*|https://*) ;;
+    *)
+      echo "walter-audit-chain: WALTER_AUDIT_LOKI_URL must start with http:// or https://" >&2
+      return 2
+      ;;
+  esac
+
+  timeout="${WALTER_AUDIT_LOKI_TIMEOUT_SECONDS:-10}"
+  _walter_audit_loki_positive_int "$timeout" "WALTER_AUDIT_LOKI_TIMEOUT_SECONDS" || return $?
+  if [[ "$timeout" -gt 300 ]]; then
+    echo "walter-audit-chain: WALTER_AUDIT_LOKI_TIMEOUT_SECONDS must be <= 300" >&2
+    return 2
+  fi
+
+  limit="${WALTER_AUDIT_LOKI_LIMIT:-5000}"
+  _walter_audit_loki_positive_int "$limit" "WALTER_AUDIT_LOKI_LIMIT" || return $?
+
+  range_ns="$(_walter_audit_loki_range_ns "$date_value")" || return $?
+  start_ns="$(printf '%s\n' "$range_ns" | sed -n '1p')"
+  end_ns="$(printf '%s\n' "$range_ns" | sed -n '2p')"
+  query="${WALTER_AUDIT_LOKI_QUERY:-{app=\"walter-os\", kind=\"audit-chain\"}}"
+  token="${WALTER_AUDIT_LOKI_TOKEN:-}"
+  endpoint="${loki_url%/}/loki/api/v1/query_range"
+
+  tmp_response="$(mktemp "${TMPDIR:-/tmp}/walter-audit-loki-response.XXXXXX")" || return 1
+  tmp_error="$(mktemp "${TMPDIR:-/tmp}/walter-audit-loki-error.XXXXXX")" || {
+    rm -f "$tmp_response"
+    return 1
+  }
+
+  curl_args=(-sS -o "$tmp_response" -w "%{http_code}" --connect-timeout "$timeout" --max-time "$timeout")
+  if [[ -n "$token" ]]; then
+    curl_args+=(-H "Authorization: Bearer $token")
+  fi
+  curl_args+=(--get "$endpoint" --data-urlencode "query=$query" --data-urlencode "start=$start_ns" --data-urlencode "end=$end_ns" --data-urlencode "limit=$limit")
+
+  case "$-" in
+    *e*)
+      errexit_was_set=1
+      set +e
+      ;;
+  esac
+  http_status="$(curl "${curl_args[@]}" 2>"$tmp_error")"
+  curl_status="$?"
+  if [[ "$errexit_was_set" -eq 1 ]]; then
+    set -e
+  fi
+  if [[ "$curl_status" -ne 0 ]]; then
+    rm -f "$tmp_response" "$tmp_error"
+    echo "walter-audit-chain: unable to query Loki (curl exit ${curl_status}); check WALTER_AUDIT_LOKI_URL and network reachability" >&2
+    return 1
+  fi
+  if [[ "$http_status" == "401" || "$http_status" == "403" ]]; then
+    rm -f "$tmp_response" "$tmp_error"
+    echo "walter-audit-chain: Loki authentication failed (HTTP ${http_status}); check WALTER_AUDIT_LOKI_TOKEN" >&2
+    return 1
+  fi
+  if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+    rm -f "$tmp_response" "$tmp_error"
+    echo "walter-audit-chain: Loki query failed (HTTP ${http_status})" >&2
+    return 1
+  fi
+
+  _walter_audit_verify_chain_from_loki_response \
+    "$tmp_response" \
+    "$date_value" \
+    "live Loki response" \
+    "from live Loki"
+  verify_status="$?"
+  rm -f "$tmp_response" "$tmp_error"
+  return "$verify_status"
 }

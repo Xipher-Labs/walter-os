@@ -43,6 +43,7 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
 ## Acceptance criteria
 
 ### AC-1 — Promtail tail config
+
 - [ ] `setup/walter-host/services/observability/promtail/walter-audit-tail.yml` (new):
   - `__path__: /var/log/walter-audit/chain-*.jsonl` (operator bind-mounts `~/.config/walter-os/audit/` to `/var/log/walter-audit/` in their docker-compose overlay)
   - Adds labels: `host`, `app: walter-os`, `kind: audit-chain`
@@ -50,6 +51,7 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
 - [ ] `setup/walter-host/services/observability/promtail/compose.yml.example` — operator instructions for mounting the audit chain dir.
 
 ### AC-2 — Grafana dashboard JSON
+
 - [ ] `setup/walter-host/services/observability/grafana/provisioning/dashboards/walter-audit.json` (matches the existing dashboard-provisioning layout — `walter-council.json` lives in the same dir):
   - Tool-call rate: `rate({app="walter-os", kind="audit-chain"}[5m])`
   - Block rate by `decision_source`:
@@ -74,22 +76,33 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
 - [ ] Dashboard auto-provisioned by Grafana's `provisioning/dashboards/` directory (already wired in the existing stack).
 
 ### AC-3 — `walter-os audit verify-chain --from-loki <range>`
-- [ ] New flag on the existing `verify-chain` command.
-- [ ] Queries Loki for the given range (defaults to last 24h), reconstructs the chain in memory.
-- [ ] Same prev_hash + sig verification as the local path.
-- [ ] Fails with helpful error if Loki is unreachable OR returns truncated data (e.g. retention dropped some rows).
-- [ ] bats coverage in `tests/walter/audit-chain-verify-from-loki.bats` (uses a Loki mock or `--mock-loki <fixture>` flag).
+
+- [x] New flag on the existing `verify-chain` command.
+- [x] Queries Loki for a given audit day, reconstructs the returned rows in
+  a temporary local audit directory, and removes the temporary files after
+  verification.
+- [x] Same `prev_hash` + row-hash verification as the local path.
+- [x] Fails with helpful error if Loki is unreachable, returns
+  authentication failures, returns malformed JSON, or returns no audit rows.
+- [x] bats coverage in `tests/walter/audit-chain-verify-from-loki.bats`
+  uses both a Loki fixture and a mocked live `curl` path.
+- [ ] Cross-checks a live Loki range against an externally anchored root or
+  receipt so tail truncation can be detected even when the returned prefix
+  is internally consistent.
 
 ### AC-4 — Operator opt-out
+
 - [ ] When `WALTER_AUDIT_LOKI_DISABLE=1` is set in `personal.env`, Promtail config does NOT tail the audit chain (tail rule is conditional on the env var).
 - [ ] Existing rows already shipped stay in Loki; opt-out only blocks future shipping.
 - [ ] `walter-os audit status` shows whether Loki shipping is active.
 
 ### AC-5 — Retention configuration
+
 - [ ] Loki config (`setup/walter-host/services/observability/loki/loki.yml` — actual filename in the repo; earlier draft of this spec used the non-existent `loki-config.yml`) gains a labeled retention stanza for `app=walter-os, kind=audit-chain` using `WALTER_AUDIT_LOKI_RETENTION_DAYS` env var (default 30).
 - [ ] Documented in `docs/operational/audit-telemetry.md`.
 
 ### AC-6 — Documentation + CHANGELOG
+
 - [ ] `docs/operational/audit-telemetry.md` (new):
   - Setup steps for the bind-mount
   - Default dashboard tour
