@@ -218,6 +218,10 @@ add_finding() {
 
 read_json_evidence() {
   local label="$1" path="$2"
+  if [[ -L "$path" ]]; then
+    echo "walter-os pr-score: ${label} is a symlink: $path" >&2
+    exit 2
+  fi
   if [[ ! -f "$path" || ! -r "$path" ]]; then
     echo "walter-os pr-score: ${label} is not readable: $path" >&2
     exit 2

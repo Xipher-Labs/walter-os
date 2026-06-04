@@ -459,6 +459,24 @@ write_preview_plan() {
   echo "$output" | jq -e '.findings | index("invalid preview plan")'
 }
 
+@test "AC4: preview evidence paths reject symlinks" {
+  local fixture="$TMP_DIR/symlink-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  local report_link="$TMP_DIR/preview-report-link.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+  ln -s "$report" "$report_link"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report_link" --json
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"preview report is a symlink"* ]]
+}
+
 @test "AC4: issue references may use a colon after keyword" {
   local fixture="$TMP_DIR/colon-ref.json"
   write_fixture \
