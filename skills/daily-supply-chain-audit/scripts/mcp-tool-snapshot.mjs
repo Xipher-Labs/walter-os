@@ -333,6 +333,9 @@ function parseSseText(text) {
       data.push(rawLine.slice("data:".length).trimStart());
     }
   }
+  if (data.length > 0) {
+    events.push({ event: eventName, data: data.join("\n") });
+  }
   return events;
 }
 
@@ -391,7 +394,7 @@ async function probeHttpServer(name, config, timeoutMs) {
       ...config.headers,
     };
     if (sessionId) headers["mcp-session-id"] = sessionId;
-    await fetchWithTimeout(
+    const response = await fetchWithTimeout(
       config.url,
       {
         method: "POST",
@@ -400,6 +403,11 @@ async function probeHttpServer(name, config, timeoutMs) {
       },
       timeoutMs,
     );
+    if (!response.ok) {
+      throw new Error(`${name} ${method} notification failed with HTTP ${response.status}`);
+    }
+    const responseSession = response.headers.get("mcp-session-id");
+    if (responseSession) sessionId = responseSession;
   }
 
   await sendRequest("initialize", {

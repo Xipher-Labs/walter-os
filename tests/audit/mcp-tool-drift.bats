@@ -166,6 +166,33 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/mcp-http-sse-final") {
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (!Object.prototype.hasOwnProperty.call(request, "id")) {
+        res.writeHead(202).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: rpcResult(request) })}`);
+    });
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/mcp-http-bad-notification") {
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (!Object.prototype.hasOwnProperty.call(request, "id")) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "notification failed" }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: rpcResult(request) }));
+    });
+    return;
+  }
+
   if (req.method === "GET" && req.url === "/sse") {
     const sessionId = String(Math.random()).slice(2);
     res.writeHead(200, {
@@ -505,6 +532,50 @@ JSON
   [ "$output" -eq 0 ]
   run grep -q "tampered-token" "$AUDIT_FINDINGS"
   [ "$status" -ne 0 ]
+}
+
+@test "HTTP MCP accepts final SSE event without trailing blank line" {
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-sse-final" '
+    .mcpServers.remote_http_sse_final = {
+      "type": "http",
+      "url": $url
+    }
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/http-sse-final-settings.json" && \
+    mv "$TMP_HOME/http-sse-final-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-sse-final" '
+    .servers.remote_http_sse_final = {
+      "type": "http",
+      "url": $url,
+      "contexts": ["all"],
+      "trust": "test-fixture",
+      "load": "default"
+    }
+  ' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/http-sse-final-registry.json" && \
+    mv "$TMP_HOME/http-sse-final-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  run jq -r '.servers.remote_http_sse_final.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "remote_lookup" ]
+}
+
+@test "HTTP MCP notification failures produce probe errors" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-bad-notification" '
+    .mcpServers.remote_http.url = $url
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/http-bad-notification-settings.json" && \
+    mv "$TMP_HOME/http-bad-notification-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-bad-notification" '
+    .remote_http.url = $url
+  ' "$WALTER_CONFIG/mcp-server-snapshots.json" > "$TMP_HOME/http-bad-notification-baseline.json" && \
+    mv "$TMP_HOME/http-bad-notification-baseline.json" "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-tool-probe-errors")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
 }
 
 @test "changed remote MCP tool description triggers critical mcp-tool-shadowing" {
