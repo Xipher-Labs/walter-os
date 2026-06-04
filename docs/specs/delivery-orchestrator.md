@@ -27,8 +27,9 @@ the persistent pipeline state.
 ## Acceptance Criteria
 
 - [AC-1] Role map: the agent maps Product, Architect, Builder, Tester,
-  Security, Reviewer, and Release to the existing triage, researcher, coder,
-  reviewer, janitor, liaison, and specialized subagent surfaces.
+  Security, Reviewer, and Release to the orchestrator coordination surface,
+  existing triage, researcher, coder, reviewer, janitor, liaison lanes, and
+  specialized subagent surfaces.
 - [AC-2] No execution authority: the agent contract explicitly says it does
   not write code, review its own diffs, merge PRs, or deploy.
 - [AC-3] Fail-closed gates: missing, ambiguous, unreadable, or contradictory
