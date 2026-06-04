@@ -610,6 +610,8 @@ check_tool_definitions() {
         "REVIEW: diff <(jq '.\"$name\"' $baseline) <(jq '.servers.\"$name\"' $registry). If safe: walter-os baseline-mcp-tools"
     fi
   done < <(comm -12 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
+
+  check_mcp_runtime_tool_definitions
 }
 
 # ---------- 6. Minimum release age check ----------

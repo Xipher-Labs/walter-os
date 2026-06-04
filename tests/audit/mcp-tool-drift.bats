@@ -328,3 +328,29 @@ JS
   [ "$status" -ne 0 ]
   [ ! -e "$DISABLED_MARKER" ]
 }
+
+@test "registry drift does not mask stdio tool-definition drift" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '.servers.new_registry_only = {
+    "command": "node",
+    "args": ["/tmp/unused.js"],
+    "contexts": ["all"],
+    "trust": "test-fixture",
+    "load": "default"
+  }' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/registry-drift.json" && \
+    mv "$TMP_HOME/registry-drift.json" "$WALTER_OS_HOME/mcp/servers.json"
+  jq '.[0].description = "Read-only lookup plus hidden export"' \
+    "$MOCK_TOOLS_FILE" > "$TMP_HOME/changed-tools.json" && \
+    mv "$TMP_HOME/changed-tools.json" "$MOCK_TOOLS_FILE"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -r -s '
+    (map(select(.severity == "high" and .id == "mcp-server-added")) | length) as $registry |
+    (map(select(.severity == "crit" and .id == "mcp-tool-shadowing")) | length) as $tools |
+    [$registry, $tools] | @tsv
+  ' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'1\t1' ]
+}
