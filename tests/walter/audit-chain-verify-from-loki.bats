@@ -99,6 +99,7 @@ case "${WALTER_TEST_CURL_MODE:-success}" in
     printf '200'
     ;;
   unreachable)
+    printf 'curl: (7) Failed to connect to loki.example port 3100\n' >&2
     exit 7
     ;;
   *)
@@ -149,6 +150,7 @@ SH
 
   [ "$status" -eq 2 ]
   [[ "$output" == *"WALTER_AUDIT_LOKI_URL"* ]]
+  [[ "$output" == *"--loki-url"* ]]
 }
 
 @test "verify-chain --from-loki queries live Loki without leaking the token" {
@@ -187,6 +189,15 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"from live Loki"* ]]
   grep -q 'http://loki.example:3100/loki/api/v1/query_range' "$(_curl_args_path)"
+}
+
+@test "verify-chain --from-loki rejects invalid explicit Loki URLs" {
+  run bash "$WALTER_OS_BIN" audit verify-chain --from-loki --loki-url "loki.example:3100" 2026-06-04
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"WALTER_AUDIT_LOKI_URL"* ]]
+  [[ "$output" == *"--loki-url"* ]]
+  [[ "$output" == *"must start with http:// or https://"* ]]
 }
 
 @test "verify-chain --from-loki rejects fixture and live URL together" {
@@ -235,6 +246,7 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"unable to query Loki"* ]]
   [[ "$output" == *"curl exit 7"* ]]
+  [[ "$output" == *"curl stderr: curl: (7) Failed to connect to loki.example port 3100"* ]]
 }
 
 @test "verify-chain --from-loki rejects malformed live Loki responses" {

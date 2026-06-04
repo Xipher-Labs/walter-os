@@ -41,8 +41,11 @@ quarterly upgrade cadence (`skills/quarterly-upgrade-cadence`).
   `{app="walter-os", kind="audit-chain"}`). Keep these values out of
   shared logs if they include private hostnames or query selectors. For
   offline review, export a Loki `/loki/api/v1/query_range` response and
-  use `walter-os audit verify-chain --from-loki --mock-loki <fixture>
-  [date]`.
+  run:
+
+  ```bash
+  walter-os audit verify-chain --from-loki --mock-loki <fixture> [date]
+  ```
 - **node-exporter + cadvisor can read your entire filesystem.** Read-only, but anything readable to `root` on the host is readable inside the container. Don't co-host secrets the host's `root` shouldn't see with the observability profile.
 - **cadvisor is `privileged: true`.** A container escape from cadvisor would be a host compromise. This is an accepted risk in exchange for accurate container metrics — but it's the strongest argument for keeping the observability stack on a dedicated host or carefully-isolated VM.
 - **Promtail's Docker socket access is effectively full daemon control.** The `:ro` flag on a Unix-socket bind-mount restricts the bind, not the API — any process inside the container that can `connect()` to `/var/run/docker.sock` can issue any Docker API call (including `containers/create`, `containers/exec`, host-path mounts on new containers, `system/prune`). A promtail compromise = a host compromise via the Docker daemon. Treat the promtail container as if it were a full admin tool.

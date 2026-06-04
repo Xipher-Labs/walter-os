@@ -662,6 +662,12 @@ _walter_audit_loki_positive_int() {
   return 0
 }
 
+_walter_audit_loki_stderr_snippet() {
+  local path="$1"
+  [[ -s "$path" ]] || return 0
+  sed -n 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; /^[[:space:]]*$/d; p; q' "$path"
+}
+
 _walter_audit_loki_range_ns() {
   local date_value="$1"
   if ! command -v python3 >/dev/null 2>&1; then
@@ -774,13 +780,13 @@ walter_audit_verify_chain_from_loki_live() {
 
   loki_url="$(_walter_audit_trim "$configured_url")"
   if [[ -z "$loki_url" ]]; then
-    echo "walter-audit-chain: WALTER_AUDIT_LOKI_URL required for live Loki verification" >&2
+    echo "walter-audit-chain: live Loki URL required; set WALTER_AUDIT_LOKI_URL or pass --loki-url" >&2
     return 2
   fi
   case "$loki_url" in
     http://*|https://*) ;;
     *)
-      echo "walter-audit-chain: WALTER_AUDIT_LOKI_URL must start with http:// or https://" >&2
+      echo "walter-audit-chain: live Loki URL from WALTER_AUDIT_LOKI_URL or --loki-url must start with http:// or https://" >&2
       return 2
       ;;
   esac
@@ -826,8 +832,13 @@ walter_audit_verify_chain_from_loki_live() {
     set -e
   fi
   if [[ "$curl_status" -ne 0 ]]; then
+    local stderr_snippet
+    stderr_snippet="$(_walter_audit_loki_stderr_snippet "$tmp_error")"
     rm -f "$tmp_response" "$tmp_error"
-    echo "walter-audit-chain: unable to query Loki (curl exit ${curl_status}); check WALTER_AUDIT_LOKI_URL and network reachability" >&2
+    echo "walter-audit-chain: unable to query Loki (curl exit ${curl_status}); check WALTER_AUDIT_LOKI_URL/--loki-url and network reachability" >&2
+    if [[ -n "$stderr_snippet" ]]; then
+      echo "walter-audit-chain: curl stderr: $stderr_snippet" >&2
+    fi
     return 1
   fi
   if [[ "$http_status" == "401" || "$http_status" == "403" ]]; then
