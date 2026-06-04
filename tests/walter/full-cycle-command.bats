@@ -45,5 +45,6 @@ COMMAND_FILE="${REPO_ROOT}/commands/full-cycle.md"
 }
 
 @test "full-cycle command does not authorize protected-branch merge commands" {
+  [[ -f "$COMMAND_FILE" ]]
   ! grep -Eq 'gh pr merge|git push origin (main|master|staging|production)' "$COMMAND_FILE"
 }
