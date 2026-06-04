@@ -497,10 +497,19 @@ cmd_baseline_mcp_tools() {
   n="$(jq 'length' "$baseline")"
   echo "✓ MCP server snapshot refreshed ($n servers): $baseline"
 
-  local helper="${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  local cli_root helper=""
+  cli_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  for candidate in \
+      "${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs" \
+      "${cli_root}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"; do
+    if [[ -f "$candidate" ]]; then
+      helper="$candidate"
+      break
+    fi
+  done
   local settings="$CLAUDE_SETTINGS"
   local tool_baseline="${WALTER_CONFIG}/mcp-tool-snapshots.json"
-  if [[ ! -f "$settings" || ! -f "$helper" ]]; then
+  if [[ ! -f "$settings" || -z "$helper" ]]; then
     return 0
   fi
   if ! command -v node >/dev/null 2>&1; then
@@ -510,7 +519,7 @@ cmd_baseline_mcp_tools() {
 
   mkdir -p "$(dirname "$tool_baseline")"
   local tool_tmp; tool_tmp="$(mktemp "${tool_baseline}.tmp.XXXXXX")"
-  if node "$helper" --settings "$settings" > "$tool_tmp"; then
+  if node "$helper" --settings "$settings" --approved-registry "$baseline" > "$tool_tmp"; then
     local tool_errors
     if ! tool_errors="$(jq '.errors // {} | length' "$tool_tmp" 2>/dev/null)"; then
       rm -f "$tool_tmp" "${tool_tmp}.sorted"

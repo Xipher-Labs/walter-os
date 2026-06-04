@@ -15,12 +15,15 @@ const DEFAULT_TIMEOUT_MS = Number.parseInt(
 const PROTOCOL_VERSION = "2025-11-25";
 
 function usage() {
-  console.error("Usage: mcp-tool-snapshot.mjs [--settings <path>] [--timeout-ms <ms>]");
+  console.error(
+    "Usage: mcp-tool-snapshot.mjs [--settings <path>] [--approved-registry <path>] [--timeout-ms <ms>]",
+  );
 }
 
 function parseArgs(argv) {
   const args = {
     settings: path.join(os.homedir(), ".claude", "settings.json"),
+    approvedRegistry: "",
     timeoutMs: Number.isFinite(DEFAULT_TIMEOUT_MS) ? DEFAULT_TIMEOUT_MS : 5000,
   };
 
@@ -28,6 +31,9 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === "--settings") {
       args.settings = argv[i + 1];
+      i += 1;
+    } else if (arg === "--approved-registry") {
+      args.approvedRegistry = argv[i + 1];
       i += 1;
     } else if (arg === "--timeout-ms") {
       args.timeoutMs = Number.parseInt(argv[i + 1], 10);
@@ -91,19 +97,47 @@ function expandEnv(envConfig) {
   return expanded;
 }
 
-function stdioServers(settings) {
+function launchConfig(config) {
+  return {
+    command: config.command,
+    args: Array.isArray(config.args) ? config.args.map(expandEnvString) : [],
+    env: expandEnv(config.env || {}),
+  };
+}
+
+function sameLaunchConfig(left, right) {
+  return JSON.stringify(sortJson(left)) === JSON.stringify(sortJson(right));
+}
+
+function stdioServers(settings, approvedRegistry) {
   const mcpServers = settings.mcpServers || {};
-  return Object.entries(mcpServers)
-    .filter(([, config]) => config && config.disabled !== true)
-    .filter(([, config]) => typeof config.command === "string" && config.command.length > 0)
-    .map(([name, config]) => [
-      name,
-      {
-        command: config.command,
-        args: Array.isArray(config.args) ? config.args.map(expandEnvString) : [],
-        env: expandEnv(config.env || {}),
-      },
-    ]);
+  const entries = [];
+  const denied = {};
+
+  for (const [name, config] of Object.entries(mcpServers)) {
+    if (!config || config.disabled === true) continue;
+    if (typeof config.command !== "string" || config.command.length === 0) continue;
+
+    const runtimeLaunch = launchConfig(config);
+    if (approvedRegistry) {
+      const approved = approvedRegistry[name];
+      if (!approved) {
+        denied[name] = { message: "stdio MCP is not present in approved server registry baseline" };
+        continue;
+      }
+      const approvedLaunch = launchConfig(approved);
+      if (!sameLaunchConfig(runtimeLaunch, approvedLaunch)) {
+        denied[name] = {
+          message: "runtime command, args, or env do not match approved server registry baseline",
+        };
+        continue;
+      }
+    }
+
+    entries.push([name, runtimeLaunch]);
+  }
+
+  return { entries, denied };
 }
 
 function withTimeout(promise, timeoutMs, onTimeout) {
@@ -236,6 +270,9 @@ async function probeServer(name, config, timeoutMs) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const settings = JSON.parse(fs.readFileSync(args.settings, "utf8"));
+  const approvedRegistry = args.approvedRegistry
+    ? JSON.parse(fs.readFileSync(args.approvedRegistry, "utf8"))
+    : null;
   const result = {
     version: 1,
     source: args.settings,
@@ -245,7 +282,8 @@ async function main() {
     skipped: {},
   };
 
-  const entries = stdioServers(settings);
+  const { entries, denied } = stdioServers(settings, approvedRegistry);
+  result.errors = denied;
   const configured = settings.mcpServers || {};
   for (const [name, config] of Object.entries(configured)) {
     if (config && (config.type === "http" || config.type === "sse")) {

@@ -77,8 +77,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
   persists approved tool baselines via `walter-os baseline-mcp-tools`, and
   emits critical `mcp-tool-shadowing` findings when tool names,
-  descriptions, or schemas change. HTTP/SSE transports remain out of scope
-  for this first runtime slice.
+  descriptions, or schemas change. Probes are gated against the approved
+  server-registry baseline before any MCP command is spawned. HTTP/SSE
+  transports remain out of scope for this first runtime slice.
 
 ### Changed
 

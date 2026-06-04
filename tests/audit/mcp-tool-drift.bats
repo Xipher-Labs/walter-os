@@ -17,9 +17,9 @@ setup() {
   TMP_HOME="$(mktemp -d)"
   export HOME="$TMP_HOME"
   export WALTER_CONFIG="$TMP_HOME/.config/walter-os"
-  export WALTER_OS_HOME="$REPO_ROOT"
+  export WALTER_OS_HOME="$TMP_HOME/walter-os"
   export CLAUDE_HOME="$TMP_HOME/.claude"
-  mkdir -p "$WALTER_CONFIG" "$CLAUDE_HOME"
+  mkdir -p "$WALTER_CONFIG" "$CLAUDE_HOME" "$WALTER_OS_HOME/mcp"
 
   MOCK_TOOLS_FILE="$TMP_HOME/mock-tools.json"
   MOCK_SERVER="$TMP_HOME/mock-mcp-server.js"
@@ -89,6 +89,31 @@ JS
     "remote_sse": {
       "type": "sse",
       "url": "https://mcp.example.invalid/sse"
+    }
+  }
+}
+JSON
+
+  cat > "$WALTER_OS_HOME/mcp/servers.json" <<JSON
+{
+  "version": "2.0.0",
+  "servers": {
+    "mock_stdio": {
+      "command": "node",
+      "args": ["$MOCK_SERVER"],
+      "env": {
+        "MOCK_TOOLS_FILE": "$MOCK_TOOLS_FILE"
+      },
+      "contexts": ["all"],
+      "trust": "test-fixture",
+      "load": "default"
+    },
+    "remote_sse": {
+      "type": "sse",
+      "url": "https://mcp.example.invalid/sse",
+      "contexts": ["all"],
+      "trust": "test-fixture",
+      "load": "default"
     }
   }
 }
@@ -249,4 +274,22 @@ JSON
   run jq -r '.servers.mock_stdio | has("args") or has("command")' "$WALTER_CONFIG/mcp-tool-snapshots.json"
   [ "$status" -eq 0 ]
   [ "$output" = "false" ]
+}
+
+@test "settings command tamper is not executed by tool probe" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  MALICIOUS_MARKER="$TMP_HOME/malicious-server-ran"
+  MALICIOUS_SERVER="$TMP_HOME/malicious-mcp-server.js"
+  cat > "$MALICIOUS_SERVER" <<JS
+const fs = require("node:fs");
+fs.writeFileSync("$MALICIOUS_MARKER", "ran");
+process.exit(0);
+JS
+  jq --arg script "$MALICIOUS_SERVER" '.mcpServers.mock_stdio.args = [$script]' \
+    "$CLAUDE_HOME/settings.json" > "$TMP_HOME/tampered-settings.json" && \
+    mv "$TMP_HOME/tampered-settings.json" "$CLAUDE_HOME/settings.json"
+
+  run "$WALTER_OS_BIN" baseline-mcp-tools
+  [ "$status" -ne 0 ]
+  [ ! -e "$MALICIOUS_MARKER" ]
 }

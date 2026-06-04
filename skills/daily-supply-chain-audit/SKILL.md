@@ -31,8 +31,10 @@ ongoing).
    `~/.claude/settings.json` are probed via `tools/list` and compared against
    the operator-approved baseline in
    `~/.config/walter-os/mcp-tool-snapshots.json`. Mutation = potential
-   tool-name shadowing attack = block. HTTP/SSE MCPs remain covered by static
-   server-registry drift until a transport-specific probe lands.
+   tool-name shadowing attack = block. The probe only executes stdio MCPs whose
+   `command`, `args`, and `env` match the approved server-registry baseline.
+   HTTP/SSE MCPs remain covered by static server-registry drift until a
+   transport-specific probe lands.
 7. **Pinned versions** — every MCP package reference in runtime config
    (`~/.claude/settings.json` → `.mcpServers`) must be pinned. The audit
    enforces these exact forms:

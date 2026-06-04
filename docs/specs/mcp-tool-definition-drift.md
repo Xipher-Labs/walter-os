@@ -38,6 +38,9 @@ MCP probing needs JSON-RPC request/response coordination and process timeouts.
 The helper uses only Node built-ins, spawns each configured stdio server without
 a shell, sends JSON-RPC messages over stdin, reads newline-delimited responses,
 normalizes tool objects with sorted keys, and prints deterministic JSON.
+To avoid turning the audit itself into an execution vector, the helper refuses
+to spawn a runtime MCP unless its `command`, `args`, and `env` match the
+approved `mcp-server-snapshots.json` baseline.
 
 `walter-os baseline-mcp-tools` keeps its existing registry baseline behavior and
 also writes the approved tool snapshot when Claude settings are present. The
@@ -57,6 +60,7 @@ tool snapshot with the approved tool baseline.
 - [ ] AC5: HTTP/SSE MCP entries are skipped by this Phase 2A probe rather than
   failing the audit.
 - [ ] AC6: probe failures are reported without rewriting the approved baseline.
+- [ ] AC7: a tampered runtime MCP command is reported but not executed.
 
 ## Verification
 

@@ -407,7 +407,16 @@ check_mcp_runtime_tool_definitions() {
 
   local baseline="${WALTER_CONFIG}/mcp-tool-snapshots.json"
   local snapshot_tmp; snapshot_tmp="$(mktemp "${baseline}.current.XXXXXX")"
-  if ! node "$helper" --settings "$settings" > "$snapshot_tmp"; then
+  local server_baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
+  if [[ ! -f "$server_baseline" ]]; then
+    rm -f "$snapshot_tmp"
+    finding high "mcp-server-baseline-missing" \
+      "MCP server registry baseline missing; refusing to execute stdio MCP probes" \
+      "Run: walter-os baseline-mcp-tools after reviewing mcp/servers.json"
+    return 0
+  fi
+
+  if ! node "$helper" --settings "$settings" --approved-registry "$server_baseline" > "$snapshot_tmp"; then
     rm -f "$snapshot_tmp"
     finding high "mcp-tool-snapshot-failed" \
       "Failed to snapshot stdio MCP tool definitions from $settings" \
