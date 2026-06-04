@@ -33,6 +33,7 @@ export interface PreviewEvidenceResponse {
 type JsonObject = Record<string, unknown>;
 
 const PREVIEW_DIR_RE = /^preview-pr-([1-9][0-9]*)$/;
+const MAX_PREVIEW_EVIDENCE_ITEMS = 50;
 const SHA256_RE = /^[A-Fa-f0-9]{64}$/;
 const REQUIRED_PLAN_ACTIONS = [
   "deploy_ephemeral_preview",
@@ -433,14 +434,17 @@ export async function readPreviewEvidence(
   } catch {
     return { root, source: "missing", previews: [] };
   }
-  const previews = await Promise.all(
-    entries.flatMap((entry) => {
+  const previewDirs = entries
+    .flatMap((entry) => {
       const match = PREVIEW_DIR_RE.exec(entry.name);
       if (!entry.isDirectory() || match === null) return [];
-      return [readPreviewItem(root, entry.name, Number(match[1]))];
+      return [{ dirName: entry.name, pr: Number(match[1]) }];
     })
-  );
+    .sort((a, b) => b.pr - a.pr)
+    .slice(0, MAX_PREVIEW_EVIDENCE_ITEMS);
 
-  previews.sort((a, b) => b.pr - a.pr);
+  const previews = await Promise.all(
+    previewDirs.map((entry) => readPreviewItem(root, entry.dirName, entry.pr))
+  );
   return { root, source: "filesystem", previews };
 }

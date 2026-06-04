@@ -340,6 +340,20 @@ describe("readPreviewEvidence", () => {
     });
   });
 
+  it("limits preview evidence to the most recent bundles", async () => {
+    const root = await makeRoot();
+    for (let pr = 1; pr <= 55; pr += 1) {
+      await mkdir(join(root, `preview-pr-${pr}`), { recursive: true });
+    }
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews).toHaveLength(50);
+    expect(evidence.previews[0].pr).toBe(55);
+    expect(evidence.previews[49].pr).toBe(6);
+    expect(evidence.previews.map((preview) => preview.pr)).not.toContain(5);
+  });
+
   it("marks malformed or mismatched evidence invalid without throwing", async () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-238");

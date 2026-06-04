@@ -16,9 +16,9 @@ describe("preview evidence route", () => {
   });
 
   it("defaults to the repository .walter previews directory", () => {
-    expect(resolvePreviewRoot("/repo/apps/control-tower", undefined)).toBe(
-      resolve("/repo/.walter/previews")
-    );
+    expect(
+      resolvePreviewRoot("/repo/apps/control-tower", undefined, () => false)
+    ).toBe(resolve("/repo/.walter/previews"));
   });
 
   it("uses cwd .walter previews when running from a packaged app root", () => {

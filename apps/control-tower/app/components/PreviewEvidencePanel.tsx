@@ -34,6 +34,10 @@ function evidenceDetails(preview: PreviewEvidenceItem): string {
   return parts.length > 0 ? parts.join(" · ") : "no artifacts";
 }
 
+export function formatInvalidCountLabel(count: number): string {
+  return count === 1 ? "1 needs attention" : `${count} need attention`;
+}
+
 function PreviewRow({ preview }: { preview: PreviewEvidenceItem }) {
   return (
     <tr className="border-b border-border/60 last:border-0 transition-colors hover:bg-surface-2/40">
@@ -125,7 +129,7 @@ export default function PreviewEvidencePanel() {
             {invalidCount > 0 && (
               <StatusBadge
                 status="critical"
-                label={`${invalidCount} needs attention`}
+                label={formatInvalidCountLabel(invalidCount)}
               />
             )}
             <button
