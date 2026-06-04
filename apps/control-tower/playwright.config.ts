@@ -4,7 +4,18 @@ const controlTowerE2EToken =
   process.env.CONTROL_TOWER_ADMIN_TOKEN ?? "control-tower-e2e-token";
 const webServerPort = process.env.PORT ?? "3000";
 const baseURL = process.env.BASE_URL ?? `http://localhost:${webServerPort}`;
-const litellmMockPort = process.env.LITELLM_MOCK_PORT ?? "4010";
+
+export function parseLitellmMockPort(
+  rawPort = process.env.LITELLM_MOCK_PORT ?? "4010"
+): string {
+  const port = rawPort.trim();
+  if (!/^[1-9][0-9]*$/.test(port)) {
+    throw new Error("LITELLM_MOCK_PORT must be a positive integer");
+  }
+  return port;
+}
+
+const litellmMockPort = parseLitellmMockPort();
 
 /**
  * Playwright config for Control Tower E2E smoke tests.

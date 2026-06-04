@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatInvalidCountLabel } from "../../app/components/PreviewEvidencePanel";
 import { redactPreviewEvidenceRoot } from "../../app/api/preview-evidence/route";
+import { parseLitellmMockPort } from "../../playwright.config";
 
 describe("preview evidence hardening", () => {
   it("rejects partially numeric mock LiteLLM ports", () => {
@@ -20,6 +21,13 @@ describe("preview evidence hardening", () => {
     }
 
     expect(stderr).toContain(
+      "LITELLM_MOCK_PORT must be a positive integer"
+    );
+  });
+
+  it("normalizes Playwright LiteLLM mock ports before building URLs", () => {
+    expect(parseLitellmMockPort(" 4010 ")).toBe("4010");
+    expect(() => parseLitellmMockPort("4010abc")).toThrow(
       "LITELLM_MOCK_PORT must be a positive integer"
     );
   });
