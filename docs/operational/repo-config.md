@@ -108,11 +108,12 @@ The command is read-only. It validates the policy file first, then reports:
 - the required verification checks
 
 `prototype` keeps the short demo/MVP check set: `lint`, `typecheck`,
-`smoke_test`, `critical_path_test`, plus `screenshot_validation` for UI paths.
-`risk_based` uses prototype checks for low-risk work, `targeted_tests`,
-`integration_tests`, and `acceptance_criteria_check` for medium-risk work, and
-production checks for high-risk work. `production` always requires the full
-verification set.
+`smoke_test`, and `critical_path_test`. `risk_based` uses prototype checks for
+low-risk work, `targeted_tests`, `integration_tests`, and
+`acceptance_criteria_check` for medium-risk work, and production checks for
+high-risk work. `production` always requires the full verification set.
+For UI paths, the command appends `screenshot_validation` to whichever plan is
+selected.
 
 The hard-limit floor still wins in every mode. Paths such as `install.sh`,
 `AGENTS.md`, `hooks/*`, `mcp/servers.json`, auth/crypto/env/key files,

@@ -347,6 +347,7 @@ YAML
     --path docs/README.md
 
   [ "$status" -eq 0 ]
+  [[ "$output" == *"policy_status: defaulted_missing"* ]]
   [[ "$output" == *"verification: risk_based"* ]]
   [[ "$output" == *"plan: prototype"* ]]
 }
