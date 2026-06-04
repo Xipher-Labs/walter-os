@@ -186,6 +186,18 @@ _resign_row() {
   [[ "$output" == *"row 1: signature verification failed"* ]]
 }
 
+@test "B-2: malformed signature reports invalid format" {
+  _make_chain
+  first="$(sed -n '1p' "$(_chain_path)" | jq -cS '.sig = "not-base64"')"
+  second="$(sed -n '2p' "$(_chain_path)")"
+  printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row 1: invalid sig format"* ]]
+}
+
 @test "B-2: missing public key fails with row number" {
   _make_chain
   rm -f "$(_public_key_path)"
@@ -206,6 +218,21 @@ _resign_row() {
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
+}
+
+@test "B-2: verifier fails closed when temp directory creation fails" {
+  _make_chain
+  mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
+  cat > "$BATS_TEST_TMPDIR/mock-bin/mktemp" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$BATS_TEST_TMPDIR/mock-bin/mktemp"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin':\$PATH walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"temporary directory unavailable"* ]]
 }
 
 @test "B-1: append rejects tampered final row even if root is rewritten" {

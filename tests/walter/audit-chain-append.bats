@@ -293,6 +293,22 @@ SH
   bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
 }
 
+@test "B-2: jq-free first row resolves session id from state file" {
+  expected_session_id="$WALTER_SESSION_ID"
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; unset WALTER_SESSION_ID; PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 0 ]
+  jq -e --arg session_id "$expected_session_id" '.session_id == $session_id' "$(_chain_path)"
+  bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
+}
+
 @test "B-1: dependency failure rows escape JSON controls without jq" {
   mkdir -p "$TMP_HOME/mock-bin"
   cat > "$TMP_HOME/mock-bin/jq" <<'SH'
@@ -307,6 +323,23 @@ SH
   [ -f "$(_chain_path)" ]
   jq -e '.decision == "block" and .decision_reason == ("bad" + "\u001b" + "\u0007" + "\b" + " reason")' "$(_chain_path)"
   bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
+}
+
+@test "B-2: signing fails closed when temp directory creation fails" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/mktemp" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/mktemp"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"temporary directory unavailable"* ]]
+  if [[ -f "$(_chain_path)" ]]; then
+    [ ! -s "$(_chain_path)" ]
+  fi
 }
 
 @test "B-1: dependency failure rows without jq cannot extend existing chains" {

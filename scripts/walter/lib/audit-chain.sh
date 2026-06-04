@@ -137,7 +137,25 @@ _walter_audit_current_session_id() {
   else
     state_file="$(_walter_audit_session_state_file)" || return 1
     [[ -f "$state_file" ]] || return 1
-    session_id="$(jq -r '.session_id // empty' "$state_file" 2>/dev/null || true)"
+    if _walter_audit_jq_available; then
+      session_id="$(jq -r '.session_id // empty' "$state_file" 2>/dev/null || true)"
+    else
+      session_id="$(python3 - "$state_file" <<'PY' 2>/dev/null || true
+import json
+import sys
+
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as handle:
+        state = json.load(handle)
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+session_id = state.get("session_id", "")
+if isinstance(session_id, str):
+    print(session_id, end="")
+PY
+)"
+    fi
   fi
   [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   printf '%s' "$session_id"
@@ -214,19 +232,22 @@ _walter_audit_sign_row() {
     return 3
   fi
 
-  tmp_dir="$(mktemp -d)"
+  tmp_dir="$(mktemp -d)" || {
+    echo "walter-audit-chain: temporary directory unavailable for signing" >&2
+    return 1
+  }
   payload_file="$tmp_dir/payload.json"
   sig_file="$tmp_dir/sig.bin"
   printf '%s' "$row_json" > "$payload_file"
   if ! "$openssl_bin" pkeyutl -sign -inkey "$private_key" -rawin -in "$payload_file" -out "$sig_file" >/dev/null 2>&1; then
-    rm -r "$tmp_dir"
+    rm -rf "$tmp_dir"
     return 1
   fi
   sig="$(_walter_audit_b64_encode_file "$sig_file")" || {
-    rm -r "$tmp_dir"
+    rm -rf "$tmp_dir"
     return 1
   }
-  rm -r "$tmp_dir"
+  rm -rf "$tmp_dir"
   printf '%s' "$sig"
 }
 
@@ -536,8 +557,12 @@ _walter_audit_verify_row_signature() {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
-  if [[ ! "$sig" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
+  if [[ -z "$sig" ]]; then
     echo "walter-audit-chain: row ${row_number}: missing sig" >&2
+    return 1
+  fi
+  if [[ ! "$sig" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
+    echo "walter-audit-chain: row ${row_number}: invalid sig format" >&2
     return 1
   fi
   session_id="$(printf '%s\n' "$line" | jq -r '.session_id // empty')" || {
@@ -557,28 +582,31 @@ _walter_audit_verify_row_signature() {
     return 3
   fi
 
-  tmp_dir="$(mktemp -d)"
+  tmp_dir="$(mktemp -d)" || {
+    echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
+    return 1
+  }
   payload_file="$tmp_dir/payload.json"
   sig_file="$tmp_dir/sig.bin"
   payload="$(printf '%s\n' "$line" | jq -cS 'del(.sig)')" || {
-    rm -r "$tmp_dir"
+    rm -rf "$tmp_dir"
     return 1
   }
   printf '%s' "$payload" > "$payload_file" || {
-    rm -r "$tmp_dir"
+    rm -rf "$tmp_dir"
     return 1
   }
   if ! _walter_audit_b64_decode_to_file "$sig" "$sig_file" >/dev/null 2>&1; then
-    rm -r "$tmp_dir"
+    rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: invalid sig encoding" >&2
     return 1
   fi
   if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$public_key" -rawin -in "$payload_file" -sigfile "$sig_file" >/dev/null 2>&1; then
-    rm -r "$tmp_dir"
+    rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: signature verification failed" >&2
     return 1
   fi
-  rm -r "$tmp_dir"
+  rm -rf "$tmp_dir"
 }
 
 _walter_audit_verify_chain_file_unlocked() {
