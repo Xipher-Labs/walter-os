@@ -286,3 +286,117 @@ YAML
   [[ "$output" == *"Walter-OS doctor — repo config"* ]]
   [[ "$output" == *"repo-config: valid"* ]]
 }
+
+@test "verification-plan uses prototype checks for low-risk risk_based changes" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/operational/repo-config.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: risk_based"* ]]
+  [[ "$output" == *"effective_risk: low"* ]]
+  [[ "$output" == *"plan: prototype"* ]]
+  [[ "$output" == *"  - lint"* ]]
+  [[ "$output" == *"  - smoke_test"* ]]
+}
+
+@test "verification-plan applies risk_based defaults when config is absent" {
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/README.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: risk_based"* ]]
+  [[ "$output" == *"plan: prototype"* ]]
+}
+
+@test "verification-plan raises script changes to medium risk checks" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path scripts/walter/lib/repo-config.sh
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: medium"* ]]
+  [[ "$output" == *"effective_risk: medium"* ]]
+  [[ "$output" == *"plan: risk_based"* ]]
+  [[ "$output" == *"  - targeted_tests"* ]]
+}
+
+@test "verification-plan escalates hard-floor paths even in prototype profile" {
+  "$WALTER_OS_BIN" repo-config defaults hackathon > "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path install.sh
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: prototype"* ]]
+  [[ "$output" == *"hard_floor: yes"* ]]
+  [[ "$output" == *"effective_risk: high"* ]]
+  [[ "$output" == *"plan: production"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+  [[ "$output" == *"  - security_review"* ]]
+}
+
+@test "verification-plan uses shared protected-path policy for hard-floor paths" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path bin/walter-os
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hard_floor: yes"* ]]
+  [[ "$output" == *"plan: production"* ]]
+}
+
+@test "verification-plan prints validation diagnostics for invalid policy" {
+  write_valid_config
+  sed -i.bak 's/verification: risk_based/verification: vibes/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk low
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid verification: vibes"* ]]
+}
+
+@test "verification-plan production mode requires full verification for low risk" {
+  write_valid_config
+  sed -i.bak 's/verification: risk_based/verification: production/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/operational/repo-config.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: production"* ]]
+  [[ "$output" == *"plan: production"* ]]
+  [[ "$output" == *"  - rollback_plan"* ]]
+}
+
+@test "verification-plan adds screenshot validation for UI paths" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path apps/control-tower/app/page.tsx
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"plan: prototype"* ]]
+  [[ "$output" == *"  - screenshot_validation"* ]]
+}
+
+@test "verification-plan rejects invalid risk values" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk spicy
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid risk: spicy"* ]]
+}

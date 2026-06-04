@@ -87,6 +87,37 @@ client-only install or a full self-hosted stack with any autonomy mode.
 `walter-os repo-config validate` prints the effective mode and reminds callers
 that the hard-limit floor is non-overridable in every mode.
 
+## Verification Plan
+
+Use `verification-plan` to turn the repo policy plus changed paths into an
+advisory check list:
+
+```bash
+walter-os repo-config verification-plan . --risk low --path docs/operational/repo-config.md
+walter-os repo-config verification-plan . --risk medium --path scripts/walter/lib/repo-config.sh
+walter-os repo-config verification-plan . --risk low --path install.sh
+```
+
+The command is read-only. It validates the policy file first, then reports:
+
+- configured `verification` mode (`prototype`, `risk_based`, or `production`)
+- input risk from `--risk low|medium|high`
+- path-derived risk from changed paths
+- effective risk after taking the maximum
+- whether a hard-floor path was touched
+- the required verification checks
+
+`prototype` keeps the short demo/MVP check set: lint, typecheck, smoke test,
+critical-path test, plus screenshot validation for UI paths. `risk_based`
+uses prototype checks for low-risk work, targeted/integration/AC checks for
+medium-risk work, and production checks for high-risk work. `production`
+always requires the full verification set.
+
+The hard-limit floor still wins in every mode. Paths such as `install.sh`,
+`AGENTS.md`, `hooks/*`, `mcp/servers.json`, auth/crypto/env/key files,
+workflow files, and migrations force `plan: production` and
+`human_gate: required` even when the repo uses the hackathon prototype preset.
+
 ## Validation Rules
 
 The validator fails closed for malformed YAML, invalid enum values, wrong

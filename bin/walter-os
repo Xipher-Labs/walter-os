@@ -68,8 +68,8 @@
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
 #   post-merge-check [--commit SHA] [--json]
 #                               Classify post-merge health evidence (read-only)
-#   repo-config {validate|defaults [balanced|hackathon]}
-#                               Validate walter-repo-config.yaml per-repo policy
+#   repo-config {validate|defaults|verification-plan}
+#                               Validate walter-repo-config.yaml policy + verification depth
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
 #                               Manage network egress allowlist (#122 A-2)
