@@ -1080,26 +1080,29 @@ _walter_audit_loki_stderr_snippet() {
   sed -n 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; /^[[:space:]]*$/d; p; q' "$path"
 }
 
-_walter_audit_loki_range_ns() {
-  local date_value="$1"
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "walter-audit-chain: python3 required for Loki date range calculation" >&2
-    return 3
+_walter_audit_loki_date_epoch() {
+  local date_value="$1" epoch
+  if [[ ! "$date_value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "walter-audit-chain: invalid Loki date: $date_value" >&2
+    return 2
   fi
-  python3 - "$date_value" <<'PY'
-from datetime import datetime, timedelta, timezone
-import sys
+  if epoch="$(date -u -j -f "%Y-%m-%d" "$date_value" "+%s" 2>/dev/null)"; then
+    printf '%s' "$epoch"
+    return 0
+  fi
+  if epoch="$(date -u -d "${date_value}T00:00:00Z" "+%s" 2>/dev/null)"; then
+    printf '%s' "$epoch"
+    return 0
+  fi
+  echo "walter-audit-chain: invalid Loki date: $date_value" >&2
+  return 2
+}
 
-date_value = sys.argv[1]
-try:
-    start = datetime.strptime(date_value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-except ValueError:
-    print(f"walter-audit-chain: invalid Loki date: {date_value}", file=sys.stderr)
-    sys.exit(2)
-end = start + timedelta(days=1)
-print(int(start.timestamp() * 1_000_000_000))
-print(int(end.timestamp() * 1_000_000_000))
-PY
+_walter_audit_loki_range_ns() {
+  local date_value="$1" start_epoch end_epoch
+  start_epoch="$(_walter_audit_loki_date_epoch "$date_value")" || return $?
+  end_epoch=$((start_epoch + 86400))
+  printf '%s\n%s\n' "$((start_epoch * 1000000000))" "$(((end_epoch * 1000000000) - 1))"
 }
 
 _walter_audit_verify_chain_from_loki_response() {
@@ -1114,6 +1117,7 @@ _walter_audit_verify_chain_from_loki_response() {
     echo "walter-audit-chain: jq required" >&2
     return 3
   fi
+  _walter_audit_loki_date_epoch "$date_value" >/dev/null || return $?
 
   tmp_config="$(mktemp -d "${TMPDIR:-/tmp}/walter-audit-loki.XXXXXX")" || return 1
   tmp_audit="${tmp_config}/audit"
@@ -1202,6 +1206,10 @@ walter_audit_verify_chain_from_loki_live() {
       return 2
       ;;
   esac
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "walter-audit-chain: curl required for live Loki verification" >&2
+    return 3
+  fi
 
   timeout="${WALTER_AUDIT_LOKI_TIMEOUT_SECONDS:-10}"
   _walter_audit_loki_positive_int "$timeout" "WALTER_AUDIT_LOKI_TIMEOUT_SECONDS" || return $?
