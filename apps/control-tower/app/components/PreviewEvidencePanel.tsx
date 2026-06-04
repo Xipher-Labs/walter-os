@@ -59,7 +59,7 @@ function PreviewRow({ preview }: { preview: PreviewEvidenceItem }) {
             href={preview.url}
             className="font-medium text-accent underline-offset-4 hover:underline"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
           >
             {preview.url}
           </a>

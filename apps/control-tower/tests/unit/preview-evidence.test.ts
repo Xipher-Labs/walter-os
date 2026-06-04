@@ -114,6 +114,34 @@ describe("readPreviewEvidence", () => {
     );
   });
 
+  it("reports unreadable preview files separately from malformed JSON", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-241");
+    const reportPath = join(bundle, "preview-report.json");
+    await mkdir(bundle, { recursive: true });
+    await writeFile(reportPath, "{}", "utf8");
+    await chmod(reportPath, 0o000);
+
+    try {
+      const evidence = await readPreviewEvidence(root);
+
+      expect(evidence.previews[0]).toMatchObject({
+        pr: 241,
+        status: "invalid",
+        hasReport: true,
+        safetyOk: false,
+      });
+      expect(evidence.previews[0].findings).toContain(
+        "preview report cannot be read"
+      );
+      expect(evidence.previews[0].findings).not.toContain(
+        "preview report is not valid JSON"
+      );
+    } finally {
+      await chmod(reportPath, 0o600);
+    }
+  });
+
   it("keeps a valid dry-run plan separate from captured report evidence", async () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-236");

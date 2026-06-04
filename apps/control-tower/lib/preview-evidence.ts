@@ -72,9 +72,9 @@ async function readJson(
   label: string,
   findings: string[]
 ): Promise<{ exists: boolean; payload: unknown | null }> {
+  let content: string;
   try {
-    const content = await readFile(path, "utf8");
-    return { exists: true, payload: JSON.parse(content) as unknown };
+    content = await readFile(path, "utf8");
   } catch (error) {
     if (
       isObject(error) &&
@@ -83,6 +83,13 @@ async function readJson(
     ) {
       return { exists: false, payload: null };
     }
+    findings.push(`${label} cannot be read`);
+    return { exists: true, payload: null };
+  }
+
+  try {
+    return { exists: true, payload: JSON.parse(content) as unknown };
+  } catch {
     findings.push(`${label} is not valid JSON`);
     return { exists: true, payload: null };
   }
