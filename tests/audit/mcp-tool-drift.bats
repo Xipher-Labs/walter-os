@@ -183,6 +183,14 @@ teardown() {
   [ "$status" -eq 2 ]
 }
 
+@test "mcp tool snapshot helper requires approved registry" {
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+
+  run node "$HELPER" --settings "$CLAUDE_HOME/settings.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--approved-registry <path>"* ]]
+}
+
 @test "audit helper discovery handles relative audit.sh source paths" {
   RELATIVE_RUNNER="$TMP_HOME/relative-helper-discovery.sh"
   cat > "$RELATIVE_RUNNER" <<'RUNNER'

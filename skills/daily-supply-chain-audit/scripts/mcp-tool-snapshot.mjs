@@ -17,7 +17,7 @@ const SAFE_TEMPLATE_VARS = new Set(["HOME", "WALTER_OS_HOME", "WALTER_CONFIG"]);
 
 function usage() {
   console.error(
-    "Usage: mcp-tool-snapshot.mjs [--settings <path>] [--approved-registry <path>] [--timeout-ms <ms>]",
+    "Usage: mcp-tool-snapshot.mjs [--settings <path>] --approved-registry <path> [--timeout-ms <ms>]",
   );
 }
 
@@ -57,7 +57,12 @@ function parseArgs(argv) {
     }
   }
 
-  if (!args.settings || !Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
+  if (
+    !args.settings ||
+    !args.approvedRegistry ||
+    !Number.isFinite(args.timeoutMs) ||
+    args.timeoutMs <= 0
+  ) {
     usage();
     process.exit(2);
   }
@@ -317,9 +322,7 @@ async function probeServer(name, config, timeoutMs) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const settings = JSON.parse(fs.readFileSync(args.settings, "utf8"));
-  const approvedRegistry = args.approvedRegistry
-    ? JSON.parse(fs.readFileSync(args.approvedRegistry, "utf8"))
-    : null;
+  const approvedRegistry = JSON.parse(fs.readFileSync(args.approvedRegistry, "utf8"));
   const result = {
     version: 1,
     source: args.settings,
