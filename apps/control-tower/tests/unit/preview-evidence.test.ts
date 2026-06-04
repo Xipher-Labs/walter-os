@@ -212,6 +212,29 @@ describe("readPreviewEvidence", () => {
     }
   });
 
+  it("reports unreadable screenshot directories", async () => {
+    const root = await makeRoot();
+    const screenshotsPath = join(root, "preview-pr-245", "screenshots");
+    await mkdir(screenshotsPath, { recursive: true });
+    await chmod(screenshotsPath, 0o000);
+
+    try {
+      const evidence = await readPreviewEvidence(root);
+
+      expect(evidence.previews[0]).toMatchObject({
+        pr: 245,
+        status: "invalid",
+        screenshots: 0,
+        safetyOk: false,
+      });
+      expect(evidence.previews[0].findings).toContain(
+        "screenshots directory cannot be read"
+      );
+    } finally {
+      await chmod(screenshotsPath, 0o700);
+    }
+  });
+
   it("keeps a valid dry-run plan separate from captured report evidence", async () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-236");

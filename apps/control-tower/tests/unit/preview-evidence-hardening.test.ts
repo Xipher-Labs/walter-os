@@ -1,17 +1,27 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatInvalidCountLabel } from "../../app/components/PreviewEvidencePanel";
+import { redactPreviewEvidenceRoot } from "../../app/api/preview-evidence/route";
 
 describe("preview evidence hardening", () => {
-  it("parses the mock LiteLLM port as a number", () => {
-    const source = readFileSync(
-      new URL("../e2e/mock-litellm.mjs", import.meta.url),
-      "utf8"
-    );
+  it("rejects partially numeric mock LiteLLM ports", () => {
+    const script = new URL("../e2e/mock-litellm.mjs", import.meta.url);
+    let stderr = "";
 
-    expect(source).toContain("Number.parseInt");
-    expect(source).toContain("LITELLM_MOCK_PORT");
-    expect(source).toContain("server.listen(PORT");
+    try {
+      execFileSync(process.execPath, [script.pathname], {
+        env: { ...process.env, LITELLM_MOCK_PORT: "4010abc" },
+        stdio: "pipe",
+        timeout: 500,
+      });
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr ?? "");
+    }
+
+    expect(stderr).toContain(
+      "LITELLM_MOCK_PORT must be a positive integer"
+    );
   });
 
   it("uses noopener on external preview links", () => {
@@ -26,5 +36,27 @@ describe("preview evidence hardening", () => {
   it("formats invalid preview counts with singular and plural copy", () => {
     expect(formatInvalidCountLabel(1)).toBe("1 needs attention");
     expect(formatInvalidCountLabel(2)).toBe("2 need attention");
+  });
+
+  it("redacts absolute preview evidence roots from API responses", () => {
+    expect(
+      redactPreviewEvidenceRoot({
+        root: "/srv/walter/.walter/previews",
+        source: "filesystem",
+        previews: [],
+      }).root
+    ).toBe("[redacted]");
+  });
+
+  it("keeps stale preview evidence data on transient refresh failures", () => {
+    const source = readFileSync(
+      new URL("../../app/components/PreviewEvidencePanel.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(source).toContain("hasDataRef");
+    expect(source).toContain(
+      'hasDataRef.current ? prev : "Preview evidence unavailable."'
+    );
   });
 });

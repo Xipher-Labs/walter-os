@@ -96,7 +96,10 @@ async function readJson(
   }
 }
 
-async function listScreenshotBasenames(path: string): Promise<Set<string>> {
+async function listScreenshotBasenames(
+  path: string,
+  findings: string[]
+): Promise<Set<string>> {
   try {
     const entries = await readdir(path, { withFileTypes: true });
     return new Set(
@@ -114,6 +117,7 @@ async function listScreenshotBasenames(path: string): Promise<Set<string>> {
     ) {
       return new Set();
     }
+    findings.push("screenshots directory cannot be read");
     return new Set();
   }
 }
@@ -303,7 +307,8 @@ async function readPreviewItem(
   const bundlePath = join(root, dirName);
   const findings: string[] = [];
   const screenshotsOnDisk = await listScreenshotBasenames(
-    join(bundlePath, "screenshots")
+    join(bundlePath, "screenshots"),
+    findings
   );
 
   const report = await readJson(

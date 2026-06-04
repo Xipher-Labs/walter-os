@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PreviewEvidenceItem,
   PreviewEvidenceResponse,
@@ -98,6 +98,7 @@ export default function PreviewEvidencePanel() {
   const [data, setData] = useState<PreviewEvidenceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasDataRef = useRef(false);
 
   const fetchEvidence = useCallback(async () => {
     try {
@@ -106,11 +107,17 @@ export default function PreviewEvidencePanel() {
       setData((await res.json()) as PreviewEvidenceResponse);
       setError(null);
     } catch {
-      setError("Preview evidence unavailable.");
+      setError((prev) =>
+        hasDataRef.current ? prev : "Preview evidence unavailable."
+      );
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    hasDataRef.current = data !== null;
+  }, [data]);
 
   useEffect(() => {
     fetchEvidence();
