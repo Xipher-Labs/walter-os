@@ -388,6 +388,19 @@ SH
   fi
 }
 
+@test "B-2: signing failure reports an actionable error" {
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  printf '%s' 'not-a-private-key' > "$private_key"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to sign audit row"* ]]
+  if [[ -f "$(_chain_path)" ]]; then
+    [ ! -s "$(_chain_path)" ]
+  fi
+}
+
 @test "B-1: dependency failure rows without jq cannot extend existing chains" {
   bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' block approval-gate ok >/dev/null"
   mkdir -p "$TMP_HOME/mock-bin"

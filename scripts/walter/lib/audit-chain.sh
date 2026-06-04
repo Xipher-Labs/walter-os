@@ -286,9 +286,14 @@ _walter_audit_sign_row() {
   }
   payload_file="$tmp_dir/payload.json"
   sig_file="$tmp_dir/sig.bin"
-  printf '%s' "$row_json" > "$payload_file"
+  printf '%s' "$row_json" > "$payload_file" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: unable to write signing payload" >&2
+    return 1
+  }
   if ! "$openssl_bin" pkeyutl -sign -inkey "$private_key" -rawin -in "$payload_file" -out "$sig_file" >/dev/null 2>&1; then
     rm -rf "$tmp_dir"
+    echo "walter-audit-chain: failed to sign audit row" >&2
     return 1
   fi
   sig="$(_walter_audit_b64_encode_file "$sig_file")" || {
@@ -578,7 +583,7 @@ _walter_audit_truncate_fd() {
 
 _walter_audit_verify_row_hash() {
   local line="$1" row_number="$2" stored_row_hash row_without_hash computed_row_hash
-  stored_row_hash="$(printf '%s\n' "$line" | jq -r '.row_hash // empty')" || {
+  stored_row_hash="$(printf '%s\n' "$line" | jq -r '.row_hash // empty' 2>/dev/null)" || {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
@@ -601,7 +606,7 @@ _walter_audit_verify_row_hash() {
 
 _walter_audit_verify_row_signature() {
   local line="$1" row_number="$2" session_id sig public_key openssl_bin tmp_dir payload payload_file sig_file
-  sig="$(printf '%s\n' "$line" | jq -r '.sig // empty')" || {
+  sig="$(printf '%s\n' "$line" | jq -r '.sig // empty' 2>/dev/null)" || {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
@@ -613,7 +618,7 @@ _walter_audit_verify_row_signature() {
     echo "walter-audit-chain: row ${row_number}: invalid sig format" >&2
     return 1
   fi
-  session_id="$(printf '%s\n' "$line" | jq -r '.session_id // empty')" || {
+  session_id="$(printf '%s\n' "$line" | jq -r '.session_id // empty' 2>/dev/null)" || {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
@@ -630,6 +635,7 @@ _walter_audit_verify_row_signature() {
     return 3
   fi
   openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
+  _walter_audit_require_python3 || return 3
 
   tmp_dir="$(mktemp -d)" || {
     echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
@@ -637,15 +643,12 @@ _walter_audit_verify_row_signature() {
   }
   payload_file="$tmp_dir/payload.json"
   sig_file="$tmp_dir/sig.bin"
-  payload="$(printf '%s\n' "$line" | jq -cS 'del(.sig)')" || {
+  payload="$(printf '%s\n' "$line" | jq -cS 'del(.sig)' 2>/dev/null)" || {
     rm -rf "$tmp_dir"
+    echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
   printf '%s' "$payload" > "$payload_file" || {
-    rm -rf "$tmp_dir"
-    return 1
-  }
-  _walter_audit_require_python3 || {
     rm -rf "$tmp_dir"
     return 1
   }

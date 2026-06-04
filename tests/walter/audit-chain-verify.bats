@@ -267,7 +267,7 @@ SH
 
   run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin':\$PATH walter_audit_verify_chain 2026-05-31"
 
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 3 ]
   [[ "$output" == *"required tool missing: python3"* ]]
 }
 
