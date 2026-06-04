@@ -288,6 +288,21 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "repo-config fallback policy preserves high-sensitivity hard-floor paths" {
+  cp "$REPO_ROOT/scripts/walter/lib/repo-config.sh" "$TMP_DIR/repo-config.sh"
+
+  run bash -c '
+    export WALTER_OS_HOME="$1/missing"
+    # shellcheck source=/dev/null
+    source "$2"
+    _walter_repo_config_path_is_hard_floor ".ssh/id_ed25519" &&
+      _walter_repo_config_path_is_hard_floor "nested/.ssh/id_ed25519" &&
+      _walter_repo_config_path_is_hard_floor ".claude/settings.json"
+  ' bash "$TMP_DIR" "$TMP_DIR/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "doctor --repo-config validates git root policy from subdirectories" {
   write_valid_config
   sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \
@@ -388,6 +403,19 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"hard_floor: yes"* ]]
   [[ "$output" == *"plan: production"* ]]
+}
+
+@test "verification-plan does not hard-floor non-migration paths containing migration" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/operational/data-migration-safety.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: low"* ]]
+  [[ "$output" == *"hard_floor: no"* ]]
+  [[ "$output" == *"plan: prototype"* ]]
 }
 
 @test "verification-plan prints validation diagnostics for invalid policy" {
