@@ -323,24 +323,36 @@ walter_repo_config_capability_plan() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --risk)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --risk\n' >&2
+          return 2
+        fi
         input_risk="${2:-}"
-        shift 2 || shift
+        shift 2
         ;;
       --risk=*)
         input_risk="${1#--risk=}"
         shift
         ;;
       --path)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --path\n' >&2
+          return 2
+        fi
         paths+=("${2:-}")
-        shift 2 || shift
+        shift 2
         ;;
       --path=*)
         paths+=("${1#--path=}")
         shift
         ;;
       --evidence)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --evidence\n' >&2
+          return 2
+        fi
         evidence_items+=("${2:-}")
-        shift 2 || shift
+        shift 2
         ;;
       --evidence=*)
         evidence_items+=("${1#--evidence=}")
@@ -352,6 +364,10 @@ walter_repo_config_capability_plan() {
           paths+=("$1")
           shift
         done
+        ;;
+      --*)
+        printf 'repo-config: unknown option: %s\n' "$1" >&2
+        return 2
         ;;
       *)
         paths+=("$1")

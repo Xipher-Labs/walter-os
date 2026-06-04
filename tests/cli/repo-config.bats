@@ -616,3 +616,56 @@ YAML
   [ "$status" -eq 2 ]
   [[ "$output" == *"invalid evidence: vibes"* ]]
 }
+
+@test "capability-plan rejects missing risk values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --risk
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --risk"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan rejects missing path values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --risk low --path
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan rejects option-looking missing path values" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --path --risk low
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+}
+
+@test "capability-plan rejects missing evidence values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --evidence
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --evidence"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan rejects unknown options unless forced positional" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --unknown
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option: --unknown"* ]]
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" -- --unknown
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: low"* ]]
+}
