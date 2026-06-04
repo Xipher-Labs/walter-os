@@ -16,6 +16,7 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | [`openclaw.md`](openclaw.md) | OpenClaw gateway trust model and runtime contract. |
 | [`oss-trust-v0.5.0-small-batch.md`](oss-trust-v0.5.0-small-batch.md) | OSS Trust roadmap small-batch: C-3 pre-commit framework, D-1 GitHub Security Advisories partner, E-3 `@types/*` allowlist, E-4 `walter-os justify revoke` CLI. |
 | [`post-merge-feedback-loop.md`](post-merge-feedback-loop.md) | Read-only AD-13 post-merge health classification before fix-PR/rollback automation. |
+| [`semantic-gates.md`](semantic-gates.md) | AD-4 spec/AC/architecture/test relevance gates for autonomous delivery readiness. |
 
 ## Worked Examples
 

@@ -73,6 +73,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Semantic gates first slice (#229).** Adds `walter-os semantic-gates` to
+  check spec completeness, AC testability, architecture-review evidence, and
+  test relevance before autonomous delivery work proceeds.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
