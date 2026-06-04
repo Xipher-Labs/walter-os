@@ -11,7 +11,7 @@ artifact format for preview evidence.
 
 - Add `walter-os preview bundle` as the first AD-10 primitive.
 - Package an existing preview URL, seed manifest, and screenshots into a
-  deterministic local report bundle.
+  local report bundle with deterministic layout and artifact hashes.
 - Reject secret-like artifacts so production secrets are not copied into preview
   evidence.
 - Emit JSON for future Control Tower, PR Score, and release automation.

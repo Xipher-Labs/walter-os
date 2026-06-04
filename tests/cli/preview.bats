@@ -87,6 +87,26 @@ write_preview_artifacts() {
   [[ ! -e "$TMP_DIR/out/preview-pr-235/seed/.env" ]]
 }
 
+@test "preview bundle handles artifact filenames that start with dash" {
+  cd "$TMP_DIR"
+  printf '{"users":[{"id":"dash-demo"}]}\n' > ./-seed.json
+  printf 'fake png bytes\n' > ./-screen.png
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed -seed.json \
+    --screenshot -screen.png \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.seed_manifest.sha256 | length == 64'
+  echo "$output" | jq -e '.screenshots[0].sha256 | length == 64'
+  [[ -f "$TMP_DIR/out/preview-pr-235/seed/-seed.json" ]]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/-screen.png" ]]
+}
+
 @test "preview bundle rejects non-http preview URLs" {
   write_preview_artifacts
 
@@ -126,6 +146,14 @@ write_preview_artifacts() {
 
   [ "$status" -eq 64 ]
   [[ "$output" == *"--pr must be a positive integer"* ]]
+}
+
+@test "preview bundle shows usage for unknown options" {
+  run bash "$WALTER_OS_BIN" preview bundle --wat
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"unknown option: --wat"* ]]
+  [[ "$output" == *"Usage: walter-os preview bundle"* ]]
 }
 
 @test "help documents preview bundle" {

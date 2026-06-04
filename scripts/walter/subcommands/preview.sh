@@ -30,6 +30,8 @@ EOF
 
 die_usage() {
   echo "walter-os preview: $1" >&2
+  echo >&2
+  usage >&2
   exit "$USAGE_ERROR_EXIT"
 }
 
@@ -47,9 +49,9 @@ require_jq() {
 sha256_file() {
   local path="$1"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$path" | awk '{print $1}'
+    sha256sum -- "$path" | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$path" | awk '{print $1}'
+    shasum -a 256 -- "$path" | awk '{print $1}'
   else
     die_runtime "sha256sum or shasum is required"
   fi
@@ -59,9 +61,14 @@ file_size() {
   wc -c < "$1" | tr -d '[:space:]'
 }
 
+path_base() {
+  local path="$1"
+  printf '%s\n' "${path##*/}"
+}
+
 reject_secret_like_artifact() {
   local path="$1" base lower
-  base="$(basename "$path")"
+  base="$(path_base "$path")"
   lower="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
 
   case "$lower" in
@@ -102,11 +109,11 @@ artifact_json() {
 
 copy_artifact() {
   local source="$1" dest_dir="$2" dest
-  dest="${dest_dir}/$(basename "$source")"
+  dest="${dest_dir}/$(path_base "$source")"
   if [[ -e "$dest" ]]; then
-    die_usage "duplicate artifact basename: $(basename "$source")"
+    die_usage "duplicate artifact basename: $(path_base "$source")"
   fi
-  cp -p "$source" "$dest"
+  cp -p -- "$source" "$dest"
   printf '%s\n' "$dest"
 }
 
