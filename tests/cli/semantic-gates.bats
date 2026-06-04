@@ -129,6 +129,23 @@ BATS
   [[ "$output" == *"no test file references docs/specs/example-feature.md"* ]]
 }
 
+@test "semantic-gates accepts non-shell test files that reference the spec" {
+  write_valid_spec
+  cat > "$TMP_DIR/repo/tests/cli/example_feature_test.go" <<'GO'
+package example
+
+// Refs: docs/specs/example-feature.md
+func TestExampleFeature(t *testing.T) {}
+GO
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"test-relevance: pass"* ]]
+  [[ "$output" == *"tests/cli/example_feature_test.go"* ]]
+}
+
 @test "semantic-gates --json emits machine-readable gate results" {
   write_valid_spec
   write_referencing_test

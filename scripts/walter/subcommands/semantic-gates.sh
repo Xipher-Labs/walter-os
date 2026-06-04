@@ -156,7 +156,7 @@ check_test_relevance() {
   fi
 
   match_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates.XXXXXX")"
-  find "$tests_dir" -type f \( -name '*.bats' -o -name '*.sh' -o -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.tsx' \) -print |
+  find "$tests_dir" -type f -print |
     while IFS= read -r file; do
       if grep -qF "$spec_rel" "$file"; then
         printf '%s\n' "$file" >> "$match_file"
