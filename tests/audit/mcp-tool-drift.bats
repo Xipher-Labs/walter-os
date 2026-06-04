@@ -308,6 +308,20 @@ JSON
   [ "$output" = "false" ]
 }
 
+@test "non-string args and env values are normalized before spawn" {
+  jq '.mcpServers.mock_stdio.args += [7] | .mcpServers.mock_stdio.env.EXTRA_NUMERIC = 123' \
+    "$CLAUDE_HOME/settings.json" > "$TMP_HOME/non-string-settings.json" && \
+    mv "$TMP_HOME/non-string-settings.json" "$CLAUDE_HOME/settings.json"
+  jq '.servers.mock_stdio.args += [7] | .servers.mock_stdio.env.EXTRA_NUMERIC = 123' \
+    "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/non-string-registry.json" && \
+    mv "$TMP_HOME/non-string-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  run jq -r '.servers.mock_stdio.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "safe_lookup" ]
+}
+
 @test "settings command tamper is not executed by tool probe" {
   "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
   MALICIOUS_MARKER="$TMP_HOME/malicious-server-ran"

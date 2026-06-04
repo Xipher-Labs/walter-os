@@ -13,6 +13,7 @@ const DEFAULT_TIMEOUT_MS = Number.parseInt(
   10,
 );
 const PROTOCOL_VERSION = "2025-11-25";
+const SAFE_TEMPLATE_VARS = new Set(["HOME", "WALTER_OS_HOME", "WALTER_CONFIG"]);
 
 function usage() {
   console.error(
@@ -79,29 +80,57 @@ function normalizeTools(tools) {
     });
 }
 
-function expandEnvString(value) {
-  if (typeof value !== "string") return value;
-  return value.replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, name) => {
-    if (Object.prototype.hasOwnProperty.call(process.env, name)) {
+function stringifyConfigValue(value) {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function expandSafeTemplateString(value) {
+  return stringifyConfigValue(value).replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, name) => {
+    if (SAFE_TEMPLATE_VARS.has(name) && Object.prototype.hasOwnProperty.call(process.env, name)) {
       return process.env[name];
     }
     return match;
   });
 }
 
-function expandEnv(envConfig) {
+function compareEnv(envConfig) {
   const expanded = {};
   for (const [key, value] of Object.entries(envConfig || {})) {
-    expanded[key] = expandEnvString(value);
+    expanded[key] = expandSafeTemplateString(value);
   }
   return expanded;
 }
 
 function launchConfig(config) {
   return {
-    command: config.command,
-    args: Array.isArray(config.args) ? config.args.map(expandEnvString) : [],
-    env: expandEnv(config.env || {}),
+    command: stringifyConfigValue(config.command),
+    args: Array.isArray(config.args) ? config.args.map(expandSafeTemplateString) : [],
+    env: compareEnv(config.env || {}),
+  };
+}
+
+function materializeEnv(envConfig) {
+  const env = {};
+  for (const [key, value] of Object.entries(envConfig || {})) {
+    const stringValue = expandSafeTemplateString(value);
+    if (
+      (stringValue === `$${key}` || stringValue === `\${${key}}`) &&
+      Object.prototype.hasOwnProperty.call(process.env, key)
+    ) {
+      env[key] = process.env[key];
+    } else {
+      env[key] = stringValue;
+    }
+  }
+  return env;
+}
+
+function spawnLaunchConfig(config) {
+  return {
+    command: stringifyConfigValue(config.command),
+    args: Array.isArray(config.args) ? config.args.map(expandSafeTemplateString) : [],
+    env: materializeEnv(config.env || {}),
   };
 }
 
@@ -144,7 +173,7 @@ function stdioServers(settings, approvedRegistry) {
       }
     }
 
-    entries.push([name, runtimeLaunch]);
+    entries.push([name, spawnLaunchConfig(config)]);
   }
 
   return { entries, denied };
@@ -239,9 +268,8 @@ async function probeServer(name, config, timeoutMs) {
       });
     }
 
-    function sendNotification(method, params) {
+    function sendNotification(method) {
       const payload = { jsonrpc: "2.0", method };
-      if (params !== undefined) payload.params = params;
       child.stdin.write(`${JSON.stringify(payload)}\n`);
     }
 

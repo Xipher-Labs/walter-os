@@ -368,16 +368,20 @@ check_mcp_scanners() {
 
 # ---------- 5. MCP server-registry + tool-definition drift ----------
 # (Function still named check_tool_definitions for backward compat with
-# audit_main() invocation order; Phase 1 closes the no-op gap at the
-# registry level. Phase 2 — tool-schema drift via stdio JSON-RPC — is
-# follow-up under #117.)
+# audit_main() invocation order. It now performs two checks: static
+# registry drift and stdio tools/list drift for approved default-profile MCPs.)
 
 _mcp_tool_snapshot_helper() {
   local script_root="${BASH_SOURCE[0]%/skills/*}"
-  for candidate in \
-      "${WALTER_OS_HOME:-}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs" \
-      "${script_root}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs" \
-      "${HOME}/walter-os/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"; do
+  local -a candidates=()
+  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
+    candidates+=("${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs")
+  fi
+  candidates+=(
+    "${script_root}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+    "${HOME}/walter-os/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  )
+  for candidate in "${candidates[@]}"; do
     if [[ -n "$candidate" && -f "$candidate" ]]; then
       printf '%s' "$candidate"
       return 0
