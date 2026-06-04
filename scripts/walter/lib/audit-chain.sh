@@ -1067,7 +1067,7 @@ walter_audit_verify_chain() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path lock_path row_count root_hash verify_result verify_status
+  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path lock_path row_count verify_result verify_status
   _walter_audit_check_date_arg "$date_value" "date" || return $?
 
   audit_dir="$(walter_audit_dir)"
@@ -1078,7 +1078,7 @@ walter_audit_verify_chain() {
   _walter_audit_acquire_lock "$lock_path" || return 1
   if verify_result="$(_walter_audit_verify_chain_day_unlocked "$date_value")"; then
     verify_status=0
-    read -r row_count root_hash <<< "$verify_result"
+    read -r row_count _ <<< "$verify_result"
   else
     verify_status="$?"
   fi
@@ -1176,13 +1176,13 @@ _walter_audit_previous_date_checked() {
 }
 
 _walter_audit_verify_chain_range_unlocked() {
-  local since_date="$1" until_date="$2" current_date previous_date expected_root current_root day_count=0 verify_result row_count step_status
+  local since_date="$1" until_date="$2" current_date previous_date expected_root current_root day_count=0 verify_result step_status
 
   current_date="$since_date"
   expected_root=""
   while [[ "$current_date" == "$until_date" || "$current_date" < "$until_date" ]]; do
     verify_result="$(_walter_audit_verify_chain_day_unlocked "$current_date")" || return $?
-    read -r row_count current_root <<< "$verify_result"
+    read -r _ current_root <<< "$verify_result"
 
     if [[ "$day_count" -eq 0 ]]; then
       previous_date="$(_walter_audit_previous_date_checked "$current_date")"
