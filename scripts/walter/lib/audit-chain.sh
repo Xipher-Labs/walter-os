@@ -659,6 +659,7 @@ _walter_audit_loki_positive_int() {
     echo "walter-audit-chain: ${label} must be a positive integer" >&2
     return 2
   fi
+  return 0
 }
 
 _walter_audit_loki_range_ns() {
@@ -733,8 +734,11 @@ _walter_audit_verify_chain_from_loki_response() {
     return 1
   }
 
-  WALTER_CONFIG="$tmp_config" walter_audit_verify_chain "$date_value"
-  verify_status="$?"
+  if WALTER_CONFIG="$tmp_config" walter_audit_verify_chain "$date_value"; then
+    verify_status=0
+  else
+    verify_status="$?"
+  fi
   _walter_audit_remove_loki_tmp "$tmp_config"
   [[ "$verify_status" -eq 0 ]] || return "$verify_status"
 
@@ -837,12 +841,15 @@ walter_audit_verify_chain_from_loki_live() {
     return 1
   fi
 
-  _walter_audit_verify_chain_from_loki_response \
+  if _walter_audit_verify_chain_from_loki_response \
     "$tmp_response" \
     "$date_value" \
     "live Loki response" \
-    "from live Loki"
-  verify_status="$?"
+    "from live Loki"; then
+    verify_status=0
+  else
+    verify_status="$?"
+  fi
   rm -f "$tmp_response" "$tmp_error"
   return "$verify_status"
 }
