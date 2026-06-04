@@ -47,7 +47,9 @@ function isObject(value: unknown): value is JsonObject {
 }
 
 function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function isHttpUrl(value: unknown): value is string {

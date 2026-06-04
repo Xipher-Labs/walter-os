@@ -28,4 +28,10 @@ describe("preview evidence route", () => {
       )
     ).toBe(resolve("/app/.walter/previews"));
   });
+
+  it("does not fall back to the filesystem root from packaged app roots", () => {
+    expect(resolvePreviewRoot("/app", undefined, () => false)).toBe(
+      resolve("/app/.walter/previews")
+    );
+  });
 });

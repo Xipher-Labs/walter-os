@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { parse, resolve } from "node:path";
 import { readPreviewEvidence } from "@/lib/preview-evidence";
 import type { PreviewEvidenceResponse } from "@/lib/preview-evidence";
 
@@ -19,7 +19,11 @@ export function resolvePreviewRoot(
   if (pathExists(cwdRoot)) {
     return cwdRoot;
   }
-  return resolve(cwd, "..", "..", ".walter", "previews");
+  const repoRoot = resolve(cwd, "..", "..");
+  if (repoRoot === parse(repoRoot).root) {
+    return cwdRoot;
+  }
+  return resolve(repoRoot, ".walter", "previews");
 }
 
 export function redactPreviewEvidenceRoot(

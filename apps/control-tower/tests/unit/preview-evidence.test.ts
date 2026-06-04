@@ -439,6 +439,49 @@ describe("readPreviewEvidence", () => {
     );
   });
 
+  it("invalidates preview plans with blank required strings", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-250");
+    await mkdir(bundle, { recursive: true });
+    await writeJson(join(bundle, "preview-plan.json"), {
+      schema_version: 1,
+      kind: "preview-plan",
+      pr: 250,
+      provider: "   ",
+      app: "control-tower",
+      branch: "codex/preview",
+      generated_at: "2026-06-04T12:00:00Z",
+      bundle_dir: ".walter/previews/preview-pr-250",
+      seed_manifest: { path: "seed/seed.json", sha256: SHA256 },
+      actions: [
+        "deploy_ephemeral_preview",
+        "apply_seed_fixture",
+        "capture_screenshots",
+        "write_preview_bundle",
+      ],
+      safety: {
+        dry_run: true,
+        preview_deploy: true,
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 250,
+      status: "invalid",
+      provider: null,
+      safetyOk: false,
+    });
+    expect(evidence.previews[0].findings).toContain(
+      "preview plan provider is missing"
+    );
+  });
+
   it("surfaces screenshot-only captures as partial evidence", async () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-237");
