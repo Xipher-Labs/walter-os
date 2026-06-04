@@ -87,6 +87,52 @@ client-only install or a full self-hosted stack with any autonomy mode.
 `walter-os repo-config validate` prints the effective mode and reminds callers
 that the hard-limit floor is non-overridable in every mode.
 
+## Capability Plan
+
+Use `capability-plan` to compute the effective capability tier from the repo
+ceiling and objective evidence signals:
+
+```bash
+walter-os repo-config capability-plan . --evidence ci --evidence tests
+walter-os repo-config capability-plan . \
+  --risk low \
+  --evidence ci \
+  --evidence tests \
+  --evidence sandbox \
+  --evidence egress \
+  --evidence rollback \
+  --evidence branch_protection \
+  --evidence history
+walter-os repo-config capability-plan . --path install.sh --evidence ci --evidence tests
+```
+
+The command is advisory and read-only. It validates the policy file first,
+then reports:
+
+- `repo_ceiling` from `capability_tier_ceiling`
+- `evidence_tier` computed from explicit signals
+- `risk_cap` from input/path risk
+- `effective_tier = min(repo_ceiling, evidence_tier, risk_cap)`
+- hard-floor status and the resulting human gate
+
+Tier names follow [`ADR-0023`](../decisions/0023-capability-tiers.md):
+`0 read_only`, `1 assisted`, `2 supervised_autonomy`, and
+`3 bounded_autonomy`. A repo with no policy file defaults to
+`capability_tier_ceiling: 1`, but no submitted evidence still computes
+`evidence_tier: 0 read_only`.
+
+Evidence is explicit so the planner does not infer safety from vibes. Accepted
+signals are `ci`, `tests`, `coverage`, `sandbox`, `egress`, `rollback`,
+`branch_protection`, and `history`. CI + tests are enough for `assisted`;
+sandbox + egress + rollback can raise to `supervised_autonomy`; branch
+protection + history can raise to `bounded_autonomy` only for low-risk,
+non-hard-floor changes.
+
+Hard-floor paths still cap effective capability at `assisted` and require a
+human gate even when all evidence is present. Production deploys, secrets,
+protected branch merges, schema migrations, destructive operations, auth,
+crypto, money, and PHI remain outside discretionary capability tiers.
+
 ## Verification Plan
 
 Use `verification-plan` to turn the repo policy plus changed paths into an

@@ -400,3 +400,99 @@ YAML
   [ "$status" -eq 2 ]
   [[ "$output" == *"invalid risk: spicy"* ]]
 }
+
+@test "capability-plan defaults to read-only without evidence" {
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 1 assisted"* ]]
+  [[ "$output" == *"evidence_tier: 0 read_only"* ]]
+  [[ "$output" == *"effective_tier: 0 read_only"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan computes assisted with CI and tests evidence" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --evidence ci \
+    --evidence tests
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"evidence_tier: 1 assisted"* ]]
+  [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"allowed_actions:"* ]]
+  [[ "$output" == *"  - open_pr"* ]]
+}
+
+@test "capability-plan caps rich evidence by repo ceiling" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback \
+    --evidence branch_protection \
+    --evidence history
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 1 assisted"* ]]
+  [[ "$output" == *"evidence_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"effective_tier: 1 assisted"* ]]
+}
+
+@test "capability-plan allows bounded autonomy only with ceiling and evidence" {
+  write_valid_config
+  sed -i.bak 's/capability_tier_ceiling: 1/capability_tier_ceiling: 3/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback \
+    --evidence branch_protection \
+    --evidence history
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"evidence_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"effective_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"  - policy_auto_merge_non_protected"* ]]
+}
+
+@test "capability-plan caps hard-floor paths at assisted and requires human gate" {
+  write_valid_config
+  sed -i.bak 's/capability_tier_ceiling: 1/capability_tier_ceiling: 3/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path install.sh \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback \
+    --evidence branch_protection \
+    --evidence history
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hard_floor: yes"* ]]
+  [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan rejects unknown evidence names" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --evidence vibes
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid evidence: vibes"* ]]
+}
