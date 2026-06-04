@@ -275,6 +275,19 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "repo-config library falls back to minimal protected paths when policy file is missing" {
+  cp "$REPO_ROOT/scripts/walter/lib/repo-config.sh" "$TMP_DIR/repo-config.sh"
+
+  run bash -c '
+    export WALTER_OS_HOME="$1/missing"
+    # shellcheck source=/dev/null
+    source "$2"
+    _walter_repo_config_path_is_hard_floor "install.sh"
+  ' bash "$TMP_DIR" "$TMP_DIR/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "doctor --repo-config validates git root policy from subdirectories" {
   write_valid_config
   sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \

@@ -13,6 +13,24 @@ fi
 if [[ -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" ]]; then
   # shellcheck source=/dev/null
   source "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB"
+elif ! declare -p WALTER_PROTECTED_PATH_PATTERNS >/dev/null 2>&1; then
+  declare -a WALTER_PROTECTED_PATH_PATTERNS=(
+    'hooks/*.sh'
+    '.github/workflows/*'
+    'install.sh'
+    'bin/walter-os'
+    'AGENTS.md'
+    'CLAUDE.md'
+    'mcp/servers.json'
+    'auth/*'
+    'crypto/*'
+    'personal/health/*'
+    '*.key'
+    '*.pem'
+    '*.crt'
+    '*.env'
+    '*.env.*'
+  )
 fi
 unset _WALTER_REPO_CONFIG_LIB_DIR _WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB
 
