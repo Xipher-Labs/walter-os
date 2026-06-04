@@ -133,6 +133,27 @@ SH
   [[ ! -e "$(cat "$FAKE_NPX_OUTPUT")" ]]
 }
 
+@test "preview capture reports non-overwrite publish failures as runtime errors" {
+  install_fake_npx
+  cat > "$fake_bin/ln" <<'SH'
+#!/usr/bin/env bash
+echo "hardlink exploded" >&2
+exit 1
+SH
+  chmod +x "$fake_bin/ln"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"hardlink exploded"* ]]
+  [[ "$output" == *"could not publish screenshot"* ]]
+  [[ "$output" != *"screenshot already exists"* ]]
+}
+
 @test "preview capture rejects non-http preview URLs" {
   install_fake_npx
 

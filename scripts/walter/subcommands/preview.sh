@@ -283,7 +283,7 @@ cmd_capture() {
   validate_slug "--name" "$name"
   validate_wait_ms "$wait_ms"
 
-  local npx_path bundle_dir screenshot_dir screenshot_path screenshot_tmp generated_at capture_json
+  local npx_path bundle_dir screenshot_dir screenshot_path screenshot_tmp generated_at capture_json ln_output
   npx_path="$(resolve_npx)"
   bundle_dir="${out_root%/}/preview-pr-${pr}"
   screenshot_dir="${bundle_dir}/screenshots"
@@ -302,9 +302,15 @@ cmd_capture() {
     die_runtime "preview screenshot capture failed"
   fi
   validate_artifact "$screenshot_tmp"
-  if ! ln -- "$screenshot_tmp" "$screenshot_path" 2>/dev/null; then
+  if ! ln_output="$(ln -- "$screenshot_tmp" "$screenshot_path" 2>&1)"; then
     rm -f -- "$screenshot_tmp"
-    die_usage "screenshot already exists: $screenshot_path"
+    if [[ -e "$screenshot_path" ]]; then
+      die_usage "screenshot already exists: $screenshot_path"
+    fi
+    if [[ -n "$ln_output" ]]; then
+      printf '%s\n' "$ln_output" >&2
+    fi
+    die_runtime "could not publish screenshot: $screenshot_path"
   fi
   rm -f -- "$screenshot_tmp"
   validate_artifact "$screenshot_path"
