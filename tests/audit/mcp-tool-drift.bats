@@ -216,6 +216,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/mcp-http-sse-open") {
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (!Object.prototype.hasOwnProperty.call(request, "id")) {
+        res.writeHead(202).end();
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+      sendSse(res, "message", { jsonrpc: "2.0", id: request.id, result: rpcResult(request) });
+    });
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/mcp-http-bad-notification") {
     readBody(req, (body) => {
       const request = JSON.parse(body);
@@ -706,6 +723,31 @@ JSON
   run jq -r '.servers.remote_http_sse_final.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
   [ "$status" -eq 0 ]
   [ "$output" = "remote_lookup" ]
+}
+
+@test "HTTP MCP reads first SSE message without waiting for stream close" {
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-sse-open" '
+    .mcpServers.remote_http.url = $url
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/http-sse-open-settings.json" && \
+    mv "$TMP_HOME/http-sse-open-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-sse-open" '
+    .servers.remote_http.url = $url
+  ' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/http-sse-open-registry.json" && \
+    mv "$TMP_HOME/http-sse-open-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+  jq --sort-keys '.servers // {}' "$WALTER_OS_HOME/mcp/servers.json" \
+    > "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  run node "$HELPER" --settings "$CLAUDE_HOME/settings.json" \
+    --approved-registry "$WALTER_CONFIG/mcp-server-snapshots.json" \
+    --timeout-ms 100
+
+  [ "$status" -eq 0 ]
+  run jq -r '.servers.remote_http.tools[0].name' <<< "$output"
+  [ "$status" -eq 0 ]
+  [ "$output" = "remote_lookup" ]
+  run jq -e '.errors.remote_http' <<< "$output"
+  [ "$status" -ne 0 ]
 }
 
 @test "HTTP MCP notification failures produce probe errors" {

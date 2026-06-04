@@ -369,6 +369,27 @@ function parseJsonRpcResponseBody(text, contentType) {
   return JSON.parse(text);
 }
 
+async function readJsonRpcResponse(response, timeoutMs, label) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("text/event-stream")) {
+    const client = createSseClient(response, label);
+    try {
+      const event = await client.waitFor(
+        (candidate) => candidate.event === "message" && Boolean(candidate.data),
+        timeoutMs,
+        `${label} message`,
+      );
+      return JSON.parse(event.data);
+    } finally {
+      await client.close();
+    }
+  }
+  return parseJsonRpcResponseBody(
+    await readResponseText(response, timeoutMs, `${label} body`),
+    contentType,
+  );
+}
+
 function validateJsonRpcResponse(message, expectedId, method) {
   if (!message || typeof message !== "object" || Array.isArray(message)) {
     throw new Error(`${method} response is not a JSON-RPC object`);
@@ -419,10 +440,7 @@ async function probeHttpServer(name, config, timeoutMs) {
     const responseSession = response.headers.get("mcp-session-id");
     if (responseSession) sessionId = responseSession;
     const message = validateJsonRpcResponse(
-      parseJsonRpcResponseBody(
-        await readResponseText(response, timeoutMs, `${name} ${method} response body`),
-        response.headers.get("content-type") || "",
-      ),
+      await readJsonRpcResponse(response, timeoutMs, `${name} ${method} response`),
       id,
       method,
     );
