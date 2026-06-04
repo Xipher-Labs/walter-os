@@ -246,6 +246,17 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "GET" && req.url === "/sse-cross-origin") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive"
+    });
+    res.write(`event: endpoint\n`);
+    res.write(`data: http://127.0.0.2:65535/sse-message\n\n`);
+    return;
+  }
+
   if (req.method === "POST" && req.url?.startsWith("/sse-message?session=")) {
     const sessionId = new URL(req.url, "http://127.0.0.1").searchParams.get("session");
     const client = sseClients.get(sessionId);
@@ -640,6 +651,36 @@ JSON
   run jq -r '.errors.remote_http.message // ""' <<< "$output"
   [ "$status" -eq 0 ]
   [[ "$output" == *"response body: timeout after 100ms"* ]]
+}
+
+@test "SSE MCP probe rejects cross-origin message endpoints" {
+  jq --arg url "$REMOTE_BASE_URL/sse-cross-origin" '
+    del(.mcpServers.remote_http) |
+    .mcpServers.remote_sse.url = $url |
+    .mcpServers.remote_sse.headers.Authorization = "Bearer ${TEST_REMOTE_TOKEN}"
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/sse-cross-origin-settings.json" && \
+    mv "$TMP_HOME/sse-cross-origin-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/sse-cross-origin" '
+    del(.servers.remote_http) |
+    .servers.remote_sse.url = $url |
+    .servers.remote_sse.headers.Authorization = "Bearer ${TEST_REMOTE_TOKEN}"
+  ' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/sse-cross-origin-registry.json" && \
+    mv "$TMP_HOME/sse-cross-origin-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+  jq --sort-keys '.servers // {}' "$WALTER_OS_HOME/mcp/servers.json" \
+    > "$WALTER_CONFIG/mcp-server-snapshots.json"
+  : > "$REMOTE_REQUESTS_FILE"
+
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  run node "$HELPER" --settings "$CLAUDE_HOME/settings.json" \
+    --approved-registry "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  [ "$status" -eq 0 ]
+  run jq -r '.errors.remote_sse.message // ""' <<< "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SSE endpoint origin mismatch"* ]]
+  run jq -s 'map(select(.method == "POST")) | length' "$REMOTE_REQUESTS_FILE"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 0 ]
 }
 
 @test "HTTP MCP accepts final SSE event without trailing blank line" {

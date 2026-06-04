@@ -379,6 +379,15 @@ function validateJsonRpcResponse(message, expectedId, method) {
   return message;
 }
 
+function resolveSsePostUrl(endpoint, baseUrl, name) {
+  const approvedUrl = new URL(baseUrl);
+  const resolvedUrl = new URL(endpoint, approvedUrl);
+  if (resolvedUrl.origin !== approvedUrl.origin) {
+    throw new Error(`${name} SSE endpoint origin mismatch`);
+  }
+  return resolvedUrl.toString();
+}
+
 async function probeHttpServer(name, config, timeoutMs) {
   let nextId = 1;
   let sessionId = "";
@@ -588,7 +597,7 @@ async function probeSseServer(name, config, timeoutMs) {
       timeoutMs,
       "SSE endpoint",
     );
-    const postUrl = new URL(endpointEvent.data, config.url).toString();
+    const postUrl = resolveSsePostUrl(endpointEvent.data, config.url, name);
 
     async function postMessage(payload) {
       const postResponse = await fetchWithTimeout(
