@@ -1542,7 +1542,7 @@ walter_audit_verify_rekor_anchor() {
   fi
 
   local date_value="$1" root_hash="$2" configured_url="${3:-}"
-  local receipt_path receipt_root entry_id payload_hash rekor_url timeout tmp_dir response_file error_file remote_hash endpoint
+  local receipt_path receipt_root receipt_url entry_id payload_hash rekor_url timeout tmp_dir response_file error_file remote_hash endpoint
 
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
   if [[ ! -f "$receipt_path" ]]; then
@@ -1566,7 +1566,17 @@ walter_audit_verify_rekor_anchor() {
     echo "walter-audit-chain: Rekor receipt missing entry id: $receipt_path" >&2
     return 1
   }
-  rekor_url="$(_walter_audit_rekor_url "${configured_url:-$(jq -r '.rekor_url // empty' "$receipt_path")}")" || return $?
+  receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path")" || {
+    echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+    return 1
+  }
+  if [[ -n "$configured_url" ]]; then
+    rekor_url="$(_walter_audit_rekor_url "$configured_url")" || return $?
+  elif [[ -n "${WALTER_AUDIT_REKOR_URL:-}" ]]; then
+    rekor_url="$(_walter_audit_rekor_url)" || return $?
+  else
+    rekor_url="$(_walter_audit_rekor_url "$receipt_url")" || return $?
+  fi
   timeout="$(_walter_audit_rekor_timeout)" || return $?
   if ! command -v curl >/dev/null 2>&1; then
     echo "walter-audit-chain: curl required for Rekor verification" >&2

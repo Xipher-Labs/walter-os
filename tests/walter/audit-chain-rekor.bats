@@ -333,6 +333,27 @@ SH
   grep -q 'http://rekor.example/api/v1/log/entries/abc123' "$(_curl_args_path)"
 }
 
+@test "verify-chain --check-rekor honors WALTER_AUDIT_REKOR_URL over stored receipt URL" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://stored-rekor.example" 2026-05-31
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_URL="http://env-rekor.example" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified Rekor anchor abc123"* ]]
+  grep -q 'http://env-rekor.example/api/v1/log/entries/abc123' "$(_curl_args_path)"
+}
+
 @test "verify-chain --check-rekor fails when the receipt root differs" {
   _make_chain
   _write_mock_curl
