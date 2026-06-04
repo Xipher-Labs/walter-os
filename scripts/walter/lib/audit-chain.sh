@@ -748,7 +748,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id sig sign_status
+  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id sig sign_status chain_created
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -760,11 +760,13 @@ walter_audit_append() {
   chain_path="$(walter_audit_chain_path "$row_date")"
   root_path="$(walter_audit_root_path "$row_date")"
 
+  chain_created=0
   if [[ ! -e "$chain_path" ]]; then
     : > "$chain_path" || {
       _walter_audit_release_lock "$lock_path"
       return 1
     }
+    chain_created=1
   elif [[ ! -f "$chain_path" ]]; then
     echo "walter-audit-chain: chain path is not a file: $chain_path" >&2
     _walter_audit_release_lock "$lock_path"
@@ -781,6 +783,12 @@ walter_audit_append() {
 
   previous_hash="null"
   previous_line="$(tail -n 1 <&9)"
+  if [[ "$chain_created" -eq 0 && ! -s "$chain_path" && -f "$root_path" ]]; then
+    echo "walter-audit-chain: empty chain with existing root: $chain_path" >&2
+    exec 9>&-
+    _walter_audit_release_lock "$lock_path"
+    return 1
+  fi
   if [[ -s "$chain_path" ]]; then
     last_hex="$(tail -c 1 "$chain_path" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
     if [[ "$last_hex" != "0a" ]]; then
