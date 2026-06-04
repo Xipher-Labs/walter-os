@@ -11,7 +11,8 @@ blocked, needs human review, or is a clean candidate for policy-driven merge.
 
 - Add `walter-os pr-score` as an operator-facing readiness score.
 - Use observable PR evidence: checks, review state, title format, linked issue
-  references, verification notes, and sensitive file paths.
+  references, verification notes, sensitive file paths, and optional preview
+  evidence.
 - Return a clear decision: `block`, `human-review`, or `policy-auto-merge`.
 - Support JSON output for future automation.
 
@@ -19,8 +20,8 @@ blocked, needs human review, or is a clean candidate for policy-driven merge.
 
 - Do not merge PRs.
 - Do not relax the hard-limit floor from `approval-gate.sh`.
-- Do not require Plane, Forgejo, or preview-environment integration in this
-  first slice.
+- Do not deploy preview environments or mint preview credentials. PR Score only
+  consumes existing `preview-plan.json` and `preview-report.json` evidence.
 
 ## Acceptance Criteria
 
@@ -32,6 +33,11 @@ blocked, needs human review, or is a clean candidate for policy-driven merge.
 - AC4: `--json` returns machine-readable `score`, `decision`, `components`, and
   `findings`.
 - AC5: `walter-os help` documents the new command.
+- AC6: `--preview-report` awards preview evidence only when the report preserves
+  the AD-10 safety invariants (`production_secrets: rejected`, credentials not
+  minted, deploy not performed, hard-limit floor preserved).
+- AC7: `--preview-plan` without a report is incomplete preview evidence and
+  returns `human-review`; invalid explicit preview evidence returns `block`.
 
 ## Related
 
