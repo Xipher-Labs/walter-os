@@ -130,6 +130,24 @@ describe("readPreviewEvidence", () => {
     });
   });
 
+  it("explains empty preview directories instead of showing no findings", async () => {
+    const root = await makeRoot();
+    await mkdir(join(root, "preview-pr-239"), { recursive: true });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 239,
+      status: "invalid",
+      statusLabel: "Needs attention",
+      screenshots: 0,
+      hasReport: false,
+      hasPlan: false,
+      safetyOk: false,
+      findings: ["preview evidence missing"],
+    });
+  });
+
   it("marks malformed or mismatched evidence invalid without throwing", async () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-238");

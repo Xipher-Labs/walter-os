@@ -14,4 +14,12 @@ describe("preview evidence route", () => {
       resolve("/repo/.walter/previews")
     );
   });
+
+  it("uses cwd .walter previews when running from a packaged app root", () => {
+    expect(
+      resolvePreviewRoot("/app", undefined, (path) =>
+        path === resolve("/app/.walter/previews")
+      )
+    ).toBe(resolve("/app/.walter/previews"));
+  });
 });

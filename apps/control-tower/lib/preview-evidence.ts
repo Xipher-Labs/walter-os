@@ -315,6 +315,9 @@ async function readPreviewItem(
   if (!plan.exists && !report.exists && screenshots > 0) {
     findings.push("dry-run plan missing");
   }
+  if (!plan.exists && !report.exists && screenshots === 0) {
+    findings.push("preview evidence missing");
+  }
 
   const hasInvalidEvidence =
     (report.exists && !reportValid) || (plan.exists && !planValid);
