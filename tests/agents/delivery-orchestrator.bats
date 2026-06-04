@@ -4,6 +4,8 @@
 # Covers: docs/specs/delivery-orchestrator.md
 
 setup() {
+  command -v ruby >/dev/null 2>&1 || skip "ruby required"
+
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AGENT="$REPO_ROOT/agents/delivery-orchestrator.md"
   SPEC="$REPO_ROOT/docs/specs/delivery-orchestrator.md"
