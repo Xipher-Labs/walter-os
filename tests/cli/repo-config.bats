@@ -400,3 +400,23 @@ YAML
   [ "$status" -eq 2 ]
   [[ "$output" == *"invalid risk: spicy"* ]]
 }
+
+@test "verification-plan rejects missing risk values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --risk"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "verification-plan rejects missing path values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk low --path
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}

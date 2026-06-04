@@ -221,16 +221,24 @@ walter_repo_config_verification_plan() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --risk)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --risk\n' >&2
+          return 2
+        fi
         input_risk="${2:-}"
-        shift 2 || shift
+        shift 2
         ;;
       --risk=*)
         input_risk="${1#--risk=}"
         shift
         ;;
       --path)
+        if [[ $# -lt 2 ]]; then
+          printf 'repo-config: missing value for --path\n' >&2
+          return 2
+        fi
         paths+=("${2:-}")
-        shift 2 || shift
+        shift 2
         ;;
       --path=*)
         paths+=("${1#--path=}")

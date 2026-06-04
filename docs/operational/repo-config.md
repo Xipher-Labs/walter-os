@@ -90,7 +90,7 @@ that the hard-limit floor is non-overridable in every mode.
 ## Verification Plan
 
 Use `verification-plan` to turn the repo policy plus changed paths into an
-advisory check list:
+advisory checklist:
 
 ```bash
 walter-os repo-config verification-plan . --risk low --path docs/operational/repo-config.md
