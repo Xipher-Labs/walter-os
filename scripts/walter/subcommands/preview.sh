@@ -72,7 +72,7 @@ require_jq() {
 
 resolve_npx() {
   if [[ -n "${WALTER_PREVIEW_NPX:-}" ]]; then
-    if [[ -f "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" && ! -L "$WALTER_PREVIEW_NPX" ]]; then
+    if [[ -e "$WALTER_PREVIEW_NPX" && ! -d "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" ]]; then
       printf '%s\n' "$WALTER_PREVIEW_NPX"
       return 0
     fi
@@ -283,7 +283,7 @@ cmd_capture() {
   validate_slug "--name" "$name"
   validate_wait_ms "$wait_ms"
 
-  local npx_path bundle_dir screenshot_dir screenshot_path generated_at capture_json
+  local npx_path bundle_dir screenshot_dir screenshot_path screenshot_tmp generated_at capture_json
   npx_path="$(resolve_npx)"
   bundle_dir="${out_root%/}/preview-pr-${pr}"
   screenshot_dir="${bundle_dir}/screenshots"
@@ -295,7 +295,18 @@ cmd_capture() {
     die_usage "screenshot already exists: $screenshot_path"
   fi
 
-  "$npx_path" --no-install playwright screenshot --wait-for-timeout "$wait_ms" "$url" "$screenshot_path"
+  screenshot_tmp="$(mktemp "${screenshot_dir}/.${name}.tmp.XXXXXX")" \
+    || die_runtime "could not create temporary screenshot path"
+  if ! "$npx_path" --no-install playwright screenshot --wait-for-timeout "$wait_ms" "$url" "$screenshot_tmp"; then
+    rm -f -- "$screenshot_tmp"
+    die_runtime "preview screenshot capture failed"
+  fi
+  validate_artifact "$screenshot_tmp"
+  if ! ln -- "$screenshot_tmp" "$screenshot_path" 2>/dev/null; then
+    rm -f -- "$screenshot_tmp"
+    die_usage "screenshot already exists: $screenshot_path"
+  fi
+  rm -f -- "$screenshot_tmp"
   validate_artifact "$screenshot_path"
 
   generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

@@ -69,12 +69,14 @@ if [[ -z "$output" ]]; then
   echo "missing screenshot path" >&2
   exit 2
 fi
+printf '%s\n' "$output" > "${FAKE_NPX_OUTPUT:?}"
 printf 'fake png bytes\n' > "$output"
 SH
   chmod +x "$fake_bin/npx"
   export PATH="$fake_bin:$PATH"
   export WALTER_PREVIEW_NPX="$fake_bin/npx"
   export FAKE_NPX_LOG="$TMP_DIR/npx.log"
+  export FAKE_NPX_OUTPUT="$TMP_DIR/npx-output.log"
 }
 
 @test "preview capture writes a screenshot artifact with Playwright CLI" {
@@ -96,6 +98,39 @@ SH
   [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
   [[ "$(cat "$FAKE_NPX_LOG")" == *"--no-install playwright screenshot"* ]]
   [[ "$(cat "$FAKE_NPX_LOG")" == *"--wait-for-timeout 1000"* ]]
+}
+
+@test "preview capture accepts executable npx symlinks consistently" {
+  install_fake_npx
+  mv "$fake_bin/npx" "$fake_bin/npx-real"
+  ln -s "$fake_bin/npx-real" "$fake_bin/npx"
+  export WALTER_PREVIEW_NPX="$fake_bin/npx"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+}
+
+@test "preview capture writes to a temp file before publishing screenshot" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [[ "$(cat "$FAKE_NPX_OUTPUT")" != "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [[ "$(cat "$FAKE_NPX_OUTPUT")" == "$TMP_DIR/out/preview-pr-235/screenshots/."*".tmp."* ]]
+  [[ ! -e "$(cat "$FAKE_NPX_OUTPUT")" ]]
 }
 
 @test "preview capture rejects non-http preview URLs" {
