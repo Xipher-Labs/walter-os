@@ -332,40 +332,7 @@ async function drainResponseBody(response, timeoutMs) {
   }
 }
 
-function parseSseText(text) {
-  const events = [];
-  let eventName = "message";
-  let data = [];
-  for (const rawLine of text.split(/\r?\n/)) {
-    if (rawLine === "") {
-      if (data.length > 0) {
-        events.push({ event: eventName, data: data.join("\n") });
-      }
-      eventName = "message";
-      data = [];
-      continue;
-    }
-    if (rawLine.startsWith(":")) continue;
-    if (rawLine.startsWith("event:")) {
-      eventName = rawLine.slice("event:".length).trim();
-    } else if (rawLine.startsWith("data:")) {
-      data.push(rawLine.slice("data:".length).trimStart());
-    }
-  }
-  if (data.length > 0) {
-    events.push({ event: eventName, data: data.join("\n") });
-  }
-  return events;
-}
-
-function parseJsonRpcResponseBody(text, contentType) {
-  if (contentType.includes("text/event-stream")) {
-    for (const event of parseSseText(text)) {
-      if (!event.data) continue;
-      return JSON.parse(event.data);
-    }
-    throw new Error("empty SSE JSON-RPC response");
-  }
+function parseJsonRpcResponseBody(text) {
   return JSON.parse(text);
 }
 
@@ -384,10 +351,7 @@ async function readJsonRpcResponse(response, timeoutMs, label) {
       await client.close();
     }
   }
-  return parseJsonRpcResponseBody(
-    await readResponseText(response, timeoutMs, `${label} body`),
-    contentType,
-  );
+  return parseJsonRpcResponseBody(await readResponseText(response, timeoutMs, `${label} body`));
 }
 
 function validateJsonRpcResponse(message, expectedId, method) {

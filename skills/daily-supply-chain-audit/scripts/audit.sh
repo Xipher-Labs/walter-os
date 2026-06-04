@@ -392,6 +392,10 @@ _mcp_tool_snapshot_helper() {
   return 1
 }
 
+_mcp_tool_node_major_version() {
+  node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null
+}
+
 check_mcp_runtime_tool_definitions() {
   local settings="${CLAUDE_HOME}/settings.json"
   [[ -f "$settings" ]] || return 0
@@ -406,8 +410,16 @@ check_mcp_runtime_tool_definitions() {
 
   if ! command -v node >/dev/null 2>&1; then
     finding high "no-node-mcp-tool-drift" \
-      "node not installed; cannot probe MCP tool definitions" \
-      "Install Node.js or run walter-os baseline-mcp-tools from a Node-enabled host"
+      "Node.js 18+ not installed; cannot probe MCP tool definitions" \
+      "Install Node.js 18+ or run walter-os baseline-mcp-tools from a Node-enabled host"
+    return 0
+  fi
+
+  local node_major
+  if ! node_major="$(_mcp_tool_node_major_version)" || [[ ! "$node_major" =~ ^[0-9]+$ || "$node_major" -lt 18 ]]; then
+    finding high "node-too-old-mcp-tool-drift" \
+      "Node.js 18+ required for HTTP/SSE MCP tool-definition probing" \
+      "Upgrade Node.js to 18+ or run walter-os baseline-mcp-tools from a Node.js 18+ host"
     return 0
   fi
 

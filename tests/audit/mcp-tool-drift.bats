@@ -458,6 +458,36 @@ RUNNER
   [ "$status" -eq 1 ]
 }
 
+@test "HTTP/SSE MCP probe requires Node.js 18+ before runtime probing" {
+  local old_node_bin="$TMP_HOME/old-node-bin"
+  mkdir -p "$old_node_bin"
+  cat > "$old_node_bin/node" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-p" ]]; then
+  printf '16\n'
+  exit 0
+fi
+echo "old node cannot run MCP probes" >&2
+exit 1
+SH
+  chmod +x "$old_node_bin/node"
+
+  rm -f "$AUDIT_FINDINGS"
+  PATH="$old_node_bin:$PATH" bash "$AUDIT_RUNNER"
+
+  run jq -r 'select(.severity == "high" and .id == "node-too-old-mcp-tool-drift") | .desc + " | " + .action' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Node.js 18+ required"* ]]
+  [[ "$output" == *"Node.js 18+ host"* ]]
+}
+
+@test "HTTP/SSE MCP probe parses event-stream responses through streaming path only" {
+  local helper="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+
+  run grep -n 'function parseSseText' "$helper"
+  [ "$status" -eq 1 ]
+}
+
 @test "audit path fallbacks do not expand empty WALTER_OS_HOME to root" {
   run grep -n '\${WALTER_OS_HOME:-}/' "$AUDIT"
   [ "$status" -eq 1 ]
