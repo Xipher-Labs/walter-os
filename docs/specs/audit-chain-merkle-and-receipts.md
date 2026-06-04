@@ -104,7 +104,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 ### AC-5 — Sigstore Rekor opt-in
 
-- [ ] When `WALTER_AUDIT_REKOR_UPLOAD=1`, `walter-os audit close-day` uploads:
+- [x] When `WALTER_AUDIT_REKOR_UPLOAD=1`, `walter-os audit close-day` uploads:
   ```json
   {
     "root": "<hex>",
@@ -114,17 +114,17 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
   }
   ```
   signed with the LAST session's Ed25519 key. Receives a Rekor entry-id; stored in `root-YYYY-MM-DD.rekor.json`.
-- [ ] `walter-os audit verify-chain --check-rekor` confirms the local root matches what's in Rekor.
-- [ ] If `WALTER_AUDIT_REKOR_UPLOAD=0` (default), no network call.
+- [x] `walter-os audit verify-chain --check-rekor` confirms the local root matches what's in Rekor.
+- [x] If `WALTER_AUDIT_REKOR_UPLOAD=0` (default), no network call.
 
 ### AC-6 — Operator-facing docs + CHANGELOG
 
-- [ ] `docs/operational/audit-chain.md` (new):
+- [x] `docs/operational/audit-chain.md` (new):
   - Row schema + normalization rules
   - How to verify (`walter-os audit verify-chain`)
   - How to opt into Rekor
   - "What does this NOT protect against" (compromised session key during the session itself)
-- [ ] CHANGELOG entry under `[Unreleased] → Added (audit integrity)`.
+- [x] CHANGELOG entry under `[Unreleased] → Added (audit integrity)`.
 
 ### AC-7 — Migration / coexistence
 

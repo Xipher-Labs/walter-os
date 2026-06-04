@@ -33,6 +33,11 @@ walter_audit_root_path() {
   printf '%s/root-%s.txt\n' "$(walter_audit_dir)" "$date_value"
 }
 
+walter_audit_rekor_receipt_path() {
+  local date_value="${1:-$(walter_audit_date)}"
+  printf '%s/root-%s.rekor.json\n' "$(walter_audit_dir)" "$date_value"
+}
+
 walter_audit_lock_path() {
   printf '%s/.chain.lock\n' "$(walter_audit_dir)"
 }
@@ -1155,9 +1160,370 @@ walter_audit_verify_chain() {
   printf 'ok: verified %s row(s): %s\n' "$row_count" "$chain_path"
 }
 
-walter_audit_close_day() {
-  [[ "$#" -le 1 ]] || {
-    echo "walter-audit-chain: usage: walter_audit_close_day [date]" >&2
+_walter_audit_rekor_url() {
+  local configured="${1:-${WALTER_AUDIT_REKOR_URL:-https://rekor.sigstore.dev}}" rekor_url
+  rekor_url="$(_walter_audit_trim "$configured")"
+  if [[ -z "$rekor_url" ]]; then
+    echo "walter-audit-chain: Rekor URL required" >&2
+    return 2
+  fi
+  case "$rekor_url" in
+    http://*|https://*) ;;
+    *)
+      echo "walter-audit-chain: Rekor URL must start with http:// or https://" >&2
+      return 2
+      ;;
+  esac
+  printf '%s' "${rekor_url%/}"
+}
+
+_walter_audit_rekor_timeout() {
+  local timeout="${WALTER_AUDIT_REKOR_TIMEOUT_SECONDS:-10}"
+  if [[ ! "$timeout" =~ ^[1-9][0-9]*$ ]]; then
+    echo "walter-audit-chain: WALTER_AUDIT_REKOR_TIMEOUT_SECONDS must be a positive integer" >&2
+    return 2
+  fi
+  if [[ "$timeout" -gt 300 ]]; then
+    echo "walter-audit-chain: WALTER_AUDIT_REKOR_TIMEOUT_SECONDS must be <= 300" >&2
+    return 2
+  fi
+  printf '%s' "$timeout"
+}
+
+_walter_audit_operator_hash() {
+  local operator="${WALTER_AUDIT_OPERATOR_ID:-${USER:-unknown}}"
+  walter_audit_hash_string "walter-os-audit-operator:${operator}"
+}
+
+_walter_audit_version() {
+  local version_file="${WALTER_OS_HOME:-}/VERSION" version
+  if [[ -f "$version_file" ]]; then
+    version="$(sed -n '1p' "$version_file" 2>/dev/null || true)"
+    version="$(_walter_audit_trim "$version")"
+  else
+    version=""
+  fi
+  printf '%s' "${version:-unknown}"
+}
+
+_walter_audit_last_session_id_for_day() {
+  local chain_path="$1" session_id
+  session_id="$(tail -n 1 "$chain_path" | jq -er '
+    if (.session_id | type) == "string" and (.session_id | test("^[A-Za-z0-9._-]+$")) then
+      .session_id
+    else
+      empty
+    end
+  ' 2>/dev/null)" || {
+    echo "walter-audit-chain: unable to read final audit session id: $chain_path" >&2
+    return 1
+  }
+  printf '%s' "$session_id"
+}
+
+_walter_audit_rekor_payload() {
+  local date_value="$1" root_hash="$2" operator_hash version
+  operator_hash="$(_walter_audit_operator_hash)"
+  version="$(_walter_audit_version)"
+  jq -cS -n \
+    --arg date "$date_value" \
+    --arg operator "$operator_hash" \
+    --arg root "$root_hash" \
+    --arg version "$version" \
+    '{date:$date, operator:$operator, root:$root, walter_os_version:$version}'
+}
+
+_walter_audit_rekor_request_body() {
+  local payload="$1" sig="$2" public_key="$3" payload_hash
+  payload_hash="$(walter_audit_hash_string "$payload")"
+  jq -cS -n \
+    --arg hash "$payload_hash" \
+    --arg public_key "$public_key" \
+    --arg sig "$sig" \
+    '{
+      apiVersion: "0.0.1",
+      kind: "hashedrekord",
+      spec: {
+        data: {hash: {algorithm: "sha256", value: $hash}},
+        signature: {content: $sig, publicKey: {content: $public_key}}
+      }
+    }'
+}
+
+_walter_audit_rekor_entry_id() {
+  local response_file="$1" entry_id
+  entry_id="$(jq -er 'if type == "object" then keys_unsorted[0] else empty end' "$response_file" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor response missing entry id" >&2
+    return 1
+  }
+  [[ -n "$entry_id" && "$entry_id" != "null" ]] || {
+    echo "walter-audit-chain: Rekor response missing entry id" >&2
+    return 1
+  }
+  printf '%s' "$entry_id"
+}
+
+_walter_audit_rekor_stderr_snippet() {
+  local path="$1"
+  [[ -s "$path" ]] || return 0
+  sed -n 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; /^[[:space:]]*$/d; p; q' "$path"
+}
+
+_walter_audit_rekor_curl() {
+  local method="$1" url="$2" output="$3" error="$4" timeout="$5" data_file="${6:-}"
+  local http_status curl_status errexit_was_set=0
+  local -a curl_args
+
+  curl_args=(-sS -o "$output" -w "%{http_code}" --connect-timeout "$timeout" --max-time "$timeout")
+  if [[ "$method" == "POST" ]]; then
+    curl_args+=(-X POST -H "Content-Type: application/json" --data-binary "@${data_file}")
+  fi
+  curl_args+=("$url")
+
+  case "$-" in
+    *e*)
+      errexit_was_set=1
+      set +e
+      ;;
+  esac
+  http_status="$(curl "${curl_args[@]}" 2>"$error")"
+  curl_status="$?"
+  if [[ "$errexit_was_set" -eq 1 ]]; then
+    set -e
+  fi
+  if [[ "$curl_status" -ne 0 ]]; then
+    local stderr_snippet
+    stderr_snippet="$(_walter_audit_rekor_stderr_snippet "$error")"
+    echo "walter-audit-chain: unable to contact Rekor (curl exit ${curl_status}); check WALTER_AUDIT_REKOR_URL/--rekor-url and network reachability" >&2
+    if [[ -n "$stderr_snippet" ]]; then
+      echo "walter-audit-chain: curl stderr: $stderr_snippet" >&2
+    fi
+    return 1
+  fi
+  if [[ "$http_status" == "401" || "$http_status" == "403" ]]; then
+    echo "walter-audit-chain: Rekor authentication failed (HTTP ${http_status})" >&2
+    return 1
+  fi
+  if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+    echo "walter-audit-chain: Rekor request failed (HTTP ${http_status})" >&2
+    return 1
+  fi
+  return 0
+}
+
+_walter_audit_rekor_response_payload_hash() {
+  local response_file="$1" entry_id="$2" tmp_dir body_file body_hash body_value
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-body)" || return 1
+  body_file="$tmp_dir/body.json"
+  body_value="$(jq -er --arg entry_id "$entry_id" '.[$entry_id].body // empty' "$response_file" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor response missing decodable entry body" >&2
+    return 1
+  }
+  if ! python3 - "$body_value" "$body_file" <<'PY'
+import base64
+import binascii
+import pathlib
+import sys
+
+try:
+    value = sys.argv[1]
+    data = base64.b64decode(value.encode("ascii"), validate=True)
+except (binascii.Error, ValueError):
+    raise SystemExit(1)
+pathlib.Path(sys.argv[2]).write_bytes(data)
+PY
+  then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor response missing decodable entry body" >&2
+    return 1
+  fi
+  body_hash="$(jq -er '.spec.data.hash.value // empty' "$body_file" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry body missing payload hash" >&2
+    return 1
+  }
+  rm -rf "$tmp_dir"
+  printf '%s' "$body_hash"
+}
+
+_walter_audit_rekor_write_receipt() {
+  local receipt_path="$1" entry_id="$2" rekor_url="$3" payload="$4" sig="$5" public_key="$6" response_file="$7"
+  local payload_hash tmp_receipt
+  payload_hash="$(walter_audit_hash_string "$payload")"
+  tmp_receipt="${receipt_path}.tmp.${BASHPID:-$$}"
+  jq -cS -n \
+    --arg entry_id "$entry_id" \
+    --arg payload_sha256 "$payload_hash" \
+    --arg public_key "$public_key" \
+    --arg rekor_url "$rekor_url" \
+    --arg sig "$sig" \
+    --argjson payload "$payload" \
+    --slurpfile response "$response_file" \
+    '{
+      entry_id: $entry_id,
+      payload: $payload,
+      payload_sha256: $payload_sha256,
+      public_key: $public_key,
+      rekor_url: $rekor_url,
+      response: $response[0],
+      sig: $sig
+    }' > "$tmp_receipt" || {
+      rm -f "$tmp_receipt"
+      return 1
+    }
+  chmod 600 "$tmp_receipt" || {
+    rm -f "$tmp_receipt"
+    return 1
+  }
+  mv "$tmp_receipt" "$receipt_path"
+}
+
+_walter_audit_rekor_receipt_payload_hash() {
+  local receipt_path="$1" payload payload_hash stored_payload_hash
+  payload="$(jq -cS '.payload' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+    return 1
+  }
+  payload_hash="$(walter_audit_hash_string "$payload")"
+  stored_payload_hash="$(jq -r '.payload_sha256 // empty' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+    return 1
+  }
+  if [[ "$payload_hash" != "$stored_payload_hash" ]]; then
+    echo "walter-audit-chain: Rekor receipt payload hash mismatch: $receipt_path" >&2
+    return 1
+  fi
+  printf '%s' "$payload_hash"
+}
+
+walter_audit_rekor_upload() {
+  [[ "$#" -ge 3 && "$#" -le 4 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_rekor_upload <date> <root> <chain-path> [rekor-url]" >&2
+    return 2
+  }
+  local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}"
+  local receipt_path rekor_url timeout session_id payload sig public_key_file public_key request_body entry_id
+  local tmp_dir request_file response_file error_file endpoint
+
+  receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
+  if [[ -f "$receipt_path" ]]; then
+    _walter_audit_rekor_receipt_payload_hash "$receipt_path" >/dev/null || return $?
+    if [[ "$(jq -r '.payload.root // empty' "$receipt_path")" != "$root_hash" ]]; then
+      echo "walter-audit-chain: Rekor receipt root mismatch: $receipt_path" >&2
+      return 1
+    fi
+    printf 'ok: Rekor receipt already exists: %s\n' "$receipt_path"
+    return 0
+  fi
+
+  rekor_url="$(_walter_audit_rekor_url "$configured_url")" || return $?
+  timeout="$(_walter_audit_rekor_timeout)" || return $?
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "walter-audit-chain: curl required for Rekor upload" >&2
+    return 3
+  fi
+  _walter_audit_require_python3 || return 3
+
+  session_id="$(_walter_audit_last_session_id_for_day "$chain_path")" || return $?
+  payload="$(_walter_audit_rekor_payload "$date_value" "$root_hash")" || return $?
+  sig="$(_walter_audit_sign_row "$payload" "$session_id")" || return $?
+  public_key_file="$(_walter_audit_public_key_file "$session_id")" || {
+    echo "walter-audit-chain: cannot anchor Rekor receipt: public key missing for session ${session_id}" >&2
+    return 2
+  }
+  public_key="$(_walter_audit_b64_encode_file "$public_key_file")" || return $?
+  request_body="$(_walter_audit_rekor_request_body "$payload" "$sig" "$public_key")" || return $?
+
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-upload)" || return 1
+  request_file="$tmp_dir/request.json"
+  response_file="$tmp_dir/response.json"
+  error_file="$tmp_dir/error.txt"
+  printf '%s' "$request_body" > "$request_file" || {
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  endpoint="${rekor_url}/api/v1/log/entries"
+  if ! _walter_audit_rekor_curl "POST" "$endpoint" "$response_file" "$error_file" "$timeout" "$request_file"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+  entry_id="$(_walter_audit_rekor_entry_id "$response_file")" || {
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  _walter_audit_rekor_write_receipt "$receipt_path" "$entry_id" "$rekor_url" "$payload" "$sig" "$public_key" "$response_file" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: unable to write Rekor receipt: $receipt_path" >&2
+    return 1
+  }
+  rm -rf "$tmp_dir"
+  printf 'ok: anchored audit root in Rekor %s: %s\n' "$entry_id" "$receipt_path"
+}
+
+walter_audit_verify_rekor_anchor() {
+  [[ "$#" -ge 2 && "$#" -le 3 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_rekor_anchor <date> <root> [rekor-url]" >&2
+    return 2
+  }
+  local date_value="$1" root_hash="$2" configured_url="${3:-}"
+  local receipt_path receipt_root entry_id payload_hash rekor_url timeout tmp_dir response_file error_file remote_hash endpoint
+
+  receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
+  if [[ ! -f "$receipt_path" ]]; then
+    echo "walter-audit-chain: Rekor receipt not found: $receipt_path" >&2
+    return 1
+  fi
+  receipt_root="$(jq -r '.payload.root // empty' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+    return 1
+  }
+  if [[ "$receipt_root" != "$root_hash" ]]; then
+    echo "walter-audit-chain: Rekor receipt root mismatch: $receipt_path" >&2
+    return 1
+  fi
+  if [[ "$(jq -r '.payload.date // empty' "$receipt_path")" != "$date_value" ]]; then
+    echo "walter-audit-chain: Rekor receipt date mismatch: $receipt_path" >&2
+    return 1
+  fi
+  payload_hash="$(_walter_audit_rekor_receipt_payload_hash "$receipt_path")" || return $?
+  entry_id="$(jq -er '.entry_id // empty' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor receipt missing entry id: $receipt_path" >&2
+    return 1
+  }
+  rekor_url="$(_walter_audit_rekor_url "${configured_url:-$(jq -r '.rekor_url // empty' "$receipt_path")}")" || return $?
+  timeout="$(_walter_audit_rekor_timeout)" || return $?
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "walter-audit-chain: curl required for Rekor verification" >&2
+    return 3
+  fi
+  _walter_audit_require_python3 || return 3
+
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-verify)" || return 1
+  response_file="$tmp_dir/response.json"
+  error_file="$tmp_dir/error.txt"
+  endpoint="${rekor_url}/api/v1/log/entries/${entry_id}"
+  if ! _walter_audit_rekor_curl "GET" "$endpoint" "$response_file" "$error_file" "$timeout"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+  remote_hash="$(_walter_audit_rekor_response_payload_hash "$response_file" "$entry_id")" || {
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  rm -rf "$tmp_dir"
+  if [[ "$remote_hash" != "$payload_hash" ]]; then
+    echo "walter-audit-chain: Rekor entry payload hash mismatch for ${entry_id}" >&2
+    echo "  expected: $payload_hash" >&2
+    echo "  actual:   $remote_hash" >&2
+    return 1
+  fi
+  printf 'ok: verified Rekor anchor %s\n' "$entry_id"
+}
+
+walter_audit_verify_chain_with_rekor() {
+  [[ "$#" -le 2 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_chain_with_rekor [date] [rekor-url]" >&2
     return 2
   }
   if ! _walter_audit_jq_available; then
@@ -1165,7 +1531,60 @@ walter_audit_close_day() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line
+  local date_value="${1:-$(walter_audit_date)}" configured_url="${2:-}" audit_dir lock_path verify_result verify_status row_count root_hash
+  _walter_audit_check_date_arg "$date_value" "date" || return $?
+
+  audit_dir="$(walter_audit_dir)"
+  lock_path="$(walter_audit_lock_path)"
+  mkdir -p "$audit_dir" || return 1
+  chmod 700 "$audit_dir" || return 1
+  _walter_audit_acquire_lock "$lock_path" || return 1
+  if verify_result="$(_walter_audit_verify_chain_day_unlocked "$date_value")"; then
+    verify_status=0
+    read -r row_count root_hash <<< "$verify_result"
+  else
+    verify_status="$?"
+  fi
+  _walter_audit_release_lock "$lock_path"
+  [[ "$verify_status" -eq 0 ]] || return "$verify_status"
+
+  printf 'ok: verified %s row(s): %s\n' "$row_count" "$(walter_audit_chain_path "$date_value")"
+  walter_audit_verify_rekor_anchor "$date_value" "$root_hash" "$configured_url"
+}
+
+walter_audit_close_day() {
+  local rekor_url="" positional=()
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --rekor-url)
+        if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+          echo "walter-audit-chain: --rekor-url <url> required" >&2
+          return 2
+        fi
+        rekor_url="$2"
+        shift 2
+        ;;
+      --*)
+        echo "walter-audit-chain: unsupported close-day option: $1" >&2
+        echo "walter-audit-chain: usage: walter_audit_close_day [--rekor-url <url>] [date]" >&2
+        return 2
+        ;;
+      *)
+        positional+=("$1")
+        shift
+        ;;
+    esac
+  done
+  [[ "${#positional[@]}" -le 1 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_close_day [--rekor-url <url>] [date]" >&2
+    return 2
+  }
+  if ! _walter_audit_jq_available; then
+    echo "walter-audit-chain: jq required" >&2
+    return 3
+  fi
+
+  local date_value="${positional[0]:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line
   _walter_audit_check_date_arg "$date_value" "date" || return $?
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
@@ -1208,6 +1627,9 @@ walter_audit_close_day() {
   [[ "$close_status" -eq 0 ]] || return "$close_status"
 
   printf 'ok: closed audit day %s (%s row(s)): %s\n' "$date_value" "$row_count" "$root_path"
+  if [[ "${WALTER_AUDIT_REKOR_UPLOAD:-0}" == "1" ]]; then
+    walter_audit_rekor_upload "$date_value" "$root_hash" "$chain_path" "$rekor_url"
+  fi
 }
 
 _walter_audit_verify_prev_chain_root() {
