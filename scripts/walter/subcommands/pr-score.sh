@@ -232,20 +232,23 @@ preview_report_status() {
   local payload="$1" expected_pr="$2"
   jq -nc --argjson report "$payload" --argjson expected_pr "$expected_pr" '
     def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
+    ($report | if type == "object" then . else {} end) as $r |
+    ($r.seed_manifest | if type == "object" then . else {} end) as $seed |
+    ($r.screenshots | if type == "array" then . else [] end) as $screenshots |
+    ($r.safety | if type == "object" then . else {} end) as $safety |
     {
       provided: true,
       valid: (
-        ($report.schema_version == 1) and
-        ($report.pr == $expected_pr) and
-        (($report.url // "") | type == "string" and test("^https?://")) and
-        (($report.seed_manifest.sha256 // "") | sha256_ok) and
-        (($report.screenshots // []) | type == "array") and
-        (($report.screenshots // []) | length > 0) and
-        ([($report.screenshots // [])[] | select(((.sha256 // "") | sha256_ok) | not)] | length == 0) and
-        ($report.safety.production_secrets == "rejected") and
-        ($report.safety.credentials == "not minted") and
-        ($report.safety.deploy == "not performed") and
-        ($report.safety.hard_limit_floor == "preserved")
+        ($r.schema_version == 1) and
+        ($r.pr == $expected_pr) and
+        (($r.url // "") | type == "string" and test("^https?://")) and
+        (($seed.sha256 // "") | sha256_ok) and
+        ($screenshots | length > 0) and
+        ([$screenshots[] | select(((if type == "object" then (.sha256 // "") else "" end) | sha256_ok) | not)] | length == 0) and
+        ($safety.production_secrets == "rejected") and
+        ($safety.credentials == "not minted") and
+        ($safety.deploy == "not performed") and
+        ($safety.hard_limit_floor == "preserved")
       )
     }'
 }
@@ -254,26 +257,30 @@ preview_plan_status() {
   local payload="$1" expected_pr="$2"
   jq -nc --argjson plan "$payload" --argjson expected_pr "$expected_pr" '
     def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
+    ($plan | if type == "object" then . else {} end) as $p |
+    ($p.seed_manifest | if type == "object" then . else {} end) as $seed |
+    ($p.actions | if type == "array" then . else [] end) as $actions |
+    ($p.safety | if type == "object" then . else {} end) as $safety |
     {
       provided: true,
       valid: (
-        ($plan.schema_version == 1) and
-        ($plan.kind == "preview-plan") and
-        ($plan.pr == $expected_pr) and
-        (($plan.provider // "") | type == "string" and length > 0) and
-        (($plan.app // "") | type == "string" and length > 0) and
-        (($plan.branch // "") | type == "string" and length > 0) and
-        (($plan.seed_manifest.sha256 // "") | sha256_ok) and
-        (($plan.actions // []) | index("deploy_ephemeral_preview") != null) and
-        (($plan.actions // []) | index("apply_seed_fixture") != null) and
-        (($plan.actions // []) | index("capture_screenshots") != null) and
-        (($plan.actions // []) | index("write_preview_bundle") != null) and
-        ($plan.safety.dry_run == true) and
-        ($plan.safety.preview_deploy == true) and
-        ($plan.safety.production_secrets == "rejected") and
-        ($plan.safety.credentials == "not minted") and
-        ($plan.safety.deploy == "not performed") and
-        ($plan.safety.hard_limit_floor == "preserved")
+        ($p.schema_version == 1) and
+        ($p.kind == "preview-plan") and
+        ($p.pr == $expected_pr) and
+        (($p.provider // "") | type == "string" and length > 0) and
+        (($p.app // "") | type == "string" and length > 0) and
+        (($p.branch // "") | type == "string" and length > 0) and
+        (($seed.sha256 // "") | sha256_ok) and
+        ($actions | index("deploy_ephemeral_preview") != null) and
+        ($actions | index("apply_seed_fixture") != null) and
+        ($actions | index("capture_screenshots") != null) and
+        ($actions | index("write_preview_bundle") != null) and
+        ($safety.dry_run == true) and
+        ($safety.preview_deploy == true) and
+        ($safety.production_secrets == "rejected") and
+        ($safety.credentials == "not minted") and
+        ($safety.deploy == "not performed") and
+        ($safety.hard_limit_floor == "preserved")
       )
     }'
 }

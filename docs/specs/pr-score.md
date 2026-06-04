@@ -30,8 +30,8 @@ blocked, needs human review, or is a clean candidate for policy-driven merge.
 - AC2: Failing checks or an invalid title return `block`.
 - AC3: Sensitive paths such as `.github/workflows/`, `hooks/`, `install.sh`,
   `AGENTS.md`, or `mcp/servers.json` force `human-review`.
-- AC4: `--json` returns machine-readable `score`, `decision`, `components`, and
-  `findings`.
+- AC4: `--json` returns machine-readable `score`, `decision`, `components`,
+  `preview`, and `findings`.
 - AC5: `walter-os help` documents the new command.
 - AC6: `--preview-report` awards preview evidence only when the report preserves
   the AD-10 safety invariants (`production_secrets: rejected`, credentials not
