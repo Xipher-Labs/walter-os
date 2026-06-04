@@ -38,6 +38,10 @@ _root_path() {
   printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
 }
 
+_state_file() {
+  bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_ROOT'"
+}
+
 _physical_path() {
   (cd "$1" && pwd -P)
 }
@@ -87,6 +91,24 @@ _verify_chain() {
   jq -e '.row_hash | test("^[0-9a-f]{64}$")' "$(_chain_path)"
   jq -e '.sig | test("^[A-Za-z0-9+/]{86}==$")' "$(_chain_path)"
   jq -e '.tool == "Bash" and .decision == "allow" and .decision_source == "approval-gate"' "$(_chain_path)"
+}
+
+@test "B-2: append reports invalid session state explicitly" {
+  printf '{bad-json\n' > "$(_state_file)"
+
+  run bash -c "unset WALTER_SESSION_ID; source '$AUDIT_LIB'; WALTER_AUDIT_SESSION_STATE='$(_state_file)' walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid session state: $(_state_file)"* ]]
+  [[ "$output" != *"active session id required"* ]]
+}
+
+@test "B-2: append reports invalid WALTER_SESSION_ID explicitly" {
+  run bash -c "source '$AUDIT_LIB'; WALTER_SESSION_ID='bad/session' walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid session id for signed audit row"* ]]
+  [[ "$output" != *"active session id required"* ]]
 }
 
 @test "B-1: flock lock file is private when flock is available" {
@@ -465,6 +487,19 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"empty chain with existing root"* ]]
   [ ! -s "$(_chain_path)" ]
+  [ "$(cat "$(_root_path)")" = "$original_root" ]
+}
+
+@test "B-1: append rejects missing chain when root already exists" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' allow approval-gate ok >/dev/null"
+  original_root="$(cat "$(_root_path)")"
+  rm "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after chain deletion' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"chain missing with existing root"* ]]
+  [ ! -e "$(_chain_path)" ]
   [ "$(cat "$(_root_path)")" = "$original_root" ]
 }
 

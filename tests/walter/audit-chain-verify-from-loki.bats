@@ -152,6 +152,16 @@ SH
   [[ "$output" == *"no audit-chain rows found"* ]]
 }
 
+@test "verify-chain --from-loki rejects path-traversal dates" {
+  _make_chain
+  _make_loki_fixture
+
+  run bash "$WALTER_OS_BIN" audit verify-chain --from-loki --mock-loki "$(_fixture_path)" "../../bad"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid Loki date"* ]]
+}
+
 @test "verify-chain --from-loki requires a live Loki URL when no fixture is provided" {
   run bash "$WALTER_OS_BIN" audit verify-chain --from-loki 2026-06-04
 
@@ -176,10 +186,27 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
   [[ "$output" == *"from live Loki"* ]]
-  [[ "$output" != *"super-secret-token"* ]]
+  combined_output="${output}${stderr:-}"
+  [[ "$combined_output" != *"super-secret-token"* ]]
   grep -q '/loki/api/v1/query_range' "$(_curl_args_path)"
   grep -q '{app="walter-os", kind="audit-chain"}' "$(_curl_args_path)"
+  grep -q 'start=1780531200000000000' "$(_curl_args_path)"
+  grep -q 'end=1780617599999999999' "$(_curl_args_path)"
   grep -q 'Authorization: Bearer super-secret-token' "$(_curl_args_path)"
+}
+
+@test "verify-chain --from-loki computes live range bounds without python3" {
+  mkdir -p "$TMP_HOME/bin"
+  cat > "$TMP_HOME/bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$TMP_HOME/bin/python3"
+
+  run env PATH="$TMP_HOME/bin:$PATH" "$BASH" -c "source '$AUDIT_LIB'; _walter_audit_loki_range_ns 2026-06-04"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = $'1780531200000000000\n1780617599999999999' ]
 }
 
 @test "verify-chain --from-loki accepts an explicit Loki URL" {
@@ -217,6 +244,18 @@ SH
   [[ "$output" == *"choose either --mock-loki or --loki-url"* ]]
 }
 
+@test "live Loki verification reports missing curl explicitly" {
+  mkdir -p "$TMP_HOME/no-curl-bin"
+
+  run env \
+    PATH="$TMP_HOME/no-curl-bin" \
+    WALTER_AUDIT_LOKI_URL="http://loki.example:3100" \
+    "$BASH" -c "source '$AUDIT_LIB'; walter_audit_verify_chain_from_loki_live 2026-06-04"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"curl required for live Loki verification"* ]]
+}
+
 @test "verify-chain --from-loki reports live Loki authentication failures" {
   _make_chain
   _make_loki_fixture
@@ -234,7 +273,8 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"Loki authentication failed"* ]]
   [[ "$output" == *"HTTP 401"* ]]
-  [[ "$output" != *"super-secret-token"* ]]
+  combined_output="${output}${stderr:-}"
+  [[ "$combined_output" != *"super-secret-token"* ]]
 }
 
 @test "verify-chain --from-loki reports unreachable live Loki endpoints" {

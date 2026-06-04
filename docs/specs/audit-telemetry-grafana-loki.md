@@ -75,7 +75,7 @@ B-3 wires the chain into the existing walter-host observability stack (Grafana +
     `count by (session_id) (last_over_time({app="walter-os", kind="audit-chain"} | json | unwrap ts [30m]))`
 - [ ] Dashboard auto-provisioned by Grafana's `provisioning/dashboards/` directory (already wired in the existing stack).
 
-### AC-3 — `walter-os audit verify-chain --from-loki <range>`
+### AC-3 — `walter-os audit verify-chain --from-loki [date]`
 
 - [x] New flag on the existing `verify-chain` command.
 - [x] Queries Loki for a given audit day, reconstructs the returned rows in

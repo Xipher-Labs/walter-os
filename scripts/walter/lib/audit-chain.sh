@@ -166,6 +166,12 @@ _walter_audit_openssl() {
   printf '%s' "$_WALTER_AUDIT_OPENSSL_BIN"
 }
 
+_walter_audit_mktemp_dir() {
+  local label="${1:-audit-chain}"
+  mktemp -d "${TMPDIR:-/tmp}/walter-${label}.XXXXXX" 2>/dev/null \
+    || mktemp -d -t "walter-${label}.XXXXXX" 2>/dev/null
+}
+
 _walter_audit_state_dir() {
   if declare -F _walter_session_state_dir >/dev/null 2>&1; then
     _walter_session_state_dir
@@ -216,14 +222,18 @@ _walter_audit_session_state_file() {
 }
 
 _walter_audit_current_session_id() {
-  local state_file session_id
+  local state_file session_id from_state=0
   if [[ -n "${WALTER_SESSION_ID:-}" ]]; then
     session_id="$WALTER_SESSION_ID"
   else
+    from_state=1
     state_file="$(_walter_audit_session_state_file)" || return 1
     [[ -f "$state_file" ]] || return 1
     if _walter_audit_jq_available; then
-      session_id="$(jq -r '.session_id // empty' "$state_file" 2>/dev/null || true)"
+      session_id="$(jq -er 'if (.session_id | type) == "string" then .session_id else empty end' "$state_file" 2>/dev/null)" || {
+        echo "walter-audit-chain: invalid session state: $state_file" >&2
+        return 4
+      }
     else
       _walter_audit_require_python3 || return 3
       session_id="$(python3 - "$state_file" 2>/dev/null <<'PY'
@@ -237,16 +247,24 @@ except (OSError, json.JSONDecodeError):
     raise SystemExit(1)
 
 session_id = state.get("session_id", "")
-if isinstance(session_id, str):
-    print(session_id, end="")
+if not isinstance(session_id, str) or not session_id:
+    raise SystemExit(1)
+print(session_id, end="")
 PY
 )" || {
         echo "walter-audit-chain: invalid session state: $state_file" >&2
-        return 1
+        return 4
       }
     fi
   fi
-  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  if [[ ! "$session_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    if [[ "$from_state" -eq 1 ]]; then
+      echo "walter-audit-chain: invalid session state: $state_file" >&2
+      return 4
+    fi
+    echo "walter-audit-chain: invalid session id for signed audit row" >&2
+    return 2
+  fi
   printf '%s' "$session_id"
 }
 
@@ -315,6 +333,8 @@ _walter_audit_sign_row() {
     session_status="$?"
     if [[ "$session_status" -ne 0 ]]; then
       [[ "$session_status" -eq 3 ]] && return 3
+      [[ "$session_status" -eq 2 ]] && return 2
+      [[ "$session_status" -eq 4 ]] && return 1
       echo "walter-audit-chain: active session id required for signed audit row" >&2
       return 2
     fi
@@ -334,7 +354,7 @@ _walter_audit_sign_row() {
   fi
   openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
 
-  tmp_dir="$(mktemp -d)" || {
+  tmp_dir="$(_walter_audit_mktemp_dir audit-sign)" || {
     echo "walter-audit-chain: temporary directory unavailable for signing" >&2
     return 1
   }
@@ -659,13 +679,14 @@ _walter_audit_verify_row_hash() {
 }
 
 _walter_audit_verify_row_signature() {
-  local line="$1" row_number="$2" session_id sig public_key openssl_bin tmp_dir payload payload_file sig_file
+  local line="$1" row_number="$2" tmp_dir="${3:-}" cleanup_tmp=0
+  local session_id sig public_key openssl_bin payload payload_file sig_file
   sig="$(printf '%s\n' "$line" | jq -r '.sig // empty' 2>/dev/null)" || {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
   if [[ -z "$sig" ]]; then
-    echo "walter-audit-chain: row ${row_number}: missing sig" >&2
+    echo "walter-audit-chain: row ${row_number}: missing sig (legacy unsigned audit chain; rotate or start a fresh chain for this date before enforcing signed verification)" >&2
     return 1
   fi
   if [[ ! "$sig" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
@@ -691,36 +712,40 @@ _walter_audit_verify_row_signature() {
   openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
   _walter_audit_require_python3 || return 3
 
-  tmp_dir="$(mktemp -d)" || {
-    echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
-    return 1
-  }
+  if [[ -z "$tmp_dir" ]]; then
+    tmp_dir="$(_walter_audit_mktemp_dir audit-verify-row)" || {
+      echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
+      return 1
+    }
+    cleanup_tmp=1
+  fi
   payload_file="$tmp_dir/payload.json"
   sig_file="$tmp_dir/sig.bin"
   payload="$(printf '%s\n' "$line" | jq -cS 'del(.sig)' 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
   printf '%s' "$payload" > "$payload_file" || {
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     return 1
   }
   if ! _walter_audit_b64_decode_to_file "$sig" "$sig_file" >/dev/null 2>&1; then
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: invalid sig encoding" >&2
     return 1
   fi
   if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$public_key" -rawin -in "$payload_file" -sigfile "$sig_file" >/dev/null 2>&1; then
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: signature verification failed" >&2
     return 1
   fi
-  rm -rf "$tmp_dir"
+  [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
+  return 0
 }
 
 _walter_audit_verify_chain_file_unlocked() {
-  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex
+  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex sig_tmp_dir verify_status
   if ! _walter_audit_jq_available; then
     echo "walter-audit-chain: jq required" >&2
     return 3
@@ -732,44 +757,63 @@ _walter_audit_verify_chain_file_unlocked() {
       return 1
     fi
   fi
+  sig_tmp_dir="$(_walter_audit_mktemp_dir audit-verify-chain)" || {
+    echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
+    return 1
+  }
   row_number=0
   expected_hash="null"
   while IFS= read -r line || [[ -n "$line" ]]; do
     row_number=$((row_number + 1))
     canonical="$(printf '%s\n' "$line" | jq -cS . 2>/dev/null)" || {
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
       return 1
     }
     if [[ "$canonical" != "$line" ]]; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: non-canonical JSON" >&2
       return 1
     fi
     if ! printf '%s\n' "$line" | jq -e 'type == "object"' >/dev/null 2>&1; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
       return 1
     fi
-    _walter_audit_verify_row_hash "$line" "$row_number" || return 1
+    _walter_audit_verify_row_hash "$line" "$row_number" || {
+      rm -rf "$sig_tmp_dir"
+      return 1
+    }
     prev_hash="$(printf '%s\n' "$line" | jq -r '.prev_hash // empty')"
     if [[ -z "$prev_hash" ]]; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: missing prev_hash" >&2
       return 1
     fi
     if [[ "$prev_hash" != "$expected_hash" ]]; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: prev_hash mismatch" >&2
       echo "  expected: $expected_hash" >&2
       echo "  actual:   $prev_hash" >&2
       return 1
     fi
-    _walter_audit_verify_row_signature "$line" "$row_number" || return $?
+    _walter_audit_verify_row_signature "$line" "$row_number" "$sig_tmp_dir"
+    verify_status="$?"
+    if [[ "$verify_status" -ne 0 ]]; then
+      rm -rf "$sig_tmp_dir"
+      return "$verify_status"
+    fi
     actual_hash="$(walter_audit_hash_string "$line")"
     expected_hash="$actual_hash"
   done < "$chain_path"
 
   if [[ "$row_number" -eq 0 ]]; then
+    rm -rf "$sig_tmp_dir"
     echo "walter-audit-chain: empty chain: $chain_path" >&2
     return 1
   fi
 
+  rm -rf "$sig_tmp_dir"
   printf '%s\n' "$row_number"
 }
 
@@ -809,6 +853,22 @@ _walter_audit_verify_root_unlocked() {
   fi
 }
 
+_walter_audit_root_matches_rotated_chain() {
+  local chain_path="$1" root_path="$2" root_hash rotated previous_line last_hex
+  [[ -f "$root_path" ]] || return 1
+  root_hash="$(cat "$root_path")" || return 1
+  [[ "$root_hash" =~ ^[0-9a-f]{64}$ ]] || return 1
+  for rotated in "$chain_path".*; do
+    [[ -f "$rotated" && -s "$rotated" ]] || continue
+    last_hex="$(tail -c 1 "$rotated" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+    [[ "$last_hex" == "0a" ]] || continue
+    previous_line="$(tail -n 1 "$rotated")" || continue
+    [[ -n "$previous_line" ]] || continue
+    [[ "$(walter_audit_hash_string "$previous_line")" == "$root_hash" ]] && return 0
+  done
+  return 1
+}
+
 walter_audit_append() {
   [[ "$#" -eq 5 ]] || {
     echo "walter-audit-chain: usage: walter_audit_append <tool> <input> <decision> <source> <reason>" >&2
@@ -835,6 +895,11 @@ walter_audit_append() {
 
   chain_created=0
   if [[ ! -e "$chain_path" ]]; then
+    if [[ -e "$root_path" ]] && ! _walter_audit_root_matches_rotated_chain "$chain_path" "$root_path"; then
+      echo "walter-audit-chain: chain missing with existing root: $chain_path" >&2
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    fi
     : > "$chain_path" || {
       _walter_audit_release_lock "$lock_path"
       return 1
@@ -916,6 +981,8 @@ walter_audit_append() {
     exec 9>&-
     _walter_audit_release_lock "$lock_path"
     [[ "$session_status" -eq 3 ]] && return 3
+    [[ "$session_status" -eq 2 ]] && return 2
+    [[ "$session_status" -eq 4 ]] && return 1
     echo "walter-audit-chain: active session id required for signed audit row" >&2
     return 2
   fi
@@ -1270,26 +1337,29 @@ _walter_audit_loki_stderr_snippet() {
   sed -n 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; /^[[:space:]]*$/d; p; q' "$path"
 }
 
-_walter_audit_loki_range_ns() {
-  local date_value="$1"
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "walter-audit-chain: python3 required for Loki date range calculation" >&2
-    return 3
+_walter_audit_loki_date_epoch() {
+  local date_value="$1" epoch
+  if [[ ! "$date_value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "walter-audit-chain: invalid Loki date: $date_value" >&2
+    return 2
   fi
-  python3 - "$date_value" <<'PY'
-from datetime import datetime, timedelta, timezone
-import sys
+  if epoch="$(date -u -j -f "%Y-%m-%d" "$date_value" "+%s" 2>/dev/null)"; then
+    printf '%s' "$epoch"
+    return 0
+  fi
+  if epoch="$(date -u -d "${date_value}T00:00:00Z" "+%s" 2>/dev/null)"; then
+    printf '%s' "$epoch"
+    return 0
+  fi
+  echo "walter-audit-chain: invalid Loki date: $date_value" >&2
+  return 2
+}
 
-date_value = sys.argv[1]
-try:
-    start = datetime.strptime(date_value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-except ValueError:
-    print(f"walter-audit-chain: invalid Loki date: {date_value}", file=sys.stderr)
-    sys.exit(2)
-end = start + timedelta(days=1)
-print(int(start.timestamp() * 1_000_000_000))
-print(int(end.timestamp() * 1_000_000_000))
-PY
+_walter_audit_loki_range_ns() {
+  local date_value="$1" start_epoch end_epoch
+  start_epoch="$(_walter_audit_loki_date_epoch "$date_value")" || return $?
+  end_epoch=$((start_epoch + 86400))
+  printf '%s\n%s\n' "$((start_epoch * 1000000000))" "$(((end_epoch * 1000000000) - 1))"
 }
 
 _walter_audit_verify_chain_from_loki_response() {
@@ -1304,6 +1374,7 @@ _walter_audit_verify_chain_from_loki_response() {
     echo "walter-audit-chain: jq required" >&2
     return 3
   fi
+  _walter_audit_loki_date_epoch "$date_value" >/dev/null || return $?
 
   tmp_config="$(mktemp -d "${TMPDIR:-/tmp}/walter-audit-loki.XXXXXX")" || return 1
   tmp_audit="${tmp_config}/audit"
@@ -1312,7 +1383,7 @@ _walter_audit_verify_chain_from_loki_response() {
     return 1
   }
 
-  values_count="$(jq '[.data.result[]?.values[]?] | length' "$response_file" 2>/dev/null)" || {
+  values_count="$(jq 'reduce .data.result[]? as $stream (0; . + (($stream.values // []) | length))' "$response_file" 2>/dev/null)" || {
     _walter_audit_remove_loki_tmp "$tmp_config"
     echo "walter-audit-chain: invalid Loki response JSON: $source_label" >&2
     return 1
@@ -1392,6 +1463,10 @@ walter_audit_verify_chain_from_loki_live() {
       return 2
       ;;
   esac
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "walter-audit-chain: curl required for live Loki verification" >&2
+    return 3
+  fi
 
   timeout="${WALTER_AUDIT_LOKI_TIMEOUT_SECONDS:-10}"
   _walter_audit_loki_positive_int "$timeout" "WALTER_AUDIT_LOKI_TIMEOUT_SECONDS" || return $?
