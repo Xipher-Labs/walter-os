@@ -302,7 +302,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, { ...options, redirect: "error", signal: controller.signal });
   } catch (error) {
     if (error && error.name === "AbortError") {
       throw new Error(`timeout after ${timeoutMs}ms`);
@@ -313,10 +313,20 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-async function drainResponseBody(response) {
+async function readResponseText(response, timeoutMs, label) {
+  return withTimeout(response.text(), timeoutMs, () => {
+    response.body?.cancel().catch(() => {});
+  }).catch((error) => {
+    throw new Error(`${label}: ${error.message}`);
+  });
+}
+
+async function drainResponseBody(response, timeoutMs) {
   if (!response.body) return;
   try {
-    await response.arrayBuffer();
+    await withTimeout(response.arrayBuffer(), timeoutMs, () => {
+      response.body?.cancel().catch(() => {});
+    });
   } catch {
     await response.body.cancel().catch(() => {});
   }
@@ -359,6 +369,16 @@ function parseJsonRpcResponseBody(text, contentType) {
   return JSON.parse(text);
 }
 
+function validateJsonRpcResponse(message, expectedId, method) {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    throw new Error(`${method} response is not a JSON-RPC object`);
+  }
+  if (String(message.id) !== String(expectedId)) {
+    throw new Error(`${method} response id mismatch`);
+  }
+  return message;
+}
+
 async function probeHttpServer(name, config, timeoutMs) {
   let nextId = 1;
   let sessionId = "";
@@ -384,17 +404,21 @@ async function probeHttpServer(name, config, timeoutMs) {
       timeoutMs,
     );
     if (!response.ok) {
-      await drainResponseBody(response);
+      await drainResponseBody(response, timeoutMs);
       throw new Error(`${name} ${method} failed with HTTP ${response.status}`);
     }
     const responseSession = response.headers.get("mcp-session-id");
     if (responseSession) sessionId = responseSession;
-    const message = parseJsonRpcResponseBody(
-      await response.text(),
-      response.headers.get("content-type") || "",
+    const message = validateJsonRpcResponse(
+      parseJsonRpcResponseBody(
+        await readResponseText(response, timeoutMs, `${name} ${method} response body`),
+        response.headers.get("content-type") || "",
+      ),
+      id,
+      method,
     );
     if (message.error) throw new Error(message.error.message || "JSON-RPC error");
-    return message.result || {};
+    return message.result ?? {};
   }
 
   async function sendNotification(method) {
@@ -414,12 +438,12 @@ async function probeHttpServer(name, config, timeoutMs) {
       timeoutMs,
     );
     if (!response.ok) {
-      await drainResponseBody(response);
+      await drainResponseBody(response, timeoutMs);
       throw new Error(`${name} ${method} notification failed with HTTP ${response.status}`);
     }
     const responseSession = response.headers.get("mcp-session-id");
     if (responseSession) sessionId = responseSession;
-    await drainResponseBody(response);
+    await drainResponseBody(response, timeoutMs);
   }
 
   await sendRequest("initialize", {
@@ -552,7 +576,7 @@ async function probeSseServer(name, config, timeoutMs) {
     timeoutMs,
   );
   if (!response.ok) {
-    await drainResponseBody(response);
+    await drainResponseBody(response, timeoutMs);
     throw new Error(`${name} SSE connect failed with HTTP ${response.status}`);
   }
   const client = createSseClient(response, name);
@@ -581,10 +605,10 @@ async function probeSseServer(name, config, timeoutMs) {
         timeoutMs,
       );
       if (!postResponse.ok) {
-        await drainResponseBody(postResponse);
+        await drainResponseBody(postResponse, timeoutMs);
         throw new Error(`${name} SSE POST failed with HTTP ${postResponse.status}`);
       }
-      await drainResponseBody(postResponse);
+      await drainResponseBody(postResponse, timeoutMs);
     }
 
     async function sendRequest(method, params) {

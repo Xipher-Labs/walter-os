@@ -166,6 +166,43 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/mcp-http-redirect") {
+    readBody(req, () => {
+      res.writeHead(302, { location: "/mcp-http" });
+      res.end();
+    });
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/mcp-http-mismatched-id") {
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (!Object.prototype.hasOwnProperty.call(request, "id")) {
+        res.writeHead(202).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id + 1000, result: rpcResult(request) }));
+    });
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/mcp-http-slow-body") {
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (!Object.prototype.hasOwnProperty.call(request, "id")) {
+        res.writeHead(202).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write(`{"jsonrpc":"2.0","id":${JSON.stringify(request.id)},`);
+      setTimeout(() => {
+        res.end(`"result":${JSON.stringify(rpcResult(request))}}`);
+      }, 400);
+    });
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/mcp-http-sse-final") {
     readBody(req, (body) => {
       const request = JSON.parse(body);
@@ -532,6 +569,77 @@ JSON
   [ "$output" -eq 0 ]
   run grep -q "tampered-token" "$AUDIT_FINDINGS"
   [ "$status" -ne 0 ]
+}
+
+@test "HTTP MCP probe refuses redirects without following with auth" {
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-redirect" '
+    .mcpServers.remote_http.url = $url
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/http-redirect-settings.json" && \
+    mv "$TMP_HOME/http-redirect-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-redirect" '
+    .servers.remote_http.url = $url
+  ' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/http-redirect-registry.json" && \
+    mv "$TMP_HOME/http-redirect-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+  jq --sort-keys '.servers // {}' "$WALTER_OS_HOME/mcp/servers.json" \
+    > "$WALTER_CONFIG/mcp-server-snapshots.json"
+  : > "$REMOTE_REQUESTS_FILE"
+
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  run node "$HELPER" --settings "$CLAUDE_HOME/settings.json" \
+    --approved-registry "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  [ "$status" -eq 0 ]
+  run jq -r '.errors.remote_http.message // ""' <<< "$output"
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  run jq -s 'map(select(.url == "/mcp-http")) | length' "$REMOTE_REQUESTS_FILE"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 0 ]
+}
+
+@test "HTTP MCP probe rejects mismatched JSON-RPC response ids" {
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-mismatched-id" '
+    .mcpServers.remote_http.url = $url
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/http-mismatch-settings.json" && \
+    mv "$TMP_HOME/http-mismatch-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-mismatched-id" '
+    .servers.remote_http.url = $url
+  ' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/http-mismatch-registry.json" && \
+    mv "$TMP_HOME/http-mismatch-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+  jq --sort-keys '.servers // {}' "$WALTER_OS_HOME/mcp/servers.json" \
+    > "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  run node "$HELPER" --settings "$CLAUDE_HOME/settings.json" \
+    --approved-registry "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  [ "$status" -eq 0 ]
+  run jq -r '.errors.remote_http.message // ""' <<< "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"response id mismatch"* ]]
+}
+
+@test "HTTP MCP probe times out while reading slow response bodies" {
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-slow-body" '
+    .mcpServers.remote_http.url = $url
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/http-slow-body-settings.json" && \
+    mv "$TMP_HOME/http-slow-body-settings.json" "$CLAUDE_HOME/settings.json"
+  jq --arg url "$REMOTE_BASE_URL/mcp-http-slow-body" '
+    .servers.remote_http.url = $url
+  ' "$WALTER_OS_HOME/mcp/servers.json" > "$TMP_HOME/http-slow-body-registry.json" && \
+    mv "$TMP_HOME/http-slow-body-registry.json" "$WALTER_OS_HOME/mcp/servers.json"
+  jq --sort-keys '.servers // {}' "$WALTER_OS_HOME/mcp/servers.json" \
+    > "$WALTER_CONFIG/mcp-server-snapshots.json"
+
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  run node "$HELPER" --settings "$CLAUDE_HOME/settings.json" \
+    --approved-registry "$WALTER_CONFIG/mcp-server-snapshots.json" \
+    --timeout-ms 100
+
+  [ "$status" -eq 0 ]
+  run jq -r '.errors.remote_http.message // ""' <<< "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"response body: timeout after 100ms"* ]]
 }
 
 @test "HTTP MCP accepts final SSE event without trailing blank line" {
