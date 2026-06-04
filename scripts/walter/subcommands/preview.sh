@@ -148,6 +148,9 @@ repo_config_path() {
 
 preview_deploy_enabled() {
   local config_path="$1"
+  if [[ -e "$config_path" && ( ! -f "$config_path" || ! -r "$config_path" ) ]]; then
+    die_usage "config is not a readable file: $config_path"
+  fi
   if [[ ! -f "$config_path" ]]; then
     printf 'false\n'
     return 0

@@ -140,6 +140,26 @@ YAML
   [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
 }
 
+@test "preview plan rejects config paths that are not readable files" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/config-dir"
+  mkdir -p "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"config is not a readable file"* ]]
+  [[ "$output" == *"$config_file"* ]]
+}
+
 @test "preview plan rejects unsupported providers" {
   write_preview_artifacts
   write_preview_config
