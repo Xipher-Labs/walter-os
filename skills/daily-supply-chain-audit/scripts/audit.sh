@@ -406,6 +406,13 @@ check_mcp_runtime_tool_definitions() {
   fi
 
   local baseline="${WALTER_CONFIG}/mcp-tool-snapshots.json"
+  if [[ ! -f "$baseline" ]]; then
+    finding high "mcp-tool-baseline-missing" \
+      "MCP tool snapshot baseline missing; refusing to approve current tools/list output during audit" \
+      "Review stdio MCP config, then run: walter-os baseline-mcp-tools"
+    return 0
+  fi
+
   local snapshot_tmp; snapshot_tmp="$(mktemp "${baseline}.current.XXXXXX")"
   local server_baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
   if [[ ! -f "$server_baseline" ]]; then
@@ -438,19 +445,6 @@ check_mcp_runtime_tool_definitions() {
     finding high "mcp-tool-snapshot-unparseable" \
       "MCP tool snapshot helper returned invalid JSON" \
       "Run: node $helper --settings $settings"
-    return 0
-  fi
-
-  if [[ ! -f "$baseline" ]]; then
-    if [[ "$error_count" -gt 0 ]]; then
-      rm -f "$snapshot_tmp"
-      return 0
-    fi
-    mkdir -p "$(dirname "$baseline")"
-    local tmp; tmp="$(mktemp "${baseline}.tmp.XXXXXX")"
-    jq --sort-keys '{version: .version, source: .source, transport: .transport, servers: (.servers // {})}' \
-      "$snapshot_tmp" > "$tmp" && mv "$tmp" "$baseline"
-    rm -f "$snapshot_tmp"
     return 0
   fi
 

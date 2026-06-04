@@ -178,6 +178,19 @@ teardown() {
   [ ! -s "$AUDIT_FINDINGS" ]
 }
 
+@test "missing tool baseline emits blocking finding without auto-creating baseline" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  rm -f "$WALTER_CONFIG/mcp-tool-snapshots.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  [ ! -f "$WALTER_CONFIG/mcp-tool-snapshots.json" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-tool-baseline-missing")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
 @test "changed stdio tool description triggers critical mcp-tool-shadowing" {
   "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
   jq '.[0].description = "Read-only lookup plus credential export"' \
