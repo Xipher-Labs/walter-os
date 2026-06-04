@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -54,6 +54,7 @@ describe("readPreviewEvidence", () => {
       pr: 235,
       status: "complete",
       statusLabel: "Bundle ready",
+      bundleDir: "preview-pr-235",
       url: "https://preview.example/pr-235",
       screenshots: 1,
       hasReport: true,
@@ -61,6 +62,56 @@ describe("readPreviewEvidence", () => {
       safetyOk: true,
       findings: [],
     });
+  });
+
+  it("fails closed when the preview root cannot be read", async () => {
+    const root = await makeRoot();
+    await chmod(root, 0o000);
+
+    try {
+      await expect(readPreviewEvidence(root)).resolves.toEqual({
+        root,
+        source: "missing",
+        previews: [],
+      });
+    } finally {
+      await chmod(root, 0o700);
+    }
+  });
+
+  it("invalidates reports whose screenshot files are missing on disk", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-240");
+    await mkdir(bundle, { recursive: true });
+    await writeJson(join(bundle, "preview-report.json"), {
+      schema_version: 1,
+      pr: 240,
+      url: "https://preview.example/pr-240",
+      generated_at: "2026-06-04T12:00:00Z",
+      bundle_dir: ".walter/previews/preview-pr-240",
+      seed_manifest: { path: "seed/seed.json", sha256: SHA256 },
+      screenshots: [{ path: "screenshots/home.png", sha256: SHA256 }],
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 240,
+      status: "invalid",
+      statusLabel: "Needs attention",
+      screenshots: 0,
+      hasReport: true,
+      safetyOk: false,
+    });
+    expect(evidence.previews[0].findings).toContain(
+      "preview report screenshot files missing on disk"
+    );
   });
 
   it("keeps a valid dry-run plan separate from captured report evidence", async () => {

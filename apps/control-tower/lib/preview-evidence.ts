@@ -264,17 +264,17 @@ async function readPreviewItem(
   dirName: string,
   pr: number
 ): Promise<PreviewEvidenceItem> {
-  const bundleDir = join(root, dirName);
+  const bundlePath = join(root, dirName);
   const findings: string[] = [];
-  const screenshotsOnDisk = await countScreenshots(join(bundleDir, "screenshots"));
+  const screenshotsOnDisk = await countScreenshots(join(bundlePath, "screenshots"));
 
   const report = await readJson(
-    join(bundleDir, "preview-report.json"),
+    join(bundlePath, "preview-report.json"),
     "preview report",
     findings
   );
   const plan = await readJson(
-    join(bundleDir, "preview-plan.json"),
+    join(bundlePath, "preview-plan.json"),
     "preview plan",
     findings
   );
@@ -296,7 +296,10 @@ async function readPreviewItem(
     reportSafetyOk = result.safetyOk;
     url = result.url;
     generatedAt = result.generatedAt;
-    screenshots = Math.max(screenshots, result.screenshots);
+    if (result.screenshots > screenshotsOnDisk) {
+      findings.push("preview report screenshot files missing on disk");
+      reportValid = false;
+    }
   }
 
   if (plan.exists && plan.payload !== null) {
@@ -351,7 +354,7 @@ async function readPreviewItem(
     pr,
     status,
     statusLabel,
-    bundleDir,
+    bundleDir: dirName,
     url,
     provider,
     app,
@@ -384,7 +387,12 @@ export async function readPreviewEvidence(
     return { root, source: "missing", previews: [] };
   }
 
-  const entries = await readdir(root, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return { root, source: "missing", previews: [] };
+  }
   const previews = await Promise.all(
     entries.flatMap((entry) => {
       const match = PREVIEW_DIR_RE.exec(entry.name);
