@@ -313,6 +313,15 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+async function drainResponseBody(response) {
+  if (!response.body) return;
+  try {
+    await response.arrayBuffer();
+  } catch {
+    await response.body.cancel().catch(() => {});
+  }
+}
+
 function parseSseText(text) {
   const events = [];
   let eventName = "message";
@@ -375,6 +384,7 @@ async function probeHttpServer(name, config, timeoutMs) {
       timeoutMs,
     );
     if (!response.ok) {
+      await drainResponseBody(response);
       throw new Error(`${name} ${method} failed with HTTP ${response.status}`);
     }
     const responseSession = response.headers.get("mcp-session-id");
@@ -404,10 +414,12 @@ async function probeHttpServer(name, config, timeoutMs) {
       timeoutMs,
     );
     if (!response.ok) {
+      await drainResponseBody(response);
       throw new Error(`${name} ${method} notification failed with HTTP ${response.status}`);
     }
     const responseSession = response.headers.get("mcp-session-id");
     if (responseSession) sessionId = responseSession;
+    await drainResponseBody(response);
   }
 
   await sendRequest("initialize", {
@@ -494,6 +506,7 @@ function createSseClient(response, name) {
         if (done) break;
         consumeChunk(value);
       }
+      buffer += decoder.decode();
       if (buffer.length > 0) consumeLine(buffer);
       dispatchEvent();
     } catch (error) {
@@ -539,6 +552,7 @@ async function probeSseServer(name, config, timeoutMs) {
     timeoutMs,
   );
   if (!response.ok) {
+    await drainResponseBody(response);
     throw new Error(`${name} SSE connect failed with HTTP ${response.status}`);
   }
   const client = createSseClient(response, name);
@@ -567,8 +581,10 @@ async function probeSseServer(name, config, timeoutMs) {
         timeoutMs,
       );
       if (!postResponse.ok) {
+        await drainResponseBody(postResponse);
         throw new Error(`${name} SSE POST failed with HTTP ${postResponse.status}`);
       }
+      await drainResponseBody(postResponse);
     }
 
     async function sendRequest(method, params) {
