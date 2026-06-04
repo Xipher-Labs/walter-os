@@ -256,11 +256,7 @@ async function main() {
   for (const [name, config] of entries) {
     try {
       const snapshot = await probeServer(name, config, args.timeoutMs);
-      result.servers[name] = {
-        command: config.command,
-        args: config.args,
-        tools: snapshot.tools,
-      };
+      result.servers[name] = { tools: snapshot.tools };
     } catch (error) {
       result.errors[name] = { message: error.message };
     }

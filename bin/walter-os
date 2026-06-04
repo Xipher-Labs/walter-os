@@ -511,6 +511,18 @@ cmd_baseline_mcp_tools() {
   mkdir -p "$(dirname "$tool_baseline")"
   local tool_tmp; tool_tmp="$(mktemp "${tool_baseline}.tmp.XXXXXX")"
   if node "$helper" --settings "$settings" > "$tool_tmp"; then
+    local tool_errors
+    if ! tool_errors="$(jq '.errors // {} | length' "$tool_tmp" 2>/dev/null)"; then
+      rm -f "$tool_tmp" "${tool_tmp}.sorted"
+      echo "warning: MCP tool-definition snapshot returned invalid JSON; baseline not refreshed" >&2
+      return 4
+    fi
+    if [[ "$tool_errors" -gt 0 ]]; then
+      echo "warning: MCP tool-definition snapshot had $tool_errors probe error(s); baseline not refreshed" >&2
+      jq -r '.errors | keys | join(", ")' "$tool_tmp" >&2 || true
+      rm -f "$tool_tmp" "${tool_tmp}.sorted"
+      return 4
+    fi
     jq --sort-keys '{version: .version, source: .source, transport: .transport, servers: (.servers // {})}' \
       "$tool_tmp" > "${tool_tmp}.sorted" && mv "${tool_tmp}.sorted" "$tool_baseline"
     rm -f "$tool_tmp"
@@ -520,6 +532,7 @@ cmd_baseline_mcp_tools() {
   else
     rm -f "$tool_tmp" "${tool_tmp}.sorted"
     echo "warning: MCP tool-definition snapshot failed; server-registry baseline was still refreshed" >&2
+    return 4
   fi
 }
 

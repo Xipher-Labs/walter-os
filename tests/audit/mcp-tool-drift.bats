@@ -228,3 +228,25 @@ JSON
   [ "$status" -eq 0 ]
   [ "$output" = "safe_lookup" ]
 }
+
+@test "baseline-mcp-tools rejects partial tool baseline on probe error" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '.mcpServers.mock_stdio.command = "/nonexistent/walter-mcp-server"' \
+    "$CLAUDE_HOME/settings.json" > "$TMP_HOME/broken-settings.json" && \
+    mv "$TMP_HOME/broken-settings.json" "$CLAUDE_HOME/settings.json"
+
+  run "$WALTER_OS_BIN" baseline-mcp-tools
+  [ "$status" -ne 0 ]
+
+  run jq -r '.servers.mock_stdio.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "safe_lookup" ]
+}
+
+@test "tool snapshot baseline does not persist command args" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+
+  run jq -r '.servers.mock_stdio | has("args") or has("command")' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "false" ]
+}

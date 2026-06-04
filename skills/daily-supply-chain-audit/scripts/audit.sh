@@ -433,6 +433,10 @@ check_mcp_runtime_tool_definitions() {
   fi
 
   if [[ ! -f "$baseline" ]]; then
+    if [[ "$error_count" -gt 0 ]]; then
+      rm -f "$snapshot_tmp"
+      return 0
+    fi
     mkdir -p "$(dirname "$baseline")"
     local tmp; tmp="$(mktemp "${baseline}.tmp.XXXXXX")"
     jq --sort-keys '{version: .version, source: .source, transport: .transport, servers: (.servers // {})}' \
