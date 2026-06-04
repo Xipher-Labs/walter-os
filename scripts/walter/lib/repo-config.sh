@@ -6,7 +6,10 @@
 # policy surface, but it does not relax approval-gate hard limits.
 
 _WALTER_REPO_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${WALTER_OS_HOME:-${_WALTER_REPO_CONFIG_LIB_DIR}/../../..}/scripts/walter/lib/protected-paths.sh"
+_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${_WALTER_REPO_CONFIG_LIB_DIR}/protected-paths.sh"
+if [[ ! -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" && -n "${WALTER_OS_HOME:-}" ]]; then
+  _WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${WALTER_OS_HOME}/scripts/walter/lib/protected-paths.sh"
+fi
 if [[ -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" ]]; then
   # shellcheck source=/dev/null
   source "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB"
@@ -199,6 +202,8 @@ _walter_repo_config_print_checks() {
       printf '  - acceptance_criteria_check\n'
       ;;
     production)
+      printf '  - lint\n'
+      printf '  - typecheck\n'
       printf '  - spec_up_to_date\n'
       printf '  - red_green_refactor_tests\n'
       printf '  - unit_tests\n'

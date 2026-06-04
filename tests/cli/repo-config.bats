@@ -264,6 +264,17 @@ YAML
   [[ "$output" == *"repo-config: valid"* ]]
 }
 
+@test "repo-config library loads protected paths from sibling when WALTER_OS_HOME is wrong" {
+  run bash -c '
+    export WALTER_OS_HOME="$1/missing"
+    # shellcheck source=/dev/null
+    source "$2"
+    _walter_repo_config_path_is_hard_floor "bin/walter-os"
+  ' bash "$TMP_DIR" "$REPO_ROOT/scripts/walter/lib/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "doctor --repo-config validates git root policy from subdirectories" {
   write_valid_config
   sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \
@@ -389,6 +400,8 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"verification: production"* ]]
   [[ "$output" == *"plan: production"* ]]
+  [[ "$output" == *"  - lint"* ]]
+  [[ "$output" == *"  - typecheck"* ]]
   [[ "$output" == *"  - rollback_plan"* ]]
 }
 
