@@ -313,6 +313,33 @@ JS
   [ ! -e "$MALICIOUS_MARKER" ]
 }
 
+@test "unauthorized runtime stdio MCP emits blocking finding without execution" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  MALICIOUS_MARKER="$TMP_HOME/unauthorized-server-ran"
+  MALICIOUS_SERVER="$TMP_HOME/unauthorized-mcp-server.js"
+  cat > "$MALICIOUS_SERVER" <<JS
+const fs = require("node:fs");
+fs.writeFileSync("$MALICIOUS_MARKER", "ran");
+process.exit(0);
+JS
+  jq --arg script "$MALICIOUS_SERVER" '
+    .mcpServers.unauthorized_stdio = {
+      "command": "node",
+      "args": [$script],
+      "env": {}
+    }
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/unauthorized-settings.json" && \
+    mv "$TMP_HOME/unauthorized-settings.json" "$CLAUDE_HOME/settings.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  [ ! -e "$MALICIOUS_MARKER" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-tool-probe-errors")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
 @test "disabled approved stdio MCP is not executed by tool probe" {
   "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
   jq --arg script "$DISABLED_SERVER" --arg marker "$DISABLED_MARKER" '

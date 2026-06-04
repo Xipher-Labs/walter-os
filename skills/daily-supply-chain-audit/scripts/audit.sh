@@ -427,7 +427,7 @@ check_mcp_runtime_tool_definitions() {
   local error_count
   error_count="$(jq '.errors // {} | length' "$snapshot_tmp" 2>/dev/null || echo 0)"
   if [[ "$error_count" -gt 0 ]]; then
-    finding info "mcp-tool-probe-errors" \
+    finding high "mcp-tool-probe-errors" \
       "MCP tool snapshot reported $error_count stdio probe error(s)" \
       "Run: node $helper --settings $settings | jq '.errors'"
   fi
