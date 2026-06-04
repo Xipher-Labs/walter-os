@@ -40,7 +40,7 @@ setup() {
   done
 }
 
-@test "delivery orchestrator cannot execute code, self-review, merge, or deploy" {
+@test "delivery orchestrator does not write code, self-review, merge, or deploy" {
   [[ -f "$AGENT" ]]
 
   grep -qi "does not write code" "$AGENT"
@@ -61,7 +61,7 @@ setup() {
 @test "delivery orchestrator uses feature-state as the pipeline state owner" {
   [[ -f "$AGENT" ]]
 
-  grep -q ".walter/features" "$AGENT"
+  grep -Fq ".walter/features" "$AGENT"
   grep -q "walter-os feature-state init" "$AGENT"
   grep -q "walter-os feature-state validate" "$AGENT"
 }
@@ -69,7 +69,7 @@ setup() {
 @test "delivery orchestrator spec is indexed and covers AD-1 acceptance criteria" {
   [[ -f "$SPEC" ]]
 
-  grep -q "delivery-orchestrator.md" "$SPEC_INDEX"
+  grep -Fq "delivery-orchestrator.md" "$SPEC_INDEX"
   grep -q "AD-1" "$SPEC"
   grep -q "Role map" "$SPEC"
   grep -q "Fail-closed gates" "$SPEC"
