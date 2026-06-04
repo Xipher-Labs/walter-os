@@ -28,7 +28,9 @@ print_help() {
 }
 
 cmd="${1:-help}"
-shift || true
+if [[ $# -gt 0 ]]; then
+  shift
+fi
 
 case "$cmd" in
   validate)

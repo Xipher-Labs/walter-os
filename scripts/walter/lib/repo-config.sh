@@ -316,7 +316,9 @@ _walter_repo_config_print_capability_actions() {
 
 walter_repo_config_capability_plan() {
   local target="${1:-$(pwd)}"
-  shift || true
+  if [[ $# -gt 0 ]]; then
+    shift
+  fi
   local input_risk="low"
   local paths=()
   local evidence_items=()
@@ -473,7 +475,9 @@ walter_repo_config_capability_plan() {
 
 walter_repo_config_verification_plan() {
   local target="${1:-$(pwd)}"
-  shift || true
+  if [[ $# -gt 0 ]]; then
+    shift
+  fi
   local input_risk="low"
   local paths=()
 
