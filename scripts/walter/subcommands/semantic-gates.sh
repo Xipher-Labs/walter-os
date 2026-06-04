@@ -192,7 +192,7 @@ check_test_relevance() {
 
   match_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates.XXXXXX")"
   while IFS= read -r file; do
-    if grep -qF "$spec_rel" "$file"; then
+    if grep -qF -- "$spec_rel" "$file"; then
       printf '%s\n' "$file" >> "$match_file"
     fi
   done < "$candidates_file"

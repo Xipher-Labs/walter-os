@@ -18,7 +18,7 @@ setup() {
 teardown() {
   cd "$BATS_TEST_DIRNAME" || exit
   case "$TMP_DIR" in
-    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_DIR" ;;
+    /tmp/*|/private/tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_DIR" ;;
   esac
   true
 }
@@ -159,6 +159,22 @@ replace_acceptance_criteria_with_weak_substrings() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"test-relevance: fail"* ]]
   [[ "$output" == *"no test file references docs/specs/example-feature.md"* ]]
+}
+
+@test "semantic-gates accepts spec paths that start with dash" {
+  write_valid_spec
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md" "$TMP_DIR/repo/-dash-spec.md"
+  cat > "$TMP_DIR/repo/tests/cli/dash-spec.bats" <<'BATS'
+#!/usr/bin/env bats
+# Refs: -dash-spec.md
+BATS
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/-dash-spec.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"test-relevance: pass"* ]]
+  [[ "$output" == *"tests/cli/dash-spec.bats"* ]]
 }
 
 @test "semantic-gates fails when architecture review section is empty" {
