@@ -256,7 +256,11 @@ print_gate_json() {
   return 0
 }
 
-cmd="${1:-help}"
+if [[ $# -eq 0 ]]; then
+  usage_error "spec file is required"
+fi
+
+cmd="$1"
 if [[ "$cmd" =~ ^(-h|--help|help)$ ]]; then
   print_help
   exit 0

@@ -108,6 +108,20 @@ replace_acceptance_criteria_with_weak_substrings() {
   mv "$spec.tmp" "$spec"
 }
 
+@test "semantic-gates without a spec is a usage error" {
+  run "$WALTER_OS_BIN" semantic-gates
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"walter-os semantic-gates: spec file is required"* ]]
+}
+
+@test "semantic-gates help exits cleanly" {
+  run "$WALTER_OS_BIN" semantic-gates help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"walter-os semantic-gates <docs/specs/name.md>"* ]]
+}
+
 @test "semantic-gates passes a complete spec with referenced tests" {
   write_valid_spec
   write_referencing_test
