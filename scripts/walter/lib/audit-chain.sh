@@ -1300,18 +1300,74 @@ _walter_audit_rekor_entry_id() {
   printf '%s' "$entry_id"
 }
 
+_walter_audit_rekor_conflict_entry_id() {
+  local headers_file="$1" response_file="$2" entry_id location
+  entry_id="$(jq -er '
+    if type == "object" then
+      .uuid // .entryUUID // .entry_uuid // .entryID // .entry_id // .id // empty
+    else
+      empty
+    end
+  ' "$response_file" 2>/dev/null || true)"
+  if [[ -z "$entry_id" && -s "$headers_file" ]]; then
+    location="$(python3 - "$headers_file" <<'PY'
+import pathlib
+import sys
+
+for raw_line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").splitlines():
+    if raw_line.lower().startswith("location:"):
+        print(raw_line.split(":", 1)[1].strip(), end="")
+        break
+PY
+)" || location=""
+    case "$location" in
+      */api/v1/log/entries/*)
+        entry_id="${location##*/}"
+        entry_id="${entry_id%%\?*}"
+        ;;
+      *)
+        entry_id="$location"
+        ;;
+    esac
+  fi
+  if [[ -z "$entry_id" || "$entry_id" == "null" || ! "$entry_id" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+    echo "walter-audit-chain: Rekor duplicate response missing existing entry id" >&2
+    return 1
+  fi
+  printf '%s' "$entry_id"
+}
+
 _walter_audit_rekor_stderr_snippet() {
   local path="$1"
   [[ -s "$path" ]] || return 0
   sed -n 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; /^[[:space:]]*$/d; p; q' "$path"
 }
 
+_walter_audit_rekor_status_allowed() {
+  local http_status="$1" allowed_statuses="$2" status
+  [[ -n "$allowed_statuses" ]] || return 1
+  local old_ifs="$IFS"
+  IFS=,
+  for status in $allowed_statuses; do
+    if [[ "$http_status" == "$status" ]]; then
+      IFS="$old_ifs"
+      return 0
+    fi
+  done
+  IFS="$old_ifs"
+  return 1
+}
+
 _walter_audit_rekor_curl() {
   local method="$1" url="$2" output="$3" error="$4" timeout="$5" data_file="${6:-}"
+  local allowed_statuses="${7:-}" status_file="${8:-}" headers_file="${9:-}"
   local http_status curl_status errexit_was_set=0
   local -a curl_args
 
   curl_args=(-sS -o "$output" -w "%{http_code}" --connect-timeout "$timeout" --max-time "$timeout")
+  if [[ -n "$headers_file" ]]; then
+    curl_args+=(-D "$headers_file")
+  fi
   if [[ "$method" == "POST" ]]; then
     curl_args+=(-X POST -H "Content-Type: application/json" --data-binary "@${data_file}")
   fi
@@ -1328,6 +1384,9 @@ _walter_audit_rekor_curl() {
   if [[ "$errexit_was_set" -eq 1 ]]; then
     set -e
   fi
+  if [[ -n "$status_file" ]]; then
+    printf '%s' "$http_status" > "$status_file" || return 1
+  fi
   if [[ "$curl_status" -ne 0 ]]; then
     local stderr_snippet
     stderr_snippet="$(_walter_audit_rekor_stderr_snippet "$error")"
@@ -1342,6 +1401,9 @@ _walter_audit_rekor_curl() {
     return 1
   fi
   if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+    if _walter_audit_rekor_status_allowed "$http_status" "$allowed_statuses"; then
+      return 0
+    fi
     echo "walter-audit-chain: Rekor request failed (HTTP ${http_status})" >&2
     return 1
   fi
@@ -1447,7 +1509,7 @@ walter_audit_rekor_upload() {
   local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}"
   local receipt_path rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
   local sign_status
-  local receipt_date tmp_dir digest_file request_file response_file error_file endpoint
+  local receipt_date tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
 
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
   if [[ -f "$receipt_path" ]]; then
@@ -1509,19 +1571,43 @@ walter_audit_rekor_upload() {
   request_file="$tmp_dir/request.json"
   response_file="$tmp_dir/response.json"
   error_file="$tmp_dir/error.txt"
+  headers_file="$tmp_dir/headers.txt"
+  status_file="$tmp_dir/status.txt"
   printf '%s' "$request_body" > "$request_file" || {
     rm -rf "$tmp_dir"
     return 1
   }
   endpoint="${rekor_url}/api/v1/log/entries"
-  if ! _walter_audit_rekor_curl "POST" "$endpoint" "$response_file" "$error_file" "$timeout" "$request_file"; then
+  if ! _walter_audit_rekor_curl "POST" "$endpoint" "$response_file" "$error_file" "$timeout" "$request_file" "409" "$status_file" "$headers_file"; then
     rm -rf "$tmp_dir"
     return 1
   fi
-  entry_id="$(_walter_audit_rekor_entry_id "$response_file")" || {
-    rm -rf "$tmp_dir"
-    return 1
-  }
+  post_status="$(cat "$status_file" 2>/dev/null || true)"
+  if [[ "$post_status" == "409" ]]; then
+    entry_id="$(_walter_audit_rekor_conflict_entry_id "$headers_file" "$response_file")" || {
+      rm -rf "$tmp_dir"
+      return 1
+    }
+    endpoint="${rekor_url}/api/v1/log/entries/${entry_id}"
+    if ! _walter_audit_rekor_curl "GET" "$endpoint" "$response_file" "$error_file" "$timeout"; then
+      rm -rf "$tmp_dir"
+      return 1
+    fi
+    fetched_entry_id="$(_walter_audit_rekor_entry_id "$response_file")" || {
+      rm -rf "$tmp_dir"
+      return 1
+    }
+    if [[ "$fetched_entry_id" != "$entry_id" ]]; then
+      echo "walter-audit-chain: Rekor duplicate entry id mismatch for ${entry_id}" >&2
+      rm -rf "$tmp_dir"
+      return 1
+    fi
+  else
+    entry_id="$(_walter_audit_rekor_entry_id "$response_file")" || {
+      rm -rf "$tmp_dir"
+      return 1
+    }
+  fi
   _walter_audit_rekor_write_receipt "$receipt_path" "$entry_id" "$rekor_url" "$payload" "$sig" "$public_key" "$response_file" || {
     rm -rf "$tmp_dir"
     echo "walter-audit-chain: unable to write Rekor receipt: $receipt_path" >&2
