@@ -10,8 +10,9 @@ export function resolvePreviewRoot(
   configuredRoot = process.env.WALTER_PREVIEW_ROOT,
   pathExists: (path: string) => boolean = existsSync
 ): string {
-  if (configuredRoot && configuredRoot.trim().length > 0) {
-    return resolve(cwd, configuredRoot);
+  const trimmedRoot = configuredRoot?.trim() ?? "";
+  if (trimmedRoot.length > 0) {
+    return resolve(cwd, trimmedRoot);
   }
   const cwdRoot = resolve(cwd, ".walter", "previews");
   if (pathExists(cwdRoot)) {

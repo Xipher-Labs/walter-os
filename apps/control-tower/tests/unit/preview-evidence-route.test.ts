@@ -9,6 +9,12 @@ describe("preview evidence route", () => {
     ).toBe(resolve("/repo/apps/previews"));
   });
 
+  it("trims configured preview roots before resolving them", () => {
+    expect(
+      resolvePreviewRoot("/repo/apps/control-tower", "  ../previews  ")
+    ).toBe(resolve("/repo/apps/previews"));
+  });
+
   it("defaults to the repository .walter previews directory", () => {
     expect(resolvePreviewRoot("/repo/apps/control-tower", undefined)).toBe(
       resolve("/repo/.walter/previews")

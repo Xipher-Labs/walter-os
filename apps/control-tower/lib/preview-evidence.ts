@@ -1,5 +1,5 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 export type PreviewEvidenceStatus =
   | "complete"
@@ -95,23 +95,25 @@ async function readJson(
   }
 }
 
-async function countScreenshots(path: string): Promise<number> {
+async function listScreenshotBasenames(path: string): Promise<Set<string>> {
   try {
     const entries = await readdir(path, { withFileTypes: true });
-    return entries.filter(
-      (entry) =>
-        entry.isFile() &&
-        /\.(png|jpe?g|webp)$/i.test(entry.name)
-    ).length;
+    return new Set(
+      entries.flatMap((entry) =>
+        entry.isFile() && /\.(png|jpe?g|webp)$/i.test(entry.name)
+          ? [entry.name]
+          : []
+      )
+    );
   } catch (error) {
     if (
       isObject(error) &&
       "code" in error &&
       (error as { code?: unknown }).code === "ENOENT"
     ) {
-      return 0;
+      return new Set();
     }
-    return 0;
+    return new Set();
   }
 }
 
@@ -125,6 +127,7 @@ function validatePreviewReport(
   url: string | null;
   generatedAt: string | null;
   screenshots: number;
+  screenshotBasenames: string[];
 } {
   if (!isObject(payload)) {
     findings.push("preview report is not an object");
@@ -134,6 +137,7 @@ function validatePreviewReport(
       url: null,
       generatedAt: null,
       screenshots: 0,
+      screenshotBasenames: [],
     };
   }
 
@@ -160,6 +164,10 @@ function validatePreviewReport(
     findings.push("preview report seed hash is missing or invalid");
     valid = false;
   }
+  if (!isObject(seed) || !stringValue(seed.path)) {
+    findings.push("preview report seed path is missing or invalid");
+    valid = false;
+  }
   if (screenshots.length === 0) {
     findings.push("preview report screenshots are missing");
     valid = false;
@@ -173,10 +181,25 @@ function validatePreviewReport(
     findings.push("preview report screenshot hash is missing or invalid");
     valid = false;
   }
+  if (
+    screenshots.some(
+      (screenshot) =>
+        !isObject(screenshot) || !stringValue(screenshot.path)
+    )
+  ) {
+    findings.push("preview report screenshot path is missing or invalid");
+    valid = false;
+  }
   if (!safetyOk) {
     findings.push("preview report safety invariants failed");
     valid = false;
   }
+
+  const screenshotBasenames = screenshots.flatMap((screenshot) => {
+    if (!isObject(screenshot)) return [];
+    const path = stringValue(screenshot.path);
+    return path === null ? [] : [basename(path)];
+  });
 
   return {
     valid,
@@ -184,6 +207,7 @@ function validatePreviewReport(
     url: isHttpUrl(payload.url) ? payload.url : null,
     generatedAt: stringValue(payload.generated_at),
     screenshots: screenshots.length,
+    screenshotBasenames,
   };
 }
 
@@ -245,6 +269,10 @@ function validatePreviewPlan(
     findings.push("preview plan seed hash is missing or invalid");
     valid = false;
   }
+  if (!isObject(seed) || !stringValue(seed.path)) {
+    findings.push("preview plan seed path is missing or invalid");
+    valid = false;
+  }
   for (const action of REQUIRED_PLAN_ACTIONS) {
     if (!actions.includes(action)) {
       findings.push(`preview plan action missing: ${action}`);
@@ -273,7 +301,9 @@ async function readPreviewItem(
 ): Promise<PreviewEvidenceItem> {
   const bundlePath = join(root, dirName);
   const findings: string[] = [];
-  const screenshotsOnDisk = await countScreenshots(join(bundlePath, "screenshots"));
+  const screenshotsOnDisk = await listScreenshotBasenames(
+    join(bundlePath, "screenshots")
+  );
 
   const report = await readJson(
     join(bundlePath, "preview-report.json"),
@@ -295,7 +325,7 @@ async function readPreviewItem(
   let app: string | null = null;
   let branch: string | null = null;
   let generatedAt: string | null = null;
-  let screenshots = screenshotsOnDisk;
+  let screenshots = screenshotsOnDisk.size;
 
   if (report.exists && report.payload !== null) {
     const result = validatePreviewReport(report.payload, pr, findings);
@@ -303,7 +333,10 @@ async function readPreviewItem(
     reportSafetyOk = result.safetyOk;
     url = result.url;
     generatedAt = result.generatedAt;
-    if (result.screenshots > screenshotsOnDisk) {
+    const missingScreenshots = result.screenshotBasenames.some(
+      (screenshot) => !screenshotsOnDisk.has(screenshot)
+    );
+    if (missingScreenshots || result.screenshots > screenshotsOnDisk.size) {
       findings.push("preview report screenshot files missing on disk");
       reportValid = false;
     }
