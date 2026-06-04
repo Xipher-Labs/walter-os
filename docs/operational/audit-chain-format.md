@@ -48,6 +48,13 @@ ${WALTER_CONFIG:-$HOME/.config/walter-os}/state/session-<session_id>.pub
 ${WALTER_CONFIG:-$HOME/.config/walter-os}/state/keys-archive/session-<session_id>.pub
 ```
 
+Runtime requirements for signed append and verification:
+
+- `jq` for canonical JSON normalization.
+- An Ed25519-capable `openssl` for signing and signature verification.
+- `python3` with the standard `base64`, `json`, and `pathlib` modules for
+  strict base64 serialization/deserialization helpers.
+
 Append operations take a sidecar lock at `audit/.chain.lock`, reopen the active `chain-YYYY-MM-DD.jsonl` path inside the lock, read the last row, compute the next `prev_hash`, and append one line.
 
 Hook-integration rows currently use these `decision_source` values:

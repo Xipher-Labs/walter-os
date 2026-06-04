@@ -617,7 +617,8 @@ _walter_audit_verify_row_hash() {
 }
 
 _walter_audit_verify_row_signature() {
-  local line="$1" row_number="$2" session_id sig public_key openssl_bin tmp_dir payload payload_file sig_file
+  local line="$1" row_number="$2" tmp_dir="${3:-}" cleanup_tmp=0
+  local session_id sig public_key openssl_bin payload payload_file sig_file
   sig="$(printf '%s\n' "$line" | jq -r '.sig // empty' 2>/dev/null)" || {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
@@ -649,36 +650,40 @@ _walter_audit_verify_row_signature() {
   openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
   _walter_audit_require_python3 || return 3
 
-  tmp_dir="$(mktemp -d)" || {
-    echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
-    return 1
-  }
+  if [[ -z "$tmp_dir" ]]; then
+    tmp_dir="$(mktemp -d)" || {
+      echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
+      return 1
+    }
+    cleanup_tmp=1
+  fi
   payload_file="$tmp_dir/payload.json"
   sig_file="$tmp_dir/sig.bin"
   payload="$(printf '%s\n' "$line" | jq -cS 'del(.sig)' 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
   printf '%s' "$payload" > "$payload_file" || {
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     return 1
   }
   if ! _walter_audit_b64_decode_to_file "$sig" "$sig_file" >/dev/null 2>&1; then
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: invalid sig encoding" >&2
     return 1
   fi
   if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$public_key" -rawin -in "$payload_file" -sigfile "$sig_file" >/dev/null 2>&1; then
-    rm -rf "$tmp_dir"
+    [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
     echo "walter-audit-chain: row ${row_number}: signature verification failed" >&2
     return 1
   fi
-  rm -rf "$tmp_dir"
+  [[ "$cleanup_tmp" -eq 1 ]] && rm -rf "$tmp_dir"
+  return 0
 }
 
 _walter_audit_verify_chain_file_unlocked() {
-  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex
+  local chain_path="$1" line row_number prev_hash actual_hash expected_hash canonical last_hex sig_tmp_dir verify_status
   if ! _walter_audit_jq_available; then
     echo "walter-audit-chain: jq required" >&2
     return 3
@@ -690,44 +695,63 @@ _walter_audit_verify_chain_file_unlocked() {
       return 1
     fi
   fi
+  sig_tmp_dir="$(mktemp -d)" || {
+    echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
+    return 1
+  }
   row_number=0
   expected_hash="null"
   while IFS= read -r line || [[ -n "$line" ]]; do
     row_number=$((row_number + 1))
     canonical="$(printf '%s\n' "$line" | jq -cS . 2>/dev/null)" || {
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
       return 1
     }
     if [[ "$canonical" != "$line" ]]; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: non-canonical JSON" >&2
       return 1
     fi
     if ! printf '%s\n' "$line" | jq -e 'type == "object"' >/dev/null 2>&1; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
       return 1
     fi
-    _walter_audit_verify_row_hash "$line" "$row_number" || return 1
+    _walter_audit_verify_row_hash "$line" "$row_number" || {
+      rm -rf "$sig_tmp_dir"
+      return 1
+    }
     prev_hash="$(printf '%s\n' "$line" | jq -r '.prev_hash // empty')"
     if [[ -z "$prev_hash" ]]; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: missing prev_hash" >&2
       return 1
     fi
     if [[ "$prev_hash" != "$expected_hash" ]]; then
+      rm -rf "$sig_tmp_dir"
       echo "walter-audit-chain: row ${row_number}: prev_hash mismatch" >&2
       echo "  expected: $expected_hash" >&2
       echo "  actual:   $prev_hash" >&2
       return 1
     fi
-    _walter_audit_verify_row_signature "$line" "$row_number" || return $?
+    _walter_audit_verify_row_signature "$line" "$row_number" "$sig_tmp_dir"
+    verify_status="$?"
+    if [[ "$verify_status" -ne 0 ]]; then
+      rm -rf "$sig_tmp_dir"
+      return "$verify_status"
+    fi
     actual_hash="$(walter_audit_hash_string "$line")"
     expected_hash="$actual_hash"
   done < "$chain_path"
 
   if [[ "$row_number" -eq 0 ]]; then
+    rm -rf "$sig_tmp_dir"
     echo "walter-audit-chain: empty chain: $chain_path" >&2
     return 1
   fi
 
+  rm -rf "$sig_tmp_dir"
   printf '%s\n' "$row_number"
 }
 

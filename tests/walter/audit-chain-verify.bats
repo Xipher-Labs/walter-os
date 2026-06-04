@@ -256,6 +256,27 @@ _resign_row() {
   [ "$output" = "resolver_count=1" ]
 }
 
+@test "B-2: verifier reuses one signature temp directory per chain" {
+  _make_chain
+  real_mktemp="$(command -v mktemp)"
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/mktemp" <<SH
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "-d" ]]; then
+  current=0
+  [[ -f "$TMP_HOME/mktemp-d-count" ]] && current="\$(cat "$TMP_HOME/mktemp-d-count")"
+  printf '%s' "\$((current + 1))" > "$TMP_HOME/mktemp-d-count"
+fi
+exec "$real_mktemp" "\$@"
+SH
+  chmod +x "$TMP_HOME/mock-bin/mktemp"
+
+  run env PATH="$TMP_HOME/mock-bin:$PATH" bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$TMP_HOME/mktemp-d-count")" = "1" ]
+}
+
 @test "B-2: verifier fails closed when temp directory creation fails" {
   _make_chain
   mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
