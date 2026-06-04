@@ -434,6 +434,36 @@ SH
   [[ "$output" == *"Rekor receipt root mismatch"* ]]
 }
 
+@test "verify-chain --check-rekor fails when the remote signature differs" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  python3 - "$(_curl_body_path)" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+body = json.loads(path.read_text(encoding="utf-8"))
+body["spec"]["signature"]["content"] = base64.b64encode(b"\0" * 64).decode("ascii")
+path.write_text(json.dumps(body), encoding="utf-8")
+PY
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor entry signature mismatch"* ]]
+}
+
 @test "close-day rejects an existing Rekor receipt with the wrong date" {
   _make_chain
   _write_mock_curl

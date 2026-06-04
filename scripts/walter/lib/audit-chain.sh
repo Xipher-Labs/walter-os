@@ -305,6 +305,23 @@ print(base64.b64encode(pathlib.Path(sys.argv[1]).read_bytes()).decode("ascii"), 
 PY
 }
 
+_walter_audit_b64_any_decode_to_file() {
+  local value="$1" out="$2"
+  _walter_audit_require_python3 || return 1
+  python3 - "$value" "$out" <<'PY'
+import base64
+import binascii
+import pathlib
+import sys
+
+try:
+    data = base64.b64decode(sys.argv[1].encode("ascii"), validate=True)
+except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
+    raise SystemExit(f"invalid base64: {exc}")
+pathlib.Path(sys.argv[2]).write_bytes(data)
+PY
+}
+
 _walter_audit_b64_decode_to_file() {
   local value="$1" out="$2"
   _walter_audit_require_python3 || return 1
@@ -1446,6 +1463,96 @@ PY
   printf '%s' "$body_hash"
 }
 
+_walter_audit_rekor_verify_response_binding() {
+  local response_file="$1" entry_id="$2" expected_hash="$3" receipt_path="$4"
+  local tmp_dir body_file sig_file pub_file digest_file body_value remote_hash remote_sig remote_public_key
+  local receipt_sig receipt_public_key openssl_bin
+
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-binding)" || return 1
+  body_file="$tmp_dir/body.json"
+  sig_file="$tmp_dir/sig.bin"
+  pub_file="$tmp_dir/pub.pem"
+  digest_file="$tmp_dir/digest.bin"
+  body_value="$(jq -er --arg entry_id "$entry_id" '.[$entry_id].body // empty' "$response_file" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor response missing decodable entry body" >&2
+    return 1
+  }
+  if ! _walter_audit_b64_any_decode_to_file "$body_value" "$body_file"; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor response missing decodable entry body" >&2
+    return 1
+  fi
+  remote_hash="$(jq -er '.spec.data.hash.value // empty' "$body_file" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry body missing payload hash" >&2
+    return 1
+  }
+  if [[ "$remote_hash" != "$expected_hash" ]]; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry payload hash mismatch for ${entry_id}" >&2
+    echo "  expected: $expected_hash" >&2
+    echo "  actual:   $remote_hash" >&2
+    return 1
+  fi
+  remote_sig="$(jq -er '.spec.signature.content // empty' "$body_file" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry body missing signature" >&2
+    return 1
+  }
+  remote_public_key="$(jq -er '.spec.signature.publicKey.content // empty' "$body_file" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry body missing public key" >&2
+    return 1
+  }
+  receipt_sig="$(jq -er '.sig // empty' "$receipt_path" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor receipt missing signature: $receipt_path" >&2
+    return 1
+  }
+  receipt_public_key="$(jq -er '.public_key // empty' "$receipt_path" 2>/dev/null)" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor receipt missing public key: $receipt_path" >&2
+    return 1
+  }
+  if [[ "$remote_sig" != "$receipt_sig" ]]; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry signature mismatch for ${entry_id}" >&2
+    return 1
+  fi
+  if [[ "$remote_public_key" != "$receipt_public_key" ]]; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry public key mismatch for ${entry_id}" >&2
+    return 1
+  fi
+  if ! _walter_audit_resolve_openssl; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: ED25519-capable openssl missing" >&2
+    return 3
+  fi
+  openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
+  _walter_audit_hex_to_file "$expected_hash" "$digest_file" || {
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  _walter_audit_b64_decode_to_file "$remote_sig" "$sig_file" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry signature is invalid" >&2
+    return 1
+  }
+  _walter_audit_b64_any_decode_to_file "$remote_public_key" "$pub_file" || {
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry public key is invalid" >&2
+    return 1
+  }
+  if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$pub_file" -rawin -in "$digest_file" -sigfile "$sig_file" >/dev/null 2>&1; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry signature verification failed for ${entry_id}" >&2
+    return 1
+  fi
+  rm -rf "$tmp_dir"
+}
+
 _walter_audit_rekor_write_receipt() {
   local receipt_path="$1" entry_id="$2" rekor_url="$3" payload="$4" sig="$5" public_key="$6" response_file="$7"
   local payload_hash tmp_receipt
@@ -1628,7 +1735,7 @@ walter_audit_verify_rekor_anchor() {
   fi
 
   local date_value="$1" root_hash="$2" configured_url="${3:-}"
-  local receipt_path receipt_root receipt_url entry_id payload_hash rekor_url timeout tmp_dir response_file error_file remote_hash endpoint
+  local receipt_path receipt_root receipt_url entry_id payload_hash rekor_url timeout tmp_dir response_file error_file endpoint
 
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
   if [[ ! -f "$receipt_path" ]]; then
@@ -1678,17 +1785,11 @@ walter_audit_verify_rekor_anchor() {
     rm -rf "$tmp_dir"
     return 1
   fi
-  remote_hash="$(_walter_audit_rekor_response_payload_hash "$response_file" "$entry_id")" || {
+  _walter_audit_rekor_verify_response_binding "$response_file" "$entry_id" "$payload_hash" "$receipt_path" || {
     rm -rf "$tmp_dir"
     return 1
   }
   rm -rf "$tmp_dir"
-  if [[ "$remote_hash" != "$payload_hash" ]]; then
-    echo "walter-audit-chain: Rekor entry payload hash mismatch for ${entry_id}" >&2
-    echo "  expected: $payload_hash" >&2
-    echo "  actual:   $remote_hash" >&2
-    return 1
-  fi
   printf 'ok: verified Rekor anchor %s\n' "$entry_id"
 }
 
