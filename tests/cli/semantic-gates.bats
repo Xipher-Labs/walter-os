@@ -175,7 +175,7 @@ replace_acceptance_criteria_with_weak_substrings() {
   [[ "$output" == *"no test file references docs/specs/example-feature.md"* ]]
 }
 
-@test "semantic-gates accepts spec paths that start with dash" {
+@test "semantic-gates matches repo-relative spec paths that start with dash" {
   write_valid_spec
   mv "$TMP_DIR/repo/docs/specs/example-feature.md" "$TMP_DIR/repo/-dash-spec.md"
   cat > "$TMP_DIR/repo/tests/cli/dash-spec.bats" <<'BATS'
