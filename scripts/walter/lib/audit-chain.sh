@@ -1028,6 +1028,10 @@ walter_audit_verify_chain() {
   fi
 
   local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count verify_status root_hash previous_line
+  if ! _walter_audit_valid_date "$date_value"; then
+    echo "walter-audit-chain: invalid date: $date_value" >&2
+    return 2
+  fi
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
   root_path="$(walter_audit_root_path "$date_value")"
@@ -1069,6 +1073,10 @@ walter_audit_close_day() {
   fi
 
   local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line
+  if ! _walter_audit_valid_date "$date_value"; then
+    echo "walter-audit-chain: invalid date: $date_value" >&2
+    return 2
+  fi
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
   root_path="$(walter_audit_root_path "$date_value")"

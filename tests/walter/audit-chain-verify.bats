@@ -433,6 +433,13 @@ SH
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
 }
 
+@test "B-2: verify-chain rejects invalid date before path lookup" {
+  run bash "$WALTER_OS_BIN" audit verify-chain 'x/../../escape'
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid date"* ]]
+}
+
 @test "B-2: close-day writes root for a verified chain" {
   _make_chain
   rm -f "$(_root_path)"
@@ -455,6 +462,18 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"root hash mismatch"* ]]
   [ "$(cat "$(_root_path)")" != "$original_root" ]
+}
+
+@test "B-2: close-day rejects invalid date before path construction" {
+  _make_chain
+  mkdir -p "$WALTER_CONFIG/audit/chain-x" "$WALTER_CONFIG/audit/root-x"
+  cp "$(_chain_path)" "$WALTER_CONFIG/escape.jsonl"
+
+  run bash "$WALTER_OS_BIN" audit close-day 'x/../../escape'
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid date"* ]]
+  [ ! -f "$WALTER_CONFIG/escape.txt" ]
 }
 
 @test "B-2: first row of a new day links previous day root" {

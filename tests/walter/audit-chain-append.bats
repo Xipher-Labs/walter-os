@@ -478,6 +478,17 @@ SH
   jq -e '.ts == "2026-05-31T00:00:01Z"' "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl"
 }
 
+@test "B-2: invalid previous day root preserves helper status" {
+  mkdir -p "$WALTER_CONFIG/audit"
+  printf '%s' "not-a-root" > "$WALTER_CONFIG/audit/root-2026-05-30.txt"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid root hash"* ]]
+  [ ! -s "$(_chain_path)" ]
+}
+
 @test "B-1: append preserves caller RETURN traps" {
   marker="$TMP_HOME/caller-return-trap-ran"
 
