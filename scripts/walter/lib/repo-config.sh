@@ -462,7 +462,7 @@ walter_repo_config_capability_plan() {
   printf 'path_risk: %s\n' "$path_risk"
   printf 'effective_risk: %s\n' "$effective_risk"
   printf 'hard_floor: %s\n' "$hard_floor"
-  if [[ "$effective_tier" -eq 0 || "$hard_floor" == "yes" || "$effective_risk" == "high" ]]; then
+  if (( effective_tier < 3 )) || [[ "$hard_floor" == "yes" || "$effective_risk" == "high" ]]; then
     printf 'human_gate: required\n'
   else
     printf 'human_gate: policy\n'

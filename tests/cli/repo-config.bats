@@ -541,6 +541,7 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"evidence_tier: 1 assisted"* ]]
   [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
   [[ "$output" == *"allowed_actions:"* ]]
   [[ "$output" == *"  - open_pr"* ]]
 }
@@ -562,6 +563,27 @@ YAML
   [[ "$output" == *"repo_ceiling: 1 assisted"* ]]
   [[ "$output" == *"evidence_tier: 3 bounded_autonomy"* ]]
   [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan requires human gate for supervised autonomy" {
+  write_valid_config
+  sed -i.bak 's/capability_tier_ceiling: 1/capability_tier_ceiling: 2/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 2 supervised_autonomy"* ]]
+  [[ "$output" == *"evidence_tier: 2 supervised_autonomy"* ]]
+  [[ "$output" == *"effective_tier: 2 supervised_autonomy"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
 }
 
 @test "capability-plan allows bounded autonomy only with ceiling and evidence" {
@@ -583,6 +605,7 @@ YAML
   [[ "$output" == *"repo_ceiling: 3 bounded_autonomy"* ]]
   [[ "$output" == *"evidence_tier: 3 bounded_autonomy"* ]]
   [[ "$output" == *"effective_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"human_gate: policy"* ]]
   [[ "$output" == *"  - policy_auto_merge_non_protected"* ]]
 }
 
