@@ -38,20 +38,18 @@ case "$cmd" in
     walter_repo_config_defaults "${1:-balanced}"
     ;;
   verification-plan|verify-plan)
-    target="${1:-$(pwd)}"
-    if [[ "${1:-}" == --* ]]; then
-      target="$(pwd)"
-    else
-      shift || true
+    target="$(pwd)"
+    if [[ $# -gt 0 && "${1:-}" != --* ]]; then
+      target="$1"
+      shift
     fi
     walter_repo_config_verification_plan "$target" "$@"
     ;;
   capability-plan|capability)
-    target="${1:-$(pwd)}"
-    if [[ "${1:-}" == --* ]]; then
-      target="$(pwd)"
-    else
-      shift || true
+    target="$(pwd)"
+    if [[ $# -gt 0 && "${1:-}" != --* ]]; then
+      target="$1"
+      shift
     fi
     walter_repo_config_capability_plan "$target" "$@"
     ;;

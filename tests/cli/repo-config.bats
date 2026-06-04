@@ -364,6 +364,14 @@ YAML
   [[ "$output" == *"plan: prototype"* ]]
 }
 
+@test "verification-plan defaults target to pwd without shell noise" {
+  run bash -c "cd '$TMP_DIR/repo' && '$WALTER_OS_BIN' repo-config verification-plan"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: verification plan"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
 @test "verification-plan raises script changes to medium risk checks" {
   write_valid_config
 
@@ -542,6 +550,14 @@ YAML
   [[ "$output" == *"evidence_tier: 0 read_only"* ]]
   [[ "$output" == *"effective_tier: 0 read_only"* ]]
   [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan defaults target to pwd without shell noise" {
+  run bash -c "cd '$TMP_DIR/repo' && '$WALTER_OS_BIN' repo-config capability-plan"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: capability plan"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
 }
 
 @test "capability-plan computes assisted with CI and tests evidence" {
