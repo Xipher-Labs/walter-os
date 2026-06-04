@@ -9,8 +9,11 @@ export function parseLitellmMockPort(
   rawPort = process.env.LITELLM_MOCK_PORT ?? "4010"
 ): string {
   const port = rawPort.trim();
-  if (!/^[1-9][0-9]*$/.test(port)) {
-    throw new Error("LITELLM_MOCK_PORT must be a positive integer");
+  const portNumber = Number.parseInt(port, 10);
+  if (!/^[1-9][0-9]*$/.test(port) || portNumber > 65_535) {
+    throw new Error(
+      "LITELLM_MOCK_PORT must be a positive integer from 1 to 65535"
+    );
   }
   return port;
 }

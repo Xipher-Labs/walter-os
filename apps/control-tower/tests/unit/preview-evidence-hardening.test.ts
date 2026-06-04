@@ -25,11 +25,29 @@ describe("preview evidence hardening", () => {
     );
   });
 
+  it("rejects out-of-range mock LiteLLM ports", () => {
+    const script = new URL("../e2e/mock-litellm.mjs", import.meta.url);
+    let stderr = "";
+
+    try {
+      execFileSync(process.execPath, [script.pathname], {
+        env: { ...process.env, LITELLM_MOCK_PORT: "65536" },
+        stdio: "pipe",
+        timeout: 500,
+      });
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr ?? "");
+    }
+
+    expect(stderr).toContain("1 to 65535");
+  });
+
   it("normalizes Playwright LiteLLM mock ports before building URLs", () => {
     expect(parseLitellmMockPort(" 4010 ")).toBe("4010");
     expect(() => parseLitellmMockPort("4010abc")).toThrow(
       "LITELLM_MOCK_PORT must be a positive integer"
     );
+    expect(() => parseLitellmMockPort("65536")).toThrow("1 to 65535");
   });
 
   it("uses noopener on external preview links", () => {

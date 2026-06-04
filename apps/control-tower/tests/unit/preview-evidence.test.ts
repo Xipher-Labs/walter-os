@@ -14,6 +14,11 @@ async function writeJson(path: string, payload: unknown) {
   await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+async function writeSeed(bundle: string) {
+  await mkdir(join(bundle, "seed"), { recursive: true });
+  await writeFile(join(bundle, "seed", "seed.json"), "{}", "utf8");
+}
+
 describe("readPreviewEvidence", () => {
   it("returns an empty filesystem source when the preview root is absent", async () => {
     const root = join(await makeRoot(), "missing");
@@ -29,6 +34,7 @@ describe("readPreviewEvidence", () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-235");
     await mkdir(join(bundle, "screenshots"), { recursive: true });
+    await writeSeed(bundle);
     await writeFile(join(bundle, "screenshots", "home.png"), "png", "utf8");
     await writeJson(join(bundle, "preview-report.json"), {
       schema_version: 1,
@@ -154,6 +160,7 @@ describe("readPreviewEvidence", () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-243");
     await mkdir(join(bundle, "screenshots"), { recursive: true });
+    await writeSeed(bundle);
     await writeFile(join(bundle, "screenshots", "other.png"), "png", "utf8");
     await writeJson(join(bundle, "preview-report.json"), {
       schema_version: 1,
@@ -181,6 +188,40 @@ describe("readPreviewEvidence", () => {
     });
     expect(evidence.previews[0].findings).toContain(
       "preview report screenshot files missing on disk"
+    );
+  });
+
+  it("invalidates reports whose seed file is missing on disk", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-246");
+    await mkdir(join(bundle, "screenshots"), { recursive: true });
+    await writeFile(join(bundle, "screenshots", "home.png"), "png", "utf8");
+    await writeJson(join(bundle, "preview-report.json"), {
+      schema_version: 1,
+      pr: 246,
+      url: "https://preview.example/pr-246",
+      generated_at: "2026-06-04T12:00:00Z",
+      bundle_dir: ".walter/previews/preview-pr-246",
+      seed_manifest: { path: "seed/seed.json", sha256: SHA256 },
+      screenshots: [{ path: "screenshots/home.png", sha256: SHA256 }],
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 246,
+      status: "invalid",
+      screenshots: 1,
+      safetyOk: false,
+    });
+    expect(evidence.previews[0].findings).toContain(
+      "preview report seed file missing on disk"
     );
   });
 

@@ -10,10 +10,13 @@
 import { createServer } from "node:http";
 
 const rawPort = (process.env.LITELLM_MOCK_PORT ?? "4000").trim();
-if (!/^[1-9][0-9]*$/.test(rawPort)) {
-  throw new Error("LITELLM_MOCK_PORT must be a positive integer");
+const parsedPort = Number.parseInt(rawPort, 10);
+if (!/^[1-9][0-9]*$/.test(rawPort) || parsedPort > 65_535) {
+  throw new Error(
+    "LITELLM_MOCK_PORT must be a positive integer from 1 to 65535"
+  );
 }
-const PORT = Number.parseInt(rawPort, 10);
+const PORT = parsedPort;
 
 function makeCompletion(content) {
   return JSON.stringify({

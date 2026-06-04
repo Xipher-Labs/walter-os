@@ -132,6 +132,7 @@ function validatePreviewReport(
   url: string | null;
   generatedAt: string | null;
   screenshots: number;
+  seedPath: string | null;
   screenshotBasenames: string[];
 } {
   if (!isObject(payload)) {
@@ -142,6 +143,7 @@ function validatePreviewReport(
       url: null,
       generatedAt: null,
       screenshots: 0,
+      seedPath: null,
       screenshotBasenames: [],
     };
   }
@@ -212,8 +214,17 @@ function validatePreviewReport(
     url: isHttpUrl(payload.url) ? payload.url : null,
     generatedAt: stringValue(payload.generated_at),
     screenshots: screenshots.length,
+    seedPath: isObject(seed) ? stringValue(seed.path) : null,
     screenshotBasenames,
   };
+}
+
+async function isExistingFile(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function validatePreviewPlan(
@@ -339,6 +350,10 @@ async function readPreviewItem(
     reportSafetyOk = result.safetyOk;
     url = result.url;
     generatedAt = result.generatedAt;
+    if (result.seedPath !== null && !(await isExistingFile(join(bundlePath, result.seedPath)))) {
+      findings.push("preview report seed file missing on disk");
+      reportValid = false;
+    }
     const missingScreenshots = result.screenshotBasenames.some(
       (screenshot) => !screenshotsOnDisk.has(screenshot)
     );
