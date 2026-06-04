@@ -170,6 +170,19 @@ teardown() {
   [ "$output" = "safe_lookup" ]
 }
 
+@test "mcp tool snapshot helper rejects flags with missing values" {
+  HELPER="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+
+  run node "$HELPER" --settings
+  [ "$status" -eq 2 ]
+
+  run node "$HELPER" --approved-registry
+  [ "$status" -eq 2 ]
+
+  run node "$HELPER" --timeout-ms
+  [ "$status" -eq 2 ]
+}
+
 @test "unchanged stdio tool definitions emit no finding after baseline" {
   "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
 

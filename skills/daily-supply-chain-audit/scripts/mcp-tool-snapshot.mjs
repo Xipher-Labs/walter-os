@@ -28,16 +28,25 @@ function parseArgs(argv) {
     timeoutMs: Number.isFinite(DEFAULT_TIMEOUT_MS) ? DEFAULT_TIMEOUT_MS : 5000,
   };
 
+  function requireValue(flag, index) {
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) {
+      usage();
+      process.exit(2);
+    }
+    return value;
+  }
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--settings") {
-      args.settings = argv[i + 1];
+      args.settings = requireValue(arg, i);
       i += 1;
     } else if (arg === "--approved-registry") {
-      args.approvedRegistry = argv[i + 1];
+      args.approvedRegistry = requireValue(arg, i);
       i += 1;
     } else if (arg === "--timeout-ms") {
-      args.timeoutMs = Number.parseInt(argv[i + 1], 10);
+      args.timeoutMs = Number.parseInt(requireValue(arg, i), 10);
       i += 1;
     } else if (arg === "-h" || arg === "--help") {
       usage();
