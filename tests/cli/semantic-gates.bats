@@ -107,7 +107,7 @@ BATS
 @test "semantic-gates fails when AC bullets are not testable" {
   write_valid_spec
   write_referencing_test
-  perl -0pi -e 's/(## Acceptance criteria\n\n).*?(\n\n## Test plan)/$1- [ ] AC-1: Make this nicer.\n- [ ] AC-2: Improve the thing.$2/s' \
+  perl -0pi -e 's/(## Acceptance criteria\n\n).*?(\n\n## Test plan)/$1- [ ] AC-1: Make the latest dashboard nicer.\n- [ ] AC-2: Add a contest mode later.$2/s' \
     "$TMP_DIR/repo/docs/specs/example-feature.md"
 
   run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \

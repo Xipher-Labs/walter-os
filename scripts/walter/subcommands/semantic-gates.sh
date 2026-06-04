@@ -113,7 +113,7 @@ check_spec_completeness() {
 }
 
 check_ac_testability() {
-  local ac_body ac_lines weak_lines
+  local ac_body ac_lines weak_lines observable_pattern
   ac_body="$(section_body "^(Acceptance criteria|Acceptance Criteria)")"
   ac_lines="$(printf '%s\n' "$ac_body" | grep -Ei '^[[:space:]]*[-*][[:space:]]+\[[ xX]?\][[:space:]]*(AC-[0-9]+|[A-Z]+-[0-9]+|[A-Za-z0-9 _/-]+:)' || true)"
 
@@ -122,7 +122,8 @@ check_ac_testability() {
     return
   fi
 
-  weak_lines="$(printf '%s\n' "$ac_lines" | grep -Eiv '(test|verify|assert|coverage|exit|fail|pass|emit|block|allow|return|record|create|update|validate|refuse|render|link|include)' || true)"
+  observable_pattern='(^|[^[:alnum:]_])(test|tests|tested|testing|verify|verifies|verified|verification|assert|asserts|asserted|coverage|exit|exits|fail|fails|failed|pass|passes|passed|emit|emits|emitted|block|blocks|blocked|allow|allows|allowed|return|returns|returned|record|records|recorded|create|creates|created|update|updates|updated|validate|validates|validated|refuse|refuses|refused|render|renders|rendered|link|links|linked|include|includes|included)([^[:alnum:]_]|$)'
+  weak_lines="$(printf '%s\n' "$ac_lines" | grep -Eiv "$observable_pattern" || true)"
   if [[ -n "$weak_lines" ]]; then
     add_failure "ac-testability" "AC bullets must include observable verification language"
     while IFS= read -r line; do
