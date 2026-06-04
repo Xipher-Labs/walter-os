@@ -71,6 +71,15 @@ requires the one-minor-version notice cycle.
 
 Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime enforcement (#260), tamper-resistant capability mint approvals (#264), capability hook tokenization cleanup (#262), sandbox key-scan test decoupling (#263), vendored-skill pin enforcement (#255), Codex startup degradation diagnostics (#248/#259), optional app profiles (#207/#208/#210/#211/#212/#213), severity-gate runtime implementation, and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
 
+### Added
+
+- **MCP stdio tool-definition drift detection (#122).** Adds a
+  `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
+  persists approved tool baselines via `walter-os baseline-mcp-tools`, and
+  emits critical `mcp-tool-shadowing` findings when tool names,
+  descriptions, or schemas change. HTTP/SSE transports remain out of scope
+  for this first runtime slice.
+
 ### Changed
 
 - **Post-merge feedback loop first slice (#238).** Adds a read-only

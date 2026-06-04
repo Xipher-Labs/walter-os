@@ -27,9 +27,12 @@ ongoing).
 5. **Skills audit** — every skill in `~/.claude/skills/` and `~/.codex/skills/`
    gets static analysis: scripts shouldn't `curl | bash`, shouldn't write to
    `~/.ssh`, shouldn't egress to non-allowlisted domains.
-6. **Tool definition drift** — for each connected MCP server, today's tool
-   definitions diffed against yesterday's. Mutation = potential tool-name
-   shadowing attack = block.
+6. **Tool definition drift** — stdio MCP servers loaded from
+   `~/.claude/settings.json` are probed via `tools/list` and compared against
+   the operator-approved baseline in
+   `~/.config/walter-os/mcp-tool-snapshots.json`. Mutation = potential
+   tool-name shadowing attack = block. HTTP/SSE MCPs remain covered by static
+   server-registry drift until a transport-specific probe lands.
 7. **Pinned versions** — every MCP package reference in runtime config
    (`~/.claude/settings.json` → `.mcpServers`) must be pinned. The audit
    enforces these exact forms:

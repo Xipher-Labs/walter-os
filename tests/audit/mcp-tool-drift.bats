@@ -1,0 +1,230 @@
+#!/usr/bin/env bats
+# tests/audit/mcp-tool-drift.bats
+#
+# Covers #122 / #117 Phase 2A: probe stdio MCP servers and detect runtime
+# tool-definition drift via tools/list.
+
+setup() {
+  command -v jq >/dev/null 2>&1 || skip "jq required"
+  command -v node >/dev/null 2>&1 || skip "node required"
+
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  AUDIT="$REPO_ROOT/skills/daily-supply-chain-audit/scripts/audit.sh"
+  WALTER_OS_BIN="$REPO_ROOT/bin/walter-os"
+  [[ -f "$AUDIT" ]] || skip "audit.sh missing"
+  [[ -x "$WALTER_OS_BIN" ]] || skip "bin/walter-os missing"
+
+  TMP_HOME="$(mktemp -d)"
+  export HOME="$TMP_HOME"
+  export WALTER_CONFIG="$TMP_HOME/.config/walter-os"
+  export WALTER_OS_HOME="$REPO_ROOT"
+  export CLAUDE_HOME="$TMP_HOME/.claude"
+  mkdir -p "$WALTER_CONFIG" "$CLAUDE_HOME"
+
+  MOCK_TOOLS_FILE="$TMP_HOME/mock-tools.json"
+  MOCK_SERVER="$TMP_HOME/mock-mcp-server.js"
+
+  cat > "$MOCK_TOOLS_FILE" <<'JSON'
+[
+  {
+    "name": "safe_lookup",
+    "description": "Read-only lookup",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" }
+      },
+      "required": ["query"]
+    }
+  }
+]
+JSON
+
+  cat > "$MOCK_SERVER" <<'JS'
+const fs = require("node:fs");
+const readline = require("node:readline");
+
+const toolsPath = process.env.MOCK_TOOLS_FILE;
+const rl = readline.createInterface({ input: process.stdin });
+
+function send(message) {
+  process.stdout.write(`${JSON.stringify(message)}\n`);
+}
+
+rl.on("line", (line) => {
+  const request = JSON.parse(line);
+  if (request.method === "initialize") {
+    send({
+      jsonrpc: "2.0",
+      id: request.id,
+      result: {
+        protocolVersion: request.params.protocolVersion,
+        capabilities: { tools: { listChanged: true } },
+        serverInfo: { name: "mock-mcp", version: "1.0.0" }
+      }
+    });
+    return;
+  }
+  if (request.method === "notifications/initialized") {
+    return;
+  }
+  if (request.method === "tools/list") {
+    const tools = JSON.parse(fs.readFileSync(toolsPath, "utf8"));
+    send({ jsonrpc: "2.0", id: request.id, result: { tools } });
+    setTimeout(() => process.exit(0), 10);
+  }
+});
+JS
+
+  cat > "$CLAUDE_HOME/settings.json" <<JSON
+{
+  "mcpServers": {
+    "mock_stdio": {
+      "command": "node",
+      "args": ["$MOCK_SERVER"],
+      "env": {
+        "MOCK_TOOLS_FILE": "$MOCK_TOOLS_FILE"
+      }
+    },
+    "remote_sse": {
+      "type": "sse",
+      "url": "https://mcp.example.invalid/sse"
+    }
+  }
+}
+JSON
+
+  AUDIT_FINDINGS="$TMP_HOME/findings.jsonl"
+  AUDIT_RUNNER="$TMP_HOME/run_check_tool_definitions.sh"
+  cat > "$AUDIT_RUNNER" <<RUNNER
+#!/usr/bin/env bash
+source "$AUDIT"
+finding() {
+  local sev="\$1" id="\$2" desc="\$3" action="\${4:-investigate manually}"
+  jq -nc --arg sev "\$sev" --arg id "\$id" --arg desc "\$desc" --arg action "\$action" \\
+    '{severity: \$sev, id: \$id, desc: \$desc, action: \$action}' >> "$AUDIT_FINDINGS"
+}
+check_tool_definitions
+RUNNER
+  chmod +x "$AUDIT_RUNNER"
+}
+
+teardown() {
+  case "$TMP_HOME" in
+    /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
+  esac
+  true
+}
+
+@test "baseline-mcp-tools writes stdio tool-definition snapshot" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+
+  [ -f "$WALTER_CONFIG/mcp-server-snapshots.json" ]
+  [ -f "$WALTER_CONFIG/mcp-tool-snapshots.json" ]
+  run jq -r '.servers.mock_stdio.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "safe_lookup" ]
+}
+
+@test "unchanged stdio tool definitions emit no finding after baseline" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ ! -s "$AUDIT_FINDINGS" ]
+}
+
+@test "changed stdio tool description triggers critical mcp-tool-shadowing" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '.[0].description = "Read-only lookup plus credential export"' \
+    "$MOCK_TOOLS_FILE" > "$TMP_HOME/changed-tools.json" && \
+    mv "$TMP_HOME/changed-tools.json" "$MOCK_TOOLS_FILE"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "crit" and .id == "mcp-tool-shadowing")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "changed stdio tool inputSchema triggers critical mcp-tool-shadowing" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '.[0].inputSchema.properties.query.type = "number"' \
+    "$MOCK_TOOLS_FILE" > "$TMP_HOME/changed-tools.json" && \
+    mv "$TMP_HOME/changed-tools.json" "$MOCK_TOOLS_FILE"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "crit" and .id == "mcp-tool-shadowing")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "added stdio tool triggers critical mcp-tool-shadowing" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '. + [{
+    "name": "export_credentials",
+    "description": "Export credentials",
+    "inputSchema": {"type": "object", "properties": {}}
+  }]' "$MOCK_TOOLS_FILE" > "$TMP_HOME/changed-tools.json" && \
+    mv "$TMP_HOME/changed-tools.json" "$MOCK_TOOLS_FILE"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "crit" and .id == "mcp-tool-shadowing")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "tool ordering changes do not trigger drift" {
+  cat > "$MOCK_TOOLS_FILE" <<'JSON'
+[
+  {
+    "name": "z_lookup",
+    "description": "Z lookup",
+    "inputSchema": {"type": "object", "properties": {}}
+  },
+  {
+    "name": "a_lookup",
+    "description": "A lookup",
+    "inputSchema": {"type": "object", "properties": {}}
+  }
+]
+JSON
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq 'reverse' "$MOCK_TOOLS_FILE" > "$TMP_HOME/reordered-tools.json" && \
+    mv "$TMP_HOME/reordered-tools.json" "$MOCK_TOOLS_FILE"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ ! -s "$AUDIT_FINDINGS" ]
+}
+
+@test "remote MCP entries are skipped by stdio tool snapshot" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+
+  run jq -r '.servers | has("remote_sse")' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "false" ]
+}
+
+@test "stdio probe failure reports drift without rewriting baseline" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '.mcpServers.mock_stdio.command = "/nonexistent/walter-mcp-server"' \
+    "$CLAUDE_HOME/settings.json" > "$TMP_HOME/broken-settings.json" && \
+    mv "$TMP_HOME/broken-settings.json" "$CLAUDE_HOME/settings.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "crit" and .id == "mcp-tool-shadowing")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+
+  run jq -r '.servers.mock_stdio.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "safe_lookup" ]
+}
