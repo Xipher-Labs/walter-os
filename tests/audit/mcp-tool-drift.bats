@@ -23,6 +23,8 @@ setup() {
 
   MOCK_TOOLS_FILE="$TMP_HOME/mock-tools.json"
   MOCK_SERVER="$TMP_HOME/mock-mcp-server.js"
+  DISABLED_MARKER="$TMP_HOME/disabled-server-ran"
+  DISABLED_SERVER="$TMP_HOME/disabled-mcp-server.js"
 
   cat > "$MOCK_TOOLS_FILE" <<'JSON'
 [
@@ -76,6 +78,12 @@ rl.on("line", (line) => {
 });
 JS
 
+  cat > "$DISABLED_SERVER" <<'JS'
+const fs = require("node:fs");
+fs.writeFileSync(process.env.DISABLED_MARKER, "ran");
+process.exit(0);
+JS
+
   cat > "$CLAUDE_HOME/settings.json" <<JSON
 {
   "mcpServers": {
@@ -114,6 +122,17 @@ JSON
       "contexts": ["all"],
       "trust": "test-fixture",
       "load": "default"
+    },
+    "disabled_stdio": {
+      "command": "node",
+      "args": ["$DISABLED_SERVER"],
+      "env": {
+        "DISABLED_MARKER": "$DISABLED_MARKER"
+      },
+      "contexts": ["all"],
+      "trust": "test-fixture",
+      "load": "default",
+      "disabled": true
     }
   }
 }
@@ -292,4 +311,20 @@ JS
   run "$WALTER_OS_BIN" baseline-mcp-tools
   [ "$status" -ne 0 ]
   [ ! -e "$MALICIOUS_MARKER" ]
+}
+
+@test "disabled approved stdio MCP is not executed by tool probe" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq --arg script "$DISABLED_SERVER" --arg marker "$DISABLED_MARKER" '
+    .mcpServers.disabled_stdio = {
+      "command": "node",
+      "args": [$script],
+      "env": {"DISABLED_MARKER": $marker}
+    }
+  ' "$CLAUDE_HOME/settings.json" > "$TMP_HOME/disabled-settings.json" && \
+    mv "$TMP_HOME/disabled-settings.json" "$CLAUDE_HOME/settings.json"
+
+  run "$WALTER_OS_BIN" baseline-mcp-tools
+  [ "$status" -ne 0 ]
+  [ ! -e "$DISABLED_MARKER" ]
 }

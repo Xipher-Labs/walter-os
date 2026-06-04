@@ -32,6 +32,7 @@ ongoing).
    the operator-approved baseline in
    `~/.config/walter-os/mcp-tool-snapshots.json`. Mutation = potential
    tool-name shadowing attack = block. The probe only executes stdio MCPs whose
+   approved registry entry is enabled in the default profile and whose
    `command`, `args`, and `env` match the approved server-registry baseline.
    HTTP/SSE MCPs remain covered by static server-registry drift until a
    transport-specific probe lands.

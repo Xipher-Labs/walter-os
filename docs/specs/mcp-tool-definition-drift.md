@@ -39,8 +39,9 @@ The helper uses only Node built-ins, spawns each configured stdio server without
 a shell, sends JSON-RPC messages over stdin, reads newline-delimited responses,
 normalizes tool objects with sorted keys, and prints deterministic JSON.
 To avoid turning the audit itself into an execution vector, the helper refuses
-to spawn a runtime MCP unless its `command`, `args`, and `env` match the
-approved `mcp-server-snapshots.json` baseline.
+to spawn a runtime MCP unless the approved `mcp-server-snapshots.json` baseline
+marks it enabled in the default profile and its `command`, `args`, and `env`
+match the runtime settings.
 
 `walter-os baseline-mcp-tools` keeps its existing registry baseline behavior and
 also writes the approved tool snapshot when Claude settings are present. The
@@ -61,6 +62,7 @@ tool snapshot with the approved tool baseline.
   failing the audit.
 - [ ] AC6: probe failures are reported without rewriting the approved baseline.
 - [ ] AC7: a tampered runtime MCP command is reported but not executed.
+- [ ] AC8: a disabled or manual/high-risk MCP is reported but not executed.
 
 ## Verification
 

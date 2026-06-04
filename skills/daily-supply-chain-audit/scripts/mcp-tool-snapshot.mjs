@@ -125,6 +125,16 @@ function stdioServers(settings, approvedRegistry) {
         denied[name] = { message: "stdio MCP is not present in approved server registry baseline" };
         continue;
       }
+      if (approved.disabled === true) {
+        denied[name] = { message: "approved server registry baseline marks this stdio MCP disabled" };
+        continue;
+      }
+      if ((approved.load || "default") !== "default") {
+        denied[name] = {
+          message: "approved server registry baseline marks this stdio MCP outside the default load profile",
+        };
+        continue;
+      }
       const approvedLaunch = launchConfig(approved);
       if (!sameLaunchConfig(runtimeLaunch, approvedLaunch)) {
         denied[name] = {
