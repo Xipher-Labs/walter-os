@@ -369,7 +369,7 @@ check_mcp_scanners() {
 # ---------- 5. MCP server-registry + tool-definition drift ----------
 # (Function still named check_tool_definitions for backward compat with
 # audit_main() invocation order. It now performs two checks: static
-# registry drift and stdio tools/list drift for approved default-profile MCPs.)
+# registry drift and tools/list drift for approved default-profile MCPs.)
 
 _mcp_tool_snapshot_helper() {
   local script_dir script_root
@@ -399,14 +399,14 @@ check_mcp_runtime_tool_definitions() {
   local helper
   if ! helper="$(_mcp_tool_snapshot_helper)"; then
     finding info "mcp-tool-snapshot-helper-missing" \
-      "MCP tool-definition snapshot helper not found; stdio tools/list drift check skipped" \
+      "MCP tool-definition snapshot helper not found; tools/list drift check skipped" \
       "Run install.sh --upgrade from a current Walter-OS checkout"
     return 0
   fi
 
   if ! command -v node >/dev/null 2>&1; then
     finding high "no-node-mcp-tool-drift" \
-      "node not installed; cannot probe stdio MCP tool definitions" \
+      "node not installed; cannot probe MCP tool definitions" \
       "Install Node.js or run walter-os baseline-mcp-tools from a Node-enabled host"
     return 0
   fi
@@ -415,7 +415,7 @@ check_mcp_runtime_tool_definitions() {
   if [[ ! -f "$baseline" ]]; then
     finding high "mcp-tool-baseline-missing" \
       "MCP tool snapshot baseline missing; refusing to approve current tools/list output during audit" \
-      "Review stdio MCP config, then run: walter-os baseline-mcp-tools"
+      "Review MCP config, then run: walter-os baseline-mcp-tools"
     return 0
   fi
 
@@ -424,7 +424,7 @@ check_mcp_runtime_tool_definitions() {
   if [[ ! -f "$server_baseline" ]]; then
     rm -f "$snapshot_tmp"
     finding high "mcp-server-baseline-missing" \
-      "MCP server registry baseline missing; refusing to execute stdio MCP probes" \
+      "MCP server registry baseline missing; refusing to execute MCP probes" \
       "Run: walter-os baseline-mcp-tools after reviewing mcp/servers.json"
     return 0
   fi
@@ -432,7 +432,7 @@ check_mcp_runtime_tool_definitions() {
   if ! node "$helper" --settings "$settings" --approved-registry "$server_baseline" > "$snapshot_tmp"; then
     rm -f "$snapshot_tmp"
     finding high "mcp-tool-snapshot-failed" \
-      "Failed to snapshot stdio MCP tool definitions from $settings" \
+      "Failed to snapshot MCP tool definitions from $settings" \
       "Run: node $helper --settings $settings --approved-registry $server_baseline"
     return 0
   fi
@@ -441,7 +441,7 @@ check_mcp_runtime_tool_definitions() {
   error_count="$(jq '.errors // {} | length' "$snapshot_tmp" 2>/dev/null || echo 0)"
   if [[ "$error_count" -gt 0 ]]; then
     finding high "mcp-tool-probe-errors" \
-      "MCP tool snapshot reported $error_count stdio probe error(s)" \
+      "MCP tool snapshot reported $error_count probe error(s)" \
       "Run: node $helper --settings $settings --approved-registry $server_baseline | jq '.errors'"
   fi
 
@@ -466,7 +466,7 @@ check_mcp_runtime_tool_definitions() {
   rm -f "$snapshot_tmp"
   if [[ "$current_servers" != "$stored_servers" ]]; then
     finding crit "mcp-tool-shadowing" \
-      "Stdio MCP tool definitions changed since the approved baseline" \
+      "MCP tool definitions changed since the approved baseline" \
       "Review current tools/list output. If safe: walter-os baseline-mcp-tools"
   fi
 }
@@ -480,7 +480,7 @@ check_tool_definitions() {
   #   - command / args changed → HIGH (different binary or version)
   #   - trust level changed → MEDIUM
   #
-  # The runtime stdio tools/list drift check runs after the static registry
+  # The runtime tools/list drift check runs after the static registry
   # comparison so registry drift cannot mask tool-definition drift.
   # Registry path resolution (Copilot R3 #129): prefer the explicit
   # WALTER_OS_HOME env var, then walk up from the script's own location

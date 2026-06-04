@@ -39,11 +39,13 @@ Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS
 ## Acceptance criteria
 
 ### AC-1 — P2-01 bootstrap.sh eval elimination
+
 - [ ] `setup/bootstrap.sh` `run()` rewritten to use `run_args` (positional args, no `eval`).
 - [ ] `run_args` helper hoisted to shared lib at `scripts/walter/lib/run-args.sh` (sourced by both `bootstrap.sh` and `install.sh`).
 - [ ] `tests/install/bootstrap-no-eval.bats` (new) — greps `setup/bootstrap.sh` for `eval[[:space:]]` and asserts zero matches.
 
 ### AC-2 — P2-02/P2-03 network-surface documentation
+
 - [ ] `docs/operational/network-exposure.md` (new) — lists every walter-host service with its port-binding policy:
   - **`0.0.0.0` (required)**: Syncthing 22000, WireGuard 51820/udp — with rationale + Cloudflare-Access NOT a replacement explanation
   - **`127.0.0.1` only**: every other service (n8n, plane, litellm, infisical, etc.)
@@ -51,6 +53,7 @@ Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS
 - [ ] `tests/oss/network-exposure-doc.bats` — asserts every `compose.yml` port mapping is referenced in `network-exposure.md` (no undocumented `0.0.0.0` binds).
 
 ### AC-3 — P2-04 stderr/stdout bounded framing
+
 - [ ] Submodule `Xipher-Labs/marchetto-agent-skills-fork` gains a sibling commit to the d1ad0e7 P0-06 fix: `detect-error.sh` wraps `stderr` / `stdout` content in `<TOOL_STDERR>…</TOOL_STDERR>` + `<TOOL_STDOUT>…</TOOL_STDOUT>` markers with the same "UNTRUSTED DATA" framing prefix.
 - [ ] **Marker-escape invariant** (mirrors the P0-06 fix exactly): before wrapping, any occurrence of the closing marker (`</TOOL_STDERR>` or `</TOOL_STDOUT>`) inside the captured content MUST be HTML-escaped (`<` → `&lt;`, `>` → `&gt;`) so a tool that emits the literal closing tag in its stderr (curl progress, jq error, etc.) cannot prematurely terminate the bounded section. The marker pair itself is hard-coded in the wrapping code; only the BODY is the untrusted content. Same approach `preserve-lessons.sh` already uses for `</LESSON_TITLES>` (see `external/marchetto-agent-skills/skills/learn-by-mistake/hooks/scripts/preserve-lessons.sh`).
 - [ ] `external/marchetto-agent-skills` submodule pin bumped to the new SHA.
@@ -59,12 +62,14 @@ Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS
   - 2 cases that inject the literal closing-tag string into stderr/stdout and assert the marker stays sealed (the closing tag in the body is escaped; the outer marker still terminates the section). Mirrors the existing `</LESSON_TITLES>` escape test from P0-06.
 
 ### AC-4 — P2-05 Grafana Assistant opt-in only
+
 - [ ] `setup/walter-host/services/observability/compose.yml` — remove `GF_INSTALL_PLUGINS: "grafana-assistant-app"` from the default config.
 - [ ] Add operator override: when `WALTER_GRAFANA_ASSISTANT=1` is set in `personal.env`, compose-override re-adds the plugin.
 - [ ] `setup/walter-host/services/observability/README.md` (new section) explains the trade-off + Grafana-Cloud-LLM-leakage threat model.
 - [ ] `tests/oss/services-grafana-no-assistant-by-default.bats` — asserts the plugin is NOT in the default compose.
 
 ### AC-5 — P2-06 redactor coverage
+
 - [ ] `scripts/agent-secret-redactor.sh` adds patterns for:
   - Hetzner: operator-config pattern via `WALTER_HETZNER_TOKEN_PATTERN`
     env var (the raw "64-char hex" pattern would catch every sha256
@@ -89,15 +94,17 @@ Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS
   configured).
 
 ### AC-6 — P2-07 tool-definition drift detection
-- [x] `skills/daily-supply-chain-audit/scripts/audit.sh` `check_tool_definitions()` implemented for stdio MCPs:
-  - For each MCP in `~/.claude/settings.json` `mcpServers`, query its tool list (`tools/list` JSON-RPC method via a direct stdio probe — the current audit script only wraps Snyk's `mcp-scan`, NOT `mcp-scanner`; integrating `mcp-scanner` would be a separate optional task and is not a prerequisite for this AC).
+
+- [x] `skills/daily-supply-chain-audit/scripts/audit.sh` `check_tool_definitions()` implemented for stdio, HTTP, and SSE MCPs:
+  - For each approved default-profile MCP in `~/.claude/settings.json` `mcpServers`, query its tool list (`tools/list` JSON-RPC method via a direct stdio, Streamable HTTP, or legacy SSE probe — the current audit script only wraps Snyk's `mcp-scan`, NOT `mcp-scanner`; integrating `mcp-scanner` would be a separate optional task and is not a prerequisite for this AC).
   - Normalize tool names, descriptions, schemas, and other tool-definition fields → store to `~/.config/walter-os/mcp-tool-snapshots.json`.
   - Diff vs the operator-approved baseline. CRITICAL finding `mcp-tool-shadowing` on any change.
 - [x] `walter-os baseline-mcp-tools` CLI subcommand for re-snapshotting after an intentional MCP version bump (same pattern as `baseline-external-hooks`).
 - [x] `tests/audit/mcp-tool-drift.bats` (new) — mock an MCP, snapshot, modify the tool list, assert CRITICAL finding.
-- [ ] Follow-up: add HTTP/SSE tool probes once Walter-OS has a safe remote MCP inspection path.
+- [x] HTTP/SSE tool probes reuse the approved server-registry gate before any remote request and do not persist header token values.
 
 ### AC-7 — P2-08 SQL pattern variants
+
 **Audit before extending**: `hooks/approval-gate.sh`'s current `DELETE FROM` regex IS already case-insensitive (`[Dd][Ee]...`) and already uses `[[:space:]]+` between tokens. The implementer should re-read the current regex before assuming the "lowercase" and "any whitespace" variants are gaps; they may already be covered. The genuine gap is the **comment-separator** case (`DELETE/*…*/FROM`) — that's what this AC adds.
 
 - [ ] `hooks/approval-gate.sh` `BLOCK_BASH_PATTERNS` SQL `DELETE FROM` regex extended ONLY for the genuinely-missing case:
@@ -106,6 +113,7 @@ Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS
 - [ ] `tests/hooks/approval-gate.bats` extended with: the new comment-separator case + assertions for the existing-coverage cases (regression-pin them so a future cleanup of the regex can't accidentally drop the coverage).
 
 ### AC-8 — Audit ledger + CHANGELOG
+
 - [ ] `docs/operational/security-audit-2026-05-11.md` Status lines on P2-01..P2-08 with PR refs.
 - [ ] Summary table: 6/6 P0, 9/9 P1, **8/8 P2** closed.
 - [ ] `CHANGELOG.md` `[Unreleased]` (becoming `[0.5.0]`) → Security entries per AC.

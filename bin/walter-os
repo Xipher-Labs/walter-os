@@ -22,7 +22,7 @@
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
-#   baseline-mcp-tools          Refresh MCP server + stdio tool baselines
+#   baseline-mcp-tools          Refresh MCP server + tool baselines
 #   baseline-external-hooks     Refresh external/**/hooks/scripts/*.sh checksums
 #                               after an intentional submodule SHA bump (audit P1-07)
 #   enable-hook <name>          Enable a hook in ~/.claude/settings.json
@@ -476,7 +476,7 @@ cmd_baseline_hooks() {
 # Re-snapshot mcp/servers.json after an intentional MCP server change
 # (added / removed / version bump / trust-level change). Operators run
 # this only after reviewing the change. Closes #117 Phase 1.
-# Phase 2 (per-tool schema query via stdio JSON-RPC) is a follow-up.
+# Runtime tool-definition probes cover stdio plus approved HTTP/SSE MCPs.
 cmd_baseline_mcp_tools() {
   require_jq
   local registry="${WALTER_OS_HOME:-${HOME}/walter-os}/mcp/servers.json"
@@ -537,7 +537,7 @@ cmd_baseline_mcp_tools() {
     rm -f "$tool_tmp"
     local tool_n
     tool_n="$(jq '.servers | length' "$tool_baseline")"
-    echo "✓ MCP tool snapshot refreshed ($tool_n stdio servers): $tool_baseline"
+    echo "✓ MCP tool snapshot refreshed ($tool_n MCP servers): $tool_baseline"
   else
     rm -f "$tool_tmp" "${tool_tmp}.sorted"
     echo "warning: MCP tool-definition snapshot failed; server-registry baseline was still refreshed" >&2

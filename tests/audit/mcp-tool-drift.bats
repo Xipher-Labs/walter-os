@@ -25,12 +25,33 @@ setup() {
   MOCK_SERVER="$TMP_HOME/mock-mcp-server.js"
   DISABLED_MARKER="$TMP_HOME/disabled-server-ran"
   DISABLED_SERVER="$TMP_HOME/disabled-mcp-server.js"
+  REMOTE_TOOLS_FILE="$TMP_HOME/remote-tools.json"
+  REMOTE_SERVER="$TMP_HOME/mock-remote-mcp-server.js"
+  REMOTE_PORT_FILE="$TMP_HOME/remote-port"
+  REMOTE_REQUESTS_FILE="$TMP_HOME/remote-requests.jsonl"
+  export TEST_REMOTE_TOKEN="remote-secret-token"
 
   cat > "$MOCK_TOOLS_FILE" <<'JSON'
 [
   {
     "name": "safe_lookup",
     "description": "Read-only lookup",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" }
+      },
+      "required": ["query"]
+    }
+  }
+]
+JSON
+
+  cat > "$REMOTE_TOOLS_FILE" <<'JSON'
+[
+  {
+    "name": "remote_lookup",
+    "description": "Remote read-only lookup",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -84,6 +105,116 @@ fs.writeFileSync(process.env.DISABLED_MARKER, "ran");
 process.exit(0);
 JS
 
+  cat > "$REMOTE_SERVER" <<'JS'
+const fs = require("node:fs");
+const http = require("node:http");
+
+const toolsPath = process.argv[2];
+const portPath = process.argv[3];
+const requestsPath = process.argv[4];
+const sseClients = new Map();
+
+function readTools() {
+  return JSON.parse(fs.readFileSync(toolsPath, "utf8"));
+}
+
+function rpcResult(request) {
+  if (request.method === "initialize") {
+    return {
+      protocolVersion: request.params?.protocolVersion,
+      capabilities: { tools: { listChanged: true } },
+      serverInfo: { name: "mock-remote-mcp", version: "1.0.0" }
+    };
+  }
+  if (request.method === "tools/list") {
+    return { tools: readTools() };
+  }
+  return {};
+}
+
+function readBody(req, callback) {
+  let body = "";
+  req.setEncoding("utf8");
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+  req.on("end", () => callback(body));
+}
+
+function sendSse(res, event, data) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+const server = http.createServer((req, res) => {
+  fs.appendFileSync(requestsPath, JSON.stringify({
+    method: req.method,
+    url: req.url,
+    authorization: req.headers.authorization || ""
+  }) + "\n");
+
+  if (req.method === "POST" && req.url === "/mcp-http") {
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (!Object.prototype.hasOwnProperty.call(request, "id")) {
+        res.writeHead(202).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: rpcResult(request) }));
+    });
+    return;
+  }
+
+  if (req.method === "GET" && req.url === "/sse") {
+    const sessionId = String(Math.random()).slice(2);
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive"
+    });
+    sseClients.set(sessionId, res);
+    res.write(`event: endpoint\n`);
+    res.write(`data: /sse-message?session=${sessionId}\n\n`);
+    req.on("close", () => {
+      sseClients.delete(sessionId);
+    });
+    return;
+  }
+
+  if (req.method === "POST" && req.url?.startsWith("/sse-message?session=")) {
+    const sessionId = new URL(req.url, "http://127.0.0.1").searchParams.get("session");
+    const client = sseClients.get(sessionId);
+    readBody(req, (body) => {
+      const request = JSON.parse(body);
+      if (Object.prototype.hasOwnProperty.call(request, "id") && client) {
+        sendSse(client, "message", { jsonrpc: "2.0", id: request.id, result: rpcResult(request) });
+      }
+      res.writeHead(202).end();
+    });
+    return;
+  }
+
+  res.writeHead(404).end();
+});
+
+server.listen(0, "127.0.0.1", () => {
+  fs.writeFileSync(portPath, String(server.address().port));
+});
+JS
+
+  node "$REMOTE_SERVER" "$REMOTE_TOOLS_FILE" "$REMOTE_PORT_FILE" "$REMOTE_REQUESTS_FILE" &
+  REMOTE_PID="$!"
+  for _ in {1..100}; do
+    [[ -s "$REMOTE_PORT_FILE" ]] && break
+    sleep 0.05
+  done
+  [[ -s "$REMOTE_PORT_FILE" ]] || {
+    echo "mock remote MCP server did not start" >&2
+    return 1
+  }
+  REMOTE_BASE_URL="http://127.0.0.1:$(cat "$REMOTE_PORT_FILE")"
+
   cat > "$CLAUDE_HOME/settings.json" <<JSON
 {
   "mcpServers": {
@@ -94,9 +225,16 @@ JS
         "MOCK_TOOLS_FILE": "$MOCK_TOOLS_FILE"
       }
     },
+    "remote_http": {
+      "type": "http",
+      "url": "$REMOTE_BASE_URL/mcp-http",
+      "headers": {
+        "Authorization": "Bearer \${TEST_REMOTE_TOKEN}"
+      }
+    },
     "remote_sse": {
       "type": "sse",
-      "url": "https://mcp.example.invalid/sse"
+      "url": "$REMOTE_BASE_URL/sse"
     }
   }
 }
@@ -116,9 +254,19 @@ JSON
       "trust": "test-fixture",
       "load": "default"
     },
+    "remote_http": {
+      "type": "http",
+      "url": "$REMOTE_BASE_URL/mcp-http",
+      "headers": {
+        "Authorization": "Bearer \${TEST_REMOTE_TOKEN}"
+      },
+      "contexts": ["all"],
+      "trust": "test-fixture",
+      "load": "default"
+    },
     "remote_sse": {
       "type": "sse",
-      "url": "https://mcp.example.invalid/sse",
+      "url": "$REMOTE_BASE_URL/sse",
       "contexts": ["all"],
       "trust": "test-fixture",
       "load": "default"
@@ -154,6 +302,10 @@ RUNNER
 }
 
 teardown() {
+  if [[ -n "${REMOTE_PID:-}" ]]; then
+    kill "$REMOTE_PID" >/dev/null 2>&1 || true
+    wait "$REMOTE_PID" >/dev/null 2>&1 || true
+  fi
   case "$TMP_HOME" in
     /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac
@@ -309,12 +461,82 @@ JSON
   [ ! -s "$AUDIT_FINDINGS" ]
 }
 
-@test "remote MCP entries are skipped by stdio tool snapshot" {
+@test "remote MCP entries are probed by tool snapshot" {
   "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
 
-  run jq -r '.servers | has("remote_sse")' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  run jq -r '.servers.remote_http.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
   [ "$status" -eq 0 ]
-  [ "$output" = "false" ]
+  [ "$output" = "remote_lookup" ]
+
+  run jq -r '.servers.remote_sse.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "remote_lookup" ]
+}
+
+@test "remote MCP header tokens are sent but not persisted" {
+  run "$WALTER_OS_BIN" baseline-mcp-tools
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"$TEST_REMOTE_TOKEN"* ]]
+
+  run grep -q "$TEST_REMOTE_TOKEN" "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -ne 0 ]
+
+  run jq -r 'select(.url == "/mcp-http") | .authorization' "$REMOTE_REQUESTS_FILE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Bearer $TEST_REMOTE_TOKEN"* ]]
+}
+
+@test "remote MCP header tamper is not requested" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  : > "$REMOTE_REQUESTS_FILE"
+  jq '.mcpServers.remote_http.headers.Authorization = "Bearer tampered-token"' \
+    "$CLAUDE_HOME/settings.json" > "$TMP_HOME/tampered-remote-settings.json" && \
+    mv "$TMP_HOME/tampered-remote-settings.json" "$CLAUDE_HOME/settings.json"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-tool-probe-errors")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+
+  run jq -s 'map(select(.url == "/mcp-http")) | length' "$REMOTE_REQUESTS_FILE"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 0 ]
+  run grep -q "tampered-token" "$AUDIT_FINDINGS"
+  [ "$status" -ne 0 ]
+}
+
+@test "changed remote MCP tool description triggers critical mcp-tool-shadowing" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  jq '.[0].description = "Remote lookup plus hidden export"' \
+    "$REMOTE_TOOLS_FILE" > "$TMP_HOME/changed-remote-tools.json" && \
+    mv "$TMP_HOME/changed-remote-tools.json" "$REMOTE_TOOLS_FILE"
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "crit" and .id == "mcp-tool-shadowing")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "unreachable baselined remote MCP emits probe error without rewriting baseline" {
+  "$WALTER_OS_BIN" baseline-mcp-tools >/dev/null
+  kill "$REMOTE_PID" >/dev/null 2>&1 || true
+  wait "$REMOTE_PID" >/dev/null 2>&1 || true
+  REMOTE_PID=""
+
+  rm -f "$AUDIT_FINDINGS"
+  bash "$AUDIT_RUNNER"
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "mcp-tool-probe-errors")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+
+  run jq -r '.servers.remote_http.tools[0].name' "$WALTER_CONFIG/mcp-tool-snapshots.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "remote_lookup" ]
 }
 
 @test "stdio probe failure reports drift without rewriting baseline" {

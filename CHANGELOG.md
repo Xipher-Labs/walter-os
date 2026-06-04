@@ -73,14 +73,13 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Added
 
-- **MCP stdio tool-definition drift detection (#122).** Adds a
-  `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
+- **MCP tool-definition drift detection (#122/#331).** Adds a
+  `tools/list` JSON-RPC probe for stdio, HTTP, and SSE MCPs from Claude settings,
   persists approved tool baselines via `walter-os baseline-mcp-tools`, and
   emits critical `mcp-tool-shadowing` findings when tool names,
   descriptions, or schemas change. Probes are gated against the approved
-  server-registry baseline before any MCP command is spawned, and disabled or
-  manual/high-risk entries are not executed by the audit. HTTP/SSE transports
-  remain out of scope for this first runtime slice.
+  server-registry baseline before any MCP command or remote request runs, and
+  disabled or manual/high-risk entries are not executed by the audit.
 
 ### Changed
 
