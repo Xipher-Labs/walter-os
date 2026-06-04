@@ -31,7 +31,8 @@ Options:
   --record-feature-state <id>   Append the decision to a feature-state ledger.
   --repo <dir>                  Repository containing .walter/features/.
                                 --repo requires --record-feature-state; recording
-                                uses the current git repository by default.
+                                defaults to the current git repository root,
+                                falling back to the current working directory.
 EOF
 }
 

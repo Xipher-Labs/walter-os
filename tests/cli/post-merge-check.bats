@@ -268,5 +268,6 @@ EOF
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"--repo requires --record-feature-state"* ]]
-  [[ "$output" == *"current git repository by default"* ]]
+  [[ "$output" == *"current git repository root"* ]]
+  [[ "$output" == *"falling back to the current working directory"* ]]
 }
