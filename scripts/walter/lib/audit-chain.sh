@@ -202,7 +202,8 @@ PY
       echo "walter-audit-chain: invalid session state: $state_file" >&2
       return 4
     fi
-    return 1
+    echo "walter-audit-chain: invalid session id for signed audit row" >&2
+    return 2
   fi
   printf '%s' "$session_id"
 }
@@ -272,6 +273,7 @@ _walter_audit_sign_row() {
     session_status="$?"
     if [[ "$session_status" -ne 0 ]]; then
       [[ "$session_status" -eq 3 ]] && return 3
+      [[ "$session_status" -eq 2 ]] && return 2
       [[ "$session_status" -eq 4 ]] && return 1
       echo "walter-audit-chain: active session id required for signed audit row" >&2
       return 2
@@ -791,6 +793,22 @@ _walter_audit_verify_root_unlocked() {
   fi
 }
 
+_walter_audit_root_matches_rotated_chain() {
+  local chain_path="$1" root_path="$2" root_hash rotated previous_line last_hex
+  [[ -f "$root_path" ]] || return 1
+  root_hash="$(cat "$root_path")" || return 1
+  [[ "$root_hash" =~ ^[0-9a-f]{64}$ ]] || return 1
+  for rotated in "$chain_path".*; do
+    [[ -f "$rotated" && -s "$rotated" ]] || continue
+    last_hex="$(tail -c 1 "$rotated" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+    [[ "$last_hex" == "0a" ]] || continue
+    previous_line="$(tail -n 1 "$rotated")" || continue
+    [[ -n "$previous_line" ]] || continue
+    [[ "$(walter_audit_hash_string "$previous_line")" == "$root_hash" ]] && return 0
+  done
+  return 1
+}
+
 walter_audit_append() {
   [[ "$#" -eq 5 ]] || {
     echo "walter-audit-chain: usage: walter_audit_append <tool> <input> <decision> <source> <reason>" >&2
@@ -811,6 +829,11 @@ walter_audit_append() {
 
   chain_created=0
   if [[ ! -e "$chain_path" ]]; then
+    if [[ -e "$root_path" ]] && ! _walter_audit_root_matches_rotated_chain "$chain_path" "$root_path"; then
+      echo "walter-audit-chain: chain missing with existing root: $chain_path" >&2
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    fi
     : > "$chain_path" || {
       _walter_audit_release_lock "$lock_path"
       return 1
@@ -878,6 +901,7 @@ walter_audit_append() {
     exec 9>&-
     _walter_audit_release_lock "$lock_path"
     [[ "$session_status" -eq 3 ]] && return 3
+    [[ "$session_status" -eq 2 ]] && return 2
     [[ "$session_status" -eq 4 ]] && return 1
     echo "walter-audit-chain: active session id required for signed audit row" >&2
     return 2

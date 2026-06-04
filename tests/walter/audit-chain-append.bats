@@ -103,6 +103,14 @@ _verify_chain() {
   [[ "$output" != *"active session id required"* ]]
 }
 
+@test "B-2: append reports invalid WALTER_SESSION_ID explicitly" {
+  run bash -c "source '$AUDIT_LIB'; WALTER_SESSION_ID='bad/session' walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid session id for signed audit row"* ]]
+  [[ "$output" != *"active session id required"* ]]
+}
+
 @test "B-1: flock lock file is private when flock is available" {
   command -v flock >/dev/null 2>&1 || skip "flock not installed"
 
@@ -479,6 +487,19 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"empty chain with existing root"* ]]
   [ ! -s "$(_chain_path)" ]
+  [ "$(cat "$(_root_path)")" = "$original_root" ]
+}
+
+@test "B-1: append rejects missing chain when root already exists" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' allow approval-gate ok >/dev/null"
+  original_root="$(cat "$(_root_path)")"
+  rm "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after chain deletion' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"chain missing with existing root"* ]]
+  [ ! -e "$(_chain_path)" ]
   [ "$(cat "$(_root_path)")" = "$original_root" ]
 }
 
