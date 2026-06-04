@@ -303,6 +303,18 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "repo-config hard-floor matcher treats directory patterns as recursive" {
+  run bash -c '
+    # shellcheck source=/dev/null
+    source "$1"
+    WALTER_PROTECTED_PATH_PATTERNS=("sensitive")
+    _walter_repo_config_path_is_hard_floor "sensitive/token.txt" &&
+      _walter_repo_config_path_is_hard_floor "nested/sensitive/token.txt"
+  ' bash "$REPO_ROOT/scripts/walter/lib/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "doctor --repo-config validates git root policy from subdirectories" {
   write_valid_config
   sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \
