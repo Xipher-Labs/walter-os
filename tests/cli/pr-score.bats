@@ -366,6 +366,46 @@ write_preview_plan() {
   echo "$output" | jq -e '.findings | index("invalid preview report")'
 }
 
+@test "AC4: preview report for another PR is invalid evidence" {
+  local fixture="$TMP_DIR/mismatched-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+  jq '.pr = 999' "$report" > "$TMP_DIR/mismatched-report.json"
+  mv "$TMP_DIR/mismatched-report.json" "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.report.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview report")'
+}
+
+@test "AC4: preview plan for another PR is invalid evidence" {
+  local fixture="$TMP_DIR/mismatched-plan.json"
+  local plan="$TMP_DIR/preview-plan.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_plan "$plan"
+  jq '.pr = 999' "$plan" > "$TMP_DIR/mismatched-plan-updated.json"
+  mv "$TMP_DIR/mismatched-plan-updated.json" "$plan"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-plan "$plan" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.plan.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview plan")'
+}
+
 @test "AC4: issue references may use a colon after keyword" {
   local fixture="$TMP_DIR/colon-ref.json"
   write_fixture \

@@ -229,13 +229,14 @@ read_json_evidence() {
 }
 
 preview_report_status() {
-  local payload="$1"
-  jq -nc --argjson report "$payload" '
+  local payload="$1" expected_pr="$2"
+  jq -nc --argjson report "$payload" --argjson expected_pr "$expected_pr" '
     def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
     {
       provided: true,
       valid: (
         ($report.schema_version == 1) and
+        ($report.pr == $expected_pr) and
         (($report.url // "") | type == "string" and test("^https?://")) and
         (($report.seed_manifest.sha256 // "") | sha256_ok) and
         (($report.screenshots // []) | type == "array") and
@@ -250,14 +251,15 @@ preview_report_status() {
 }
 
 preview_plan_status() {
-  local payload="$1"
-  jq -nc --argjson plan "$payload" '
+  local payload="$1" expected_pr="$2"
+  jq -nc --argjson plan "$payload" --argjson expected_pr "$expected_pr" '
     def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
     {
       provided: true,
       valid: (
         ($plan.schema_version == 1) and
         ($plan.kind == "preview-plan") and
+        ($plan.pr == $expected_pr) and
         (($plan.provider // "") | type == "string" and length > 0) and
         (($plan.app // "") | type == "string" and length > 0) and
         (($plan.branch // "") | type == "string" and length > 0) and
@@ -374,7 +376,7 @@ preview_report_status_json='{"provided":false,"valid":null}'
 
 if [[ -n "$preview_plan_path" ]]; then
   preview_plan_json="$(read_json_evidence "preview plan" "$preview_plan_path")"
-  preview_plan_status_json="$(preview_plan_status "$preview_plan_json")"
+  preview_plan_status_json="$(preview_plan_status "$preview_plan_json" "$(jq -r '.number // 0' <<<"$pr_json")")"
   if [[ "$(jq -r '.valid' <<<"$preview_plan_status_json")" != "true" ]]; then
     preview_invalid=1
     add_finding "invalid preview plan"
@@ -383,7 +385,7 @@ fi
 
 if [[ -n "$preview_report_path" ]]; then
   preview_report_json="$(read_json_evidence "preview report" "$preview_report_path")"
-  preview_report_status_json="$(preview_report_status "$preview_report_json")"
+  preview_report_status_json="$(preview_report_status "$preview_report_json" "$(jq -r '.number // 0' <<<"$pr_json")")"
   if [[ "$(jq -r '.valid' <<<"$preview_report_status_json")" != "true" ]]; then
     preview_invalid=1
     add_finding "invalid preview report"
