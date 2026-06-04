@@ -7,6 +7,7 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   command -v jq >/dev/null 2>&1 || skip "jq required"
+  SESSION_LIB="$REPO_ROOT/scripts/walter/lib/session-state.sh"
   TMP_HOME="$(mktemp -d)"
   TMP_CFG="$TMP_HOME/.config/walter-os"
   TEST_REPO="$TMP_HOME/repo"
@@ -19,7 +20,8 @@ setup() {
   export WALTER_OS_HOME="$REPO_ROOT"
   export WALTER_AUDIT_DATE="2026-05-31"
   export WALTER_AUDIT_NOW="2026-05-31T12:00:00Z"
-  export WALTER_SESSION_ID="hook-integration-test"
+  export WALTER_SESSION_TEST_CLOCK=1
+  export WALTER_SESSION_NOW_EPOCH=1767225600
   export WALTER_AGENT_NAME="test-agent"
   unset PLANE_API_TOKEN PLANE_API_URL PLANE_WORKSPACE PLANE_PROJECT
   unset WALTER_DENYLIST_BYPASS WALTER_EGRESS_ALLOW_OVERRIDE
@@ -30,6 +32,12 @@ setup() {
   git -C "$TEST_REPO" config user.name "Test"
   git -C "$TEST_REPO" commit --allow-empty -q -m "init"
   git -C "$TEST_REPO" remote add origin https://github.com/example/test.git
+
+  bash -c "source '$SESSION_LIB'; _walter_session_openssl" >/dev/null \
+    || skip "ED25519-capable openssl required"
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$TEST_REPO'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$TEST_REPO'")"
+  export WALTER_SESSION_ID="$(jq -r '.session_id' "$state_file")"
 
   cat > "$WALTER_CONFIG/trust-tiers.yml" <<'TIERS'
 agents:
@@ -68,8 +76,8 @@ _chain_path() {
 
 _hook_event() {
   local tool="$1" command="$2"
-  jq -n --arg tool "$tool" --arg command "$command" \
-    '{"tool_name":$tool,"tool_input":{"command":$command}}'
+  jq -n --arg tool "$tool" --arg command "$command" --arg cwd "$TEST_REPO" \
+    '{"tool_name":$tool,"cwd":$cwd,"tool_input":{"command":$command}}'
 }
 
 _approval_gate_bash() {
@@ -120,7 +128,7 @@ _network_gate_no_jq() {
 
 _network_gate_tool() {
   local tool="$1"
-  jq -n --arg tool "$tool" '{"tool_name":$tool,"tool_input":{}}' \
+  jq -n --arg tool "$tool" --arg cwd "$TEST_REPO" '{"tool_name":$tool,"cwd":$cwd,"tool_input":{}}' \
     | bash "$REPO_ROOT/hooks/network-gate.sh"
 }
 
@@ -134,7 +142,7 @@ _pre_commit_tests() {
 
 _wiki_validator_write() {
   local file_path="$1"
-  jq -n --arg path "$file_path" '{"tool_name":"Write","tool_input":{"file_path":$path}}' \
+  jq -n --arg path "$file_path" --arg cwd "$TEST_REPO" '{"tool_name":"Write","cwd":$cwd,"tool_input":{"file_path":$path}}' \
     | bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
 }
 
@@ -147,7 +155,7 @@ _wiki_validator_no_jq() {
   mkdir -p "$mock_bin"
   printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
   chmod +x "$mock_bin/jq"
-  jq -n --arg path "$file_path" '{"tool_name":"Write","tool_input":{"file_path":$path}}' \
+  jq -n --arg path "$file_path" --arg cwd "$TEST_REPO" '{"tool_name":"Write","cwd":$cwd,"tool_input":{"file_path":$path}}' \
     | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
 }
 
@@ -166,6 +174,20 @@ _last_output_line() {
   echo "$output" | jq -e '.decision == "allow"'
   [ "$(_rows)" = "1" ]
   jq -e '.decision_source == "approval-gate" and .decision == "allow" and .tool == "Bash"' "$(_chain_path)"
+}
+
+@test "approval-gate resolves audit session from hook cwd" {
+  expected_session_id="$WALTER_SESSION_ID"
+  unset WALTER_SESSION_ID
+
+  run _approval_gate_bash "echo hi"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  [ "$(_rows)" = "1" ]
+  jq -e --arg sid "$expected_session_id" \
+    '.session_id == $sid and (.sig | test("^[A-Za-z0-9+/]{86}==$"))' \
+    "$(_chain_path)"
 }
 
 @test "approval-gate ignores untrusted WALTER_OS_HOME for audit source" {

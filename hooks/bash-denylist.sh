@@ -142,6 +142,10 @@ if ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; then
   exit 0
 fi
 
+if declare -F walter_audit_set_repo_from_hook_input >/dev/null 2>&1; then
+  walter_audit_set_repo_from_hook_input "$INPUT"
+fi
+
 # Extract command. Fail CLOSED if jq cannot parse the input or the command
 # field is absent / empty — we cannot make a security decision about a
 # command we cannot read. Codex R2 MEDIUM M4: previously, malformed JSON or

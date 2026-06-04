@@ -142,6 +142,10 @@ if [[ -z "$INPUT" ]]; then
   _emit_block "network-gate: empty hook input — failing closed for safety." "$INPUT"
 fi
 
+if declare -F walter_audit_set_repo_from_hook_input >/dev/null 2>&1; then
+  walter_audit_set_repo_from_hook_input "$INPUT"
+fi
+
 if ! TOOL_NAME="$(printf '%s' "$INPUT" | jq -er 'if (.tool_name | type) == "string" and (.tool_name | length) > 0 then .tool_name else empty end' 2>/dev/null)"; then
   _emit_block "network-gate: malformed JSON, missing tool_name, or non-string tool_name — failing closed for safety." "$INPUT"
 fi

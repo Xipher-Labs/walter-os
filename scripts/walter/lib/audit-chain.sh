@@ -4,6 +4,13 @@
 # Tamper-evident audit-chain writer for Walter-OS.
 # Refs: docs/specs/audit-chain-merkle-and-receipts.md
 
+_walter_audit_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_walter_audit_lib_dir}/session-state.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${_walter_audit_lib_dir}/session-state.sh"
+fi
+unset _walter_audit_lib_dir
+
 walter_audit_config_dir() {
   printf '%s\n' "${WALTER_CONFIG:-${HOME}/.config/walter-os}"
 }
@@ -52,6 +59,175 @@ walter_audit_hash_bytes() {
 
 walter_audit_hash_string() {
   printf '%s' "$1" | walter_audit_hash_bytes
+}
+
+_walter_audit_require_tool() {
+  local tool="$1"
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "walter-audit-chain: required tool missing: $tool" >&2
+    return 1
+  fi
+}
+
+_walter_audit_openssl() {
+  local openssl_bin=""
+  if declare -F _walter_session_openssl >/dev/null 2>&1; then
+    _walter_session_openssl
+    return $?
+  fi
+  openssl_bin="$(command -v openssl 2>/dev/null || true)"
+  [[ -n "$openssl_bin" ]] || return 1
+  "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1 || return 1
+  printf '%s' "$openssl_bin"
+}
+
+_walter_audit_state_dir() {
+  if declare -F _walter_session_state_dir >/dev/null 2>&1; then
+    _walter_session_state_dir
+  else
+    printf '%s/state' "$(walter_audit_config_dir)"
+  fi
+}
+
+_walter_audit_private_key_file() {
+  local session_id="$1"
+  if declare -F _walter_session_private_key_file >/dev/null 2>&1; then
+    _walter_session_private_key_file "$session_id"
+  else
+    printf '%s/session-%s.key' "$(_walter_audit_state_dir)" "$session_id"
+  fi
+}
+
+_walter_audit_public_key_file() {
+  local session_id="$1" public_key archive_key
+  if declare -F _walter_session_public_key_file >/dev/null 2>&1; then
+    public_key="$(_walter_session_public_key_file "$session_id")"
+  else
+    public_key="$(_walter_audit_state_dir)/session-${session_id}.pub"
+  fi
+  if [[ -f "$public_key" ]]; then
+    printf '%s' "$public_key"
+    return 0
+  fi
+  archive_key="$(_walter_audit_state_dir)/keys-archive/session-${session_id}.pub"
+  if [[ -f "$archive_key" ]]; then
+    printf '%s' "$archive_key"
+    return 0
+  fi
+  return 1
+}
+
+_walter_audit_session_state_file() {
+  local repo="${WALTER_AUDIT_REPO:-${PWD}}"
+  if [[ -n "${WALTER_AUDIT_SESSION_STATE:-}" && -f "${WALTER_AUDIT_SESSION_STATE}" ]]; then
+    printf '%s' "$WALTER_AUDIT_SESSION_STATE"
+    return 0
+  fi
+  if declare -F walter_session_state_file >/dev/null 2>&1; then
+    walter_session_state_file "$repo"
+    return 0
+  fi
+  return 1
+}
+
+_walter_audit_current_session_id() {
+  local state_file session_id
+  if [[ -n "${WALTER_SESSION_ID:-}" ]]; then
+    session_id="$WALTER_SESSION_ID"
+  else
+    state_file="$(_walter_audit_session_state_file)" || return 1
+    [[ -f "$state_file" ]] || return 1
+    session_id="$(jq -r '.session_id // empty' "$state_file" 2>/dev/null || true)"
+  fi
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s' "$session_id"
+}
+
+walter_audit_set_repo_from_hook_input() {
+  local hook_input="$1" repo_path
+  if ! _walter_audit_jq_available; then
+    return 0
+  fi
+  repo_path="$(printf '%s' "$hook_input" | jq -er '
+    if (.cwd | type) == "string" and (.cwd | length) > 0 then
+      .cwd
+    elif (.workspace.current_dir | type) == "string" and (.workspace.current_dir | length) > 0 then
+      .workspace.current_dir
+    else
+      empty
+    end
+  ' 2>/dev/null || true)"
+  if [[ -n "$repo_path" ]]; then
+    export WALTER_AUDIT_REPO="$repo_path"
+  fi
+}
+
+_walter_audit_b64_encode_file() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+import base64
+import pathlib
+import sys
+
+print(base64.b64encode(pathlib.Path(sys.argv[1]).read_bytes()).decode("ascii"), end="")
+PY
+}
+
+_walter_audit_b64_decode_to_file() {
+  local value="$1" out="$2"
+  python3 - "$value" "$out" <<'PY'
+import base64
+import binascii
+import pathlib
+import re
+import sys
+
+value = sys.argv[1]
+if not re.fullmatch(r"[A-Za-z0-9+/]{86}==", value):
+    raise SystemExit("invalid signature base64")
+try:
+    data = base64.b64decode(value.encode("ascii"), validate=True)
+except (binascii.Error, ValueError) as exc:
+    raise SystemExit(f"invalid signature base64: {exc}")
+if len(data) != 64:
+    raise SystemExit("invalid signature length")
+if base64.b64encode(data).decode("ascii") != value:
+    raise SystemExit("non-canonical signature base64")
+pathlib.Path(sys.argv[2]).write_bytes(data)
+PY
+}
+
+_walter_audit_sign_row() {
+  local row_json="$1" session_id private_key openssl_bin tmp_dir payload_file sig_file sig
+  _walter_audit_require_tool python3 || return 1
+  session_id="$(_walter_audit_current_session_id)" || {
+    echo "walter-audit-chain: active session id required for signed audit row" >&2
+    return 2
+  }
+  private_key="$(_walter_audit_private_key_file "$session_id")"
+  [[ -f "$private_key" ]] || {
+    echo "walter-audit-chain: session private key missing for signed audit row: $session_id" >&2
+    return 2
+  }
+  if ! openssl_bin="$(_walter_audit_openssl)"; then
+    echo "walter-audit-chain: ED25519-capable openssl missing" >&2
+    return 3
+  fi
+
+  tmp_dir="$(mktemp -d)"
+  payload_file="$tmp_dir/payload.json"
+  sig_file="$tmp_dir/sig.bin"
+  printf '%s' "$row_json" > "$payload_file"
+  if ! "$openssl_bin" pkeyutl -sign -inkey "$private_key" -rawin -in "$payload_file" -out "$sig_file" >/dev/null 2>&1; then
+    rm -r "$tmp_dir"
+    return 1
+  fi
+  sig="$(_walter_audit_b64_encode_file "$sig_file")" || {
+    rm -r "$tmp_dir"
+    return 1
+  }
+  rm -r "$tmp_dir"
+  printf '%s' "$sig"
 }
 
 _walter_audit_jq_available() {
@@ -341,7 +517,7 @@ _walter_audit_verify_row_hash() {
     echo "walter-audit-chain: row ${row_number}: missing row_hash" >&2
     return 1
   fi
-  row_without_hash="$(printf '%s\n' "$line" | jq -cS 'del(.row_hash)' 2>/dev/null)" || {
+  row_without_hash="$(printf '%s\n' "$line" | jq -cS 'del(.row_hash, .sig)' 2>/dev/null)" || {
     echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
     return 1
   }
@@ -352,6 +528,57 @@ _walter_audit_verify_row_hash() {
     echo "  actual:   $stored_row_hash" >&2
     return 1
   fi
+}
+
+_walter_audit_verify_row_signature() {
+  local line="$1" row_number="$2" session_id sig public_key openssl_bin tmp_dir payload payload_file sig_file
+  sig="$(printf '%s\n' "$line" | jq -r '.sig // empty')" || {
+    echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
+    return 1
+  }
+  if [[ ! "$sig" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
+    echo "walter-audit-chain: row ${row_number}: missing sig" >&2
+    return 1
+  fi
+  session_id="$(printf '%s\n' "$line" | jq -r '.session_id // empty')" || {
+    echo "walter-audit-chain: row ${row_number}: invalid JSON object" >&2
+    return 1
+  }
+  if [[ ! "$session_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "walter-audit-chain: row ${row_number}: invalid session_id" >&2
+    return 1
+  fi
+  public_key="$(_walter_audit_public_key_file "$session_id")" || {
+    echo "walter-audit-chain: row ${row_number}: cannot verify session ${session_id}: public key missing" >&2
+    return 2
+  }
+  if ! openssl_bin="$(_walter_audit_openssl)"; then
+    echo "walter-audit-chain: ED25519-capable openssl missing" >&2
+    return 3
+  fi
+
+  tmp_dir="$(mktemp -d)"
+  payload_file="$tmp_dir/payload.json"
+  sig_file="$tmp_dir/sig.bin"
+  payload="$(printf '%s\n' "$line" | jq -cS 'del(.sig)')" || {
+    rm -r "$tmp_dir"
+    return 1
+  }
+  printf '%s' "$payload" > "$payload_file" || {
+    rm -r "$tmp_dir"
+    return 1
+  }
+  if ! _walter_audit_b64_decode_to_file "$sig" "$sig_file" >/dev/null 2>&1; then
+    rm -r "$tmp_dir"
+    echo "walter-audit-chain: row ${row_number}: invalid sig encoding" >&2
+    return 1
+  fi
+  if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$public_key" -rawin -in "$payload_file" -sigfile "$sig_file" >/dev/null 2>&1; then
+    rm -r "$tmp_dir"
+    echo "walter-audit-chain: row ${row_number}: signature verification failed" >&2
+    return 1
+  fi
+  rm -r "$tmp_dir"
 }
 
 _walter_audit_verify_chain_file_unlocked() {
@@ -395,6 +622,7 @@ _walter_audit_verify_chain_file_unlocked() {
       echo "  actual:   $prev_hash" >&2
       return 1
     fi
+    _walter_audit_verify_row_signature "$line" "$row_number" || return $?
     actual_hash="$(walter_audit_hash_string "$line")"
     expected_hash="$actual_hash"
   done < "$chain_path"
@@ -449,7 +677,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash
+  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id sig sign_status
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -516,10 +744,16 @@ walter_audit_append() {
   fi
 
   summary="$(walter_audit_input_summary "$input")"
+  session_id="$(_walter_audit_current_session_id)" || {
+    echo "walter-audit-chain: active session id required for signed audit row" >&2
+    exec 9>&-
+    _walter_audit_release_lock "$lock_path"
+    return 2
+  }
   if _walter_audit_jq_available; then
     row_without_hash="$(jq -ncS \
       --arg ts "$timestamp" \
-      --arg session_id "${WALTER_SESSION_ID:-unknown}" \
+      --arg session_id "$session_id" \
       --arg operator "${USER:-unknown}" \
       --arg event "tool_invocation" \
       --arg tool "$tool" \
@@ -539,10 +773,32 @@ walter_audit_append() {
       _walter_audit_release_lock "$lock_path"
       return 1
     }
+    if sig="$(_walter_audit_sign_row "$row")"; then
+      :
+    else
+      sign_status="$?"
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return "$sign_status"
+    fi
+    row="$(printf '%s\n' "$row" | jq -cS --arg sig "$sig" '. + {sig:$sig}')" || {
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
   else
-    row_without_hash="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    row_without_hash="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
     row_hash="$(walter_audit_hash_string "$row_without_hash")"
-    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "${WALTER_SESSION_ID:-unknown}"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    if sig="$(_walter_audit_sign_row "$row")"; then
+      :
+    else
+      sign_status="$?"
+      exec 9>&-
+      _walter_audit_release_lock "$lock_path"
+      return "$sign_status"
+    fi
+    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"sig\":$(walter_audit_json_string "$sig"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
   fi
 
   if ! _walter_audit_fd_matches_path 9 "$chain_path"; then
@@ -740,7 +996,7 @@ _walter_audit_verify_chain_from_loki_response() {
     return 1
   }
 
-  if WALTER_CONFIG="$tmp_config" walter_audit_verify_chain "$date_value"; then
+  if WALTER_AUDIT_DIR="$tmp_audit" walter_audit_verify_chain "$date_value"; then
     verify_status=0
   else
     verify_status="$?"

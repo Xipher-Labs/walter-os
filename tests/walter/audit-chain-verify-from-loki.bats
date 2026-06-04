@@ -8,15 +8,22 @@ setup() {
 
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AUDIT_LIB="$REPO_ROOT/scripts/walter/lib/audit-chain.sh"
+  SESSION_LIB="$REPO_ROOT/scripts/walter/lib/session-state.sh"
   WALTER_OS_BIN="$REPO_ROOT/bin/walter-os"
   TMP_HOME="$(mktemp -d "$REPO_ROOT/.tmp-audit-loki.XXXXXX")"
   export HOME="$TMP_HOME/home"
   export WALTER_CONFIG="$TMP_HOME/home/.config/walter-os"
   export WALTER_AUDIT_DATE="2026-06-04"
   export WALTER_AUDIT_NOW="2026-06-04T12:00:00Z"
-  export WALTER_SESSION_ID="session-loki"
+  export WALTER_SESSION_TEST_CLOCK=1
+  export WALTER_SESSION_NOW_EPOCH=1767225600
   export WALTER_OS_HOME="$REPO_ROOT"
   mkdir -p "$WALTER_CONFIG"
+  bash -c "source '$SESSION_LIB'; _walter_session_openssl" >/dev/null \
+    || skip "ED25519-capable openssl required"
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_ROOT'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_ROOT'")"
+  export WALTER_SESSION_ID="$(jq -r '.session_id' "$state_file")"
 }
 
 teardown() {

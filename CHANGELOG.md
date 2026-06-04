@@ -78,6 +78,11 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   live Loki `query_range` calls via `--loki-url` or
   `WALTER_AUDIT_LOKI_URL`, while preserving the same local hash-chain
   verifier for Loki-shipped rows.
+- **Signed audit-chain rows (#333/#122).** Audit JSONL rows now carry
+  standard padded base64 Ed25519 signatures generated from the active A-2
+  session key. `walter-os audit verify-chain` validates each row's signature
+  via the active or archived session public key, so fabricated rows fail even
+  when their local hash-chain fields are internally consistent.
 
 ### Changed
 

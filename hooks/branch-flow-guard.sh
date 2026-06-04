@@ -72,6 +72,9 @@ INPUT="$(cat)"
 
 # Extract command (using jq if available, basic grep fallback otherwise)
 if command -v jq >/dev/null 2>&1; then
+  if declare -F walter_audit_set_repo_from_hook_input >/dev/null 2>&1; then
+    walter_audit_set_repo_from_hook_input "$INPUT"
+  fi
   CMD="$(echo "$INPUT" | jq -r '.tool_input.command // ""')"
 else
   CMD="$(echo "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
