@@ -6,7 +6,10 @@ Walter-OS writes tool-decision audit rows to:
 ${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/chain-YYYY-MM-DD.jsonl
 ```
 
-Each row is canonical `jq -cS` JSON. The important integrity fields are:
+When `jq` is available, rows are normalized as `jq -cS` JSON before local
+verification. Minimal environments without `jq` can still append audit rows via
+the fallback writer, but verification and close-day operations require `jq`.
+The important integrity fields are:
 
 - `prev_hash`: SHA-256 of the previous row's exact JSON bytes, or `"null"` for the first row of the day.
 - `prev_chain_root`: previous day's root hash, present on the first row when the previous root exists.
@@ -64,8 +67,9 @@ The uploaded payload contains only:
 }
 ```
 
-Walter-OS signs that payload with the last audit row's session Ed25519 key and
-submits a Rekor `hashedrekord`. It stores the entry id and response at:
+Walter-OS hashes that payload, signs the SHA-256 digest with the last audit
+row's session Ed25519 key, and submits a Rekor `hashedrekord`. It stores the
+entry id and response at:
 
 ```text
 ${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/root-YYYY-MM-DD.rekor.json

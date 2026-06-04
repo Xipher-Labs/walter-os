@@ -103,11 +103,11 @@ ${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/root-YYYY-MM-DD.rekor.json
 ```
 
 The Rekor payload is canonical JSON with the daily `root`, `date`, hashed
-`operator`, and `walter_os_version`. The payload is signed with the last row's
-session Ed25519 key, submitted as a Rekor `hashedrekord`, and never includes
-audit row content or the plaintext operator id. Upload is disabled by default;
-it only runs when `WALTER_AUDIT_REKOR_UPLOAD=1` is set for
-`walter-os audit close-day`.
+`operator`, and `walter_os_version`. Walter-OS signs the payload's SHA-256
+digest with the last row's session Ed25519 key, submits that digest/signature as
+a Rekor `hashedrekord`, and never includes audit row content or the plaintext
+operator id. Upload is disabled by default; it only runs when
+`WALTER_AUDIT_REKOR_UPLOAD=1` is set for `walter-os audit close-day`.
 
 Verify a local root against its Rekor entry with:
 

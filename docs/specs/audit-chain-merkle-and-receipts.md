@@ -113,7 +113,9 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
     "walter_os_version": "<from VERSION>"
   }
   ```
-  signed with the LAST session's Ed25519 key. Receives a Rekor entry-id; stored in `root-YYYY-MM-DD.rekor.json`.
+  hashed and signed with the LAST session's Ed25519 key as a Rekor
+  `hashedrekord`. Receives a Rekor entry-id; stored in
+  `root-YYYY-MM-DD.rekor.json`.
 - [x] `walter-os audit verify-chain --check-rekor` confirms the local root matches what's in Rekor.
 - [x] If `WALTER_AUDIT_REKOR_UPLOAD=0` (default), no network call.
 

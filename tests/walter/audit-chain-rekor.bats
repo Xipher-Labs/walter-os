@@ -55,6 +55,40 @@ _curl_body_path() {
   printf '%s/curl-body.json\n' "$TMP_HOME"
 }
 
+_decode_base64_to_file() {
+  python3 - "$1" "$2" <<'PY'
+import base64
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[2]).write_bytes(base64.b64decode(sys.argv[1], validate=True))
+PY
+}
+
+_hex_to_file() {
+  python3 - "$1" "$2" <<'PY'
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[2]).write_bytes(bytes.fromhex(sys.argv[1]))
+PY
+}
+
+_openssl_bin() {
+  bash -c "source '$SESSION_LIB'; _walter_session_openssl"
+}
+
+_path_without_jq() {
+  local bin="$TMP_HOME/no-jq-bin" tool tool_path
+  mkdir -p "$bin"
+  for tool in awk cat chmod cp curl date grep mktemp mv python3 rm sed shasum tail tr; do
+    tool_path="$(command -v "$tool" 2>/dev/null || true)"
+    [[ -n "$tool_path" ]] || continue
+    ln -sf "$tool_path" "$bin/$tool"
+  done
+  printf '%s' "$bin"
+}
+
 _make_chain() {
   bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
   WALTER_AUDIT_NOW="2026-05-31T12:00:01Z" \
@@ -193,6 +227,35 @@ SH
   [ ! -f "$TMP_HOME/curl-called" ]
 }
 
+@test "direct Rekor upload reports missing jq explicitly" {
+  _make_chain
+  bash "$WALTER_OS_BIN" audit close-day 2026-05-31 >/dev/null
+  root_hash="$(cat "$(_root_path)")"
+
+  run env PATH="$(_path_without_jq)" /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_rekor_upload '2026-05-31' '$root_hash' '$(_chain_path)' 'http://rekor.example'"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"jq required"* ]]
+}
+
+@test "direct Rekor verification reports missing jq explicitly" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  root_hash="$(cat "$(_root_path)")"
+
+  run env PATH="$(_path_without_jq)" /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_verify_rekor_anchor '2026-05-31' '$root_hash' 'http://rekor.example'"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"jq required"* ]]
+}
+
 @test "close-day uploads one opt-in Rekor entry and stores receipt" {
   _make_chain
   _write_mock_curl
@@ -219,6 +282,34 @@ SH
   fi
   grep -q 'http://rekor.example/api/v1/log/entries' "$(_curl_args_path)"
   jq -e '.kind == "hashedrekord" and .apiVersion == "0.0.1"' "$(_curl_body_path)"
+}
+
+@test "Rekor request signature verifies against submitted hash digest" {
+  _make_chain
+  _write_mock_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 0 ]
+  hash_value="$(jq -r '.spec.data.hash.value' "$(_curl_body_path)")"
+  sig_value="$(jq -r '.spec.signature.content' "$(_curl_body_path)")"
+  public_key_value="$(jq -r '.spec.signature.publicKey.content' "$(_curl_body_path)")"
+  _hex_to_file "$hash_value" "$TMP_HOME/rekor-digest.bin"
+  _decode_base64_to_file "$sig_value" "$TMP_HOME/rekor-sig.bin"
+  _decode_base64_to_file "$public_key_value" "$TMP_HOME/rekor-pub.pem"
+
+  run "$(_openssl_bin)" pkeyutl -verify -pubin \
+    -inkey "$TMP_HOME/rekor-pub.pem" \
+    -rawin \
+    -in "$TMP_HOME/rekor-digest.bin" \
+    -sigfile "$TMP_HOME/rekor-sig.bin"
+
+  [ "$status" -eq 0 ]
 }
 
 @test "verify-chain --check-rekor confirms the stored root against Rekor" {
@@ -264,6 +355,31 @@ SH
   [[ "$output" == *"Rekor receipt root mismatch"* ]]
 }
 
+@test "close-day rejects an existing Rekor receipt with the wrong date" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq '.payload.date = "2026-06-01"' "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  receipt_payload="$(jq -cS '.payload' "$TMP_HOME/receipt.json")"
+  receipt_hash="$(printf '%s' "$receipt_payload" | shasum -a 256 | awk '{print $1}')"
+  jq --arg hash "$receipt_hash" '.payload_sha256 = $hash' \
+    "$TMP_HOME/receipt.json" > "$(_rekor_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor receipt date mismatch"* ]]
+}
+
 @test "close-day holds the audit lock while anchoring the Rekor root" {
   _make_chain
   _write_mock_curl
@@ -307,6 +423,48 @@ SH
     bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
 
   [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified Rekor anchor abc123"* ]]
+}
+
+@test "verify-chain --check-rekor holds the audit lock through Rekor verification" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  race_status="$TMP_HOME/verify-race-status"
+  probe_script="$TMP_HOME/rekor-verify-race-probe.sh"
+  cat > "$probe_script" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$AUDIT_LIB"
+eval "$(declare -f walter_audit_verify_rekor_anchor | sed '1s/walter_audit_verify_rekor_anchor/_original_walter_audit_verify_rekor_anchor/')"
+walter_audit_verify_rekor_anchor() {
+  set +e
+  WALTER_AUDIT_NOW="2026-05-31T12:00:02Z" WALTER_AUDIT_LOCK_WAIT_SECONDS=0 \
+    bash -c "source \"$AUDIT_LIB\"; walter_audit_append Bash 'racing verify append' allow approval-gate ok" >/dev/null 2>&1
+  child_status="$?"
+  set -e
+  printf '%s' "$child_status" > "$RACE_STATUS"
+  _original_walter_audit_verify_rekor_anchor "$@"
+}
+walter_audit_verify_chain_with_rekor 2026-05-31 "http://rekor.example"
+SH
+  chmod +x "$probe_script"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    AUDIT_LIB="$AUDIT_LIB" \
+    RACE_STATUS="$race_status" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$probe_script"
+
+  [ "$status" -eq 0 ]
+  [ -f "$race_status" ]
+  [ "$(cat "$race_status")" != "0" ]
   [[ "$output" == *"ok: verified Rekor anchor abc123"* ]]
 }
 
