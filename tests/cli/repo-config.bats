@@ -326,6 +326,18 @@ YAML
   [[ "$output" == *"  - targeted_tests"* ]]
 }
 
+@test "verification-plan normalizes dot-slash script paths for medium risk" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path ./scripts/walter/lib/repo-config.sh
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: medium"* ]]
+  [[ "$output" == *"effective_risk: medium"* ]]
+}
+
 @test "verification-plan escalates hard-floor paths even in prototype profile" {
   "$WALTER_OS_BIN" repo-config defaults hackathon > "$TMP_DIR/repo/walter-repo-config.yaml"
 
@@ -392,6 +404,17 @@ YAML
   [[ "$output" == *"  - screenshot_validation"* ]]
 }
 
+@test "verification-plan normalizes dot-slash Control Tower UI paths" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path ./apps/control-tower/app/page.ts
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"  - screenshot_validation"* ]]
+}
+
 @test "verification-plan rejects invalid risk values" {
   write_valid_config
 
@@ -419,4 +442,27 @@ YAML
   [ "$status" -eq 2 ]
   [[ "$output" == *"missing value for --path"* ]]
   [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "verification-plan rejects option-looking missing path values" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --path --risk low
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+}
+
+@test "verification-plan rejects unknown options unless forced positional" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --unknown
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option: --unknown"* ]]
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" -- --unknown
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: low"* ]]
 }

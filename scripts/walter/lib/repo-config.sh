@@ -158,7 +158,8 @@ _walter_repo_config_path_is_hard_floor() {
 
 _walter_repo_config_path_is_medium_risk() {
   local path="$1"
-  case "$path" in
+  local normalized="${path#./}"
+  case "$normalized" in
     bin/*|*/bin/*|scripts/*|*/scripts/*|setup/*|*/setup/*|compose.yml|*/compose.yml|\
     docker-compose.yml|*/docker-compose.yml|apps/*/api/*|*/apps/*/api/*)
       return 0
@@ -169,7 +170,8 @@ _walter_repo_config_path_is_medium_risk() {
 
 _walter_repo_config_path_is_ui() {
   local path="$1"
-  case "$path" in
+  local normalized="${path#./}"
+  case "$normalized" in
     apps/control-tower/*|*/apps/control-tower/*|*.tsx|*.jsx|*.css|*.scss)
       return 0
       ;;
@@ -233,7 +235,7 @@ walter_repo_config_verification_plan() {
         shift
         ;;
       --path)
-        if [[ $# -lt 2 ]]; then
+        if [[ $# -lt 2 || "$2" == --* ]]; then
           printf 'repo-config: missing value for --path\n' >&2
           return 2
         fi
@@ -250,6 +252,10 @@ walter_repo_config_verification_plan() {
           paths+=("$1")
           shift
         done
+        ;;
+      --*)
+        printf 'repo-config: unknown option: %s\n' "$1" >&2
+        return 2
         ;;
       *)
         paths+=("$1")
