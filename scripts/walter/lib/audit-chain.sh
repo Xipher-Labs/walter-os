@@ -70,10 +70,7 @@ _walter_audit_require_tool() {
 }
 
 _walter_audit_require_python3() {
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "walter-audit-chain: required tool missing: python3" >&2
-    return 1
-  fi
+  _walter_audit_require_tool python3 || return 1
   if ! python3 - <<'PY' >/dev/null 2>&1
 import json  # noqa: F401
 PY
