@@ -230,6 +230,29 @@ GO
   [[ "$output" == *"ac-testability: pass"* ]]
 }
 
+@test "semantic-gates accepts numbered spec headings" {
+  write_valid_spec
+  write_referencing_test
+  awk '
+    {
+      if ($0 == "## Non-goals") print "## 3. Non-goals"
+      else if ($0 == "## Acceptance criteria") print "## 5. Acceptance criteria"
+      else if ($0 == "## Test plan") print "## 6. Test plan"
+      else print
+    }
+  ' "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    > "$TMP_DIR/repo/docs/specs/example-feature.md.tmp"
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md.tmp" \
+    "$TMP_DIR/repo/docs/specs/example-feature.md"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"spec-completeness: pass"* ]]
+  [[ "$output" == *"ac-testability: pass"* ]]
+}
+
 @test "semantic-gates rejects repo directories outside the spec path" {
   write_valid_spec
   write_referencing_test

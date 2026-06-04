@@ -66,7 +66,7 @@ add_evidence() {
 
 has_heading() {
   local pattern="$1"
-  grep -Eiq "^#{2,3}[[:space:]]+${pattern}([[:space:]]|$)" "$spec_file"
+  grep -Eiq "^#{2,3}[[:space:]]+([0-9]+[.)][[:space:]]+)?${pattern}([[:space:]]|$)" "$spec_file"
 }
 
 section_body() {
@@ -76,6 +76,7 @@ section_body() {
     /^#{2,3}[[:space:]]+/ {
       heading = $0
       sub(/^#{2,3}[[:space:]]+/, "", heading)
+      sub(/^[0-9]+[.)][[:space:]]+/, "", heading)
       heading = tolower(heading)
       if (heading ~ pattern) {
         in_section = 1
@@ -96,6 +97,7 @@ matching_sections_body() {
     /^#{2,3}[[:space:]]+/ {
       heading = $0
       sub(/^#{2,3}[[:space:]]+/, "", heading)
+      sub(/^[0-9]+[.)][[:space:]]+/, "", heading)
       heading = tolower(heading)
       in_section = (heading ~ pattern)
       next
