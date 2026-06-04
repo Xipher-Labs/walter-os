@@ -154,6 +154,20 @@ SH
   [[ "$output" != *"screenshot already exists"* ]]
 }
 
+@test "preview capture treats wait-ms values as base 10" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --wait-ms 08
+
+  [ "$status" -eq 0 ]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+}
+
 @test "preview capture rejects non-http preview URLs" {
   install_fake_npx
 
