@@ -225,6 +225,79 @@ describe("readPreviewEvidence", () => {
     );
   });
 
+  it("invalidates reports whose seed path escapes the seed directory", async () => {
+    for (const [pr, seedPath] of [
+      [247, "../seed.json"],
+      [249, "/tmp/seed.json"],
+    ] as const) {
+      const root = await makeRoot();
+      const bundle = join(root, `preview-pr-${pr}`);
+      await mkdir(join(bundle, "screenshots"), { recursive: true });
+      await writeFile(join(bundle, "screenshots", "home.png"), "png", "utf8");
+      await writeJson(join(bundle, "preview-report.json"), {
+        schema_version: 1,
+        pr,
+        url: `https://preview.example/pr-${pr}`,
+        generated_at: "2026-06-04T12:00:00Z",
+        bundle_dir: `.walter/previews/preview-pr-${pr}`,
+        seed_manifest: { path: seedPath, sha256: SHA256 },
+        screenshots: [{ path: "screenshots/home.png", sha256: SHA256 }],
+        safety: {
+          production_secrets: "rejected",
+          credentials: "not minted",
+          deploy: "not performed",
+          hard_limit_floor: "preserved",
+        },
+      });
+
+      const evidence = await readPreviewEvidence(root);
+
+      expect(evidence.previews[0]).toMatchObject({
+        pr,
+        status: "invalid",
+        safetyOk: false,
+      });
+      expect(evidence.previews[0].findings).toContain(
+        "preview report seed path escapes seed directory"
+      );
+    }
+  });
+
+  it("invalidates reports whose screenshot path escapes screenshots", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-248");
+    await mkdir(join(bundle, "screenshots"), { recursive: true });
+    await writeSeed(bundle);
+    await writeFile(join(bundle, "screenshots", "home.png"), "png", "utf8");
+    await writeJson(join(bundle, "preview-report.json"), {
+      schema_version: 1,
+      pr: 248,
+      url: "https://preview.example/pr-248",
+      generated_at: "2026-06-04T12:00:00Z",
+      bundle_dir: ".walter/previews/preview-pr-248",
+      seed_manifest: { path: "seed/seed.json", sha256: SHA256 },
+      screenshots: [{ path: "../screenshots/home.png", sha256: SHA256 }],
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 248,
+      status: "invalid",
+      screenshots: 1,
+      safetyOk: false,
+    });
+    expect(evidence.previews[0].findings).toContain(
+      "preview report screenshot path escapes screenshots directory"
+    );
+  });
+
   it("reports unreadable preview files separately from malformed JSON", async () => {
     const root = await makeRoot();
     const bundle = join(root, "preview-pr-241");

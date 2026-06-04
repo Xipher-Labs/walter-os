@@ -1,5 +1,5 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join, posix } from "node:path";
 
 export type PreviewEvidenceStatus =
   | "complete"
@@ -56,6 +56,34 @@ function isHttpUrl(value: unknown): value is string {
 
 function isSha256(value: unknown): value is string {
   return typeof value === "string" && SHA256_RE.test(value);
+}
+
+function normalizeArtifactPath(
+  value: unknown,
+  expectedDir: "screenshots" | "seed",
+  finding: string,
+  findings: string[]
+): string | null {
+  const path = stringValue(value);
+  if (path === null) return null;
+  if (path.startsWith("/") || path.includes("\\")) {
+    findings.push(finding);
+    return null;
+  }
+
+  const normalized = posix.normalize(path);
+  if (
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    !normalized.startsWith(`${expectedDir}/`) ||
+    normalized === `${expectedDir}/`
+  ) {
+    findings.push(finding);
+    return null;
+  }
+
+  return normalized;
 }
 
 function hasSafetyInvariants(safety: unknown): boolean {
@@ -133,7 +161,7 @@ function validatePreviewReport(
   generatedAt: string | null;
   screenshots: number;
   seedPath: string | null;
-  screenshotBasenames: string[];
+  screenshotPaths: string[];
 } {
   if (!isObject(payload)) {
     findings.push("preview report is not an object");
@@ -144,7 +172,7 @@ function validatePreviewReport(
       generatedAt: null,
       screenshots: 0,
       seedPath: null,
-      screenshotBasenames: [],
+      screenshotPaths: [],
     };
   }
 
@@ -202,10 +230,30 @@ function validatePreviewReport(
     valid = false;
   }
 
-  const screenshotBasenames = screenshots.flatMap((screenshot) => {
+  const seedPath = isObject(seed)
+    ? normalizeArtifactPath(
+        seed.path,
+        "seed",
+        "preview report seed path escapes seed directory",
+        findings
+      )
+    : null;
+  if (isObject(seed) && stringValue(seed.path) !== null && seedPath === null) {
+    valid = false;
+  }
+
+  const screenshotPaths = screenshots.flatMap((screenshot) => {
     if (!isObject(screenshot)) return [];
-    const path = stringValue(screenshot.path);
-    return path === null ? [] : [basename(path)];
+    const path = normalizeArtifactPath(
+      screenshot.path,
+      "screenshots",
+      "preview report screenshot path escapes screenshots directory",
+      findings
+    );
+    if (stringValue(screenshot.path) !== null && path === null) {
+      valid = false;
+    }
+    return path === null ? [] : [path];
   });
 
   return {
@@ -214,8 +262,8 @@ function validatePreviewReport(
     url: isHttpUrl(payload.url) ? payload.url : null,
     generatedAt: stringValue(payload.generated_at),
     screenshots: screenshots.length,
-    seedPath: isObject(seed) ? stringValue(seed.path) : null,
-    screenshotBasenames,
+    seedPath,
+    screenshotPaths,
   };
 }
 
@@ -354,9 +402,12 @@ async function readPreviewItem(
       findings.push("preview report seed file missing on disk");
       reportValid = false;
     }
-    const missingScreenshots = result.screenshotBasenames.some(
-      (screenshot) => !screenshotsOnDisk.has(screenshot)
-    );
+    let missingScreenshots = false;
+    for (const screenshot of result.screenshotPaths) {
+      if (!(await isExistingFile(join(bundlePath, screenshot)))) {
+        missingScreenshots = true;
+      }
+    }
     if (missingScreenshots || result.screenshots > screenshotsOnDisk.size) {
       findings.push("preview report screenshot files missing on disk");
       reportValid = false;
