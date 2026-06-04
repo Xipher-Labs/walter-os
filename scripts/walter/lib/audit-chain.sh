@@ -690,7 +690,7 @@ _walter_audit_loki_range_ns() {
   local date_value="$1" start_epoch end_epoch
   start_epoch="$(_walter_audit_loki_date_epoch "$date_value")" || return $?
   end_epoch=$((start_epoch + 86400))
-  printf '%s\n%s\n' "$((start_epoch * 1000000000))" "$((end_epoch * 1000000000))"
+  printf '%s\n%s\n' "$((start_epoch * 1000000000))" "$(((end_epoch * 1000000000) - 1))"
 }
 
 _walter_audit_verify_chain_from_loki_response() {

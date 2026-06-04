@@ -182,6 +182,8 @@ SH
   [[ "$output" != *"super-secret-token"* ]]
   grep -q '/loki/api/v1/query_range' "$(_curl_args_path)"
   grep -q '{app="walter-os", kind="audit-chain"}' "$(_curl_args_path)"
+  grep -q 'start=1780531200000000000' "$(_curl_args_path)"
+  grep -q 'end=1780617599999999999' "$(_curl_args_path)"
   grep -q 'Authorization: Bearer super-secret-token' "$(_curl_args_path)"
 }
 
