@@ -464,6 +464,26 @@ SH
   [ "$(cat "$(_root_path)")" != "$original_root" ]
 }
 
+@test "B-2: close-day fails when final row cannot be read" {
+  _make_chain
+  rm -f "$(_root_path)"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    tail() {
+      if [[ \"\$1\" == '-n' ]]; then
+        return 42
+      fi
+      command tail \"\$@\"
+    }
+    walter_audit_close_day 2026-05-31
+  "
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unable to read final row"* ]]
+  [ ! -f "$(_root_path)" ]
+}
+
 @test "B-2: close-day rejects invalid date before path construction" {
   _make_chain
   mkdir -p "$WALTER_CONFIG/audit/chain-x" "$WALTER_CONFIG/audit/root-x"
@@ -498,6 +518,37 @@ SH
   [[ "$output" == *"2026-05-31..2026-06-01"* ]]
 }
 
+@test "B-2: verify-chain --since holds one audit snapshot lock" {
+  _make_chain
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+  child_status="$TMP_HOME/range-lock-child-status"
+  probe_script="$TMP_HOME/range-lock-probe.sh"
+  cat > "$probe_script" <<'SH'
+#!/usr/bin/env bash
+source "$AUDIT_LIB"
+eval "$(declare -f _walter_audit_verify_prev_chain_root | sed '1s/_walter_audit_verify_prev_chain_root/_original_walter_audit_verify_prev_chain_root/')"
+_walter_audit_verify_prev_chain_root() {
+  if [[ ! -f "$CHILD_STATUS" ]]; then
+    WALTER_AUDIT_NOW="2026-06-02T00:00:01Z" WALTER_AUDIT_LOCK_WAIT_SECONDS=0 \
+      bash -c "source \"$AUDIT_LIB\"; walter_audit_append Bash 'lock probe' allow approval-gate ok" >/dev/null 2>&1
+    printf '%s' "$?" > "$CHILD_STATUS"
+  fi
+  _original_walter_audit_verify_prev_chain_root "$@"
+}
+walter_audit_verify_chain_range 2026-05-31 2026-06-01
+SH
+  chmod +x "$probe_script"
+
+  run env AUDIT_LIB="$AUDIT_LIB" CHILD_STATUS="$child_status" bash "$probe_script"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified 2 day(s)"* ]]
+  [ -f "$child_status" ]
+  [ "$(cat "$child_status")" != "0" ]
+  [ ! -f "$(_chain_path_for 2026-06-02)" ]
+}
+
 @test "B-2: verify-chain --since detects cross-day root mismatch" {
   _make_chain
   WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
@@ -510,4 +561,24 @@ SH
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"2026-06-01: prev_chain_root mismatch"* ]]
+
+  run env WALTER_AUDIT_NOW="2026-06-02T00:00:01Z" WALTER_AUDIT_LOCK_WAIT_SECONDS=0 \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after failed range' allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "B-2: verify-chain --since reports missing python3 runtime clearly" {
+  _make_chain
+  mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
+  cat > "$BATS_TEST_TMPDIR/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$BATS_TEST_TMPDIR/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin':\$PATH walter_audit_verify_chain_range 2026-05-31 2026-05-31"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
 }

@@ -478,6 +478,15 @@ SH
   jq -e '.ts == "2026-05-31T00:00:01Z"' "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl"
 }
 
+@test "B-2: append rejects invalid captured row date before path construction" {
+  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_NOW='2026-99-99T00:00:01Z' walter_audit_append Bash invalid-date allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid audit row date: 2026-99-99"* ]]
+  [ ! -e "$WALTER_CONFIG/audit/chain-2026-99-99.jsonl" ]
+  [ ! -e "$WALTER_CONFIG/audit/root-2026-99-99.txt" ]
+}
+
 @test "B-2: invalid previous day root preserves helper status" {
   mkdir -p "$WALTER_CONFIG/audit"
   printf '%s' "not-a-root" > "$WALTER_CONFIG/audit/root-2026-05-30.txt"
