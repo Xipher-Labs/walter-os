@@ -6,10 +6,31 @@
 # policy surface, but it does not relax approval-gate hard limits.
 
 _WALTER_REPO_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${WALTER_OS_HOME:-${_WALTER_REPO_CONFIG_LIB_DIR}/../../..}/scripts/walter/lib/protected-paths.sh"
+_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${_WALTER_REPO_CONFIG_LIB_DIR}/protected-paths.sh"
+if [[ ! -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" && -n "${WALTER_OS_HOME:-}" ]]; then
+  _WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${WALTER_OS_HOME}/scripts/walter/lib/protected-paths.sh"
+fi
 if [[ -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" ]]; then
   # shellcheck source=/dev/null
   source "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB"
+elif ! declare -p WALTER_PROTECTED_PATH_PATTERNS >/dev/null 2>&1; then
+  declare -a WALTER_PROTECTED_PATH_PATTERNS=(
+    'hooks/*.sh'
+    '.github/workflows/*'
+    'install.sh'
+    'bin/walter-os'
+    'AGENTS.md'
+    'CLAUDE.md'
+    'mcp/servers.json'
+    'auth/*'
+    'crypto/*'
+    'personal/health/*'
+    '*.key'
+    '*.pem'
+    '*.crt'
+    '*.env'
+    '*.env.*'
+  )
 fi
 unset _WALTER_REPO_CONFIG_LIB_DIR _WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB
 
@@ -158,7 +179,8 @@ _walter_repo_config_path_is_hard_floor() {
 
 _walter_repo_config_path_is_medium_risk() {
   local path="$1"
-  case "$path" in
+  local normalized="${path#./}"
+  case "$normalized" in
     bin/*|*/bin/*|scripts/*|*/scripts/*|setup/*|*/setup/*|compose.yml|*/compose.yml|\
     docker-compose.yml|*/docker-compose.yml|apps/*/api/*|*/apps/*/api/*)
       return 0
@@ -169,7 +191,8 @@ _walter_repo_config_path_is_medium_risk() {
 
 _walter_repo_config_path_is_ui() {
   local path="$1"
-  case "$path" in
+  local normalized="${path#./}"
+  case "$normalized" in
     apps/control-tower/*|*/apps/control-tower/*|*.tsx|*.jsx|*.css|*.scss)
       return 0
       ;;
@@ -197,6 +220,8 @@ _walter_repo_config_print_checks() {
       printf '  - acceptance_criteria_check\n'
       ;;
     production)
+      printf '  - lint\n'
+      printf '  - typecheck\n'
       printf '  - spec_up_to_date\n'
       printf '  - red_green_refactor_tests\n'
       printf '  - unit_tests\n'
@@ -428,16 +453,24 @@ walter_repo_config_verification_plan() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --risk)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --risk\n' >&2
+          return 2
+        fi
         input_risk="${2:-}"
-        shift 2 || shift
+        shift 2
         ;;
       --risk=*)
         input_risk="${1#--risk=}"
         shift
         ;;
       --path)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --path\n' >&2
+          return 2
+        fi
         paths+=("${2:-}")
-        shift 2 || shift
+        shift 2
         ;;
       --path=*)
         paths+=("${1#--path=}")
@@ -449,6 +482,10 @@ walter_repo_config_verification_plan() {
           paths+=("$1")
           shift
         done
+        ;;
+      --*)
+        printf 'repo-config: unknown option: %s\n' "$1" >&2
+        return 2
         ;;
       *)
         paths+=("$1")

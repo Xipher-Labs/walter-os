@@ -140,7 +140,7 @@ crypto, money, and PHI remain outside discretionary capability tiers.
 ## Verification Plan
 
 Use `verification-plan` to turn the repo policy plus changed paths into an
-advisory check list:
+advisory checklist:
 
 ```bash
 walter-os repo-config verification-plan . --risk low --path docs/operational/repo-config.md
