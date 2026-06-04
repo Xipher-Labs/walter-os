@@ -264,6 +264,52 @@ SH
   [[ "$output" == *"Rekor receipt root mismatch"* ]]
 }
 
+@test "close-day holds the audit lock while anchoring the Rekor root" {
+  _make_chain
+  _write_mock_curl
+  race_status="$TMP_HOME/race-status"
+  probe_script="$TMP_HOME/rekor-race-probe.sh"
+  cat > "$probe_script" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$AUDIT_LIB"
+eval "$(declare -f walter_audit_rekor_upload | sed '1s/walter_audit_rekor_upload/_original_walter_audit_rekor_upload/')"
+walter_audit_rekor_upload() {
+  set +e
+  WALTER_AUDIT_NOW="2026-05-31T12:00:02Z" WALTER_AUDIT_LOCK_WAIT_SECONDS=0 \
+    bash -c "source \"$AUDIT_LIB\"; walter_audit_append Bash 'racing append' allow approval-gate ok" >/dev/null 2>&1
+  child_status="$?"
+  set -e
+  printf '%s' "$child_status" > "$RACE_STATUS"
+  _original_walter_audit_rekor_upload "$@"
+}
+walter_audit_close_day --rekor-url "http://rekor.example" 2026-05-31
+SH
+  chmod +x "$probe_script"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    AUDIT_LIB="$AUDIT_LIB" \
+    RACE_STATUS="$race_status" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$probe_script"
+
+  [ "$status" -eq 0 ]
+  [ -f "$race_status" ]
+  [ "$(cat "$race_status")" != "0" ]
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified Rekor anchor abc123"* ]]
+}
+
 @test "close-day rejects invalid Rekor URLs before network access" {
   _make_chain
   _write_failing_curl

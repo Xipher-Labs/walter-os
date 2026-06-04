@@ -1584,7 +1584,7 @@ walter_audit_close_day() {
     return 3
   fi
 
-  local date_value="${positional[0]:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line
+  local date_value="${positional[0]:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line upload_status=0
   _walter_audit_check_date_arg "$date_value" "date" || return $?
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
@@ -1623,13 +1623,19 @@ walter_audit_close_day() {
   else
     close_status="$?"
   fi
+  if [[ "$close_status" -eq 0 ]]; then
+    printf 'ok: closed audit day %s (%s row(s)): %s\n' "$date_value" "$row_count" "$root_path"
+    if [[ "${WALTER_AUDIT_REKOR_UPLOAD:-0}" == "1" ]]; then
+      if walter_audit_rekor_upload "$date_value" "$root_hash" "$chain_path" "$rekor_url"; then
+        upload_status=0
+      else
+        upload_status="$?"
+      fi
+    fi
+  fi
   _walter_audit_release_lock "$lock_path"
   [[ "$close_status" -eq 0 ]] || return "$close_status"
-
-  printf 'ok: closed audit day %s (%s row(s)): %s\n' "$date_value" "$row_count" "$root_path"
-  if [[ "${WALTER_AUDIT_REKOR_UPLOAD:-0}" == "1" ]]; then
-    walter_audit_rekor_upload "$date_value" "$root_hash" "$chain_path" "$rekor_url"
-  fi
+  return "$upload_status"
 }
 
 _walter_audit_verify_prev_chain_root() {
