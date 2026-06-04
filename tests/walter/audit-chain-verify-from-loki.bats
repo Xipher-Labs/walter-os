@@ -186,7 +186,8 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
   [[ "$output" == *"from live Loki"* ]]
-  [[ "$output" != *"super-secret-token"* ]]
+  combined_output="${output}${stderr:-}"
+  [[ "$combined_output" != *"super-secret-token"* ]]
   grep -q '/loki/api/v1/query_range' "$(_curl_args_path)"
   grep -q '{app="walter-os", kind="audit-chain"}' "$(_curl_args_path)"
   grep -q 'start=1780531200000000000' "$(_curl_args_path)"
@@ -272,7 +273,8 @@ SH
   [ "$status" -eq 1 ]
   [[ "$output" == *"Loki authentication failed"* ]]
   [[ "$output" == *"HTTP 401"* ]]
-  [[ "$output" != *"super-secret-token"* ]]
+  combined_output="${output}${stderr:-}"
+  [[ "$combined_output" != *"super-secret-token"* ]]
 }
 
 @test "verify-chain --from-loki reports unreachable live Loki endpoints" {
