@@ -296,6 +296,25 @@ GO
   [[ "$output" == *"spec file must be inside repo directory"* ]]
 }
 
+@test "semantic-gates reports test traversal errors as gate failures" {
+  write_valid_spec
+  write_referencing_test
+  mkdir -p "$TMP_DIR/bin"
+  cat > "$TMP_DIR/bin/find" <<'SH'
+#!/usr/bin/env sh
+echo "find: permission denied" >&2
+exit 1
+SH
+  chmod +x "$TMP_DIR/bin/find"
+
+  run env PATH="$TMP_DIR/bin:$PATH" "$WALTER_OS_BIN" semantic-gates \
+    "$TMP_DIR/repo/docs/specs/example-feature.md" --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"test-relevance: fail"* ]]
+  [[ "$output" == *"unable to traverse tests directory"* ]]
+}
+
 @test "semantic-gates --json emits machine-readable gate results" {
   write_valid_spec
   write_referencing_test

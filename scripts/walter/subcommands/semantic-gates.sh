@@ -29,7 +29,7 @@ abs_path() {
 }
 
 usage_error() {
-  echo "semantic-gates: $*" >&2
+  echo "walter-os semantic-gates: $*" >&2
   print_help >&2
   exit 2
 }
@@ -171,19 +171,32 @@ check_architecture_review() {
 }
 
 check_test_relevance() {
-  local tests_dir="$1" match_file rel_match
+  local tests_dir="$1" candidates_file find_error_file find_error_summary match_file rel_match
   if [[ ! -d "$tests_dir" ]]; then
     add_failure "test-relevance" "tests directory not found: $tests_dir"
     return
   fi
 
+  candidates_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates-candidates.XXXXXX")"
+  find_error_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates-find.XXXXXX")"
+  if ! find "$tests_dir" -type f -print > "$candidates_file" 2> "$find_error_file"; then
+    find_error_summary="$(tr '\n' ' ' < "$find_error_file" | sed 's/[[:space:]]*$//')"
+    rm -f "$candidates_file" "$find_error_file"
+    if [[ -n "$find_error_summary" ]]; then
+      add_failure "test-relevance" "unable to traverse tests directory: $find_error_summary"
+    else
+      add_failure "test-relevance" "unable to traverse tests directory: $tests_dir"
+    fi
+    return
+  fi
+
   match_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates.XXXXXX")"
-  find "$tests_dir" -type f -print |
-    while IFS= read -r file; do
-      if grep -qF "$spec_rel" "$file"; then
-        printf '%s\n' "$file" >> "$match_file"
-      fi
-    done
+  while IFS= read -r file; do
+    if grep -qF "$spec_rel" "$file"; then
+      printf '%s\n' "$file" >> "$match_file"
+    fi
+  done < "$candidates_file"
+  rm -f "$candidates_file" "$find_error_file"
 
   if [[ ! -s "$match_file" ]]; then
     rm -f "$match_file"
