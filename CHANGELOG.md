@@ -83,6 +83,11 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   session key. `walter-os audit verify-chain` validates each row's signature
   via the active or archived session public key, so fabricated rows fail even
   when their local hash-chain fields are internally consistent.
+- **Audit-chain close-day and range verification (#333/#122).** Adds
+  `walter-os audit close-day [date]`, records `prev_chain_root` on the first
+  row of a new day when the previous daily root exists, and lets
+  `walter-os audit verify-chain --since <date> [--until <date>]` validate
+  consecutive local audit days with cross-day root continuity.
 
 ### Changed
 

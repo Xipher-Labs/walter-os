@@ -35,8 +35,16 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+_chain_path_for() {
+  printf '%s/audit/chain-%s.jsonl\n' "$WALTER_CONFIG" "$1"
+}
+
 _root_path() {
   printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
+}
+
+_root_path_for() {
+  printf '%s/audit/root-%s.txt\n' "$WALTER_CONFIG" "$1"
 }
 
 _state_file() {
@@ -423,4 +431,64 @@ SH
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
+}
+
+@test "B-2: close-day writes root for a verified chain" {
+  _make_chain
+  rm -f "$(_root_path)"
+
+  run bash "$WALTER_OS_BIN" audit close-day 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: closed audit day 2026-05-31"* ]]
+  expected="$(_sha256 "$(tail -n 1 "$(_chain_path)")")"
+  [ "$(cat "$(_root_path)")" = "$expected" ]
+}
+
+@test "B-2: close-day refuses to overwrite mismatched existing root" {
+  _make_chain
+  original_root="$(cat "$(_root_path)")"
+  printf '%064d' 0 > "$(_root_path)"
+
+  run bash "$WALTER_OS_BIN" audit close-day 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"root hash mismatch"* ]]
+  [ "$(cat "$(_root_path)")" != "$original_root" ]
+}
+
+@test "B-2: first row of a new day links previous day root" {
+  _make_chain
+  prev_root="$(cat "$(_root_path)")"
+
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+
+  jq -e --arg root "$prev_root" '.prev_chain_root == $root' "$(_chain_path_for 2026-06-01)"
+}
+
+@test "B-2: verify-chain --since walks linked days" {
+  _make_chain
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+
+  run bash "$WALTER_OS_BIN" audit verify-chain --since 2026-05-31 --until 2026-06-01
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified 2 day(s)"* ]]
+  [[ "$output" == *"2026-05-31..2026-06-01"* ]]
+}
+
+@test "B-2: verify-chain --since detects cross-day root mismatch" {
+  _make_chain
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+  tampered="$(_rehash_row "$(sed -n '1p' "$(_chain_path_for 2026-06-01)" | jq -cS '.prev_chain_root = "deadbeef"')")"
+  printf '%s\n' "$tampered" > "$(_chain_path_for 2026-06-01)"
+  _sha256 "$tampered" > "$(_root_path_for 2026-06-01)"
+
+  run bash "$WALTER_OS_BIN" audit verify-chain --since 2026-05-31 --until 2026-06-01
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2026-06-01: prev_chain_root mismatch"* ]]
 }
