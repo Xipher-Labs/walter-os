@@ -173,7 +173,8 @@ _walter_repo_config_path_is_hard_floor() {
   if declare -p WALTER_PROTECTED_PATH_PATTERNS >/dev/null 2>&1; then
     for pattern in "${WALTER_PROTECTED_PATH_PATTERNS[@]}"; do
       # shellcheck disable=SC2053 # Shared protected path policy uses globs.
-      if [[ "$normalized" == $pattern || "$normalized" == */$pattern ]]; then
+      if [[ "$normalized" == $pattern || "$normalized" == */$pattern || \
+            "$normalized" == $pattern/* || "$normalized" == */$pattern/* ]]; then
         return 0
       fi
     done
