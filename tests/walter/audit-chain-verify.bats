@@ -220,6 +220,27 @@ _resign_row() {
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
 }
 
+@test "B-2: verifier caches ED25519-capable openssl probe" {
+  _make_chain
+  counter="$TMP_HOME/openssl-probe-count"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    counter='$counter'
+    _walter_session_openssl_supports_ed25519() {
+      current=0
+      [[ -f \"\$counter\" ]] && current=\"\$(cat \"\$counter\")\"
+      printf '%s' \"\$((current + 1))\" > \"\$counter\"
+      command \"\$1\" genpkey -algorithm ED25519 >/dev/null 2>&1
+    }
+    walter_audit_verify_chain 2026-05-31 >/dev/null
+    printf 'probe_count=%s' \"\$(cat \"\$counter\")\"
+  "
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "probe_count=1" ]
+}
+
 @test "B-2: verifier fails closed when temp directory creation fails" {
   _make_chain
   mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
@@ -233,6 +254,21 @@ SH
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"temporary directory unavailable"* ]]
+}
+
+@test "B-2: verifier reports missing python3 runtime clearly" {
+  _make_chain
+  mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
+  cat > "$BATS_TEST_TMPDIR/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$BATS_TEST_TMPDIR/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin':\$PATH walter_audit_verify_chain 2026-05-31"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
 }
 
 @test "B-1: append rejects tampered final row even if root is rewritten" {

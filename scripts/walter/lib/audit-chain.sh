@@ -69,16 +69,50 @@ _walter_audit_require_tool() {
   fi
 }
 
-_walter_audit_openssl() {
+_walter_audit_require_python3() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "walter-audit-chain: required tool missing: python3" >&2
+    return 1
+  fi
+  if ! python3 - <<'PY' >/dev/null 2>&1
+import json  # noqa: F401
+PY
+  then
+    echo "walter-audit-chain: required tool missing: python3" >&2
+    return 1
+  fi
+}
+
+_walter_audit_resolve_openssl() {
   local openssl_bin=""
+  if [[ "${_WALTER_AUDIT_OPENSSL_STATUS:-}" == "ok" ]]; then
+    return 0
+  fi
+  if [[ "${_WALTER_AUDIT_OPENSSL_STATUS:-}" == "missing" ]]; then
+    return 1
+  fi
   if declare -F _walter_session_openssl >/dev/null 2>&1; then
-    _walter_session_openssl
-    return $?
+    if openssl_bin="$(_walter_session_openssl)"; then
+      _WALTER_AUDIT_OPENSSL_BIN="$openssl_bin"
+      _WALTER_AUDIT_OPENSSL_STATUS="ok"
+      return 0
+    fi
+    _WALTER_AUDIT_OPENSSL_STATUS="missing"
+    return 1
   fi
   openssl_bin="$(command -v openssl 2>/dev/null || true)"
-  [[ -n "$openssl_bin" ]] || return 1
-  "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1 || return 1
-  printf '%s' "$openssl_bin"
+  if [[ -n "$openssl_bin" ]] && "$openssl_bin" genpkey -algorithm ED25519 >/dev/null 2>&1; then
+    _WALTER_AUDIT_OPENSSL_BIN="$openssl_bin"
+    _WALTER_AUDIT_OPENSSL_STATUS="ok"
+    return 0
+  fi
+  _WALTER_AUDIT_OPENSSL_STATUS="missing"
+  return 1
+}
+
+_walter_audit_openssl() {
+  _walter_audit_resolve_openssl || return $?
+  printf '%s' "$_WALTER_AUDIT_OPENSSL_BIN"
 }
 
 _walter_audit_state_dir() {
@@ -175,13 +209,15 @@ walter_audit_set_repo_from_hook_input() {
       empty
     end
   ' 2>/dev/null || true)"
-  if [[ -n "$repo_path" ]]; then
+  if [[ -n "$repo_path" && -d "$repo_path" ]]; then
+    repo_path="$(cd "$repo_path" && pwd -P)" || return 0
     export WALTER_AUDIT_REPO="$repo_path"
   fi
 }
 
 _walter_audit_b64_encode_file() {
   local file="$1"
+  _walter_audit_require_python3 || return 1
   python3 - "$file" <<'PY'
 import base64
 import pathlib
@@ -193,6 +229,7 @@ PY
 
 _walter_audit_b64_decode_to_file() {
   local value="$1" out="$2"
+  _walter_audit_require_python3 || return 1
   python3 - "$value" "$out" <<'PY'
 import base64
 import binascii
@@ -217,7 +254,7 @@ PY
 
 _walter_audit_sign_row() {
   local row_json="$1" session_id private_key openssl_bin tmp_dir payload_file sig_file sig
-  _walter_audit_require_tool python3 || return 1
+  _walter_audit_require_python3 || return 1
   session_id="$(_walter_audit_current_session_id)" || {
     echo "walter-audit-chain: active session id required for signed audit row" >&2
     return 2
@@ -227,10 +264,11 @@ _walter_audit_sign_row() {
     echo "walter-audit-chain: session private key missing for signed audit row: $session_id" >&2
     return 2
   }
-  if ! openssl_bin="$(_walter_audit_openssl)"; then
+  if ! _walter_audit_resolve_openssl; then
     echo "walter-audit-chain: ED25519-capable openssl missing" >&2
     return 3
   fi
+  openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
 
   tmp_dir="$(mktemp -d)" || {
     echo "walter-audit-chain: temporary directory unavailable for signing" >&2
@@ -577,10 +615,11 @@ _walter_audit_verify_row_signature() {
     echo "walter-audit-chain: row ${row_number}: cannot verify session ${session_id}: public key missing" >&2
     return 2
   }
-  if ! openssl_bin="$(_walter_audit_openssl)"; then
+  if ! _walter_audit_resolve_openssl; then
     echo "walter-audit-chain: ED25519-capable openssl missing" >&2
     return 3
   fi
+  openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
 
   tmp_dir="$(mktemp -d)" || {
     echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
@@ -593,6 +632,10 @@ _walter_audit_verify_row_signature() {
     return 1
   }
   printf '%s' "$payload" > "$payload_file" || {
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  _walter_audit_require_python3 || {
     rm -rf "$tmp_dir"
     return 1
   }

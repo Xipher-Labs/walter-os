@@ -38,6 +38,10 @@ _root_path() {
   printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
 }
 
+_physical_path() {
+  (cd "$1" && pwd -P)
+}
+
 _mode_of() {
   if stat -f %Lp "$1" >/dev/null 2>&1; then
     stat -f %Lp "$1"
@@ -404,4 +408,24 @@ SH
   [ "$status" -eq 0 ]
   [ -f "$marker" ]
   [ "$(cat "$marker")" = "ran" ]
+}
+
+@test "B-2: hook cwd is existing directory normalized before export" {
+  mkdir -p "$TMP_HOME/repo/child"
+  physical="$(_physical_path "$TMP_HOME/repo")"
+  hook_input="$(jq -n --arg cwd "$TMP_HOME/repo/child/.." '{"cwd":$cwd}')"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_set_repo_from_hook_input '$hook_input'; printf '%s' \"\${WALTER_AUDIT_REPO:-}\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$physical" ]
+}
+
+@test "B-2: hook cwd ignores nonexistent directories" {
+  hook_input="$(jq -n --arg cwd "$TMP_HOME/missing" '{"cwd":$cwd}')"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_set_repo_from_hook_input '$hook_input'; printf '%s' \"\${WALTER_AUDIT_REPO:-unset}\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
 }
