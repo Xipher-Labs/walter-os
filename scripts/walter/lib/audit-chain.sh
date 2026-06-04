@@ -714,7 +714,7 @@ _walter_audit_verify_chain_from_loki_response() {
     return 1
   }
 
-  values_count="$(jq '[.data.result[]?.values[]?] | length' "$response_file" 2>/dev/null)" || {
+  values_count="$(jq 'reduce .data.result[]? as $stream (0; . + (($stream.values // []) | length))' "$response_file" 2>/dev/null)" || {
     _walter_audit_remove_loki_tmp "$tmp_config"
     echo "walter-audit-chain: invalid Loki response JSON: $source_label" >&2
     return 1
