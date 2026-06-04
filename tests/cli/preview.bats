@@ -125,6 +125,20 @@ SH
   [[ "$output" == *"npx is required for preview capture"* ]]
 }
 
+@test "preview capture rejects npx override directories" {
+  mkdir -p "$TMP_DIR/fake-npx-dir"
+  export WALTER_PREVIEW_NPX="$TMP_DIR/fake-npx-dir"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"npx is required for preview capture"* ]]
+}
+
 @test "preview capture rejects unsafe screenshot names" {
   install_fake_npx
 
@@ -136,6 +150,21 @@ SH
 
   [ "$status" -eq 64 ]
   [[ "$output" == *"--name must be a safe slug"* ]]
+}
+
+@test "preview capture rejects secret-like names before invoking Playwright" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name token \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"refusing secret-like artifact"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/screenshots/token.png" ]]
+  [[ ! -e "$FAKE_NPX_LOG" ]]
 }
 
 @test "preview capture refuses to overwrite existing screenshots" {

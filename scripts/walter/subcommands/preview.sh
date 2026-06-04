@@ -72,7 +72,7 @@ require_jq() {
 
 resolve_npx() {
   if [[ -n "${WALTER_PREVIEW_NPX:-}" ]]; then
-    if [[ -x "$WALTER_PREVIEW_NPX" && ! -L "$WALTER_PREVIEW_NPX" ]]; then
+    if [[ -f "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" && ! -L "$WALTER_PREVIEW_NPX" ]]; then
       printf '%s\n' "$WALTER_PREVIEW_NPX"
       return 0
     fi
@@ -288,6 +288,7 @@ cmd_capture() {
   bundle_dir="${out_root%/}/preview-pr-${pr}"
   screenshot_dir="${bundle_dir}/screenshots"
   screenshot_path="${screenshot_dir}/${name}.png"
+  reject_secret_like_artifact "$screenshot_path"
   mkdir -p -- "$screenshot_dir"
 
   if [[ -e "$screenshot_path" ]]; then
