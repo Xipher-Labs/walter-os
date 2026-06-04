@@ -12,6 +12,8 @@ artifact format for preview evidence.
 - Add `walter-os preview bundle` as the first AD-10 primitive.
 - Add `walter-os preview plan --dry-run` as the provider-neutral deployment
   contract before live provider adapters exist.
+- Add `walter-os preview capture` to produce screenshot artifacts from an
+  existing preview URL.
 - Package an existing preview URL, seed manifest, and screenshots into a
   local report bundle with deterministic layout and artifact hashes.
 - Fail closed unless `walter-repo-config.yaml` explicitly enables
@@ -42,6 +44,19 @@ The command accepts only `http://` or `https://` preview URLs, requires a seed
 manifest and at least one screenshot, and rejects secret-like artifact names
 such as `.env`, `.pem`, `.key`, `secret*`, or `token*`.
 
+`walter-os preview capture` writes:
+
+```text
+.walter/previews/preview-pr-<number>/
+  screenshots/<name>.png
+```
+
+The capture command uses an already-available local Playwright CLI through
+`npx --no-install playwright screenshot`, accepts only `http://` or `https://`
+URLs, requires a safe screenshot name, rejects overwrites, and emits artifact
+JSON when `--json` is passed. It captures an existing preview URL only; it does
+not deploy, auto-install packages, or mint credentials.
+
 `walter-os preview plan --dry-run` writes:
 
 ```text
@@ -70,11 +85,13 @@ opt-in per repo.
 - AC3: The default output path is `.walter/previews/preview-pr-<number>` under
   the current repository/directory.
 - AC4: Secret-like artifacts and non-HTTP(S) URLs fail closed.
-- AC5: `walter-os help` documents the preview bundle command.
+- AC5: `walter-os help` documents the preview bundle and capture commands.
 - AC6: `walter-os preview plan --dry-run` writes `preview-plan.json` only when
   `preview_deploy: true` is configured.
 - AC7: The plan command refuses to run without `--dry-run`, with unsupported
   providers, or with secret-like seed artifacts.
+- AC8: `walter-os preview capture` writes a screenshot artifact for an existing
+  HTTP(S) preview URL and refuses unsafe names, missing `npx`, and overwrites.
 
 ## Related
 

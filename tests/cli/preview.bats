@@ -54,6 +54,106 @@ human_approval_required_for:
 YAML
 }
 
+install_fake_npx() {
+  fake_bin="$TMP_DIR/fake-bin"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/npx" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "${FAKE_NPX_LOG:?}"
+output=""
+for arg in "$@"; do
+  output="$arg"
+done
+if [[ -z "$output" ]]; then
+  echo "missing screenshot path" >&2
+  exit 2
+fi
+printf 'fake png bytes\n' > "$output"
+SH
+  chmod +x "$fake_bin/npx"
+  export PATH="$fake_bin:$PATH"
+  export WALTER_PREVIEW_NPX="$fake_bin/npx"
+  export FAKE_NPX_LOG="$TMP_DIR/npx.log"
+}
+
+@test "preview capture writes a screenshot artifact with Playwright CLI" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.pr == 235'
+  echo "$output" | jq -e '.url == "https://preview.example/pr-235"'
+  echo "$output" | jq -e '.screenshot.path | endswith("screenshots/home.png")'
+  echo "$output" | jq -e '.screenshot.sha256 | length == 64'
+  echo "$output" | jq -e '.safety.deploy == "not performed"'
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [[ "$(cat "$FAKE_NPX_LOG")" == *"--no-install playwright screenshot"* ]]
+  [[ "$(cat "$FAKE_NPX_LOG")" == *"--wait-for-timeout 1000"* ]]
+}
+
+@test "preview capture rejects non-http preview URLs" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url file:///tmp/preview.html \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"preview URL must start with http:// or https://"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+}
+
+@test "preview capture requires npx" {
+  export WALTER_PREVIEW_NPX="$TMP_DIR/missing-npx"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"npx is required for preview capture"* ]]
+}
+
+@test "preview capture rejects unsafe screenshot names" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name "../home" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"--name must be a safe slug"* ]]
+}
+
+@test "preview capture refuses to overwrite existing screenshots" {
+  install_fake_npx
+  mkdir -p "$TMP_DIR/out/preview-pr-235/screenshots"
+  printf 'existing\n' > "$TMP_DIR/out/preview-pr-235/screenshots/home.png"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"screenshot already exists"* ]]
+  [[ "$(cat "$TMP_DIR/out/preview-pr-235/screenshots/home.png")" == "existing" ]]
+}
+
 @test "preview plan writes dry-run plan when preview_deploy is enabled" {
   write_preview_artifacts
   write_preview_config
