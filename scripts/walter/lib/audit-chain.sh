@@ -112,6 +112,12 @@ _walter_audit_openssl() {
   printf '%s' "$_WALTER_AUDIT_OPENSSL_BIN"
 }
 
+_walter_audit_mktemp_dir() {
+  local label="${1:-audit-chain}"
+  mktemp -d "${TMPDIR:-/tmp}/walter-${label}.XXXXXX" 2>/dev/null \
+    || mktemp -d -t "walter-${label}.XXXXXX" 2>/dev/null
+}
+
 _walter_audit_state_dir() {
   if declare -F _walter_session_state_dir >/dev/null 2>&1; then
     _walter_session_state_dir
@@ -294,7 +300,7 @@ _walter_audit_sign_row() {
   fi
   openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
 
-  tmp_dir="$(mktemp -d)" || {
+  tmp_dir="$(_walter_audit_mktemp_dir audit-sign)" || {
     echo "walter-audit-chain: temporary directory unavailable for signing" >&2
     return 1
   }
@@ -653,7 +659,7 @@ _walter_audit_verify_row_signature() {
   _walter_audit_require_python3 || return 3
 
   if [[ -z "$tmp_dir" ]]; then
-    tmp_dir="$(mktemp -d)" || {
+    tmp_dir="$(_walter_audit_mktemp_dir audit-verify-row)" || {
       echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
       return 1
     }
@@ -697,7 +703,7 @@ _walter_audit_verify_chain_file_unlocked() {
       return 1
     fi
   fi
-  sig_tmp_dir="$(mktemp -d)" || {
+  sig_tmp_dir="$(_walter_audit_mktemp_dir audit-verify-chain)" || {
     echo "walter-audit-chain: temporary directory unavailable for signature verification" >&2
     return 1
   }
