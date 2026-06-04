@@ -46,7 +46,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 | C2-D-1 | **Scope**: source tarball + SBOM + checksums file. Cosign signature is NON-reproducible by design (timestamp + nonce), and that's fine — provenance covers it. | Matches roadmap D-4. Bigger scope is a v1.x problem. |
 | C2-D-2 | **Determinism technique for tarball**: pipe `git archive --format=tar <tag>` into `gzip -n` (drops mtime + filename headers). Do NOT use `git archive --format=tar.gz`, which double-gzips when piped to gzip AND can embed a gzip-header timestamp that varies run-to-run. Don't run `tar c` on a working copy either — file mtimes vary. | Two runs of `git archive --format=tar <tag> \| gzip -n` produce byte-identical output. This is the canonical "reproducible source tarball" recipe; see reproducible-builds.org `archives` page. |
 | C2-D-3 | **Determinism technique for SBOM**: anchore/sbom-action already produces deterministic CycloneDX given a deterministic source. Pin `anchore/sbom-action` AND the underlying `syft` version. Sort `components` and `dependencies` arrays by `bom-ref` before write. | CycloneDX without sorted arrays differs run-to-run because syft walks the FS in inode order. Sorting is the documented fix; bash one-liner with jq. |
-| C2-D-4 | **Determinism technique for checksums**: sort the `find` output before hashing. Already partially done — the "Generate SHA-256 checksums for full release payload" step in `release.yml` pipes `find` through `sort > checksums.sha256` with a comment that calls out reproducibility intent; verify the sort is locale-stable (`LC_ALL=C sort`, not the runner default which can vary) and tighten the test coverage. | `find` is not deterministic across reruns even on the same FS. `find ... | LC_ALL=C sort` is the standard pattern. Referencing the step by its `name:` instead of a line number so this spec doesn't drift when `release.yml` grows. |
+| C2-D-4 | **Determinism technique for checksums**: sort the `find` output before hashing. Already partially done — the "Generate SHA-256 checksums for full release payload" step in `release.yml` pipes `find` through `sort > checksums.sha256` with a comment that calls out reproducibility intent; verify the sort is locale-stable (`LC_ALL=C sort`, not the runner default which can vary) and tighten the test coverage. | `find` is not deterministic across reruns even on the same FS. `find ... \| LC_ALL=C sort` is the standard pattern. Referencing the step by its `name:` instead of a line number so this spec doesn't drift when `release.yml` grows. |
 | C2-D-5 | **Verification job**: a new `reproducibility-check` job in `release.yml` re-builds the source tarball + SBOM + checksums in a fresh runner, compares SHA-256s to the published artifacts. Mismatch fails the workflow. | Same philosophy as C1-D-5: don't ship something whose reproducibility we haven't actually verified. |
 | C2-D-6 | **Toolchain pinning**: every tool in the reproducible path (`git`, `tar`, `gzip`, `jq`, `syft`, `bash`) MUST be pinned to a specific version inside `release.yml`. Drift in `runs-on: ubuntu-24.04` toolchain updates would break reproducibility silently. Pin via `apt-get install -y <pkg>=<exact-version>` for system tools; pin `syft` via the action SHA. | The hardest reproducibility regression is "GitHub updated their runner image; now tar 1.34.1 → 1.34.2 produces a one-byte-different archive." Pinning catches this. |
 | C2-D-7 | **Operator-reproducibility doc**: `docs/security/reproducible-builds.md` walks a forker through `git clone && git checkout <tag> && ./scripts/release/reproduce.sh <tag>` and asserts byte-identical output. | Reproducibility is worthless if the operator doesn't know how to run it. The doc is part of the AC. |
@@ -54,32 +54,38 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 ## Acceptance criteria
 
 ### AC-1 — SLSA Build L3 attestation in `release.yml` (C-1)
+
 - [ ] `release.yml` gains a SLSA provenance job that calls `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0` with a base64 subject list covering tarball + SBOM + `checksums.sha256` + its bundle.
 - [ ] The generator emits one release-level `.intoto.jsonl` covering every subject digest.
 - [ ] The release uploads ALSO include the `.intoto.jsonl` file as a release asset (operator-friendly: one place to download).
 
 ### AC-2 — Provenance generation enforcement (C-1)
+
 - [ ] New provenance job depends on the existing `release` job + the existing `security` job.
 - [ ] The job receives the exact base64 subject list emitted by the security job.
 - [ ] Generator failure marks the workflow failed.
 - [ ] Bats coverage verifies the job dependency, subject wiring, and generator ref.
 
 ### AC-3 — Verification docs (C-1)
+
 - [ ] `docs/security/verification.md` gains a "SLSA provenance verification" section with `slsa-verifier` examples.
 - [ ] Section states that releases cut before this workflow change have no retroactive provenance.
 - [ ] Cross-link from `README.md` "Security" section to the verification doc.
 
 ### AC-4 — Reproducible source tarball + SBOM + checksums (C-2)
+
 - [ ] `release.yml` jobs' `runs-on:` field pinned to `ubuntu-24.04` (replaces the current `ubuntu-latest`, which floats and would silently break reproducibility on GH's next runner-image rotation). Both `release` and `security` jobs use the same pin.
 - [ ] `release.yml` source-archive step uses `git archive --format=tar <tag> | gzip -n` (NOT `--format=tar.gz`, which double-gzips when piped — see C2-D-2). Replaces any timestamp-bearing tar invocation.
 - [ ] SBOM step pipes through `jq 'sort_by_components_and_dependencies'` (canonical bash one-liner spelled out in the spec; the plan refines it).
 - [ ] Checksums step pre-sorts the `find` output.
 
 ### AC-5 — Toolchain pinning audit (C-2)
+
 - [ ] Every command in the reproducible path has an explicit version. Documented as a table in `docs/security/reproducible-builds.md`.
 - [ ] CI fails fast if the toolchain version drifts (a smoke step `tar --version | grep -q "1.34"` style check, one per pinned tool).
 
 ### AC-6 — Reproducibility check job (C-2)
+
 - [ ] New job `reproducibility-check` (depends on the existing `security` job — same job AC-2 corrects, formerly drafted as `sbom-and-sign`) re-runs the deterministic steps on a fresh runner.
 - [ ] Computes SHA-256 of re-built tarball, SBOM, checksums.
 - [ ] Asserts each matches the published artifact's SHA-256 from `checksums.sha256`.
@@ -87,6 +93,7 @@ C-1 closes question #1 (provenance). C-2 closes question #2 (reproducibility). T
 - [ ] bats coverage in `tests/release/reproducibility.bats`.
 
 ### AC-7 — Operator-reproducibility runbook (C-2)
+
 - [ ] `docs/security/reproducible-builds.md` (new):
   - Why reproducibility matters (1 paragraph)
   - Per-artifact reproduction recipe (tarball, SBOM, checksums)

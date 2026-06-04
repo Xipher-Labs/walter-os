@@ -17,6 +17,11 @@ setup() {
   [ -f "$WORKFLOW" ]
 }
 
+@test "release workflow header documents release security and provenance jobs" {
+  grep -Fq '# Three jobs run in sequence:' "$WORKFLOW"
+  grep -Fq "#   3. \`provenance\`" "$WORKFLOW"
+}
+
 @test "release workflow has no \`|| true\` after asset operations" {
   # `|| true` after gh release download / sha256sum / cosign / sbom would
   # swallow the failure and let a placeholder be signed. Regression for HIGH-1.
