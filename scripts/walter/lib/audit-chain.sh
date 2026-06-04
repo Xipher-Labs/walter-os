@@ -171,7 +171,8 @@ _walter_audit_current_session_id() {
     if _walter_audit_jq_available; then
       session_id="$(jq -r '.session_id // empty' "$state_file" 2>/dev/null || true)"
     else
-      session_id="$(python3 - "$state_file" <<'PY' 2>/dev/null || true
+      _walter_audit_require_python3 || return 3
+      session_id="$(python3 - "$state_file" 2>/dev/null <<'PY'
 import json
 import sys
 
@@ -185,7 +186,10 @@ session_id = state.get("session_id", "")
 if isinstance(session_id, str):
     print(session_id, end="")
 PY
-)"
+)" || {
+        echo "walter-audit-chain: invalid session state: $state_file" >&2
+        return 1
+      }
     fi
   fi
   [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
@@ -250,10 +254,19 @@ PY
 }
 
 _walter_audit_sign_row() {
-  local row_json="$1" session_id private_key openssl_bin tmp_dir payload_file sig_file sig
+  local row_json="$1" session_id="${2:-}" session_status private_key openssl_bin tmp_dir payload_file sig_file sig
   _walter_audit_require_python3 || return 1
-  session_id="$(_walter_audit_current_session_id)" || {
-    echo "walter-audit-chain: active session id required for signed audit row" >&2
+  if [[ -z "$session_id" ]]; then
+    session_id="$(_walter_audit_current_session_id)"
+    session_status="$?"
+    if [[ "$session_status" -ne 0 ]]; then
+      [[ "$session_status" -eq 3 ]] && return 3
+      echo "walter-audit-chain: active session id required for signed audit row" >&2
+      return 2
+    fi
+  fi
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "walter-audit-chain: invalid session id for signed audit row" >&2
     return 2
   }
   private_key="$(_walter_audit_private_key_file "$session_id")"
@@ -745,7 +758,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id sig sign_status chain_created
+  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id session_status sig sign_status chain_created
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -820,12 +833,15 @@ walter_audit_append() {
   fi
 
   summary="$(walter_audit_input_summary "$input")"
-  session_id="$(_walter_audit_current_session_id)" || {
-    echo "walter-audit-chain: active session id required for signed audit row" >&2
+  session_id="$(_walter_audit_current_session_id)"
+  session_status="$?"
+  if [[ "$session_status" -ne 0 ]]; then
     exec 9>&-
     _walter_audit_release_lock "$lock_path"
+    [[ "$session_status" -eq 3 ]] && return 3
+    echo "walter-audit-chain: active session id required for signed audit row" >&2
     return 2
-  }
+  fi
   if _walter_audit_jq_available; then
     row_without_hash="$(jq -ncS \
       --arg ts "$timestamp" \
@@ -849,7 +865,7 @@ walter_audit_append() {
       _walter_audit_release_lock "$lock_path"
       return 1
     }
-    if sig="$(_walter_audit_sign_row "$row")"; then
+    if sig="$(_walter_audit_sign_row "$row" "$session_id")"; then
       :
     else
       sign_status="$?"
@@ -866,7 +882,7 @@ walter_audit_append() {
     row_without_hash="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
     row_hash="$(walter_audit_hash_string "$row_without_hash")"
     row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
-    if sig="$(_walter_audit_sign_row "$row")"; then
+    if sig="$(_walter_audit_sign_row "$row" "$session_id")"; then
       :
     else
       sign_status="$?"

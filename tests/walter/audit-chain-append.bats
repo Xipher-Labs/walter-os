@@ -306,7 +306,49 @@ exit 42
 SH
   chmod +x "$TMP_HOME/mock-bin/jq"
 
-  run bash -c "source '$AUDIT_LIB'; unset WALTER_SESSION_ID; PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+  run bash -c "source '$AUDIT_LIB'; unset WALTER_SESSION_ID; WALTER_AUDIT_REPO='$REPO_ROOT' PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 0 ]
+  jq -e --arg session_id "$expected_session_id" '.session_id == $session_id' "$(_chain_path)"
+  bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
+}
+
+@test "B-2: jq-free session fallback reports missing python3" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  cat > "$TMP_HOME/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq" "$TMP_HOME/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; unset WALTER_SESSION_ID; WALTER_AUDIT_REPO='$REPO_ROOT' PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
+  [ ! -s "$(_chain_path)" ]
+  [ ! -f "$(_root_path)" ]
+}
+
+@test "B-2: append signs with the resolved row session id" {
+  expected_session_id="$WALTER_SESSION_ID"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    session_resolution_count=0
+    _walter_audit_current_session_id() {
+      session_resolution_count=\$((session_resolution_count + 1))
+      if [[ \"\$session_resolution_count\" -eq 1 ]]; then
+        printf '%s' '$expected_session_id'
+      else
+        printf '%s' rotated-session
+      fi
+    }
+    walter_audit_append Bash 'session race' allow approval-gate ok
+  "
 
   [ "$status" -eq 0 ]
   jq -e --arg session_id "$expected_session_id" '.session_id == $session_id' "$(_chain_path)"
