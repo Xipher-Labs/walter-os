@@ -74,6 +74,38 @@ write_referencing_test() {
 BATS
 }
 
+remove_acceptance_criteria() {
+  local spec="$TMP_DIR/repo/docs/specs/example-feature.md"
+  awk '
+    /^## Acceptance criteria$/ { skip = 1; next }
+    /^## Test plan$/ { skip = 0; print; next }
+    !skip { print }
+  ' "$spec" > "$spec.tmp"
+  mv "$spec.tmp" "$spec"
+}
+
+replace_acceptance_criteria_with_weak_substrings() {
+  local spec="$TMP_DIR/repo/docs/specs/example-feature.md"
+  awk '
+    /^## Acceptance criteria$/ {
+      print
+      print ""
+      print "- [ ] AC-1: Make the latest dashboard nicer."
+      print "- [ ] AC-2: Add a contest mode later."
+      skip = 1
+      next
+    }
+    skip && /^## Test plan$/ {
+      skip = 0
+      print ""
+      print
+      next
+    }
+    !skip { print }
+  ' "$spec" > "$spec.tmp"
+  mv "$spec.tmp" "$spec"
+}
+
 @test "semantic-gates passes a complete spec with referenced tests" {
   write_valid_spec
   write_referencing_test
@@ -92,8 +124,7 @@ BATS
 @test "semantic-gates fails when acceptance criteria are missing" {
   write_valid_spec
   write_referencing_test
-  perl -0pi -e 's/## Acceptance criteria.*?## Test plan/## Test plan/s' \
-    "$TMP_DIR/repo/docs/specs/example-feature.md"
+  remove_acceptance_criteria
 
   run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
     --repo "$TMP_DIR/repo"
@@ -107,8 +138,7 @@ BATS
 @test "semantic-gates fails when AC bullets are not testable" {
   write_valid_spec
   write_referencing_test
-  perl -0pi -e 's/(## Acceptance criteria\n\n).*?(\n\n## Test plan)/$1- [ ] AC-1: Make the latest dashboard nicer.\n- [ ] AC-2: Add a contest mode later.$2/s' \
-    "$TMP_DIR/repo/docs/specs/example-feature.md"
+  replace_acceptance_criteria_with_weak_substrings
 
   run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
     --repo "$TMP_DIR/repo"
@@ -129,6 +159,44 @@ BATS
   [[ "$output" == *"no test file references docs/specs/example-feature.md"* ]]
 }
 
+@test "semantic-gates fails when architecture review section is empty" {
+  cat > "$TMP_DIR/repo/docs/specs/example-feature.md" <<'MARKDOWN'
+# Example feature - spec
+
+## Problem
+
+Operators need a readiness check.
+
+## Non-goals
+
+- Replacing human approval.
+
+## Decisions
+
+| Choice | Why |
+|---|---|
+| Use a CLI. | It is small. |
+
+## Architecture review
+
+## Acceptance criteria
+
+- [ ] AC-1: Verify this exits 1 when review evidence is empty.
+
+## Test plan
+
+- `bats tests/cli/semantic-gates.bats`
+MARKDOWN
+  write_referencing_test
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"architecture-review: fail"* ]]
+  [[ "$output" == *"missing reviewable decision/risk language"* ]]
+}
+
 @test "semantic-gates accepts non-shell test files that reference the spec" {
   write_valid_spec
   cat > "$TMP_DIR/repo/tests/cli/example_feature_test.go" <<'GO'
@@ -146,6 +214,34 @@ GO
   [[ "$output" == *"tests/cli/example_feature_test.go"* ]]
 }
 
+@test "semantic-gates extracts uppercase acceptance criteria sections" {
+  write_valid_spec
+  write_referencing_test
+  awk '{ if ($0 == "## Acceptance criteria") print "## ACCEPTANCE CRITERIA"; else print }' \
+    "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    > "$TMP_DIR/repo/docs/specs/example-feature.md.tmp"
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md.tmp" \
+    "$TMP_DIR/repo/docs/specs/example-feature.md"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ac-testability: pass"* ]]
+}
+
+@test "semantic-gates rejects repo directories outside the spec path" {
+  write_valid_spec
+  write_referencing_test
+  mkdir -p "$TMP_DIR/other-repo"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/other-repo"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"spec file must be inside repo directory"* ]]
+}
+
 @test "semantic-gates --json emits machine-readable gate results" {
   write_valid_spec
   write_referencing_test
@@ -157,4 +253,28 @@ GO
   jq -e '.status == "pass"' <<<"$output"
   jq -e '.gates["spec-completeness"].status == "pass"' <<<"$output"
   jq -e '.gates["test-relevance"].evidence[0] | contains("tests/cli/example-feature.bats")' <<<"$output"
+}
+
+@test "semantic-gates --json escapes tab and carriage return messages" {
+  write_valid_spec
+  write_referencing_test
+  replace_acceptance_criteria_with_weak_substrings
+  awk '
+    /^## Test plan$/ {
+      printf "- [ ] AC-3: Keep this\tweak\r\n\n"
+      print
+      next
+    }
+    { print }
+  ' "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    > "$TMP_DIR/repo/docs/specs/example-feature.md.tmp"
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md.tmp" \
+    "$TMP_DIR/repo/docs/specs/example-feature.md"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo" --json
+
+  [ "$status" -eq 1 ]
+  jq -e '.status == "fail"' <<<"$output"
+  jq -e 'any(.gates["ac-testability"].messages[]; contains("\t") or contains("\r"))' <<<"$output"
 }

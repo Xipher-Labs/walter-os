@@ -38,6 +38,8 @@ json_escape() {
   local value="$1"
   value="${value//\\/\\\\}"
   value="${value//\"/\\\"}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\r'/\\r}"
   value="${value//$'\n'/\\n}"
   printf '%s' "$value"
 }
@@ -70,10 +72,11 @@ has_heading() {
 section_body() {
   local pattern="$1"
   awk -v pattern="$pattern" '
-    BEGIN { in_section = 0 }
+    BEGIN { in_section = 0; pattern = tolower(pattern) }
     /^#{2,3}[[:space:]]+/ {
       heading = $0
       sub(/^#{2,3}[[:space:]]+/, "", heading)
+      heading = tolower(heading)
       if (heading ~ pattern) {
         in_section = 1
         next
@@ -81,6 +84,21 @@ section_body() {
       if (in_section) {
         exit
       }
+    }
+    in_section { print }
+  ' "$spec_file"
+}
+
+matching_sections_body() {
+  local pattern="$1"
+  awk -v pattern="$pattern" '
+    BEGIN { in_section = 0; pattern = tolower(pattern) }
+    /^#{2,3}[[:space:]]+/ {
+      heading = $0
+      sub(/^#{2,3}[[:space:]]+/, "", heading)
+      heading = tolower(heading)
+      in_section = (heading ~ pattern)
+      next
     }
     in_section { print }
   ' "$spec_file"
@@ -135,13 +153,15 @@ check_ac_testability() {
 }
 
 check_architecture_review() {
+  local review_body
   if has_heading "(Architecture review|Architecture|Decisions|Cross-cutting decisions|Threat model|Risks)"; then
     add_evidence "architecture-review" "architecture/decision/risk section present"
   else
     add_failure "architecture-review" "missing architecture/decision/risk section"
   fi
 
-  if grep -Eiq '(ADR-[0-9]+|DEC-[0-9]+|decision|rationale|risk|threat|review)' "$spec_file"; then
+  review_body="$(matching_sections_body "(Architecture review|Architecture|Decisions|Cross-cutting decisions|Threat model|Risks)")"
+  if printf '%s\n' "$review_body" | grep -Eiq '(ADR-[0-9]+|DEC-[0-9]+|decision|rationale|risk|threat|review)'; then
     add_evidence "architecture-review" "reviewable decision/risk language present"
   else
     add_failure "architecture-review" "missing reviewable decision/risk language"
@@ -287,6 +307,7 @@ tests_dir="$(abs_path "$tests_dir" 2>/dev/null || printf '%s\n' "$tests_dir")"
 spec_rel="$spec_file"
 case "$spec_rel" in
   "$repo_dir"/*) spec_rel="${spec_rel#"$repo_dir"/}" ;;
+  *) usage_error "spec file must be inside repo directory: $repo_dir" ;;
 esac
 
 spec_failures=""
