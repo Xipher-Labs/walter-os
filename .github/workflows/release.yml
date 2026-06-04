@@ -13,8 +13,8 @@ name: Release
 #                   full release payload, and a cosign keyless OIDC
 #                   signature. All artifacts uploaded with --clobber so
 #                   workflow_dispatch re-runs cleanly.
-#   3. `provenance` — emits SLSA3 provenance for the release security
-#                     artifacts after checksums and cosign signing finish.
+#   3. `provenance` — emits SLSA Build L3 provenance for the release
+#                     security artifacts after checksums and cosign signing.
 #
 # Note: this workflow consolidated the previous `release-security.yml`
 # into the same workflow file. The split version relied on a

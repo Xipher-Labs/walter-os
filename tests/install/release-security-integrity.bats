@@ -166,7 +166,7 @@ setup() {
   grep -E 'GITHUB_OUTPUT' "$WORKFLOW" >/dev/null
 }
 
-@test "release workflow emits SLSA3 provenance via upstream generator" {
+@test "release workflow emits SLSA Build L3 provenance via upstream generator" {
   grep -E 'name:[[:space:]]+SLSA provenance' "$WORKFLOW" >/dev/null
   grep -E 'needs:[[:space:]]+\[release, security\]' "$WORKFLOW" >/dev/null
   grep -E 'actions:[[:space:]]+read' "$WORKFLOW" >/dev/null
