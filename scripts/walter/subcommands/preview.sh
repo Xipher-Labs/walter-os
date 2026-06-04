@@ -156,8 +156,8 @@ preview_deploy_enabled() {
   local count=0 value="" parsed
   while IFS= read -r parsed; do
     count=$((count + 1))
-    value="$parsed"
-  done < <(sed -nE 's/^preview_deploy:[[:space:]]*(true|false)[[:space:]]*(#.*)?$/\1/p' < "$config_path")
+    value="$(printf '%s' "$parsed" | tr '[:upper:]' '[:lower:]')"
+  done < <(sed -nE 's/^preview_deploy:[[:space:]]*([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])[[:space:]]*(#.*)?$/\1/p' < "$config_path")
 
   if (( count > 1 )); then
     die_usage "multiple preview_deploy keys in config: $config_path"
@@ -272,7 +272,7 @@ cmd_plan() {
   config_path="$(repo_config_path "$config")"
   preview_enabled="$(preview_deploy_enabled "$config_path")"
   if [[ "$preview_enabled" != "true" ]]; then
-    die_usage "preview_deploy is not enabled in walter-repo-config.yaml"
+    die_usage "preview_deploy is not enabled in config: $config_path"
   fi
 
   local bundle_dir plan_path generated_at plan_json

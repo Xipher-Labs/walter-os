@@ -99,6 +99,26 @@ YAML
   [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
 }
 
+@test "preview plan accepts YAML boolean case variants" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  printf 'preview_deploy: True\n' > "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.safety.preview_deploy == true'
+}
+
 @test "preview plan fails closed unless preview_deploy is enabled" {
   write_preview_artifacts
   config_file="$TMP_DIR/walter-repo-config.yaml"
@@ -116,6 +136,7 @@ YAML
 
   [ "$status" -eq 64 ]
   [[ "$output" == *"preview_deploy is not enabled"* ]]
+  [[ "$output" == *"$config_file"* ]]
   [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
 }
 
