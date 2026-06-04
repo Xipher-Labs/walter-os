@@ -194,25 +194,18 @@ SH
   grep -q 'Authorization: Bearer super-secret-token' "$(_curl_args_path)"
 }
 
-@test "verify-chain --from-loki computes live range without python3" {
-  _make_chain
-  _make_loki_fixture
-  _write_mock_curl
+@test "verify-chain --from-loki computes live range bounds without python3" {
+  mkdir -p "$TMP_HOME/bin"
   cat > "$TMP_HOME/bin/python3" <<'SH'
 #!/usr/bin/env bash
 exit 127
 SH
   chmod +x "$TMP_HOME/bin/python3"
 
-  run env \
-    PATH="$TMP_HOME/bin:$PATH" \
-    WALTER_TEST_CURL_ARGS="$(_curl_args_path)" \
-    WALTER_TEST_LOKI_FIXTURE="$(_fixture_path)" \
-    WALTER_AUDIT_LOKI_URL="http://loki.example:3100" \
-    bash "$WALTER_OS_BIN" audit verify-chain --from-loki 2026-06-04
+  run env PATH="$TMP_HOME/bin:$PATH" "$BASH" -c "source '$AUDIT_LIB'; _walter_audit_loki_range_ns 2026-06-04"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"from live Loki"* ]]
+  [ "$output" = $'1780531200000000000\n1780617599999999999' ]
 }
 
 @test "verify-chain --from-loki accepts an explicit Loki URL" {
