@@ -1614,7 +1614,10 @@ _walter_audit_rekor_write_receipt() {
     rm -f "$tmp_receipt"
     return 1
   }
-  mv "$tmp_receipt" "$receipt_path"
+  mv "$tmp_receipt" "$receipt_path" || {
+    rm -f "$tmp_receipt"
+    return 1
+  }
 }
 
 _walter_audit_rekor_receipt_payload_hash() {

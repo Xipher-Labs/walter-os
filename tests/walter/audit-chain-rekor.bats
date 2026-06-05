@@ -624,6 +624,36 @@ SH
   jq -e '.kind == "hashedrekord" and .apiVersion == "0.0.1"' "$(_curl_body_path)"
 }
 
+@test "direct Rekor upload reports receipt publish failures under errexit" {
+  _make_chain
+  bash "$WALTER_OS_BIN" audit close-day 2026-05-31 >/dev/null
+  _write_mock_curl
+  root_hash="$(cat "$(_root_path)")"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    /bin/bash -c "
+      set -e
+      source '$AUDIT_LIB'
+      mv() {
+        if [[ \"\${2:-}\" == *.rekor.json ]]; then
+          return 1
+        fi
+        command mv \"\$@\"
+      }
+      walter_audit_rekor_upload '2026-05-31' '$root_hash' '$(_chain_path)' 'http://rekor.example'
+    "
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unable to write Rekor receipt"* ]]
+  [[ "$output" != *"ok: anchored audit root in Rekor"* ]]
+  if compgen -G "$(_rekor_path).tmp.*" >/dev/null; then
+    return 1
+  fi
+}
+
 @test "close-day recovers an existing Rekor entry after duplicate upload" {
   _make_chain
   _write_mock_curl
