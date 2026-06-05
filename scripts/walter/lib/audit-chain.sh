@@ -1338,7 +1338,7 @@ _walter_audit_rekor_entry_id() {
 }
 
 _walter_audit_rekor_conflict_entry_id() {
-  local headers_file="$1" response_file="$2" entry_id location
+  local headers_file="$1" response_file="$2" entry_id location message_entry_id
   entry_id="$(jq -er '
     if type == "object" then
       .uuid // .entryUUID // .entry_uuid // .entryID // .entry_id // .id // empty
@@ -1366,6 +1366,17 @@ PY
         entry_id="$location"
         ;;
     esac
+  fi
+  if [[ -z "$entry_id" ]]; then
+    message_entry_id="$(jq -er '
+      if type == "object" and (.message | type) == "string" then
+        .message
+        | capture("(?<id>[A-Za-z0-9._:-]+)$").id
+      else
+        empty
+      end
+    ' "$response_file" 2>/dev/null || true)"
+    entry_id="$message_entry_id"
   fi
   if [[ -z "$entry_id" || "$entry_id" == "null" || ! "$entry_id" =~ ^[A-Za-z0-9._:-]+$ ]]; then
     echo "walter-audit-chain: Rekor duplicate response missing existing entry id" >&2

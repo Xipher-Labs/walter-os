@@ -285,6 +285,38 @@ PY
       printf '404'
     fi
     ;;
+  duplicate-message)
+    if [[ "$method" == "POST" ]]; then
+      cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 409 Conflict\r\n\r\n' > "$headers"
+      printf '{"code":409,"message":"entry already exists: abc123"}\n' > "$output"
+      printf '409'
+    elif [[ "$method" == "GET" && "$url" == */api/v1/log/entries/abc123 ]]; then
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 200 OK\r\n\r\n' > "$headers"
+      python3 - "${WALTER_TEST_REKOR_CURL_BODY:?}" "$output" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+body = pathlib.Path(sys.argv[1]).read_bytes()
+response = {
+    "abc123": {
+        "body": base64.b64encode(body).decode("ascii"),
+        "integratedTime": 1780272000,
+        "logIndex": 7,
+        "logID": "test-log",
+        "verification": {"signedEntryTimestamp": "set"},
+    }
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(response), encoding="utf-8")
+PY
+      printf '200'
+    else
+      printf '{"error":"unexpected duplicate-message method or url"}\n' > "$output"
+      printf '404'
+    fi
+    ;;
   duplicate-wrong-payload)
     if [[ "$method" == "POST" ]]; then
       cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
@@ -482,6 +514,25 @@ SH
     PATH="$TMP_HOME/bin:$PATH" \
     WALTER_AUDIT_REKOR_UPLOAD=1 \
     WALTER_TEST_REKOR_MODE=duplicate \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: anchored audit root in Rekor abc123"* ]]
+  [ -f "$(_rekor_path)" ]
+  jq -e '.entry_id == "abc123"' "$(_rekor_path)"
+  grep -q 'http://rekor.example/api/v1/log/entries/abc123' "$(_curl_args_path)"
+}
+
+@test "close-day recovers duplicate Rekor entry id from response message" {
+  _make_chain
+  _write_mock_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_MODE=duplicate-message \
     WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
     WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
     bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
