@@ -1570,11 +1570,11 @@ _walter_audit_rekor_verify_response_binding() {
   local response_file="$1" entry_id="$2" expected_hash="$3" receipt_path="$4" expected_public_key="${5:-}"
   local receipt_sig receipt_public_key
 
-  receipt_sig="$(jq -er '.sig // empty' "$receipt_path" 2>/dev/null)" || {
+  receipt_sig="$(jq -er 'if ((.sig | type) == "string" and (.sig | length) > 0) then .sig else empty end' "$receipt_path" 2>/dev/null)" || {
     echo "walter-audit-chain: Rekor receipt missing signature: $receipt_path" >&2
     return 1
   }
-  receipt_public_key="$(jq -er '.public_key // empty' "$receipt_path" 2>/dev/null)" || {
+  receipt_public_key="$(jq -er 'if ((.public_key | type) == "string" and (.public_key | length) > 0) then .public_key else empty end' "$receipt_path" 2>/dev/null)" || {
     echo "walter-audit-chain: Rekor receipt missing public key: $receipt_path" >&2
     return 1
   }
@@ -1638,7 +1638,7 @@ _walter_audit_rekor_receipt_payload_hash() {
 _walter_audit_rekor_receipt_required_fields() {
   local receipt_path="$1" field
   for field in entry_id sig public_key; do
-    jq -er --arg field "$field" '.[$field] // empty' "$receipt_path" >/dev/null 2>&1 || {
+    jq -er --arg field "$field" 'if ((.[$field] | type) == "string" and (.[$field] | length) > 0) then .[$field] else empty end' "$receipt_path" >/dev/null 2>&1 || {
       echo "walter-audit-chain: Rekor receipt missing ${field}: $receipt_path" >&2
       return 1
     }
@@ -1857,7 +1857,7 @@ walter_audit_verify_rekor_anchor() {
     return 1
   fi
   payload_hash="$(_walter_audit_rekor_receipt_payload_hash "$receipt_path")" || return $?
-  entry_id="$(jq -er '.entry_id // empty' "$receipt_path" 2>/dev/null)" || {
+  entry_id="$(jq -er 'if ((.entry_id | type) == "string" and (.entry_id | length) > 0) then .entry_id else empty end' "$receipt_path" 2>/dev/null)" || {
     echo "walter-audit-chain: Rekor receipt missing entry id: $receipt_path" >&2
     return 1
   }
