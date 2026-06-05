@@ -84,6 +84,14 @@ print(base64.b64encode(pathlib.Path(sys.argv[1]).read_bytes()).decode("ascii"), 
 PY
 }
 
+_sha256() {
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+  else
+    printf '%s' "$1" | sha256sum | awk '{print $1}'
+  fi
+}
+
 _openssl_bin() {
   bash -c "source '$SESSION_LIB'; _walter_session_openssl"
 }
@@ -305,6 +313,40 @@ SH
   [[ "$output" == *"jq required"* ]]
 }
 
+@test "direct Rekor upload rejects invalid date and root arguments" {
+  run /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_rekor_upload '2026/05/31' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' '$(_chain_path)' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid date"* ]]
+
+  run /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_rekor_upload '2026-05-31' 'not-a-root' '$(_chain_path)' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid root hash"* ]]
+
+  run /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_rekor_upload '2026-05-31' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' '$TMP_HOME/missing-chain.jsonl' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"chain not found"* ]]
+}
+
+@test "direct Rekor verification rejects invalid date and root arguments" {
+  run /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_verify_rekor_anchor '2026/05/31' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid date"* ]]
+
+  run /bin/bash -c \
+    "source '$AUDIT_LIB'; walter_audit_verify_rekor_anchor '2026-05-31' 'not-a-root' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid root hash"* ]]
+}
+
 @test "close-day uploads one opt-in Rekor entry and stores receipt" {
   _make_chain
   _write_mock_curl
@@ -472,6 +514,7 @@ PY
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"Rekor entry signature mismatch"* ]]
+  [[ "$output" != *"ok: verified 2 row(s)"* ]]
 }
 
 @test "verify-chain --check-rekor fails when Rekor key differs from final session key" {
@@ -522,7 +565,7 @@ PY
     bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
   jq '.payload.date = "2026-06-01"' "$(_rekor_path)" > "$TMP_HOME/receipt.json"
   receipt_payload="$(jq -cS '.payload' "$TMP_HOME/receipt.json")"
-  receipt_hash="$(printf '%s' "$receipt_payload" | shasum -a 256 | awk '{print $1}')"
+  receipt_hash="$(_sha256 "$receipt_payload")"
   jq --arg hash "$receipt_hash" '.payload_sha256 = $hash' \
     "$TMP_HOME/receipt.json" > "$(_rekor_path)"
 
@@ -535,6 +578,22 @@ PY
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"Rekor receipt date mismatch"* ]]
+}
+
+@test "close-day does not print success when Rekor upload fails" {
+  _make_chain
+  _write_failing_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_MARKER="$TMP_HOME/curl-called" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unable to contact Rekor"* ]]
+  [[ "$output" != *"ok: closed audit day"* ]]
+  [ -f "$TMP_HOME/curl-called" ]
 }
 
 @test "close-day holds the audit lock while anchoring the Rekor root" {
