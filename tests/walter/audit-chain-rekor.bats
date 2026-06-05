@@ -622,6 +622,35 @@ SH
   [ "$status" -eq 0 ]
 }
 
+@test "Rekor material verifier succeeds when cleanup fails after valid checks" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq '.response' "$(_rekor_path)" > "$TMP_HOME/rekor-response.json"
+  entry_id="$(jq -r '.entry_id' "$(_rekor_path)")"
+  payload_hash="$(jq -r '.payload_sha256' "$(_rekor_path)")"
+  sig="$(jq -r '.sig' "$(_rekor_path)")"
+  public_key="$(jq -r '.public_key' "$(_rekor_path)")"
+
+  run /bin/bash -c "
+    source '$AUDIT_LIB'
+    rm() {
+      if [[ \"\${1:-}\" == '-rf' && \"\${2:-}\" == *audit-rekor-binding* ]]; then
+        return 1
+      fi
+      command rm \"\$@\"
+    }
+    _walter_audit_rekor_verify_response_material \
+      '$TMP_HOME/rekor-response.json' '$entry_id' '$payload_hash' '$sig' '$public_key' '$public_key'
+  "
+
+  [ "$status" -eq 0 ]
+}
+
 @test "verify-chain --check-rekor confirms the stored root against Rekor" {
   _make_chain
   _write_mock_curl

@@ -1540,7 +1540,8 @@ _walter_audit_rekor_verify_response_material() {
     echo "walter-audit-chain: Rekor entry signature verification failed for ${entry_id}" >&2
     return 1
   fi
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" || true
+  return 0
 }
 
 _walter_audit_rekor_verify_response_binding() {
