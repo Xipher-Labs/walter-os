@@ -223,6 +223,36 @@ PY
       printf '404'
     fi
     ;;
+  wrong-payload)
+    if [[ "$method" == "POST" ]]; then
+      cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 201 Created\r\n\r\n' > "$headers"
+      python3 - "$data_file" "$output" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+body = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+body["spec"]["data"]["hash"]["value"] = "0" * 64
+encoded = json.dumps(body).encode("utf-8")
+response = {
+    "abc123": {
+        "body": base64.b64encode(encoded).decode("ascii"),
+        "integratedTime": 1780272000,
+        "logIndex": 7,
+        "logID": "test-log",
+        "verification": {"signedEntryTimestamp": "set"},
+    }
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(response), encoding="utf-8")
+PY
+      printf '201'
+    else
+      printf '{"error":"unexpected wrong-payload method or url"}\n' > "$output"
+      printf '404'
+    fi
+    ;;
   duplicate)
     if [[ "$method" == "POST" ]]; then
       cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
@@ -252,6 +282,40 @@ PY
       printf '200'
     else
       printf '{"error":"unexpected duplicate method or url"}\n' > "$output"
+      printf '404'
+    fi
+    ;;
+  duplicate-wrong-payload)
+    if [[ "$method" == "POST" ]]; then
+      cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 409 Conflict\r\nLocation: http://rekor.example/api/v1/log/entries/abc123\r\n\r\n' > "$headers"
+      printf '{"code":409,"message":"entry already exists"}\n' > "$output"
+      printf '409'
+    elif [[ "$method" == "GET" && "$url" == */api/v1/log/entries/abc123 ]]; then
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 200 OK\r\n\r\n' > "$headers"
+      python3 - "${WALTER_TEST_REKOR_CURL_BODY:?}" "$output" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+body = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+body["spec"]["data"]["hash"]["value"] = "0" * 64
+encoded = json.dumps(body).encode("utf-8")
+response = {
+    "abc123": {
+        "body": base64.b64encode(encoded).decode("ascii"),
+        "integratedTime": 1780272000,
+        "logIndex": 7,
+        "logID": "test-log",
+        "verification": {"signedEntryTimestamp": "set"},
+    }
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(response), encoding="utf-8")
+PY
+      printf '200'
+    else
+      printf '{"error":"unexpected duplicate wrong-payload method or url"}\n' > "$output"
       printf '404'
     fi
     ;;
@@ -412,6 +476,42 @@ SH
   [ -f "$(_rekor_path)" ]
   jq -e '.entry_id == "abc123"' "$(_rekor_path)"
   grep -q 'http://rekor.example/api/v1/log/entries/abc123' "$(_curl_args_path)"
+}
+
+@test "close-day rejects a Rekor POST response not bound to the payload" {
+  _make_chain
+  _write_mock_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_MODE=wrong-payload \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor entry payload hash mismatch"* ]]
+  [[ "$output" != *"ok: anchored audit root in Rekor"* ]]
+  [ ! -f "$(_rekor_path)" ]
+}
+
+@test "close-day rejects a duplicate Rekor response not bound to the payload" {
+  _make_chain
+  _write_mock_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_MODE=duplicate-wrong-payload \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor entry payload hash mismatch"* ]]
+  [[ "$output" != *"ok: anchored audit root in Rekor"* ]]
+  [ ! -f "$(_rekor_path)" ]
 }
 
 @test "Rekor request signature verifies against submitted hash digest" {

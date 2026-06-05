@@ -1436,10 +1436,10 @@ _walter_audit_rekor_curl() {
   return 0
 }
 
-_walter_audit_rekor_verify_response_binding() {
-  local response_file="$1" entry_id="$2" expected_hash="$3" receipt_path="$4" expected_public_key="${5:-}"
+_walter_audit_rekor_verify_response_material() {
+  local response_file="$1" entry_id="$2" expected_hash="$3" expected_sig="$4" expected_public_key="$5" final_public_key="${6:-}"
   local tmp_dir body_file sig_file pub_file digest_file body_value remote_hash remote_sig remote_public_key
-  local receipt_sig receipt_public_key openssl_bin
+  local openssl_bin
 
   tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-binding)" || return 1
   body_file="$tmp_dir/body.json"
@@ -1478,32 +1478,17 @@ _walter_audit_rekor_verify_response_binding() {
     echo "walter-audit-chain: Rekor entry body missing public key" >&2
     return 1
   }
-  receipt_sig="$(jq -er '.sig // empty' "$receipt_path" 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
-    echo "walter-audit-chain: Rekor receipt missing signature: $receipt_path" >&2
-    return 1
-  }
-  receipt_public_key="$(jq -er '.public_key // empty' "$receipt_path" 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
-    echo "walter-audit-chain: Rekor receipt missing public key: $receipt_path" >&2
-    return 1
-  }
-  if [[ -n "$expected_public_key" && "$receipt_public_key" != "$expected_public_key" ]]; then
-    rm -rf "$tmp_dir"
-    echo "walter-audit-chain: Rekor receipt public key does not match final audit session key: $receipt_path" >&2
-    return 1
-  fi
-  if [[ -n "$expected_public_key" && "$remote_public_key" != "$expected_public_key" ]]; then
+  if [[ -n "$final_public_key" && "$remote_public_key" != "$final_public_key" ]]; then
     rm -rf "$tmp_dir"
     echo "walter-audit-chain: Rekor entry public key does not match final audit session key for ${entry_id}" >&2
     return 1
   fi
-  if [[ "$remote_sig" != "$receipt_sig" ]]; then
+  if [[ "$remote_sig" != "$expected_sig" ]]; then
     rm -rf "$tmp_dir"
     echo "walter-audit-chain: Rekor entry signature mismatch for ${entry_id}" >&2
     return 1
   fi
-  if [[ "$remote_public_key" != "$receipt_public_key" ]]; then
+  if [[ "$remote_public_key" != "$expected_public_key" ]]; then
     rm -rf "$tmp_dir"
     echo "walter-audit-chain: Rekor entry public key mismatch for ${entry_id}" >&2
     return 1
@@ -1534,6 +1519,25 @@ _walter_audit_rekor_verify_response_binding() {
     return 1
   fi
   rm -rf "$tmp_dir"
+}
+
+_walter_audit_rekor_verify_response_binding() {
+  local response_file="$1" entry_id="$2" expected_hash="$3" receipt_path="$4" expected_public_key="${5:-}"
+  local receipt_sig receipt_public_key
+
+  receipt_sig="$(jq -er '.sig // empty' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor receipt missing signature: $receipt_path" >&2
+    return 1
+  }
+  receipt_public_key="$(jq -er '.public_key // empty' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor receipt missing public key: $receipt_path" >&2
+    return 1
+  }
+  if [[ -n "$expected_public_key" && "$receipt_public_key" != "$expected_public_key" ]]; then
+    echo "walter-audit-chain: Rekor receipt public key does not match final audit session key: $receipt_path" >&2
+    return 1
+  fi
+  _walter_audit_rekor_verify_response_material "$response_file" "$entry_id" "$expected_hash" "$receipt_sig" "$receipt_public_key" "$expected_public_key"
 }
 
 _walter_audit_rekor_write_receipt() {
@@ -1727,6 +1731,10 @@ walter_audit_rekor_upload() {
       return 1
     }
   fi
+  _walter_audit_rekor_verify_response_material "$response_file" "$entry_id" "$payload_hash" "$sig" "$public_key" "$public_key" || {
+    rm -rf "$tmp_dir"
+    return 1
+  }
   _walter_audit_rekor_write_receipt "$receipt_path" "$entry_id" "$rekor_url" "$payload" "$sig" "$public_key" "$response_file" || {
     rm -rf "$tmp_dir"
     echo "walter-audit-chain: unable to write Rekor receipt: $receipt_path" >&2
