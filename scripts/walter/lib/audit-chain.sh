@@ -5,11 +5,14 @@
 # Refs: docs/specs/audit-chain-merkle-and-receipts.md
 
 _walter_audit_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${_walter_audit_lib_dir}/session-state.sh" ]]; then
+_walter_audit_session_state_lib="${_walter_audit_lib_dir}/session-state.sh"
+if [[ -f "$_walter_audit_session_state_lib" ]]; then
   # shellcheck source=/dev/null
-  source "${_walter_audit_lib_dir}/session-state.sh"
+  if ! source "$_walter_audit_session_state_lib"; then
+    echo "walter-audit-chain: unable to load session-state helpers: $_walter_audit_session_state_lib" >&2
+  fi
 fi
-unset _walter_audit_lib_dir
+unset _walter_audit_lib_dir _walter_audit_session_state_lib
 
 walter_audit_config_dir() {
   printf '%s\n' "${WALTER_CONFIG:-${HOME}/.config/walter-os}"
@@ -237,13 +240,17 @@ walter_audit_set_repo_from_hook_input() {
 _walter_audit_b64_encode_file() {
   local file="$1"
   _walter_audit_require_python3 || return 1
-  python3 - "$file" <<'PY'
+  if ! python3 - "$file" 2>/dev/null <<'PY'
 import base64
 import pathlib
 import sys
 
 print(base64.b64encode(pathlib.Path(sys.argv[1]).read_bytes()).decode("ascii"), end="")
 PY
+  then
+    echo "walter-audit-chain: cannot base64-encode file: $file" >&2
+    return 1
+  fi
 }
 
 _walter_audit_b64_decode_to_file() {
