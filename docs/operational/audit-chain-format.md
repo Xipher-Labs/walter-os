@@ -109,6 +109,8 @@ digest/signature as a Rekor `hashedrekord`, and never includes audit row content
 the plaintext operator id, or the local payload JSON in the public Rekor entry.
 Upload is disabled by default; it only runs when
 `WALTER_AUDIT_REKOR_UPLOAD=1` is set for `walter-os audit close-day`.
+Rekor anchoring is accepted only for past UTC audit dates, and the final row's
+session private key must still be available when the anchor is created.
 
 Verify a local root against its Rekor entry with:
 

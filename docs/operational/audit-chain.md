@@ -49,6 +49,12 @@ should publish the root:
 WALTER_AUDIT_REKOR_UPLOAD=1 walter-os audit close-day 2026-05-31
 ```
 
+Rekor anchoring only accepts past UTC audit dates. This prevents publishing a
+root for a day that can still receive later audit rows. The final row's session
+private key must also still be available when anchoring runs; scheduled
+next-day anchoring after session-key cleanup is a follow-up capability, not part
+of this slice.
+
 To use a private Rekor instance:
 
 ```bash
@@ -95,4 +101,6 @@ This does not protect against a compromised session private key during the
 session itself, a compromised host that signs malicious-but-valid rows, or a
 missing external backup of local state and archived public keys. A Rekor
 `hashedrekord` entry alone proves the payload digest was timestamped; it does
-not recover the original `date`/`root` payload if the local receipt is lost.
+not recover the original `date`/`root` payload if the local receipt is lost. The
+current implementation also requires online anchoring before the final session
+private key is cleaned up.

@@ -47,6 +47,18 @@ _rekor_path() {
   printf '%s/audit/root-2026-05-31.rekor.json\n' "$WALTER_CONFIG"
 }
 
+_chain_path_for() {
+  printf '%s/audit/chain-%s.jsonl\n' "$WALTER_CONFIG" "$1"
+}
+
+_root_path_for() {
+  printf '%s/audit/root-%s.txt\n' "$WALTER_CONFIG" "$1"
+}
+
+_rekor_path_for() {
+  printf '%s/audit/root-%s.rekor.json\n' "$WALTER_CONFIG" "$1"
+}
+
 _curl_args_path() {
   printf '%s/curl-args.txt\n' "$TMP_HOME"
 }
@@ -394,6 +406,25 @@ SH
   [ ! -f "$TMP_HOME/curl-called" ]
 }
 
+@test "close-day rejects Rekor anchoring for the current UTC audit date" {
+  today="$(date -u +%Y-%m-%d)"
+  WALTER_AUDIT_DATE="$today" \
+    WALTER_AUDIT_NOW="${today}T12:00:00Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
+  _write_failing_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_MARKER="$TMP_HOME/curl-called" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" "$today"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Rekor anchoring requires a past UTC audit date"* ]]
+  [ ! -f "$(_rekor_path_for "$today")" ]
+  [ ! -f "$TMP_HOME/curl-called" ]
+}
+
 @test "direct Rekor upload reports missing jq explicitly" {
   _make_chain
   bash "$WALTER_OS_BIN" audit close-day 2026-05-31 >/dev/null
@@ -441,6 +472,24 @@ SH
 
   [ "$status" -eq 2 ]
   [[ "$output" == *"chain not found"* ]]
+}
+
+@test "direct Rekor upload rejects the current UTC audit date before network access" {
+  today="$(date -u +%Y-%m-%d)"
+  WALTER_AUDIT_DATE="$today" \
+    WALTER_AUDIT_NOW="${today}T12:00:00Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok >/dev/null"
+  root_hash="$(cat "$(_root_path_for "$today")")"
+  _write_failing_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_MARKER="$TMP_HOME/curl-called" \
+    /bin/bash -c "source '$AUDIT_LIB'; walter_audit_rekor_upload '$today' '$root_hash' '$(_chain_path_for "$today")' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Rekor anchoring requires a past UTC audit date"* ]]
+  [ ! -f "$TMP_HOME/curl-called" ]
 }
 
 @test "direct Rekor upload rejects a root not matching the chain before network access" {

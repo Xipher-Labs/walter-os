@@ -1173,6 +1173,15 @@ _walter_audit_check_sha256_arg() {
   return 2
 }
 
+_walter_audit_reject_mutable_rekor_date() {
+  local date_value="$1" today
+  today="$(date -u +%Y-%m-%d)" || return 1
+  if [[ "$date_value" > "$today" || "$date_value" == "$today" ]]; then
+    echo "walter-audit-chain: Rekor anchoring requires a past UTC audit date: $date_value" >&2
+    return 2
+  fi
+}
+
 _walter_audit_verify_chain_day_unlocked() {
   local date_value="$1" chain_path root_path row_count root_hash previous_line
   chain_path="$(walter_audit_chain_path "$date_value")"
@@ -1639,6 +1648,7 @@ walter_audit_rekor_upload() {
   local receipt_date tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
 
   _walter_audit_check_date_arg "$date_value" "date" || return $?
+  _walter_audit_reject_mutable_rekor_date "$date_value" || return $?
   _walter_audit_check_sha256_arg "$root_hash" "root hash" || return $?
   if [[ ! -f "$chain_path" ]]; then
     echo "walter-audit-chain: chain not found: $chain_path" >&2
@@ -1956,6 +1966,9 @@ walter_audit_close_day() {
 
   local date_value="${positional[0]:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line upload_status=0
   _walter_audit_check_date_arg "$date_value" "date" || return $?
+  if [[ "${WALTER_AUDIT_REKOR_UPLOAD:-0}" == "1" ]]; then
+    _walter_audit_reject_mutable_rekor_date "$date_value" || return $?
+  fi
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
   root_path="$(walter_audit_root_path "$date_value")"
