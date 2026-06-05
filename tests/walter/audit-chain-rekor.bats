@@ -347,6 +347,26 @@ SH
   [[ "$output" == *"invalid root hash"* ]]
 }
 
+@test "direct Rekor upload creates the audit directory before writing receipt" {
+  _make_chain
+  bash "$WALTER_OS_BIN" audit close-day 2026-05-31 >/dev/null
+  root_hash="$(cat "$(_root_path)")"
+  external_chain="$TMP_HOME/external-chain.jsonl"
+  cp "$(_chain_path)" "$external_chain"
+  rm -rf "$WALTER_CONFIG/audit"
+  _write_mock_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    /bin/bash -c "source '$AUDIT_LIB'; walter_audit_rekor_upload '2026-05-31' '$root_hash' '$external_chain' 'http://rekor.example'"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: anchored audit root in Rekor"* ]]
+  [ -f "$(_rekor_path)" ]
+}
+
 @test "close-day uploads one opt-in Rekor entry and stores receipt" {
   _make_chain
   _write_mock_curl
@@ -517,6 +537,31 @@ PY
   [[ "$output" != *"ok: verified 2 row(s)"* ]]
 }
 
+@test "verify-chain --check-rekor reports malformed remote signature cleanly" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq '.spec.signature.content = "not-base64"' \
+    "$(_curl_body_path)" > "$TMP_HOME/remote-body.json"
+  mv "$TMP_HOME/remote-body.json" "$(_curl_body_path)"
+  jq '.sig = "not-base64"' "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  mv "$TMP_HOME/receipt.json" "$(_rekor_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor entry signature is invalid"* ]]
+  [[ "$output" != *"invalid signature base64"* ]]
+}
+
 @test "verify-chain --check-rekor fails when Rekor key differs from final session key" {
   _make_chain
   _write_mock_curl
@@ -599,6 +644,49 @@ PY
   [ "$status" -eq 1 ]
   [[ "$output" == *"Rekor receipt URL mismatch"* ]]
   [[ "$output" != *"ok: closed audit day"* ]]
+}
+
+@test "close-day rejects an existing Rekor receipt without URL" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq 'del(.rekor_url)' "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  mv "$TMP_HOME/receipt.json" "$(_rekor_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor receipt URL missing"* ]]
+}
+
+@test "verify-chain --check-rekor rejects a receipt without URL" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq 'del(.rekor_url)' "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  mv "$TMP_HOME/receipt.json" "$(_rekor_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor receipt URL missing"* ]]
 }
 
 @test "close-day does not print success when Rekor upload fails" {

@@ -316,8 +316,8 @@ import sys
 
 try:
     data = base64.b64decode(sys.argv[1].encode("ascii"), validate=True)
-except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
-    raise SystemExit(f"invalid base64: {exc}")
+except (binascii.Error, UnicodeEncodeError, ValueError):
+    raise SystemExit(1)
 pathlib.Path(sys.argv[2]).write_bytes(data)
 PY
 }
@@ -334,15 +334,15 @@ import sys
 
 value = sys.argv[1]
 if not re.fullmatch(r"[A-Za-z0-9+/]{86}==", value):
-    raise SystemExit("invalid signature base64")
+    raise SystemExit(1)
 try:
     data = base64.b64decode(value.encode("ascii"), validate=True)
-except (binascii.Error, ValueError) as exc:
-    raise SystemExit(f"invalid signature base64: {exc}")
+except (binascii.Error, ValueError):
+    raise SystemExit(1)
 if len(data) != 64:
-    raise SystemExit("invalid signature length")
+    raise SystemExit(1)
 if base64.b64encode(data).decode("ascii") != value:
-    raise SystemExit("non-canonical signature base64")
+    raise SystemExit(1)
 pathlib.Path(sys.argv[2]).write_bytes(data)
 PY
 }
@@ -1596,7 +1596,7 @@ walter_audit_rekor_upload() {
     return 3
   fi
 
-  local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}"
+  local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}" audit_dir
   local receipt_path receipt_url stored_rekor_url rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
   local sign_status
   local receipt_date tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
@@ -1607,6 +1607,10 @@ walter_audit_rekor_upload() {
     echo "walter-audit-chain: chain not found: $chain_path" >&2
     return 2
   fi
+
+  audit_dir="$(walter_audit_dir)"
+  mkdir -p "$audit_dir" || return 1
+  chmod 700 "$audit_dir" || return 1
 
   rekor_url="$(_walter_audit_rekor_url "$configured_url")" || return $?
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
@@ -1628,6 +1632,10 @@ walter_audit_rekor_upload() {
       echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
       return 1
     }
+    if [[ -z "$receipt_url" ]]; then
+      echo "walter-audit-chain: Rekor receipt URL missing: $receipt_path" >&2
+      return 1
+    fi
     stored_rekor_url="$(_walter_audit_rekor_url "$receipt_url")" || {
       echo "walter-audit-chain: Rekor receipt URL invalid: $receipt_path" >&2
       return 1
@@ -1770,6 +1778,10 @@ walter_audit_verify_rekor_anchor() {
     echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
     return 1
   }
+  if [[ -z "$receipt_url" ]]; then
+    echo "walter-audit-chain: Rekor receipt URL missing: $receipt_path" >&2
+    return 1
+  fi
   if [[ -n "$configured_url" ]]; then
     rekor_url="$(_walter_audit_rekor_url "$configured_url")" || return $?
   elif [[ -n "${WALTER_AUDIT_REKOR_URL:-}" ]]; then
