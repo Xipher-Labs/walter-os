@@ -111,7 +111,7 @@ _openssl_bin() {
 _path_without_jq() {
   local bin="$TMP_HOME/no-jq-bin" tool tool_path
   mkdir -p "$bin"
-  for tool in awk cat chmod cp curl date grep mktemp mv python3 rm sed shasum tail tr; do
+  for tool in awk cat chmod cp curl date dirname grep mktemp mv python3 rm sed shasum sha256sum tail tr; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     [[ -n "$tool_path" ]] || continue
     ln -sf "$tool_path" "$bin/$tool"
@@ -700,6 +700,27 @@ SH
   [ "$status" -eq 0 ]
 }
 
+@test "Rekor material verifier reports stable errors when cleanup fails" {
+  response_file="$TMP_HOME/rekor-response-missing-body.json"
+  printf '{"abc123":{}}\n' > "$response_file"
+
+  run /bin/bash -c "
+    set -e
+    source '$AUDIT_LIB'
+    rm() {
+      if [[ \"\${1:-}\" == '-rf' && \"\${2:-}\" == *audit-rekor-binding* ]]; then
+        return 1
+      fi
+      command rm \"\$@\"
+    }
+    _walter_audit_rekor_verify_response_material \
+      '$response_file' abc123 '0000000000000000000000000000000000000000000000000000000000000000' sig pub pub
+  "
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor response missing decodable entry body"* ]]
+}
+
 @test "verify-chain --check-rekor confirms the stored root against Rekor" {
   _make_chain
   _write_mock_curl
@@ -1001,6 +1022,28 @@ PY
   [[ "$output" != *"ok: Rekor receipt already exists"* ]]
 }
 
+@test "close-day reports malformed Rekor receipts under errexit" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  printf '{bad-json\n' > "$(_rekor_path)"
+  root_hash="$(cat "$(_root_path)")"
+
+  run env \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    /bin/bash -c "set -e; source '$AUDIT_LIB'; walter_audit_rekor_upload '2026-05-31' '$root_hash' '$(_chain_path)' 'http://rekor.example'"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid Rekor receipt JSON"* ]]
+  [[ "$output" != *"parse error"* ]]
+  [[ "$output" != *"jq:"* ]]
+  [[ "$output" != *"ok: Rekor receipt already exists"* ]]
+}
+
 @test "verify-chain --check-rekor rejects a receipt without URL" {
   _make_chain
   _write_mock_curl
@@ -1020,6 +1063,25 @@ PY
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"Rekor receipt URL missing"* ]]
+}
+
+@test "verify-chain reports malformed Rekor receipts under errexit" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  printf '{bad-json\n' > "$(_rekor_path)"
+  root_hash="$(cat "$(_root_path)")"
+
+  run /bin/bash -c "set -e; source '$AUDIT_LIB'; walter_audit_verify_rekor_anchor '2026-05-31' '$root_hash' 'http://rekor.example'"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid Rekor receipt JSON"* ]]
+  [[ "$output" != *"parse error"* ]]
+  [[ "$output" != *"jq:"* ]]
 }
 
 @test "close-day does not print success when Rekor upload fails" {

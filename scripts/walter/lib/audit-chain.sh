@@ -398,15 +398,15 @@ _walter_audit_sign_file() {
   }
   sig_file="$tmp_dir/sig.bin"
   if ! "$openssl_bin" pkeyutl -sign -inkey "$private_key" -rawin -in "$payload_file" -out "$sig_file" >/dev/null 2>&1; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: failed to sign ${purpose}" >&2
     return 1
   fi
   sig="$(_walter_audit_b64_encode_file "$sig_file")" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" || true
   printf '%s' "$sig"
 }
 
@@ -419,7 +419,7 @@ _walter_audit_sign_row() {
   }
   payload_file="$tmp_dir/payload.json"
   printf '%s' "$row_json" > "$payload_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: unable to write signing payload" >&2
     return 1
   }
@@ -427,10 +427,10 @@ _walter_audit_sign_row() {
     :
   else
     sign_status="$?"
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return "$sign_status"
   fi
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" || true
   printf '%s' "$sig"
 }
 
@@ -1478,74 +1478,74 @@ _walter_audit_rekor_verify_response_material() {
   pub_file="$tmp_dir/pub.pem"
   digest_file="$tmp_dir/digest.bin"
   body_value="$(jq -er --arg entry_id "$entry_id" '.[$entry_id].body // empty' "$response_file" 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor response missing decodable entry body" >&2
     return 1
   }
   if ! _walter_audit_b64_any_decode_to_file "$body_value" "$body_file"; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor response missing decodable entry body" >&2
     return 1
   fi
   remote_hash="$(jq -er '.spec.data.hash.value // empty' "$body_file" 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry body missing payload hash" >&2
     return 1
   }
   if [[ "$remote_hash" != "$expected_hash" ]]; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry payload hash mismatch for ${entry_id}" >&2
     echo "  expected: $expected_hash" >&2
     echo "  actual:   $remote_hash" >&2
     return 1
   fi
   remote_sig="$(jq -er '.spec.signature.content // empty' "$body_file" 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry body missing signature" >&2
     return 1
   }
   remote_public_key="$(jq -er '.spec.signature.publicKey.content // empty' "$body_file" 2>/dev/null)" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry body missing public key" >&2
     return 1
   }
   if [[ -n "$final_public_key" && "$remote_public_key" != "$final_public_key" ]]; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry public key does not match final audit session key for ${entry_id}" >&2
     return 1
   fi
   if [[ "$remote_sig" != "$expected_sig" ]]; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry signature mismatch for ${entry_id}" >&2
     return 1
   fi
   if [[ "$remote_public_key" != "$expected_public_key" ]]; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry public key mismatch for ${entry_id}" >&2
     return 1
   fi
   if ! _walter_audit_resolve_openssl; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: ED25519-capable openssl missing" >&2
     return 3
   fi
   openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
   _walter_audit_hex_to_file "$expected_hash" "$digest_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
   _walter_audit_b64_decode_to_file "$remote_sig" "$sig_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry signature is invalid" >&2
     return 1
   }
   _walter_audit_b64_any_decode_to_file "$remote_public_key" "$pub_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry public key is invalid" >&2
     return 1
   }
   if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$pub_file" -rawin -in "$digest_file" -sigfile "$sig_file" >/dev/null 2>&1; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: Rekor entry signature verification failed for ${entry_id}" >&2
     return 1
   fi
@@ -1643,9 +1643,9 @@ walter_audit_rekor_upload() {
   fi
 
   local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}" audit_dir chain_root
-  local receipt_path receipt_url stored_rekor_url rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
+  local receipt_path receipt_date receipt_root receipt_url stored_rekor_url rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
   local sign_status
-  local receipt_date tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
+  local tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
 
   _walter_audit_check_date_arg "$date_value" "date" || return $?
   _walter_audit_reject_mutable_rekor_date "$date_value" || return $?
@@ -1671,7 +1671,7 @@ walter_audit_rekor_upload() {
   if [[ -f "$receipt_path" ]]; then
     _walter_audit_rekor_receipt_payload_hash "$receipt_path" >/dev/null || return $?
     _walter_audit_rekor_receipt_required_fields "$receipt_path" || return $?
-    receipt_date="$(jq -r '.payload.date // empty' "$receipt_path")" || {
+    receipt_date="$(jq -r '.payload.date // empty' "$receipt_path" 2>/dev/null)" || {
       echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
       return 1
     }
@@ -1679,11 +1679,15 @@ walter_audit_rekor_upload() {
       echo "walter-audit-chain: Rekor receipt date mismatch: $receipt_path" >&2
       return 1
     fi
-    if [[ "$(jq -r '.payload.root // empty' "$receipt_path")" != "$root_hash" ]]; then
+    receipt_root="$(jq -r '.payload.root // empty' "$receipt_path" 2>/dev/null)" || {
+      echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+      return 1
+    }
+    if [[ "$receipt_root" != "$root_hash" ]]; then
       echo "walter-audit-chain: Rekor receipt root mismatch: $receipt_path" >&2
       return 1
     fi
-    receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path")" || {
+    receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path" 2>/dev/null)" || {
       echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
       return 1
     }
@@ -1725,27 +1729,27 @@ walter_audit_rekor_upload() {
   tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-upload)" || return 1
   digest_file="$tmp_dir/payload.sha256.bin"
   _walter_audit_hex_to_file "$payload_hash" "$digest_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
   if sig="$(_walter_audit_sign_file "$digest_file" "$session_id" "Rekor payload digest")"; then
     :
   else
     sign_status="$?"
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return "$sign_status"
   fi
   public_key_file="$(_walter_audit_public_key_file "$session_id")" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: cannot anchor Rekor receipt: public key missing for session ${session_id}" >&2
     return 2
   }
   public_key="$(_walter_audit_b64_encode_file "$public_key_file")" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
   request_body="$(_walter_audit_rekor_request_body "$payload" "$sig" "$public_key" "$payload_hash")" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
 
@@ -1755,50 +1759,50 @@ walter_audit_rekor_upload() {
   headers_file="$tmp_dir/headers.txt"
   status_file="$tmp_dir/status.txt"
   printf '%s' "$request_body" > "$request_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
   endpoint="${rekor_url}/api/v1/log/entries"
   if ! _walter_audit_rekor_curl "POST" "$endpoint" "$response_file" "$error_file" "$timeout" "$request_file" "409" "$status_file" "$headers_file"; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   fi
   post_status="$(cat "$status_file" 2>/dev/null || true)"
   if [[ "$post_status" == "409" ]]; then
     entry_id="$(_walter_audit_rekor_conflict_entry_id "$headers_file" "$response_file")" || {
-      rm -rf "$tmp_dir"
+      rm -rf "$tmp_dir" || true
       return 1
     }
     endpoint="${rekor_url}/api/v1/log/entries/${entry_id}"
     if ! _walter_audit_rekor_curl "GET" "$endpoint" "$response_file" "$error_file" "$timeout"; then
-      rm -rf "$tmp_dir"
+      rm -rf "$tmp_dir" || true
       return 1
     fi
     fetched_entry_id="$(_walter_audit_rekor_entry_id "$response_file")" || {
-      rm -rf "$tmp_dir"
+      rm -rf "$tmp_dir" || true
       return 1
     }
     if [[ "$fetched_entry_id" != "$entry_id" ]]; then
       echo "walter-audit-chain: Rekor duplicate entry id mismatch for ${entry_id}" >&2
-      rm -rf "$tmp_dir"
+      rm -rf "$tmp_dir" || true
       return 1
     fi
   else
     entry_id="$(_walter_audit_rekor_entry_id "$response_file")" || {
-      rm -rf "$tmp_dir"
+      rm -rf "$tmp_dir" || true
       return 1
     }
   fi
   _walter_audit_rekor_verify_response_material "$response_file" "$entry_id" "$payload_hash" "$sig" "$public_key" "$public_key" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
   _walter_audit_rekor_write_receipt "$receipt_path" "$entry_id" "$rekor_url" "$payload" "$sig" "$public_key" "$response_file" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: unable to write Rekor receipt: $receipt_path" >&2
     return 1
   }
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" || true
   printf 'ok: anchored audit root in Rekor %s: %s\n' "$entry_id" "$receipt_path"
 }
 
@@ -1813,7 +1817,7 @@ walter_audit_verify_rekor_anchor() {
   fi
 
   local date_value="$1" root_hash="$2" configured_url="${3:-}" expected_public_key="${4:-}"
-  local receipt_path receipt_root receipt_url entry_id payload_hash rekor_url timeout tmp_dir response_file error_file endpoint
+  local receipt_path receipt_date receipt_root receipt_url entry_id payload_hash rekor_url timeout tmp_dir response_file error_file endpoint
 
   _walter_audit_check_date_arg "$date_value" "date" || return $?
   _walter_audit_check_sha256_arg "$root_hash" "root hash" || return $?
@@ -1831,7 +1835,11 @@ walter_audit_verify_rekor_anchor() {
     echo "walter-audit-chain: Rekor receipt root mismatch: $receipt_path" >&2
     return 1
   fi
-  if [[ "$(jq -r '.payload.date // empty' "$receipt_path")" != "$date_value" ]]; then
+  receipt_date="$(jq -r '.payload.date // empty' "$receipt_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+    return 1
+  }
+  if [[ "$receipt_date" != "$date_value" ]]; then
     echo "walter-audit-chain: Rekor receipt date mismatch: $receipt_path" >&2
     return 1
   fi
@@ -1840,7 +1848,7 @@ walter_audit_verify_rekor_anchor() {
     echo "walter-audit-chain: Rekor receipt missing entry id: $receipt_path" >&2
     return 1
   }
-  receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path")" || {
+  receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path" 2>/dev/null)" || {
     echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
     return 1
   }
@@ -1867,14 +1875,14 @@ walter_audit_verify_rekor_anchor() {
   error_file="$tmp_dir/error.txt"
   endpoint="${rekor_url}/api/v1/log/entries/${entry_id}"
   if ! _walter_audit_rekor_curl "GET" "$endpoint" "$response_file" "$error_file" "$timeout"; then
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   fi
   _walter_audit_rekor_verify_response_binding "$response_file" "$entry_id" "$payload_hash" "$receipt_path" "$expected_public_key" || {
-    rm -rf "$tmp_dir"
+    rm -rf "$tmp_dir" || true
     return 1
   }
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" || true
   printf 'ok: verified Rekor anchor %s\n' "$entry_id"
 }
 
