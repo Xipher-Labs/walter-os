@@ -783,6 +783,33 @@ PY
   [[ "$output" == *"Rekor receipt URL missing"* ]]
 }
 
+@test "close-day rejects an existing Rekor receipt missing required fields" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  cp "$(_rekor_path)" "$TMP_HOME/original-receipt.json"
+
+  for field in entry_id sig public_key; do
+    jq --arg field "$field" 'del(.[$field])' \
+      "$TMP_HOME/original-receipt.json" > "$(_rekor_path)"
+
+    run env \
+      PATH="$TMP_HOME/bin:$PATH" \
+      WALTER_AUDIT_REKOR_UPLOAD=1 \
+      WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+      WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+      bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Rekor receipt missing ${field}"* ]]
+    [[ "$output" != *"ok: Rekor receipt already exists"* ]]
+  done
+}
+
 @test "verify-chain --check-rekor rejects a receipt without URL" {
   _make_chain
   _write_mock_curl

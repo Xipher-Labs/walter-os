@@ -1601,6 +1601,16 @@ _walter_audit_rekor_receipt_payload_hash() {
   printf '%s' "$payload_hash"
 }
 
+_walter_audit_rekor_receipt_required_fields() {
+  local receipt_path="$1" field
+  for field in entry_id sig public_key; do
+    jq -er --arg field "$field" '.[$field] // empty' "$receipt_path" >/dev/null 2>&1 || {
+      echo "walter-audit-chain: Rekor receipt missing ${field}: $receipt_path" >&2
+      return 1
+    }
+  done
+}
+
 walter_audit_rekor_upload() {
   [[ "$#" -ge 3 && "$#" -le 4 ]] || {
     echo "walter-audit-chain: usage: walter_audit_rekor_upload <date> <root> <chain-path> [rekor-url]" >&2
@@ -1638,6 +1648,7 @@ walter_audit_rekor_upload() {
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
   if [[ -f "$receipt_path" ]]; then
     _walter_audit_rekor_receipt_payload_hash "$receipt_path" >/dev/null || return $?
+    _walter_audit_rekor_receipt_required_fields "$receipt_path" || return $?
     receipt_date="$(jq -r '.payload.date // empty' "$receipt_path")" || {
       echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
       return 1
