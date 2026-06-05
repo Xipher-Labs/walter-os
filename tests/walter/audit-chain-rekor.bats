@@ -380,6 +380,20 @@ SH
   [ ! -f "$TMP_HOME/curl-called" ]
 }
 
+@test "close-day rejects --rekor-url when Rekor upload is disabled" {
+  _make_chain
+  _write_failing_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_MARKER="$TMP_HOME/curl-called" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--rekor-url requires WALTER_AUDIT_REKOR_UPLOAD=1"* ]]
+  [ ! -f "$TMP_HOME/curl-called" ]
+}
+
 @test "direct Rekor upload reports missing jq explicitly" {
   _make_chain
   bash "$WALTER_OS_BIN" audit close-day 2026-05-31 >/dev/null
@@ -882,6 +896,30 @@ PY
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"Rekor entry payload hash mismatch"* ]]
+  [[ "$output" != *"ok: Rekor receipt already exists"* ]]
+}
+
+@test "close-day rejects an existing Rekor receipt with a non-final public key" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq '.public_key = "not-the-final-public-key" | .sig = "not-the-final-signature"' \
+    "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  mv "$TMP_HOME/receipt.json" "$(_rekor_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor receipt public key does not match final audit session key"* ]]
   [[ "$output" != *"ok: Rekor receipt already exists"* ]]
 }
 

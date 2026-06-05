@@ -1944,6 +1944,10 @@ walter_audit_close_day() {
     echo "walter-audit-chain: usage: walter_audit_close_day [--rekor-url <url>] [date]" >&2
     return 2
   }
+  if [[ -n "$rekor_url" && "${WALTER_AUDIT_REKOR_UPLOAD:-0}" != "1" ]]; then
+    echo "walter-audit-chain: --rekor-url requires WALTER_AUDIT_REKOR_UPLOAD=1" >&2
+    return 2
+  fi
   if ! _walter_audit_jq_available; then
     echo "walter-audit-chain: jq required" >&2
     return 3
