@@ -102,11 +102,12 @@ Optional Rekor anchoring writes a public daily-root receipt to:
 ${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/root-YYYY-MM-DD.rekor.json
 ```
 
-The Rekor payload is canonical JSON with the daily `root`, `date`, hashed
-`operator`, and `walter_os_version`. Walter-OS signs the payload's SHA-256
-digest with the last row's session Ed25519 key, submits that digest/signature as
-a Rekor `hashedrekord`, and never includes audit row content or the plaintext
-operator id. Upload is disabled by default; it only runs when
+The Rekor receipt stores a local canonical payload with the daily `root`,
+`date`, hashed `operator`, and `walter_os_version`. Walter-OS signs the
+payload's SHA-256 digest with the last row's session Ed25519 key, submits that
+digest/signature as a Rekor `hashedrekord`, and never includes audit row content,
+the plaintext operator id, or the local payload JSON in the public Rekor entry.
+Upload is disabled by default; it only runs when
 `WALTER_AUDIT_REKOR_UPLOAD=1` is set for `walter-os audit close-day`.
 
 Verify a local root against its Rekor entry with:
@@ -117,3 +118,7 @@ walter-os audit verify-chain --check-rekor 2026-05-31
 
 Use `--rekor-url <url>` or `WALTER_AUDIT_REKOR_URL` for a private Rekor
 instance. The default URL is `https://rekor.sigstore.dev`.
+
+Because the public entry is a `hashedrekord`, recovery still depends on local or
+backed-up receipt metadata. Rekor can prove the digest was timestamped, but it
+cannot reconstruct the original `date`/`root` payload after local receipt loss.

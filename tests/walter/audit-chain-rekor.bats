@@ -861,6 +861,30 @@ PY
   done
 }
 
+@test "close-day verifies an existing Rekor receipt against the remote entry" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq '.spec.data.hash.value = "0000000000000000000000000000000000000000000000000000000000000000"' \
+    "$(_curl_body_path)" > "$TMP_HOME/remote-body.json"
+  mv "$TMP_HOME/remote-body.json" "$(_curl_body_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor entry payload hash mismatch"* ]]
+  [[ "$output" != *"ok: Rekor receipt already exists"* ]]
+}
+
 @test "verify-chain --check-rekor rejects a receipt without URL" {
   _make_chain
   _write_mock_curl

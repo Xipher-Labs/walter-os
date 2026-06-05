@@ -1690,6 +1690,13 @@ walter_audit_rekor_upload() {
       echo "  actual:   $stored_rekor_url" >&2
       return 1
     fi
+    session_id="$(_walter_audit_last_session_id_for_day "$chain_path")" || return $?
+    public_key_file="$(_walter_audit_public_key_file "$session_id")" || {
+      echo "walter-audit-chain: cannot verify Rekor receipt: public key missing for session ${session_id}" >&2
+      return 2
+    }
+    public_key="$(_walter_audit_b64_encode_file "$public_key_file")" || return 1
+    walter_audit_verify_rekor_anchor "$date_value" "$root_hash" "$rekor_url" "$public_key" || return $?
     printf 'ok: Rekor receipt already exists: %s\n' "$receipt_path"
     return 0
   fi

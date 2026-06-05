@@ -45,7 +45,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 | D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. The `sig` field carries the raw 64-byte Ed25519 signature, **base64-encoded per RFC 4648 §4 (standard base64, NOT base64url): the alphabet is `A-Z a-z 0-9 + /`, padding `=` is REQUIRED so a 64-byte signature always serializes to exactly 88 characters, and the output MUST NOT contain line breaks**. Computed over the repository's current canonical JSON serialization of the row with the `sig` field removed: `jq -cS` output (keys sorted, compact form, UTF-8 bytes). This is deterministic for Walter-OS' Bash/jq verifier but is **not** RFC 8785 JCS; adopting true JCS would be a future wire-format change. NOTE: "detached signature" is NOT a term defined by the PASETO v4 spec; we use raw Ed25519 directly so the wire format is unambiguous for this implementation. PASETO v4 is referenced only as the design inspiration for the per-session-key model. | Reuses the cap-token signing key. No new key infrastructure. The implemented `jq -cS` canonical form matches the local writer/verifier; RFC 4648 §4 + required padding makes the signature encoding round-trip-stable across Python (`base64.b64encode`), Node (`Buffer.from(..., 'base64')`), Bash (`base64`), and Go (`base64.StdEncoding`). |
 | D-7 | **Verifier resolves the per-row signer**: `(session_id, sig)` → look up `~/.config/walter-os/state/session-<session_id>.pub` (the public half of the session key, persisted at session start). | Public key persists; private key dies at session end. After session end, you can still VERIFY past rows; you cannot mint new ones. |
 | D-8 | **Archived public-key lookup**: verifier checks both `~/.config/walter-os/state/session-<uuid>.pub` and `~/.config/walter-os/state/keys-archive/session-<uuid>.pub` when resolving the per-row signer. Automatic archive rotation and TTL bounding are not implemented in this slice. | Public keys must remain available to verify old rows. Supporting archive lookup lets a future session lifecycle move public keys without breaking historical verification. |
-| D-9 | **Sigstore Rekor (opt-in)**: when `WALTER_AUDIT_REKOR_UPLOAD=1`, the daily root hash (NOT row content) + timestamp + operator-id are uploaded to Sigstore Rekor at session end. Public attestation that THIS operator was running THIS chain at THIS time. | Operator-opt-in public timestamping. Per OSS Trust roadmap D-3 decision. |
+| D-9 | **Sigstore Rekor (opt-in)**: when `WALTER_AUDIT_REKOR_UPLOAD=1`, Walter-OS builds a local canonical payload with the daily root hash (NOT row content), date, hashed operator-id, and Walter-OS version. It signs that payload's SHA-256 digest and submits the digest/signature as a Rekor `hashedrekord`; the payload itself stays in the local receipt. | Operator-opt-in public timestamping without publishing audit content. Per OSS Trust roadmap D-3 decision. |
 
 ## Acceptance criteria
 
@@ -104,7 +104,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 ### AC-5 — Sigstore Rekor opt-in
 
-- [x] When `WALTER_AUDIT_REKOR_UPLOAD=1`, `walter-os audit close-day` uploads:
+- [x] When `WALTER_AUDIT_REKOR_UPLOAD=1`, `walter-os audit close-day` builds this local canonical payload:
   ```json
   {
     "root": "<hex>",
@@ -113,10 +113,11 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
     "walter_os_version": "<from VERSION>"
   }
   ```
-  hashed and signed with the LAST session's Ed25519 key as a Rekor
-  `hashedrekord`. Receives a Rekor entry-id; stored in
+  It hashes and signs the payload with the LAST session's Ed25519 key, submits
+  the digest/signature/public key as a Rekor `hashedrekord`, receives a Rekor
+  entry-id, and stores the payload plus entry metadata in
   `root-YYYY-MM-DD.rekor.json`.
-- [x] `walter-os audit verify-chain --check-rekor` confirms the local root matches what's in Rekor.
+- [x] `walter-os audit verify-chain --check-rekor` recomputes the local payload digest and confirms it matches the digest anchored in Rekor.
 - [x] If `WALTER_AUDIT_REKOR_UPLOAD=0` (default), no network call.
 
 ### AC-6 — Operator-facing docs + CHANGELOG
@@ -141,7 +142,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 | Operator-user (or compromised-as-operator) edits past rows | `prev_hash` chain detects insertion / modification / deletion of any row |
 | Operator-user replaces the entire JSONL with fabricated data | `sig` field is signed by the per-SESSION key; attacker without the session private key cannot produce valid sigs for new rows. Public key persists, so verification fails post-hoc. |
 | Compromised session forges rows DURING its own session | Real risk; session-level compromise = full control. Mitigation is upstream (A-2 capability tokens, A-3 sandbox); the audit chain detects POST-HOC tampering, not concurrent compromise. |
-| Operator deletes the entire chain | Detectable via Rekor (D-9) if opt-in. Without Rekor: not detectable by Walter-OS alone; operator's external backup discipline is the floor. |
+| Operator deletes the entire chain | Detectable via Rekor (D-9) only if the local receipt/root metadata or an external backup is retained. A public `hashedrekord` alone proves a digest was timestamped but cannot reconstruct the original `date`/`root` payload. Without Rekor or backup: not detectable by Walter-OS alone; operator's external backup discipline is the floor. |
 | Public-key tampering (replace session pub key with attacker's) | Public keys stored in `state/` + `state/keys-archive/`; tampering is detectable IF operator backs up these dirs externally. Future: archive keys to Rekor too. |
 | Time-of-check vs time-of-use (concurrent rotation during append) | flock + path re-open (D-4) closes this; bats test confirms. |
 

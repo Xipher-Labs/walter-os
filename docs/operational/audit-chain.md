@@ -56,7 +56,7 @@ WALTER_AUDIT_REKOR_UPLOAD=1 \
   walter-os audit close-day --rekor-url https://rekor.example 2026-05-31
 ```
 
-The uploaded payload contains only:
+The local anchoring payload contains only:
 
 ```json
 {
@@ -68,8 +68,9 @@ The uploaded payload contains only:
 ```
 
 Walter-OS hashes that payload, signs the SHA-256 digest with the last audit
-row's session Ed25519 key, and submits a Rekor `hashedrekord`. It stores the
-entry id and response at:
+row's session Ed25519 key, and submits the digest/signature/public key as a
+Rekor `hashedrekord`. The JSON payload itself stays in the local receipt with
+the Rekor entry id and response at:
 
 ```text
 ${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/root-YYYY-MM-DD.rekor.json
@@ -87,9 +88,11 @@ private Rekor instance.
 ## Limits
 
 This protects against local row edits, repaired local hash chains, fabricated
-rows without the original session key, and deletion of a local chain after an
-external Rekor anchor exists.
+rows without the original session key, and deletion or replacement of a local
+chain when the local receipt/root metadata or an external backup is retained.
 
 This does not protect against a compromised session private key during the
 session itself, a compromised host that signs malicious-but-valid rows, or a
-missing external backup of local state and archived public keys.
+missing external backup of local state and archived public keys. A Rekor
+`hashedrekord` entry alone proves the payload digest was timestamped; it does
+not recover the original `date`/`root` payload if the local receipt is lost.

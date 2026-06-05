@@ -106,7 +106,7 @@ The per-session ephemeral key (Ed25519) is generated at session start, stored at
 ### DEC-3 — Tamper-evident log: hybrid local + Rekor for public attestation
 
 - **Local Merkle hash-chain** over `~/.config/walter-os/audit/<date>.jsonl` files. Each row's last field is `prev_hash = sha256(prev_row_normalized)`. `walter-os audit verify-chain` walks the chain end-to-end.
-- **Optional Sigstore Rekor upload** of daily-summary hashes (NOT per-row content; just the daily root hash + timestamp). Operator can opt in via `WALTER_AUDIT_REKOR_UPLOAD=1`. Public attestation that THIS operator was running THIS audit chain at THIS time. No log content leaves the machine.
+- **Optional Sigstore Rekor upload** of daily-summary digests (NOT per-row content). Operator can opt in via `WALTER_AUDIT_REKOR_UPLOAD=1`. Walter-OS keeps the canonical `{date, root, operator, walter_os_version}` payload in the local receipt and submits its signed SHA-256 digest as a Rekor `hashedrekord`. No log content leaves the machine, and recovery still requires the local receipt or an external backup of that payload metadata.
 
 **Rejected**: full per-row Rekor upload. Privacy + cost; daily root hash is enough for tamper detection.
 
