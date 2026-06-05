@@ -1282,6 +1282,17 @@ _walter_audit_last_session_id_for_day() {
   printf '%s' "$session_id"
 }
 
+_walter_audit_chain_root_for_path() {
+  local chain_path="$1" previous_line root_hash
+  _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || return $?
+  if ! previous_line="$(tail -n 1 "$chain_path")" || [[ -z "$previous_line" ]]; then
+    echo "walter-audit-chain: unable to read final row: $chain_path" >&2
+    return 1
+  fi
+  root_hash="$(walter_audit_hash_string "$previous_line")"
+  printf '%s' "$root_hash"
+}
+
 _walter_audit_rekor_payload() {
   local date_value="$1" root_hash="$2" operator_hash version
   operator_hash="$(_walter_audit_operator_hash)"
@@ -1600,7 +1611,7 @@ walter_audit_rekor_upload() {
     return 3
   fi
 
-  local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}" audit_dir
+  local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}" audit_dir chain_root
   local receipt_path receipt_url stored_rekor_url rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
   local sign_status
   local receipt_date tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
@@ -1609,6 +1620,13 @@ walter_audit_rekor_upload() {
   _walter_audit_check_sha256_arg "$root_hash" "root hash" || return $?
   if [[ ! -f "$chain_path" ]]; then
     echo "walter-audit-chain: chain not found: $chain_path" >&2
+    return 2
+  fi
+  chain_root="$(_walter_audit_chain_root_for_path "$chain_path")" || return $?
+  if [[ "$chain_root" != "$root_hash" ]]; then
+    echo "walter-audit-chain: Rekor root does not match final chain row: $chain_path" >&2
+    echo "  expected: $chain_root" >&2
+    echo "  actual:   $root_hash" >&2
     return 2
   fi
 

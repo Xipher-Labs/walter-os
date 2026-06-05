@@ -397,6 +397,21 @@ SH
   [[ "$output" == *"chain not found"* ]]
 }
 
+@test "direct Rekor upload rejects a root not matching the chain before network access" {
+  _make_chain
+  bash "$WALTER_OS_BIN" audit close-day 2026-05-31 >/dev/null
+  _write_failing_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_MARKER="$TMP_HOME/curl-called" \
+    /bin/bash -c "source '$AUDIT_LIB'; walter_audit_rekor_upload '2026-05-31' '0000000000000000000000000000000000000000000000000000000000000000' '$(_chain_path)' 'http://rekor.example'"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Rekor root does not match final chain row"* ]]
+  [ ! -f "$TMP_HOME/curl-called" ]
+}
+
 @test "direct Rekor verification rejects invalid date and root arguments" {
   run /bin/bash -c \
     "source '$AUDIT_LIB'; walter_audit_verify_rekor_anchor '2026/05/31' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'http://rekor.example'"
