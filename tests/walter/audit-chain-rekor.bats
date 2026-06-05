@@ -74,6 +74,16 @@ pathlib.Path(sys.argv[2]).write_bytes(bytes.fromhex(sys.argv[1]))
 PY
 }
 
+_base64_file() {
+  python3 - "$1" <<'PY'
+import base64
+import pathlib
+import sys
+
+print(base64.b64encode(pathlib.Path(sys.argv[1]).read_bytes()).decode("ascii"), end="")
+PY
+}
+
 _openssl_bin() {
   bash -c "source '$SESSION_LIB'; _walter_session_openssl"
 }
@@ -462,6 +472,44 @@ PY
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"Rekor entry signature mismatch"* ]]
+}
+
+@test "verify-chain --check-rekor fails when Rekor key differs from final session key" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  openssl_bin="$(_openssl_bin)"
+  hash_value="$(jq -r '.spec.data.hash.value' "$(_curl_body_path)")"
+  _hex_to_file "$hash_value" "$TMP_HOME/attacker-digest.bin"
+  "$openssl_bin" genpkey -algorithm ED25519 -out "$TMP_HOME/attacker.key" >/dev/null 2>&1
+  "$openssl_bin" pkey -in "$TMP_HOME/attacker.key" -pubout -out "$TMP_HOME/attacker.pub" >/dev/null 2>&1
+  "$openssl_bin" pkeyutl -sign -inkey "$TMP_HOME/attacker.key" \
+    -rawin \
+    -in "$TMP_HOME/attacker-digest.bin" \
+    -out "$TMP_HOME/attacker.sig" >/dev/null 2>&1
+  attacker_sig="$(_base64_file "$TMP_HOME/attacker.sig")"
+  attacker_public_key="$(_base64_file "$TMP_HOME/attacker.pub")"
+  jq --arg sig "$attacker_sig" --arg public_key "$attacker_public_key" \
+    '.spec.signature.content = $sig | .spec.signature.publicKey.content = $public_key' \
+    "$(_curl_body_path)" > "$TMP_HOME/remote-body.json"
+  mv "$TMP_HOME/remote-body.json" "$(_curl_body_path)"
+  jq --arg sig "$attacker_sig" --arg public_key "$attacker_public_key" \
+    '.sig = $sig | .public_key = $public_key' \
+    "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  mv "$TMP_HOME/receipt.json" "$(_rekor_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"final audit session key"* ]]
 }
 
 @test "close-day rejects an existing Rekor receipt with the wrong date" {

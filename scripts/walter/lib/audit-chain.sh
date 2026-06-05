@@ -1464,7 +1464,7 @@ PY
 }
 
 _walter_audit_rekor_verify_response_binding() {
-  local response_file="$1" entry_id="$2" expected_hash="$3" receipt_path="$4"
+  local response_file="$1" entry_id="$2" expected_hash="$3" receipt_path="$4" expected_public_key="${5:-}"
   local tmp_dir body_file sig_file pub_file digest_file body_value remote_hash remote_sig remote_public_key
   local receipt_sig receipt_public_key openssl_bin
 
@@ -1515,6 +1515,16 @@ _walter_audit_rekor_verify_response_binding() {
     echo "walter-audit-chain: Rekor receipt missing public key: $receipt_path" >&2
     return 1
   }
+  if [[ -n "$expected_public_key" && "$receipt_public_key" != "$expected_public_key" ]]; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor receipt public key does not match final audit session key: $receipt_path" >&2
+    return 1
+  fi
+  if [[ -n "$expected_public_key" && "$remote_public_key" != "$expected_public_key" ]]; then
+    rm -rf "$tmp_dir"
+    echo "walter-audit-chain: Rekor entry public key does not match final audit session key for ${entry_id}" >&2
+    return 1
+  fi
   if [[ "$remote_sig" != "$receipt_sig" ]]; then
     rm -rf "$tmp_dir"
     echo "walter-audit-chain: Rekor entry signature mismatch for ${entry_id}" >&2
@@ -1725,8 +1735,8 @@ walter_audit_rekor_upload() {
 }
 
 walter_audit_verify_rekor_anchor() {
-  [[ "$#" -ge 2 && "$#" -le 3 ]] || {
-    echo "walter-audit-chain: usage: walter_audit_verify_rekor_anchor <date> <root> [rekor-url]" >&2
+  [[ "$#" -ge 2 && "$#" -le 4 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_rekor_anchor <date> <root> [rekor-url] [expected-public-key]" >&2
     return 2
   }
   if ! _walter_audit_jq_available; then
@@ -1734,7 +1744,7 @@ walter_audit_verify_rekor_anchor() {
     return 3
   fi
 
-  local date_value="$1" root_hash="$2" configured_url="${3:-}"
+  local date_value="$1" root_hash="$2" configured_url="${3:-}" expected_public_key="${4:-}"
   local receipt_path receipt_root receipt_url entry_id payload_hash rekor_url timeout tmp_dir response_file error_file endpoint
 
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
@@ -1785,7 +1795,7 @@ walter_audit_verify_rekor_anchor() {
     rm -rf "$tmp_dir"
     return 1
   fi
-  _walter_audit_rekor_verify_response_binding "$response_file" "$entry_id" "$payload_hash" "$receipt_path" || {
+  _walter_audit_rekor_verify_response_binding "$response_file" "$entry_id" "$payload_hash" "$receipt_path" "$expected_public_key" || {
     rm -rf "$tmp_dir"
     return 1
   }
@@ -1803,10 +1813,12 @@ walter_audit_verify_chain_with_rekor() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" configured_url="${2:-}" audit_dir lock_path verify_result verify_status row_count root_hash
+  local date_value="${1:-$(walter_audit_date)}" configured_url="${2:-}" audit_dir lock_path chain_path verify_result verify_status row_count root_hash
+  local expected_session_id expected_public_key_file expected_public_key
   _walter_audit_check_date_arg "$date_value" "date" || return $?
 
   audit_dir="$(walter_audit_dir)"
+  chain_path="$(walter_audit_chain_path "$date_value")"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
   chmod 700 "$audit_dir" || return 1
@@ -1815,7 +1827,21 @@ walter_audit_verify_chain_with_rekor() {
     verify_status=0
     read -r row_count root_hash <<< "$verify_result"
     printf 'ok: verified %s row(s): %s\n' "$row_count" "$(walter_audit_chain_path "$date_value")"
-    if walter_audit_verify_rekor_anchor "$date_value" "$root_hash" "$configured_url"; then
+    expected_session_id="$(_walter_audit_last_session_id_for_day "$chain_path")" || {
+      verify_status="$?"
+      _walter_audit_release_lock "$lock_path"
+      return "$verify_status"
+    }
+    expected_public_key_file="$(_walter_audit_public_key_file "$expected_session_id")" || {
+      echo "walter-audit-chain: cannot verify Rekor receipt: public key missing for session ${expected_session_id}" >&2
+      _walter_audit_release_lock "$lock_path"
+      return 2
+    }
+    expected_public_key="$(_walter_audit_b64_encode_file "$expected_public_key_file")" || {
+      _walter_audit_release_lock "$lock_path"
+      return 1
+    }
+    if walter_audit_verify_rekor_anchor "$date_value" "$root_hash" "$configured_url" "$expected_public_key"; then
       verify_status=0
     else
       verify_status="$?"
