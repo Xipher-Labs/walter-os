@@ -1597,7 +1597,7 @@ walter_audit_rekor_upload() {
   fi
 
   local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}"
-  local receipt_path rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
+  local receipt_path receipt_url stored_rekor_url rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
   local sign_status
   local receipt_date tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
 
@@ -1608,6 +1608,7 @@ walter_audit_rekor_upload() {
     return 2
   fi
 
+  rekor_url="$(_walter_audit_rekor_url "$configured_url")" || return $?
   receipt_path="$(walter_audit_rekor_receipt_path "$date_value")"
   if [[ -f "$receipt_path" ]]; then
     _walter_audit_rekor_receipt_payload_hash "$receipt_path" >/dev/null || return $?
@@ -1623,11 +1624,24 @@ walter_audit_rekor_upload() {
       echo "walter-audit-chain: Rekor receipt root mismatch: $receipt_path" >&2
       return 1
     fi
+    receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path")" || {
+      echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
+      return 1
+    }
+    stored_rekor_url="$(_walter_audit_rekor_url "$receipt_url")" || {
+      echo "walter-audit-chain: Rekor receipt URL invalid: $receipt_path" >&2
+      return 1
+    }
+    if [[ "$stored_rekor_url" != "$rekor_url" ]]; then
+      echo "walter-audit-chain: Rekor receipt URL mismatch: $receipt_path" >&2
+      echo "  expected: $rekor_url" >&2
+      echo "  actual:   $stored_rekor_url" >&2
+      return 1
+    fi
     printf 'ok: Rekor receipt already exists: %s\n' "$receipt_path"
     return 0
   fi
 
-  rekor_url="$(_walter_audit_rekor_url "$configured_url")" || return $?
   timeout="$(_walter_audit_rekor_timeout)" || return $?
   if ! command -v curl >/dev/null 2>&1; then
     echo "walter-audit-chain: curl required for Rekor upload" >&2
