@@ -1333,16 +1333,29 @@ _walter_audit_rekor_request_body() {
     }'
 }
 
+_walter_audit_rekor_entry_id_is_safe() {
+  local entry_id="$1"
+  [[ -n "$entry_id" && "$entry_id" != "null" && "$entry_id" =~ ^[A-Za-z0-9._:-]+$ ]]
+}
+
 _walter_audit_rekor_entry_id() {
-  local response_file="$1" entry_id
-  entry_id="$(jq -er 'if type == "object" then keys_unsorted[0] else empty end' "$response_file" 2>/dev/null)" || {
+  local response_file="$1" entry_id key_count
+  key_count="$(jq -er 'if type == "object" then keys_unsorted | length else empty end' "$response_file" 2>/dev/null)" || {
     echo "walter-audit-chain: Rekor response missing entry id" >&2
     return 1
   }
-  [[ -n "$entry_id" && "$entry_id" != "null" ]] || {
+  if [[ "$key_count" != "1" ]]; then
+    echo "walter-audit-chain: Rekor response invalid entry id" >&2
+    return 1
+  fi
+  entry_id="$(jq -er 'keys_unsorted[0]' "$response_file" 2>/dev/null)" || {
     echo "walter-audit-chain: Rekor response missing entry id" >&2
     return 1
   }
+  if ! _walter_audit_rekor_entry_id_is_safe "$entry_id"; then
+    echo "walter-audit-chain: Rekor response invalid entry id" >&2
+    return 1
+  fi
   printf '%s' "$entry_id"
 }
 
@@ -1387,7 +1400,7 @@ PY
     ' "$response_file" 2>/dev/null || true)"
     entry_id="$message_entry_id"
   fi
-  if [[ -z "$entry_id" || "$entry_id" == "null" || ! "$entry_id" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+  if ! _walter_audit_rekor_entry_id_is_safe "$entry_id"; then
     echo "walter-audit-chain: Rekor duplicate response missing existing entry id" >&2
     return 1
   fi
@@ -1848,6 +1861,10 @@ walter_audit_verify_rekor_anchor() {
     echo "walter-audit-chain: Rekor receipt missing entry id: $receipt_path" >&2
     return 1
   }
+  if ! _walter_audit_rekor_entry_id_is_safe "$entry_id"; then
+    echo "walter-audit-chain: Rekor receipt invalid entry id: $receipt_path" >&2
+    return 1
+  fi
   receipt_url="$(jq -r '.rekor_url // empty' "$receipt_path" 2>/dev/null)" || {
     echo "walter-audit-chain: invalid Rekor receipt JSON: $receipt_path" >&2
     return 1

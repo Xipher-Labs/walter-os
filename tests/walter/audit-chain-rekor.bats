@@ -363,6 +363,61 @@ PY
       printf '404'
     fi
     ;;
+  unsafe-entry-id)
+    if [[ "$method" == "POST" ]]; then
+      cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 201 Created\r\n\r\n' > "$headers"
+      python3 - "$data_file" "$output" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+body = pathlib.Path(sys.argv[1]).read_bytes()
+response = {
+    "../abc123": {
+        "body": base64.b64encode(body).decode("ascii"),
+        "integratedTime": 1780272000,
+        "logIndex": 7,
+        "logID": "test-log",
+        "verification": {"signedEntryTimestamp": "set"},
+    }
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(response), encoding="utf-8")
+PY
+      printf '201'
+    else
+      printf '{"error":"unexpected unsafe-entry-id method or url"}\n' > "$output"
+      printf '404'
+    fi
+    ;;
+  multi-entry)
+    if [[ "$method" == "POST" ]]; then
+      cp "$data_file" "${WALTER_TEST_REKOR_CURL_BODY:?}"
+      [[ -z "$headers" ]] || printf 'HTTP/1.1 201 Created\r\n\r\n' > "$headers"
+      python3 - "$data_file" "$output" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+body = pathlib.Path(sys.argv[1]).read_bytes()
+entry = {
+    "body": base64.b64encode(body).decode("ascii"),
+    "integratedTime": 1780272000,
+    "logIndex": 7,
+    "logID": "test-log",
+    "verification": {"signedEntryTimestamp": "set"},
+}
+response = {"abc123": entry, "def456": entry}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(response), encoding="utf-8")
+PY
+      printf '201'
+    else
+      printf '{"error":"unexpected multi-entry method or url"}\n' > "$output"
+      printf '404'
+    fi
+    ;;
   auth)
     printf '{"error":"unauthorized"}\n' > "$output"
     printf '401'
@@ -623,6 +678,28 @@ SH
   [[ "$output" == *"Rekor entry payload hash mismatch"* ]]
   [[ "$output" != *"ok: anchored audit root in Rekor"* ]]
   [ ! -f "$(_rekor_path)" ]
+}
+
+@test "close-day rejects unsafe Rekor response entry ids" {
+  _make_chain
+  _write_mock_curl
+
+  for mode in unsafe-entry-id multi-entry; do
+    rm -f "$(_rekor_path)"
+
+    run env \
+      PATH="$TMP_HOME/bin:$PATH" \
+      WALTER_AUDIT_REKOR_UPLOAD=1 \
+      WALTER_TEST_REKOR_MODE="$mode" \
+      WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+      WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+      bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Rekor response invalid entry id"* ]]
+    [[ "$output" != *"ok: anchored audit root in Rekor"* ]]
+    [ ! -f "$(_rekor_path)" ]
+  done
 }
 
 @test "close-day rejects a duplicate Rekor response not bound to the payload" {
@@ -1082,6 +1159,31 @@ PY
   [[ "$output" == *"invalid Rekor receipt JSON"* ]]
   [[ "$output" != *"parse error"* ]]
   [[ "$output" != *"jq:"* ]]
+}
+
+@test "verify-chain rejects unsafe receipt entry ids before Rekor GET" {
+  _make_chain
+  _write_mock_curl
+  WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    PATH="$TMP_HOME/bin:$PATH" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+  jq '.entry_id = "../abc123"' "$(_rekor_path)" > "$TMP_HOME/receipt.json"
+  mv "$TMP_HOME/receipt.json" "$(_rekor_path)"
+  root_hash="$(cat "$(_root_path)")"
+  rm -f "$(_curl_args_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit verify-chain --check-rekor --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor receipt invalid entry id"* ]]
+  [ ! -f "$(_curl_args_path)" ]
+  [[ "$output" != *"$root_hash"* ]]
 }
 
 @test "close-day does not print success when Rekor upload fails" {
