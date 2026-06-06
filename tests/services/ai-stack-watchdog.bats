@@ -7,6 +7,7 @@ setup() {
   WATCHDOG="$ALERTING_DIR/ai-stack-watchdog.sh"
   CRON_EXAMPLE="$ALERTING_DIR/cron.example"
   CLOUDFLARED_DROPIN="$REPO_ROOT/setup/walter-host/services/cloudflared/restart-hardening.conf"
+  LITELLM_COMPOSE="$REPO_ROOT/setup/walter-host/services/litellm/compose.yml"
 }
 
 @test "ai stack watchdog files exist" {
@@ -67,6 +68,19 @@ setup() {
   grep -q "sudo crontab -e" "$CRON_EXAMPLE"
   grep -q "installed in root cron because it calls docker and journalctl" "$WATCHDOG"
   run grep -q "or as walter" "$WATCHDOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "ai stack watchdog fails loudly when not root" {
+  grep -q "require_root" "$WATCHDOG"
+  grep -q 'id -u' "$WATCHDOG"
+  grep -q "must run as root" "$WATCHDOG"
+  grep -q "root crontab" "$WATCHDOG"
+}
+
+@test "litellm liveliness healthcheck uses python3" {
+  grep -q 'test: \["CMD", "python3", "-c"' "$LITELLM_COMPOSE"
+  run grep -q 'test: \["CMD", "python", "-c"' "$LITELLM_COMPOSE"
   [ "$status" -ne 0 ]
 }
 
@@ -146,6 +160,7 @@ setup() {
 }
 
 @test "cron logrotate hint includes the AI watchdog log" {
+  grep -q "# Logs: .*walter-watchdog.log.*walter-ai-watchdog.log" "$CRON_EXAMPLE"
   grep -q "/var/log/walter-ai-watchdog.log" "$CRON_EXAMPLE"
   grep -q "/var/log/walter-watchdog.log /var/log/walter-ai-watchdog.log /var/log/hetzner-spend.log" "$CRON_EXAMPLE"
 }

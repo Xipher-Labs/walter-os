@@ -49,7 +49,7 @@ services:
     # to /health/readiness is ~95s (Prisma migrate + 2 workers) on 2026-06-06,
     # so the probe must not mark it unhealthy before then.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4000/health/liveliness',timeout=5).status==200 else 1)"]
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4000/health/liveliness',timeout=5).status==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 5

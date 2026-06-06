@@ -2,7 +2,8 @@
 #
 # Editing:    sudo crontab -e
 # Listing:    sudo crontab -l
-# Logs:       /var/log/walter-watchdog.log
+# Logs:       /var/log/walter-watchdog.log, /var/log/walter-ai-watchdog.log,
+#             /var/log/hetzner-spend.log
 #
 # Tier 2: every 5 min, debounced
 */5 * * * * /opt/walter-vm/services/alerting/walter-vm-watchdog.sh >>/var/log/walter-watchdog.log 2>&1

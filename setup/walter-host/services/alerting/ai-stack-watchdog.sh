@@ -48,6 +48,13 @@ LITELLM_RESTART_SETTLE_SECONDS="${LITELLM_RESTART_SETTLE_SECONDS:-20}"
 TELEGRAM_CONNECT_TIMEOUT="${WALTER_TELEGRAM_CONNECT_TIMEOUT:-5}"
 TELEGRAM_MAX_TIME="${WALTER_TELEGRAM_MAX_TIME:-15}"
 
+require_root() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "ai-stack-watchdog: must run as root; install it in root crontab because docker, journalctl, and /var/run state require root" >&2
+    exit 2
+  fi
+}
+
 configure_db_sat_pct() {
   local candidate="${LITELLM_DB_SAT_PCT:-$DB_SAT_PCT}"
   if [[ "$candidate" =~ ^([1-9][0-9]?|100)$ ]]; then
@@ -58,6 +65,7 @@ configure_db_sat_pct() {
   fi
 }
 
+require_root
 [[ -f "$ENV_FILE" ]] || { echo "missing env: $ENV_FILE"; exit 2; }
 # shellcheck disable=SC1090
 source "$ENV_FILE"
