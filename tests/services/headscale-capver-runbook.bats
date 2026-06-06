@@ -9,10 +9,13 @@ setup() {
 
 @test "headscale runbook documents capver registration failure" {
   [[ -f "$RUNBOOK" ]]
+  local pinned_headscale
+  pinned_headscale="$(sed -nE 's/^[[:space:]]*image: headscale\/headscale:([^[:space:]]+).*/\1/p' "$COMPOSE")"
+  [[ -n "$pinned_headscale" ]]
 
   grep -Fq "capability version must be set" "$RUNBOOK"
   grep -Fq "Tailscale 1.96.4" "$RUNBOOK"
-  grep -Fq "Headscale 0.26.0" "$RUNBOOK"
+  grep -Fq "Headscale $pinned_headscale" "$RUNBOOK"
   grep -Fq "HTTP 500" "$RUNBOOK"
 }
 
