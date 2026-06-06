@@ -48,6 +48,12 @@ setup() {
   grep -q "Keep litellm_down=1 after a heal" "$WATCHDOG"
 }
 
+@test "cloudflared recovery remains debounced after successful auto-heal" {
+  run grep -q 'state_set "cloudflared_down" 0' "$WATCHDOG"
+  [ "$status" -ne 0 ]
+  grep -q "Keep cloudflared_down=1 after a heal" "$WATCHDOG"
+}
+
 @test "db saturation restart waits for litellm liveliness before model probes" {
   grep -q "code_after_db_restart" "$WATCHDOG"
   grep -q "skipping model probes" "$WATCHDOG"

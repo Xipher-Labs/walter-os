@@ -114,7 +114,7 @@ if ! cf_healthy; then
   transition "cloudflared_down" "1" \
     "cloudflared tunnel down/unregistered → auto-restarted ($([ $cfst -eq 0 ] && echo recovered || echo STILL DOWN — needs Hetzner console)). Symptom: 530 'origin unregistered' + SSH bad-handshake; takes down ALL tunnelled services + the AI pipeline." \
     "cloudflared tunnel healthy again"
-  [[ $cfst -eq 0 ]] && state_set "cloudflared_down" 0
+  # Keep cloudflared_down=1 after a heal so the next healthy run emits recovery.
   # If still down, the gateway probes below will all fail — skip them this cycle.
   [[ $cfst -ne 0 ]] && { echo "ai-stack-watchdog: cloudflared still down ($(date -u +%FT%TZ))"; exit 0; }
 else
