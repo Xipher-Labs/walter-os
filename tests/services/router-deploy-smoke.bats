@@ -30,8 +30,9 @@ assert_router_deploy_contract() {
 
   grep -Fq '/v1/models' "$smoke"
   grep -Fq 'ROUTER_API_KEY' "$smoke"
-  grep -Fq 'models_payload=' "$smoke"
-  grep -Fq 'failed to fetch ${ROUTER_NAME} /v1/models' "$smoke"
+  grep -Fq 'models_code=' "$smoke"
+  grep -Fq 'HTTP ${models_code}' "$smoke"
+  grep -Fq 'sed -n' "$smoke"
   grep -Fq 'failed to parse ${ROUTER_NAME} /v1/models response' "$smoke"
   grep -Fq 'payload.get("data"' "$smoke"
   grep -Fq '/v1/chat/completions' "$smoke"
