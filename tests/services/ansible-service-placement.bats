@@ -35,6 +35,8 @@ setup() {
   grep -Fq "when: walter_service_should_deploy | bool" "$SERVICE_ROLE"
   grep -Fq "svc_env.stat.exists | default(false)" "$SERVICE_ROLE"
   grep -Fq "svc_env_template.stat.exists | default(false)" "$SERVICE_ROLE"
+  grep -Fq "svc_env is defined" "$SERVICE_ROLE"
+  grep -Fq "svc_env_template is defined" "$SERVICE_ROLE"
   ! grep -Fq "svc_files" "$SERVICE_ROLE"
 }
 

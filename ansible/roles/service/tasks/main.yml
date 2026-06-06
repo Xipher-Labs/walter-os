@@ -57,9 +57,12 @@
     group: root
     mode: "0600"
   when:
-    - walter_service_should_deploy | bool
-    - not (svc_env.stat.exists | default(false))
-    - svc_env_template.stat.exists | default(false)
+    - >
+      (walter_service_should_deploy | bool)
+      and (svc_env is defined)
+      and (svc_env_template is defined)
+      and not (svc_env.stat.exists | default(false))
+      and (svc_env_template.stat.exists | default(false))
 
 - name: "[{{ service_name }}] docker compose pull"
   ansible.builtin.command:
