@@ -42,6 +42,7 @@ PROBES=(
   "codex-sub:chatgpt-codex-router"
 )
 MODEL_TIMEOUT="${LITELLM_MODEL_PROBE_TIMEOUT:-50}"  # gemini-sub legitimately takes ~35s
+LITELLM_RESTART_SETTLE_SECONDS="${LITELLM_RESTART_SETTLE_SECONDS:-20}"
 
 [[ -f "$ENV_FILE" ]] || { echo "missing env: $ENV_FILE"; exit 2; }
 # shellcheck disable=SC1090
@@ -76,14 +77,13 @@ if [[ "$code" != "200" ]]; then
   docker restart litellm-db >/dev/null 2>&1 || true
   sleep 8
   docker restart litellm >/dev/null 2>&1 || true
-  sleep 20
+  sleep "$LITELLM_RESTART_SETTLE_SECONDS"
   code2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${LITELLM_URL}/health/liveliness" 2>/dev/null || echo 000)
   [[ "$code2" == "200" ]] && healed="recovered after auto-restart (db+litellm)" || healed="STILL DOWN after auto-restart — manual intervention needed"
   transition "litellm_down" "1" \
     "LiteLLM /health was \`$code\` → auto-restarted db+litellm; $healed" \
     "LiteLLM healthy again"
-  # If it recovered, flip state so the recovery message fires next run.
-  [[ "$code2" == "200" ]] && state_set "litellm_down" 0
+  # Keep litellm_down=1 after a heal so the next healthy run emits recovery.
   # Don't run model probes this cycle if the gateway is down.
   [[ "$code2" != "200" ]] && exit 0
 else
@@ -98,9 +98,17 @@ if [[ "${used:-}" =~ ^[0-9]+$ && "${max:-}" =~ ^[0-9]+$ && "$max" -gt 0 ]]; then
   if [[ "$pct" -ge "$DB_SAT_PCT" ]]; then
     docker restart litellm-db >/dev/null 2>&1 || true; sleep 8
     docker restart litellm   >/dev/null 2>&1 || true
+    sleep "$LITELLM_RESTART_SETTLE_SECONDS"
+    code_after_db_restart=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${LITELLM_URL}/health/liveliness" 2>/dev/null || echo 000)
     transition "db_saturated" "1" \
       "litellm-db at ${used}/${max} conns (${pct}% ≥ ${DB_SAT_PCT}%) → auto-restarted db+litellm (pre-empts the 2026-06-02 outage)" \
       "litellm-db connections back to normal"
+    if [[ "$code_after_db_restart" != "200" ]]; then
+      transition "litellm_down" "1" \
+        "LiteLLM /health is \`$code_after_db_restart\` after db saturation restart; skipping model probes this cycle" \
+        "LiteLLM healthy again"
+      exit 0
+    fi
   else
     transition "db_saturated" "0" "" "litellm-db connections back to normal (${used}/${max})"
   fi
@@ -112,9 +120,12 @@ fi
 for entry in "${PROBES[@]}"; do
   model="${entry%%:*}"; router="${entry##*:}"
   key="model_${model//[^a-zA-Z0-9]/_}"
-  ok=$(docker exec -e M="$model" -e T="$MODEL_TIMEOUT" litellm sh -c 'set -a; . /run/secrets/litellm.env 2>/dev/null; set +a; python3 - <<PY 2>/dev/null
+  probe_result=$(docker exec -e M="$model" -e T="$MODEL_TIMEOUT" litellm sh -c 'set -a; . /run/secrets/litellm.env 2>/dev/null; set +a; python3 - <<PY 2>/dev/null
 import os,json,urllib.request as u
 k=os.environ.get("LITELLM_MASTER_KEY","")
+if not k:
+    print("missing_key")
+    raise SystemExit(0)
 req=u.Request("http://127.0.0.1:4000/v1/chat/completions",method="POST",
   headers={"Authorization":"Bearer "+k,"Content-Type":"application/json"},
   data=json.dumps({"model":os.environ["M"],"messages":[{"role":"user","content":"ping"}],"max_tokens":5}).encode())
@@ -124,7 +135,14 @@ try:
 except Exception:
     print("0")
 PY' 2>/dev/null | tr -d ' \n')
-  if [[ "$ok" != "1" ]]; then
+  if [[ "$probe_result" == "missing_key" ]]; then
+    transition "${key}_auth" "1" \
+      "model \`$model\` probe skipped because LiteLLM master key is empty inside \`litellm\`; fix \`/run/secrets/litellm.env\` before restarting routers" \
+      "model \`$model\` LiteLLM master key available again"
+    continue
+  fi
+  transition "${key}_auth" "0" "" "model \`$model\` LiteLLM master key available again"
+  if [[ "$probe_result" != "1" ]]; then
     docker restart "$router" >/dev/null 2>&1 || true
     transition "$key" "1" \
       "model \`$model\` probe FAILED → auto-restarted \`$router\`. If it persists it is likely a config/auth issue (e.g. wrong upstream model slug), not a crash — check \`docker logs $router\`." \
