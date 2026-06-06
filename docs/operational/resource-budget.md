@@ -4,11 +4,10 @@ Sizing guidance for the self-hosted stack (Mode 3 in the
 [README](../../README.md)). Mode 1 / Mode 2 installs don't need a VM at
 all — they run on the operator's workstation.
 
-**Minimum specs**: 4 vCPUs, 8 GB RAM, 80 GB SSD for floor/core-only. Full stack
-(all profiles) requires 16 vCPUs, 32 GB RAM, 320 GB SSD.
+**Minimum specs**: 4 vCPUs, 8 GB RAM, 80 GB SSD for floor/core-only. Full profile requires 16 vCPUs, 32 GB RAM, 320 GB SSD.
 
-Before provisioning, run `./setup/walter-host/preflight-check.sh` to verify
-minimum requirements on an existing VM.
+Before provisioning, run `./setup/walter-host/preflight-check.sh full` (or
+`floor` / `medium`) to verify the selected profile on an existing VM.
 
 ## Hetzner Cloud sizing
 
@@ -80,7 +79,7 @@ kernel, Docker, Caddy, cloudflared, and OS overhead (~2 GB baseline).
 | Forgejo repos | 5–50 GB | Operator-dependent |
 | Restic backups (local) | 20–80 GB | Rotated; offsite copy to B2/S3 recommended |
 | Container images | 10–20 GB | `docker system prune` monthly |
-| Total recommended | **240 GB** | For comfortable full-stack runway |
+| Total recommended | **320 GB** | For comfortable full-stack runway |
 
 Cloudflared egress is free under Cloudflare's free tier; Hetzner egress is
 20 TB/month included on CX-class VMs.

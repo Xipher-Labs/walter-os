@@ -49,20 +49,26 @@ case "$profile" in
     ;;
 esac
 
+profile_label_upper="$(printf '%s' "$profile_label" | tr '[:lower:]' '[:upper:]')"
+
 detect_ram_mb() {
   if [[ -n "${WALTER_PREFLIGHT_RAM_MB:-}" ]]; then
     echo "$WALTER_PREFLIGHT_RAM_MB"
     return
   fi
 
-  if [[ -r /proc/meminfo ]]; then
+  if [[ -r /proc/meminfo && "${WALTER_PREFLIGHT_SKIP_PROC:-}" != "1" ]]; then
     awk '/MemTotal:/ { printf "%.0f\n", $2 / 1024 }' /proc/meminfo
     return
   fi
 
   if command -v sysctl >/dev/null 2>&1; then
-    sysctl -n hw.memsize 2>/dev/null | awk '{ printf "%.0f\n", $1 / 1024 / 1024 }'
-    return
+    local mem_bytes
+    mem_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+    if [[ "$mem_bytes" =~ ^[0-9]+$ ]]; then
+      awk -v bytes="$mem_bytes" 'BEGIN { printf "%.0f\n", bytes / 1024 / 1024 }'
+      return
+    fi
   fi
 
   echo 0
@@ -101,17 +107,17 @@ echo "Detected: vCPU=${vcpu}, RAM=$((ram_mb / 1024)) GB, disk=${disk_gb} GB"
 echo "Required: vCPU=${required_vcpu}, RAM=$((required_ram_mb / 1024)) GB, disk=${required_disk_gb} GB"
 
 if (( vcpu < required_vcpu )); then
-  echo "ERROR: ${profile_label^^} profile requires at least ${required_vcpu} vCPU; detected ${vcpu}."
+  echo "ERROR: ${profile_label_upper} profile requires at least ${required_vcpu} vCPU; detected ${vcpu}."
   failed=1
 fi
 
 if (( ram_mb < required_ram_mb )); then
-  echo "ERROR: ${profile_label^^} profile requires at least $((required_ram_mb / 1024)) GB RAM; detected $((ram_mb / 1024)) GB."
+  echo "ERROR: ${profile_label_upper} profile requires at least $((required_ram_mb / 1024)) GB RAM; detected $((ram_mb / 1024)) GB."
   failed=1
 fi
 
 if (( disk_gb < required_disk_gb )); then
-  echo "ERROR: ${profile_label^^} profile requires at least ${required_disk_gb} GB disk; detected ${disk_gb} GB."
+  echo "ERROR: ${profile_label_upper} profile requires at least ${required_disk_gb} GB disk; detected ${disk_gb} GB."
   failed=1
 fi
 

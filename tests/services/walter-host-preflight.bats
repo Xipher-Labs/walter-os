@@ -6,6 +6,8 @@ setup() {
   PREFLIGHT="$REPO_ROOT/setup/walter-host/preflight-check.sh"
   WALTER_HOST_README="$REPO_ROOT/setup/walter-host/README.md"
   RESOURCE_BUDGET="$REPO_ROOT/docs/operational/resource-budget.md"
+  TEST_BIN="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$TEST_BIN"
 }
 
 @test "preflight blocks full profile below 32GB RAM" {
@@ -49,6 +51,33 @@ setup() {
   echo "$output" | grep -Fq "override accepted"
 }
 
+@test "preflight avoids Bash 4-only uppercase expansion" {
+  [[ -x "$PREFLIGHT" ]]
+
+  ! grep -Fq '^^' "$PREFLIGHT"
+  grep -Fq "tr '[:lower:]' '[:upper:]'" "$PREFLIGHT"
+}
+
+@test "preflight treats failing sysctl memory detection as unknown" {
+  [[ -x "$PREFLIGHT" ]]
+
+  cat >"$TEST_BIN/sysctl" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$TEST_BIN/sysctl"
+
+  run env \
+    PATH="$TEST_BIN:/usr/bin:/bin" \
+    WALTER_PREFLIGHT_SKIP_PROC=1 \
+    WALTER_PREFLIGHT_VCPU=8 \
+    WALTER_PREFLIGHT_DISK_GB=160 \
+    "$PREFLIGHT" medium
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "MEDIUM profile requires at least 16 GB RAM"
+}
+
 @test "Walter-host docs recommend CX53 for full profile" {
   [[ -f "$WALTER_HOST_README" ]]
   [[ -f "$RESOURCE_BUDGET" ]]
@@ -58,4 +87,8 @@ setup() {
   grep -Fq "16 vCPU / 32 GB RAM" "$WALTER_HOST_README"
   grep -Fq "Full stack, single operator" "$RESOURCE_BUDGET"
   grep -Fq "CX53" "$RESOURCE_BUDGET"
+  grep -Fq "preflight-check.sh full" "$RESOURCE_BUDGET"
+  grep -Fq "Full profile requires" "$RESOURCE_BUDGET"
+  grep -Fq "Total recommended | **320 GB**" "$RESOURCE_BUDGET"
+  ! grep -Fq "(all profiles) requires" "$RESOURCE_BUDGET"
 }
