@@ -77,9 +77,9 @@ server. The helper prints the exact command after `--apply`; the shape is:
 
 ```bash
 hcloud firewall remove-from-resource \
+  walter-vm-break-glass-ssh \
   --type server \
-  --server "$HCLOUD_SERVER_NAME" \
-  walter-vm-break-glass-ssh
+  --server "$HCLOUD_SERVER_NAME"
 ```
 
 Keep the firewall object if you want a reusable template, but do not leave it

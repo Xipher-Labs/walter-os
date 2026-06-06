@@ -69,9 +69,9 @@ if [[ -z "$SERVER" ]]; then
 fi
 
 create_cmd=(hcloud firewall create --name "$FIREWALL_NAME" --label walter-os=break-glass --label purpose=ssh-recovery)
-rule_cmd=(hcloud firewall add-rule --direction in --protocol tcp --port 22 --source-ips "$CIDR" --description "$DESCRIPTION" "$FIREWALL_NAME")
-apply_cmd=(hcloud firewall apply-to-resource --type server --server "$SERVER" "$FIREWALL_NAME")
-remove_cmd=(hcloud firewall remove-from-resource --type server --server "$SERVER" "$FIREWALL_NAME")
+rule_cmd=(hcloud firewall add-rule "$FIREWALL_NAME" --direction in --protocol tcp --port 22 --source-ips "$CIDR" --description "$DESCRIPTION")
+apply_cmd=(hcloud firewall apply-to-resource "$FIREWALL_NAME" --type server --server "$SERVER")
+remove_cmd=(hcloud firewall remove-from-resource "$FIREWALL_NAME" --type server --server "$SERVER")
 
 print_cmd() {
   printf '%q ' "$@"
