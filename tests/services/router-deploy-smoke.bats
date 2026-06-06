@@ -32,6 +32,8 @@ assert_router_deploy_contract() {
   grep -Fq 'ROUTER_API_KEY' "$smoke"
   grep -Fq 'models_code=' "$smoke"
   grep -Fq 'HTTP ${models_code}' "$smoke"
+  grep -Fq ': > "$tmp_body"' "$smoke"
+  ! grep -Fq '2>/dev/null' "$smoke"
   grep -Fq 'sed -n' "$smoke"
   grep -Fq 'failed to parse ${ROUTER_NAME} /v1/models response' "$smoke"
   grep -Fq 'payload.get("data"' "$smoke"

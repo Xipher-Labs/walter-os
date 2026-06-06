@@ -61,12 +61,15 @@ post_completion() {
   payload="$(completion_payload "$model")"
 
   mapfile -t auth < <(auth_args "$token")
-  code="$(curl -sS -o "$tmp_body" -w "%{http_code}" \
+  : > "$tmp_body"
+  if ! code="$(curl -sS -o "$tmp_body" -w "%{http_code}" \
     --max-time "$ROUTER_SMOKE_TIMEOUT_SECONDS" \
     -X POST "${base_url%/}/v1/chat/completions" \
     -H "Content-Type: application/json" \
     "${auth[@]}" \
-    --data-binary "$payload" 2>/dev/null || echo 000)"
+    --data-binary "$payload")"; then
+    code="000"
+  fi
 
   if [[ "$code" != "200" ]]; then
     echo "✗ ${label} smoke failed for model ${model}: HTTP ${code}" >&2
@@ -79,10 +82,13 @@ post_completion() {
 
 echo "→ discovering advertised models from ${ROUTER_NAME}..."
 mapfile -t router_auth < <(auth_args "$ROUTER_API_KEY")
-models_code="$(curl -sS -o "$tmp_body" -w "%{http_code}" \
+: > "$tmp_body"
+if ! models_code="$(curl -sS -o "$tmp_body" -w "%{http_code}" \
   --max-time "$ROUTER_SMOKE_TIMEOUT_SECONDS" \
   "${router_auth[@]}" \
-  "${ROUTER_BASE_URL%/}/v1/models" 2>/dev/null || echo 000)"
+  "${ROUTER_BASE_URL%/}/v1/models")"; then
+  models_code="000"
+fi
 
 if [[ "$models_code" != "200" ]]; then
   echo "✗ failed to fetch ${ROUTER_NAME} /v1/models: HTTP ${models_code}" >&2
