@@ -56,6 +56,14 @@ WALTER_SERVICE_PLACEMENT_FILE=/path/to/service-placement.yml \
   ansible-playbook walter-vm.yml
 ```
 
+The path must be absolute. The same value can also be passed as an Ansible
+extra var:
+
+```bash
+ansible-playbook walter-vm.yml \
+  -e walter_service_placement_file=/path/to/service-placement.yml
+```
+
 The placement file maps service names to Ansible inventory groups:
 
 ```yaml

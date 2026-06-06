@@ -26,6 +26,14 @@
       ansible.builtin.ping:
       tags: always
 
+    - name: Fail when service placement manifest path is relative
+      ansible.builtin.fail:
+        msg: "service placement manifest path must be absolute: {{ walter_service_placement_path }}"
+      when:
+        - walter_service_placement_path | length > 0
+        - not (walter_service_placement_path | regex_search('^/'))
+      tags: always
+
     - name: Check optional service placement manifest
       ansible.builtin.stat:
         path: "{{ walter_service_placement_path }}"

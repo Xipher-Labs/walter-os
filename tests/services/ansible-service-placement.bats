@@ -17,6 +17,8 @@ setup() {
   grep -Fq "walter_service_placement_path" "$PLAYBOOK"
   grep -Fq "include_vars" "$PLAYBOOK"
   grep -Fq "walter_service_placement" "$PLAYBOOK"
+  grep -Fq "service placement manifest path must be absolute" "$PLAYBOOK"
+  grep -Fq "regex_search('^/')" "$PLAYBOOK"
 }
 
 @test "walter-vm playbook filters placement by current host groups" {
@@ -55,5 +57,6 @@ setup() {
   grep -Fq "services:" "$EXAMPLE"
   grep -Fq "vms:" "$EXAMPLE"
   grep -Fq "WALTER_SERVICE_PLACEMENT_FILE" "$README"
+  grep -Fq "walter_service_placement_file" "$README"
   grep -Fq "ansible/examples/service-placement.example.yml" "$README"
 }
