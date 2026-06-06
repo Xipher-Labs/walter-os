@@ -94,7 +94,8 @@ jobs:
           sudo apt-get install -qq ansible
           ansible-galaxy collection install community.general ansible.posix
       - name: Run Walter-VM syntax-check
-        run: ansible-playbook --syntax-check ansible/walter-vm.yml -i ansible/inventory.yml
+        working-directory: ansible
+        run: ansible-playbook --syntax-check walter-vm.yml -i inventory.yml
 
   bats:
     name: bats hooks tests

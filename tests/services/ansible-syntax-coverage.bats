@@ -23,7 +23,8 @@ setup() {
   [[ -f "$WORKFLOW" ]]
 
   grep -Fq "name: ansible syntax-check" "$WORKFLOW"
-  grep -Fq "ansible-playbook --syntax-check ansible/walter-vm.yml -i ansible/inventory.yml" "$WORKFLOW"
+  grep -Fq "working-directory: ansible" "$WORKFLOW"
+  grep -Fq "ansible-playbook --syntax-check walter-vm.yml -i inventory.yml" "$WORKFLOW"
 }
 
 @test "alerting role treats /etc/walter-vm as root-only secrets dir" {
