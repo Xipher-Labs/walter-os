@@ -58,5 +58,8 @@ setup() {
   grep -Fq "vms:" "$EXAMPLE"
   grep -Fq "WALTER_SERVICE_PLACEMENT_FILE" "$README"
   grep -Fq "walter_service_placement_file" "$README"
+  grep -Fq "play's target" "$README"
+  grep -Fq "inventory group names" "$README"
+  grep -Fq "Hosts assigned to auxiliary groups must also be included in the play target" "$README"
   grep -Fq "ansible/examples/service-placement.example.yml" "$README"
 }
