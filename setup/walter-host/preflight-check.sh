@@ -14,6 +14,7 @@ Environment:
   WALTER_PREFLIGHT_RAM_MB         Test/automation override for detected RAM.
   WALTER_PREFLIGHT_VCPU           Test/automation override for detected vCPU.
   WALTER_PREFLIGHT_DISK_GB        Test/automation override for detected disk.
+  WALTER_PREFLIGHT_SKIP_PROC=1    Test/debug override: skip /proc/meminfo RAM detection.
 EOF
 }
 
@@ -132,17 +133,17 @@ echo "Detected: vCPU=${vcpu}, RAM=$((ram_mb / 1024)) GB, disk=${disk_gb} GB"
 echo "Required: vCPU=${required_vcpu}, RAM=$((required_ram_mb / 1024)) GB, disk=${required_disk_gb} GB"
 
 if (( vcpu < required_vcpu )); then
-  echo "ERROR: ${profile_label_upper} profile requires at least ${required_vcpu} vCPU; detected ${vcpu}."
+  echo "ERROR: ${profile_label_upper} profile requires at least ${required_vcpu} vCPU; detected ${vcpu}." >&2
   failed=1
 fi
 
 if (( ram_mb < required_ram_mb )); then
-  echo "ERROR: ${profile_label_upper} profile requires at least $((required_ram_mb / 1024)) GB RAM; detected $((ram_mb / 1024)) GB."
+  echo "ERROR: ${profile_label_upper} profile requires at least $((required_ram_mb / 1024)) GB RAM; detected $((ram_mb / 1024)) GB." >&2
   failed=1
 fi
 
 if (( disk_gb < required_disk_gb )); then
-  echo "ERROR: ${profile_label_upper} profile requires at least ${required_disk_gb} GB disk; detected ${disk_gb} GB."
+  echo "ERROR: ${profile_label_upper} profile requires at least ${required_disk_gb} GB disk; detected ${disk_gb} GB." >&2
   failed=1
 fi
 
@@ -153,7 +154,7 @@ if (( failed == 1 )); then
   fi
 
   if [[ "$profile_label" == "full" ]]; then
-    echo "FULL profile is intended for CX53-class hosts (16 vCPU / 32 GB RAM / 320 GB disk)."
+    echo "FULL profile is intended for CX53-class hosts (16 vCPU / 32 GB RAM / 320 GB disk)." >&2
   fi
   exit 1
 fi

@@ -15,8 +15,8 @@ setup() {
 
   run env \
     WALTER_PREFLIGHT_RAM_MB=16384 \
-    WALTER_PREFLIGHT_VCPU=8 \
-    WALTER_PREFLIGHT_DISK_GB=240 \
+    WALTER_PREFLIGHT_VCPU=16 \
+    WALTER_PREFLIGHT_DISK_GB=320 \
     "$PREFLIGHT" full
 
   [ "$status" -eq 1 ]
@@ -56,6 +56,7 @@ setup() {
 
   ! grep -Fq '^^' "$PREFLIGHT"
   grep -Fq "tr '[:lower:]' '[:upper:]'" "$PREFLIGHT"
+  grep -Fq "WALTER_PREFLIGHT_SKIP_PROC" "$PREFLIGHT"
 }
 
 @test "preflight treats failing sysctl memory detection as unknown" {
