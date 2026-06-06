@@ -30,6 +30,11 @@ setup() {
   grep -q "continue" "$WATCHDOG"
 }
 
+@test "model router restarts only on the first failed transition" {
+  grep -q 'prev_model_state=$(state_get "$key")' "$WATCHDOG"
+  grep -q 'if \[\[ "$prev_model_state" == "0" \]\]; then' "$WATCHDOG"
+}
+
 @test "cron logrotate hint includes the AI watchdog log" {
   grep -q "/var/log/walter-ai-watchdog.log" "$CRON_EXAMPLE"
   grep -q "/var/log/walter-watchdog.log /var/log/walter-ai-watchdog.log /var/log/hetzner-spend.log" "$CRON_EXAMPLE"

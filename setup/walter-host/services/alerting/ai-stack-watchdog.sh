@@ -143,7 +143,10 @@ PY' 2>/dev/null | tr -d ' \n')
   fi
   transition "${key}_auth" "0" "" "model \`$model\` LiteLLM master key available again"
   if [[ "$probe_result" != "1" ]]; then
-    docker restart "$router" >/dev/null 2>&1 || true
+    prev_model_state=$(state_get "$key")
+    if [[ "$prev_model_state" == "0" ]]; then
+      docker restart "$router" >/dev/null 2>&1 || true
+    fi
     transition "$key" "1" \
       "model \`$model\` probe FAILED → auto-restarted \`$router\`. If it persists it is likely a config/auth issue (e.g. wrong upstream model slug), not a crash — check \`docker logs $router\`." \
       "model \`$model\` healthy again"
