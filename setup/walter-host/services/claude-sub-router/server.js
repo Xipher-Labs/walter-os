@@ -38,7 +38,7 @@ if (REQUIRED_API_KEY) {
 // Model mapping: incoming OpenAI-style names → Claude CLI --model values.
 // LiteLLM sends `openai/<name>`; we strip the prefix before matching.
 // Aliases (sonnet/opus/haiku) are stable across point releases.
-const MODEL_MAP = {
+const DEFAULT_MODEL_MAP = {
   sonnet: 'sonnet',
   opus: 'opus',
   haiku: 'haiku',
@@ -47,6 +47,37 @@ const MODEL_MAP = {
   'claude-opus-4-5':   'claude-opus-4-5',
   'claude-haiku-4-5':  'claude-haiku-4-5',
 };
+
+function loadModelMap(defaultMap) {
+  const raw = process.env.MODEL_MAP_JSON;
+  if (!raw || raw.trim() === '') {
+    return Object.freeze({ ...defaultMap });
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.error(`Invalid MODEL_MAP_JSON: expected a JSON object (${err.message})`);
+    process.exit(78);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.error('Invalid MODEL_MAP_JSON: expected a JSON object mapping request aliases to CLI model slugs');
+    process.exit(78);
+  }
+
+  for (const [alias, model] of Object.entries(parsed)) {
+    if (alias.trim() === '' || typeof model !== 'string' || model.trim() === '') {
+      console.error('Invalid MODEL_MAP_JSON: aliases and model slugs must be non-empty strings');
+      process.exit(78);
+    }
+  }
+
+  return Object.freeze({ ...defaultMap, ...parsed });
+}
+
+const MODEL_MAP = loadModelMap(DEFAULT_MODEL_MAP);
 
 const ACCEPTED_MODELS = new Set(Object.keys(MODEL_MAP));
 
