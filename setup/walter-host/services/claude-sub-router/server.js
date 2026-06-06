@@ -99,6 +99,8 @@ const STARTUP_MODEL_PROBE_ENABLED = startupModelProbeEnabled();
 const STARTUP_MODEL_PROBE_TIMEOUT_MS = startupModelProbeTimeoutMs();
 const STARTUP_MODEL_PROBE_PROMPT = process.env.ROUTER_STARTUP_MODEL_PROBE_PROMPT ||
   'Reply with exactly: ok';
+const STARTUP_MODEL_PROBE_HEADER = 'x-router-startup-model-probe';
+const STARTUP_MODEL_PROBE_HEADER_VALUE = randomUUID();
 let startupModelProbeStatus = STARTUP_MODEL_PROBE_ENABLED ? 'pending' : 'skipped';
 let startupModelProbeFailure = null;
 
@@ -263,6 +265,7 @@ function invokeClaude(claudeModel, prompt) {
 
 async function postStartupModelProbe(alias) {
   const headers = { 'Content-Type': 'application/json' };
+  headers[STARTUP_MODEL_PROBE_HEADER] = STARTUP_MODEL_PROBE_HEADER_VALUE;
   if (REQUIRED_API_KEY) {
     headers.Authorization = `Bearer ${REQUIRED_API_KEY}`;
   }
@@ -297,6 +300,20 @@ async function postStartupModelProbe(alias) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function startupModelProbeReadinessError() {
+  if (startupModelProbeStatus === 'pending') {
+    return { code: 'startup_model_probe_pending', detail: 'startup model probe pending' };
+  }
+  if (startupModelProbeStatus === 'failed') {
+    return { code: 'startup_model_probe_failed', detail: startupModelProbeFailure };
+  }
+  return null;
+}
+
+function isStartupModelProbeRequest(req) {
+  return req.header(STARTUP_MODEL_PROBE_HEADER) === STARTUP_MODEL_PROBE_HEADER_VALUE;
 }
 
 async function runStartupModelProbes() {
@@ -381,11 +398,12 @@ app.use((req, res, next) => {
 // container needs `claude /login` on the host volume.
 // Unauthenticated endpoint — used by Docker healthcheck before auth is needed.
 app.get('/health', (req, res) => {
-  if (startupModelProbeStatus === 'pending') {
-    return res.status(503).json({ status: 'starting', detail: 'startup model probe pending' });
-  }
-  if (startupModelProbeStatus === 'failed') {
-    return res.status(503).json({ status: 'failed', detail: startupModelProbeFailure });
+  const probeError = startupModelProbeReadinessError();
+  if (probeError) {
+    return res.status(503).json({
+      status: probeError.code === 'startup_model_probe_pending' ? 'starting' : 'failed',
+      detail: probeError.detail,
+    });
   }
 
   const fs = require('fs');
@@ -416,6 +434,11 @@ app.get('/v1/models', (req, res) => {
 // POST /v1/chat/completions — main endpoint
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, tools, stream } = req.body || {};
+
+  const probeError = startupModelProbeReadinessError();
+  if (probeError && !isStartupModelProbeRequest(req)) {
+    return res.status(503).json({ error: probeError.code, detail: probeError.detail });
+  }
 
   if (tools && Array.isArray(tools) && tools.length > 0) {
     return res.status(400).json({ error: 'tool_use_not_supported' });
@@ -477,8 +500,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     } catch (err) {
       startupModelProbeStatus = 'failed';
       startupModelProbeFailure = startupModelProbeFailure || err.message;
-      setTimeout(() => process.exit(78), 10_000).unref();
-      server.close(() => process.exit(78));
+      process.stdout.write(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'error',
+          event: 'server_started_with_failed_startup_model_probe',
+          detail: startupModelProbeFailure,
+        }) + '\n'
+      );
     }
   })();
 });
