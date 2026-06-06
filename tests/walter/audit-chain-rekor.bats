@@ -47,6 +47,10 @@ _rekor_path() {
   printf '%s/audit/root-2026-05-31.rekor.json\n' "$WALTER_CONFIG"
 }
 
+_rekor_pending_path() {
+  printf '%s/audit/root-2026-05-31.rekor.pending.json\n' "$WALTER_CONFIG"
+}
+
 _chain_path_for() {
   printf '%s/audit/chain-%s.jsonl\n' "$WALTER_CONFIG" "$1"
 }
@@ -57,6 +61,10 @@ _root_path_for() {
 
 _rekor_path_for() {
   printf '%s/audit/root-%s.rekor.json\n' "$WALTER_CONFIG" "$1"
+}
+
+_session_private_key_path() {
+  printf '%s/state/session-%s.key\n' "$WALTER_CONFIG" "$WALTER_SESSION_ID"
 }
 
 _curl_args_path() {
@@ -622,6 +630,111 @@ SH
   fi
   grep -q 'http://rekor.example/api/v1/log/entries' "$(_curl_args_path)"
   jq -e '.kind == "hashedrekord" and .apiVersion == "0.0.1"' "$(_curl_body_path)"
+}
+
+@test "append refreshes pending Rekor material for the latest root" {
+  _make_chain
+
+  [ -f "$(_rekor_pending_path)" ]
+  first_root="$(cat "$(_root_path)")"
+  jq -e --arg root "$first_root" \
+    '.date == "2026-05-31"
+     and .root == $root
+     and .payload.root == $root
+     and (.payload_sha256 | test("^[0-9a-f]{64}$"))
+     and (.sig | test("^[A-Za-z0-9+/]{86}==$"))
+     and (.public_key | length > 0)
+     and .session_id == env.WALTER_SESSION_ID' \
+    "$(_rekor_pending_path)"
+
+  WALTER_AUDIT_NOW="2026-05-31T12:00:02Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'echo later' allow approval-gate ok >/dev/null"
+  second_root="$(cat "$(_root_path)")"
+
+  [ "$second_root" != "$first_root" ]
+  jq -e --arg root "$second_root" \
+    '.root == $root and .payload.root == $root' \
+    "$(_rekor_pending_path)"
+}
+
+@test "close-day uploads pending Rekor material after private-key cleanup" {
+  _make_chain
+  [ -f "$(_rekor_pending_path)" ]
+  pending_sig="$(jq -r '.sig' "$(_rekor_pending_path)")"
+  pending_public_key="$(jq -r '.public_key' "$(_rekor_pending_path)")"
+  public_key_path="$WALTER_CONFIG/state/session-${WALTER_SESSION_ID}.pub"
+  run bash -c "source '$SESSION_LIB'; walter_session_end '$REPO_ROOT'"
+  [ "$status" -eq 0 ]
+  [ ! -f "$(_session_private_key_path)" ]
+  [ -f "$public_key_path" ]
+  _write_mock_curl
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: anchored audit root in Rekor abc123"* ]]
+  [ -f "$(_rekor_path)" ]
+  [ "$(jq -r '.sig' "$(_rekor_path)")" = "$pending_sig" ]
+  [ "$(jq -r '.public_key' "$(_rekor_path)")" = "$pending_public_key" ]
+  [ "$(jq -r '.spec.signature.content' "$(_curl_body_path)")" = "$pending_sig" ]
+  [ "$(jq -r '.spec.signature.publicKey.content' "$(_curl_body_path)")" = "$pending_public_key" ]
+}
+
+@test "close-day rejects stale pending Rekor material before network upload" {
+  _make_chain
+  stale_root="0000000000000000000000000000000000000000000000000000000000000000"
+  jq --arg stale_root "$stale_root" \
+    '.root = $stale_root | .payload.root = $stale_root' \
+    "$(_rekor_pending_path)" > "$TMP_HOME/pending-stale.json"
+  stale_payload="$(jq -cS '.payload' "$TMP_HOME/pending-stale.json")"
+  stale_payload_hash="$(_sha256 "$stale_payload")"
+  jq --arg hash "$stale_payload_hash" \
+    '.payload_sha256 = $hash' \
+    "$TMP_HOME/pending-stale.json" > "$(_rekor_pending_path)"
+  rm -f "$(_session_private_key_path)"
+  _write_mock_curl
+  rm -f "$(_curl_args_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Rekor pending material root mismatch"* ]]
+  [[ "$output" != *"session private key missing"* ]]
+  [[ "$output" != *"ok: anchored audit root in Rekor"* ]]
+  [ ! -f "$(_curl_args_path)" ]
+  [ ! -f "$(_rekor_path)" ]
+}
+
+@test "close-day reports malformed pending Rekor material before network upload" {
+  _make_chain
+  printf '{bad-json\n' > "$(_rekor_pending_path)"
+  rm -f "$(_session_private_key_path)"
+  _write_mock_curl
+  rm -f "$(_curl_args_path)"
+
+  run env \
+    PATH="$TMP_HOME/bin:$PATH" \
+    WALTER_AUDIT_REKOR_UPLOAD=1 \
+    WALTER_TEST_REKOR_CURL_ARGS="$(_curl_args_path)" \
+    WALTER_TEST_REKOR_CURL_BODY="$(_curl_body_path)" \
+    bash "$WALTER_OS_BIN" audit close-day --rekor-url "http://rekor.example" 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid Rekor pending material JSON"* ]]
+  [[ "$output" != *"Rekor pending material missing date"* ]]
+  [[ "$output" != *"session private key missing"* ]]
+  [ ! -f "$(_curl_args_path)" ]
+  [ ! -f "$(_rekor_path)" ]
 }
 
 @test "direct Rekor upload reports receipt publish failures under errexit" {

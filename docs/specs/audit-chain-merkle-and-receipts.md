@@ -117,8 +117,9 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
   the digest/signature/public key as a Rekor `hashedrekord`, receives a Rekor
   entry-id, and stores the payload plus entry metadata in
   `root-YYYY-MM-DD.rekor.json`. Anchoring is rejected for the current/future UTC
-  audit date to avoid stale receipts on mutable days; offline/scheduled
-  next-day anchoring after session private-key cleanup is deferred to a follow-up.
+  audit date to avoid stale receipts on mutable days. Scheduled next-day
+  anchoring after session private-key cleanup is supported by bounded pending
+  Rekor material generated before the private key is removed.
 - [x] `walter-os audit verify-chain --check-rekor` recomputes the local payload digest and confirms it matches the digest anchored in Rekor.
 - [x] If `WALTER_AUDIT_REKOR_UPLOAD=0` (default), no network call.
 

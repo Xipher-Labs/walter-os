@@ -94,6 +94,10 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   receipts, and adds `walter-os audit verify-chain --check-rekor` to compare
   the local root against the Rekor entry without uploading row contents or
   plaintext operator ids.
+- **Scheduled Rekor anchoring (#339/#122).** Prepares bounded pending Rekor
+  material while the final session private key is still available, so scheduled
+  next-day close jobs can upload matching roots after session-key cleanup
+  without persisting private keys.
 
 ### Changed
 
