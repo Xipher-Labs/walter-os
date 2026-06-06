@@ -38,6 +38,14 @@ setup() {
   ! grep -Fq "svc_files" "$SERVICE_ROLE"
 }
 
+@test "placement-only set_fact tasks do not mark runs changed" {
+  [[ -f "$PLAYBOOK" ]]
+  [[ -f "$SERVICE_ROLE" ]]
+
+  [[ "$(grep -c "changed_when: false" "$PLAYBOOK")" -ge 2 ]]
+  [[ "$(grep -c "changed_when: false" "$SERVICE_ROLE")" -ge 1 ]]
+}
+
 @test "service placement example documents generic overlay shape" {
   [[ -f "$EXAMPLE" ]]
   [[ -f "$README" ]]

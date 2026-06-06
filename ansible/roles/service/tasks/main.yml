@@ -11,6 +11,7 @@
 - name: "[{{ service_name }}] decide placement"
   ansible.builtin.set_fact:
     walter_service_should_deploy: "{{ walter_enabled_services is not defined or service_name in walter_enabled_services }}"
+  changed_when: false
 
 - name: "[{{ service_name }}] ensure service dir"
   ansible.builtin.file:

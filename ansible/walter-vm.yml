@@ -55,12 +55,14 @@
     - name: Initialize host-scoped service placement
       ansible.builtin.set_fact:
         walter_enabled_services: []
+      changed_when: false
       when: walter_service_placement is defined
       tags: always
 
     - name: Select services assigned to this host
       ansible.builtin.set_fact:
         walter_enabled_services: "{{ walter_enabled_services + [item.key] }}"
+      changed_when: false
       loop: "{{ (walter_service_placement.services | default({})) | dict2items }}"
       when:
         - walter_service_placement is defined
