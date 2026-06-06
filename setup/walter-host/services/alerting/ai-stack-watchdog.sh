@@ -32,6 +32,7 @@ set -euo pipefail
 
 ENV_FILE="${WALTER_ALERTING_ENV:-/etc/walter-vm/alerting.env}"
 STATE_FILE="${WALTER_AI_WATCHDOG_STATE:-/var/run/walter-ai-watchdog.state}"
+LOCK_FILE="${WALTER_AI_WATCHDOG_LOCK:-/var/run/walter-ai-watchdog.lock}"
 LITELLM_URL="${LITELLM_LOCAL_URL:-http://127.0.0.1:4000}"
 DB_SAT_PCT="${LITELLM_DB_SAT_PCT:-85}"   # restart db when used connections exceed this % of max
 # Models to probe → the sub-router container that serves them.
@@ -61,6 +62,12 @@ configure_db_sat_pct() {
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 configure_db_sat_pct
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "ai-stack-watchdog: already running; exiting"
+  exit 0
+fi
 [[ -n "${WALTER_TELEGRAM_BOT_TOKEN:-}" && -n "${WALTER_TELEGRAM_CHAT_ID:-}" ]] || {
   echo "WALTER_TELEGRAM_{BOT_TOKEN,CHAT_ID} required"; exit 2; }
 
@@ -104,10 +111,13 @@ as_root() { if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi; }
 cf_healthy() {
   # Preferred: cloudflared --metrics endpoint; /ready is 200 with
   # readyConnections>0 only when at least one tunnel connection is registered.
-  if [[ -n "${CLOUDFLARED_METRICS:-}" ]] \
-     && curl -s --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null \
-        | grep -q '"readyConnections":[1-9]'; then
-    return 0
+  if [[ -n "${CLOUDFLARED_METRICS:-}" ]]; then
+    local ready_payload
+    ready_payload=$(curl -s --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null || true)
+    if [[ -n "$ready_payload" ]]; then
+      printf '%s\n' "$ready_payload" | grep -q '"readyConnections":[1-9]' && return 0
+      return 1
+    fi
   fi
   # Fallback: must be active AND not show an unrecovered disconnect in the
   # last 3 min (errors are OK if a re-registration followed them).
@@ -196,7 +206,11 @@ req=u.Request("http://127.0.0.1:4000/v1/chat/completions",method="POST",
   headers={"Authorization":"Bearer "+k,"Content-Type":"application/json"},
   data=json.dumps({"model":os.environ["M"],"messages":[{"role":"user","content":"ping"}],"max_tokens":5}).encode())
 try:
-    with u.urlopen(req,timeout=int(os.environ["T"])) as r:
+    try:
+        timeout=int(os.environ.get("T","50"))
+    except Exception:
+        timeout=50
+    with u.urlopen(req,timeout=timeout) as r:
         print("1" if r.status==200 else "0")
 except Exception:
     print("0")

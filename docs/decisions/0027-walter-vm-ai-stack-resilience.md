@@ -1,8 +1,10 @@
-# 0027 — Walter-VM AI-stack resilience: kill the "false green" failure mode
+# ADR-0027: Walter-VM AI-stack resilience — kill the "false green" failure mode
 
-Status: Proposed (2026-06-06)
-Context owner: operator
-Supersedes/relates: ai-stack-watchdog.sh (PR #341), cloudflared setup (setup/walter-host/cloudflare/)
+**Status**: Proposed
+**Date**: 2026-06-06
+**Deciders**: Operator
+**Relates**: `ai-stack-watchdog.sh` (PR #341), cloudflared setup
+(`setup/walter-host/cloudflare/`)
 
 ## Context
 
@@ -73,6 +75,7 @@ on them:
 ## Permanent plan (prioritized; routed per repo)
 
 ### P0 — stops the bleeding / prevents the worst recurrence
+
 - **[walter-os] Bound the LiteLLM DB pool + fail fast.** Append
   `?connection_limit=10&pool_timeout=10&connect_timeout=10` to `DATABASE_URL`
   (litellm `compose.yml`). Caps client demand at ~20 backends under
@@ -91,6 +94,7 @@ on them:
   only way in.
 
 ### P1 — structural correctness
+
 - **[walter-os] Saturation-aware DB healthcheck** (`SELECT 1` / pg_stat_activity
   ratio) instead of `pg_isready`, on `litellm-db` and the other Postgres
   instances; raise `max_connections` with matching `shared_buffers` for
@@ -109,6 +113,7 @@ on them:
   thresholds to it.
 
 ### P2 — defense in depth / bigger bets
+
 - **[walter-os] Per-container resource limits as a mandatory stack standard**
   (shared `x-walter-limits` anchor: `mem_limit`/`mem_reservation`/`cpus`/
   `pids_limit`) across all ~30 services.

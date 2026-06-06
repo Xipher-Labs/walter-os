@@ -18,10 +18,22 @@ setup() {
   grep -q "set -euo pipefail" "$WATCHDOG"
 }
 
+@test "ai stack watchdog uses a non-blocking singleton lock" {
+  grep -q 'LOCK_FILE="${WALTER_AI_WATCHDOG_LOCK:-/var/run/walter-ai-watchdog.lock}"' "$WATCHDOG"
+  grep -q 'exec 9>"$LOCK_FILE"' "$WATCHDOG"
+  grep -q "flock -n 9" "$WATCHDOG"
+  grep -q "already running; exiting" "$WATCHDOG"
+}
+
 @test "telegram notification failures are visible in cron logs" {
   grep -q "Telegram notification failed" "$WATCHDOG"
   grep -q "return 1" "$WATCHDOG"
-  run grep -q '>/dev/null || true' "$WATCHDOG"
+  run awk '
+    /^notify\(\) \{/ { in_notify=1 }
+    in_notify && /[>][/]dev[/]null [|][|] true/ { found=1 }
+    in_notify && /^\}/ { in_notify=0 }
+    END { exit !found }
+  ' "$WATCHDOG"
   [ "$status" -ne 0 ]
 }
 
@@ -81,6 +93,12 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "cloudflared metrics readiness is authoritative when reachable" {
+  grep -q "ready_payload=" "$WATCHDOG"
+  grep -q 'printf .*ready_payload.*readyConnections' "$WATCHDOG"
+  grep -q "return 1" "$WATCHDOG"
+}
+
 @test "model probe detects missing LiteLLM master key without router restarts" {
   grep -q "missing_key" "$WATCHDOG"
   grep -q "master key is empty" "$WATCHDOG"
@@ -96,6 +114,13 @@ setup() {
 @test "model probe docker exec is bounded" {
   grep -q 'MODEL_EXEC_TIMEOUT="${LITELLM_MODEL_EXEC_TIMEOUT:-70s}"' "$WATCHDOG"
   grep -q 'timeout "$MODEL_EXEC_TIMEOUT" docker exec -e M="$model"' "$WATCHDOG"
+}
+
+@test "model probe timeout is parsed defensively" {
+  grep -q 'timeout=int(os.environ.get("T","50"))' "$WATCHDOG"
+  grep -q "timeout=50" "$WATCHDOG"
+  run grep -q 'timeout=int(os.environ\["T"\])' "$WATCHDOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "model router restart debouncing is independent from alert delivery" {
