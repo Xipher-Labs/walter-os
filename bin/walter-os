@@ -77,6 +77,8 @@
 #   session {status|restart}    Manage time-bounded session state (#122 A-4)
 #   cap {mint|list|verify|revoke}
 #                               Manage session capability tokens (#122 A-2)
+#   svc {up|stop|down|restart|ps|logs|apply} <name> [--host H] [--dry-run]
+#                               Manage Walter-VM service compose lifecycle
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
 #   doctor --codex-startup      Diagnose Codex skill/plugin/MCP startup health
@@ -143,6 +145,120 @@ print_help() {
   # Stops at the first non-comment line (typically `set -euo pipefail`),
   # so adding new subcommands above never breaks the help output.
   awk '/^[^#]/ && NR > 1 { exit } /^#( |$)/ { sub(/^# ?/, ""); print }' "$0"
+}
+
+# ---------- svc (Walter-VM service lifecycle wrapper) ----------
+
+_shell_quote() {
+  printf '%q' "$1"
+}
+
+_svc_usage() {
+  cat >&2 <<'USAGE'
+Usage: walter-os svc <up|stop|down|restart|ps|logs|apply> <service> [options]
+
+Options:
+  --host <ssh-host>       Run over ssh on a Walter-VM host
+  --services-dir <path>   Service root (default: /opt/walter-vm/services)
+  --dry-run              Print the command instead of executing it
+
+Notes:
+  down never uses -v; Docker volumes are preserved.
+USAGE
+}
+
+_svc_compose_command() {
+  case "$1" in
+    up|apply) printf '%s\n' "docker compose pull && docker compose up -d" ;;
+    stop) printf '%s\n' "docker compose stop" ;;
+    down) printf '%s\n' "docker compose down" ;;
+    restart) printf '%s\n' "docker compose restart" ;;
+    ps) printf '%s\n' "docker compose ps" ;;
+    logs) printf '%s\n' "docker compose logs --tail=100" ;;
+    *) return 2 ;;
+  esac
+}
+
+cmd_svc() {
+  local action="${1:-}"
+  local service="${2:-}"
+  shift 2 2>/dev/null || true
+
+  if [[ "$action" =~ ^(-h|--help|help)$ ]]; then
+    _svc_usage
+    return 0
+  fi
+  if [[ -z "$action" || -z "$service" ]]; then
+    _svc_usage
+    return 2
+  fi
+
+  local host=""
+  local services_dir="${WALTER_VM_SERVICES_DIR:-/opt/walter-vm/services}"
+  local dry_run=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --host)
+        host="${2:-}"
+        shift 2
+        ;;
+      --services-dir)
+        services_dir="${2:-}"
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      -h|--help|help)
+        _svc_usage
+        return 0
+        ;;
+      *)
+        echo "walter-os svc: unknown option: $1" >&2
+        _svc_usage
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ ! "$service" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "walter-os svc: invalid service name: $service" >&2
+    return 2
+  fi
+  if [[ -n "$host" && ! "$host" =~ ^[A-Za-z0-9._:@-]+$ ]]; then
+    echo "walter-os svc: invalid ssh host: $host" >&2
+    return 2
+  fi
+
+  local compose_cmd
+  if ! compose_cmd="$(_svc_compose_command "$action")"; then
+    echo "walter-os svc: unknown action: $action" >&2
+    _svc_usage
+    return 2
+  fi
+
+  local service_dir="${services_dir%/}/${service}"
+  local remote_cmd
+  remote_cmd="cd $(_shell_quote "$service_dir") && ${compose_cmd}"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    if [[ -n "$host" ]]; then
+      printf 'ssh %s %s\n' "$(_shell_quote "$host")" "$(_shell_quote "$remote_cmd")"
+    else
+      printf '%s\n' "$remote_cmd"
+    fi
+    return 0
+  fi
+
+  if [[ -n "$host" ]]; then
+    # shellcheck disable=SC2029 # remote command is assembled from validated service/action inputs.
+    ssh "$host" "$remote_cmd"
+  else
+    cd "$service_dir"
+    bash -lc "$compose_cmd"
+  fi
 }
 
 # ---------- audit ----------
@@ -2254,7 +2370,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|svc|pr-score|post-merge-check|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2296,6 +2412,7 @@ case "$cmd" in
   egress)             cmd_egress "$@" ;;
   session)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/session.sh" "$@" ;;
   cap)                exec "${WALTER_OS_HOME}/scripts/walter/subcommands/cap.sh" "$@" ;;
+  svc)                cmd_svc "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
