@@ -12,16 +12,14 @@ setup() {
 @test "Hetzner break-glass SSH helper exists and defaults to dry-run" {
   [[ -x "$SCRIPT" ]]
 
-  run "$SCRIPT" --server walter-vm --cidr 203.0.113.10/32
+  run env WALTER_BREAK_GLASS_DESCRIPTION=breakglass "$SCRIPT" --server walter-vm --cidr 203.0.113.10/32
   [ "$status" -eq 0 ]
   [[ "$output" == *"DRY RUN"* ]]
   [[ "$output" == *"hcloud firewall create"* ]]
   [[ "$output" == *"hcloud firewall add-rule"* ]]
-  [[ "$output" == *"--direction in"* ]]
-  [[ "$output" == *"--protocol tcp"* ]]
-  [[ "$output" == *"--port 22"* ]]
-  [[ "$output" == *"--source-ips 203.0.113.10/32"* ]]
+  [[ "$output" == *"hcloud firewall add-rule --direction in --protocol tcp --port 22 --source-ips 203.0.113.10/32 --description breakglass walter-vm-break-glass-ssh"* ]]
   [[ "$output" == *"hcloud firewall apply-to-resource"* ]]
+  [[ "$output" == *"hcloud firewall apply-to-resource --type server --server walter-vm walter-vm-break-glass-ssh"* ]]
 }
 
 @test "Hetzner break-glass SSH helper fails closed without server or CIDR" {
@@ -39,7 +37,7 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"DRY RUN"* ]]
   [[ "$output" == *"hcloud firewall remove-from-resource"* ]]
-  [[ "$output" == *"--server walter-vm"* ]]
+  [[ "$output" == *"hcloud firewall remove-from-resource --type server --server walter-vm walter-vm-break-glass-ssh"* ]]
 }
 
 @test "Hetzner firewall rule template is SSH-only and operator-scoped" {

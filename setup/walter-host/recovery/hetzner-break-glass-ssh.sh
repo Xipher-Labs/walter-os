@@ -15,13 +15,14 @@ DESCRIPTION="${WALTER_BREAK_GLASS_DESCRIPTION:-Walter-OS break-glass SSH recover
 usage() {
   cat <<'EOF'
 Usage:
-  hetzner-break-glass-ssh.sh --server <server-name-or-id> --cidr <ip-or-cidr> [--apply]
-  hetzner-break-glass-ssh.sh --server <server-name-or-id> --remove
+  hetzner-break-glass-ssh.sh --server <server-name-or-id> --cidr <ip-or-cidr> [--firewall <name>] [--apply]
+  hetzner-break-glass-ssh.sh --server <server-name-or-id> [--firewall <name>] --remove
 
 Environment alternatives:
   HCLOUD_SERVER_NAME
   WALTER_BREAK_GLASS_SSH_CIDR
   WALTER_BREAK_GLASS_FIREWALL
+  WALTER_BREAK_GLASS_DESCRIPTION
 
 Default mode prints the hcloud commands without executing them.
 EOF
