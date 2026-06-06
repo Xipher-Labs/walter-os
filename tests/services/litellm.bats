@@ -9,6 +9,7 @@ setup() {
 litellm_service_block() {
   awk '
     /^  litellm:/ { in_block=1; print; next }
+    in_block && /^[^[:space:]][^:]*:/ { exit }
     in_block && /^  [^[:space:]][^:]*:/ { exit }
     in_block { print }
   ' "$COMPOSE_FILE"
