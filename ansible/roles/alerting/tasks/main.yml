@@ -1,0 +1,49 @@
+---
+# Alerting role for Walter-VM.
+#
+# Ships watchdog scripts to the VM. Cron installation remains explicit because
+# the scripts require operator-owned Telegram and Hetzner credentials.
+
+- name: Ensure alerting service directory exists
+  ansible.builtin.file:
+    path: "{{ walter_services_dir }}/alerting"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure Walter-VM config directory exists
+  ansible.builtin.file:
+    path: /etc/walter-vm
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ship Walter-VM watchdog script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../setup/walter-host/services/alerting/walter-vm-watchdog.sh"
+    dest: "{{ walter_services_dir }}/alerting/walter-vm-watchdog.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ship Hetzner spend watchdog script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../setup/walter-host/services/alerting/hetzner-spend-watch.sh"
+    dest: "{{ walter_services_dir }}/alerting/hetzner-spend-watch.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ship alerting cron example
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../setup/walter-host/services/alerting/cron.example"
+    dest: "{{ walter_services_dir }}/alerting/cron.example"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Report alerting credential requirement
+  ansible.builtin.debug:
+    msg: "Alerting scripts are installed; create /etc/walter-vm/alerting.env and install cron.example manually when ready."

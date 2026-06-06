@@ -1,0 +1,135 @@
+---
+# Cloudflared role for Walter-VM.
+#
+# This role installs cloudflared and, when the operator has generated tunnel
+# files locally, installs the config as a systemd-managed tunnel. DNS records
+# and Cloudflare Access apps still live in setup/walter-host/cloudflare/*.sh.
+
+- name: Define cloudflared local source directory
+  ansible.builtin.set_fact:
+    walter_cloudflared_local_dir: "{{ lookup('env', 'WALTER_CLOUDFLARED_LOCAL_DIR') | default('/tmp/walter-cf', true) }}"
+
+- name: Check local cloudflared credentials
+  ansible.builtin.stat:
+    path: "{{ walter_cloudflared_local_dir }}/credentials.json"
+  delegate_to: localhost
+  become: no
+  register: walter_cloudflared_credentials
+
+- name: Check local cloudflared config
+  ansible.builtin.stat:
+    path: "{{ walter_cloudflared_local_dir }}/config.yml"
+  delegate_to: localhost
+  become: no
+  register: walter_cloudflared_config
+
+- name: Install cloudflared apt prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - lsb-release
+    state: present
+    update_cache: yes
+
+- name: Ensure apt keyring directory exists
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Cloudflare package signing key
+  ansible.builtin.get_url:
+    url: https://pkg.cloudflare.com/cloudflare-main.gpg
+    dest: /usr/share/keyrings/cloudflare-main.gpg
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure cloudflared apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared {{ ansible_distribution_release }} main"
+    filename: cloudflared
+    state: present
+
+- name: Install cloudflared package
+  ansible.builtin.apt:
+    name: cloudflared
+    state: present
+    update_cache: yes
+
+- name: Ensure cloudflared config directory exists
+  ansible.builtin.file:
+    path: /etc/cloudflared
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - walter_cloudflared_credentials.stat.exists
+    - walter_cloudflared_config.stat.exists
+
+- name: Install cloudflared credentials
+  ansible.builtin.copy:
+    src: "{{ walter_cloudflared_local_dir }}/credentials.json"
+    dest: /etc/cloudflared/credentials.json
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - walter_cloudflared_credentials.stat.exists
+    - walter_cloudflared_config.stat.exists
+
+- name: Install cloudflared tunnel config
+  ansible.builtin.copy:
+    src: "{{ walter_cloudflared_local_dir }}/config.yml"
+    dest: /etc/cloudflared/config.yml
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - walter_cloudflared_credentials.stat.exists
+    - walter_cloudflared_config.stat.exists
+
+- name: Install cloudflared systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cloudflared.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=cloudflared
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      TimeoutStartSec=0
+      Type=notify
+      ExecStart=/usr/bin/cloudflared --config /etc/cloudflared/config.yml --no-autoupdate tunnel run
+      Restart=on-failure
+      RestartSec=5s
+
+      [Install]
+      WantedBy=multi-user.target
+  register: walter_cloudflared_service
+  when:
+    - walter_cloudflared_credentials.stat.exists
+    - walter_cloudflared_config.stat.exists
+
+- name: Enable cloudflared service when tunnel files are present
+  ansible.builtin.systemd:
+    name: cloudflared
+    daemon_reload: "{{ walter_cloudflared_service.changed | default(false) }}"
+    enabled: yes
+    state: started
+  when:
+    - walter_cloudflared_credentials.stat.exists
+    - walter_cloudflared_config.stat.exists
+
+- name: Report skipped tunnel service configuration
+  ansible.builtin.debug:
+    msg: "Skipping cloudflared service configuration; run Cloudflare setup scripts or set WALTER_CLOUDFLARED_LOCAL_DIR with credentials.json and config.yml."
+  when: not (walter_cloudflared_credentials.stat.exists and walter_cloudflared_config.stat.exists)

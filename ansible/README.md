@@ -78,10 +78,39 @@ Role steps (idempotent):
 4. `docker compose pull`
 5. `docker compose --env-file .env up -d`
 
+## Cloudflared role contract
+
+`roles/cloudflared/` installs the `cloudflared` package and can install the
+tunnel as a systemd service when tunnel files already exist locally.
+
+By default it looks for:
+
+```
+/tmp/walter-cf/
+├── credentials.json
+└── config.yml
+```
+
+Override the source directory with:
+
+```bash
+WALTER_CLOUDFLARED_LOCAL_DIR=/path/to/walter-cf ansible-playbook walter-vm.yml --tags cloudflared
+```
+
+If those files are absent, the role installs the package but skips service
+configuration. Creating tunnels, DNS records, and Cloudflare Access apps still
+lives in `setup/walter-host/cloudflare/*.sh`.
+
+## Alerting role contract
+
+`roles/alerting/` ships the Walter-VM watchdog scripts and `cron.example` to
+`/opt/walter-vm/services/alerting/`. It does not install cron automatically
+because the scripts require operator-owned credentials in
+`/etc/walter-vm/alerting.env`.
+
 ## What this DOES NOT replace
 
 - Cloudflare DNS / Access apps (use `setup/walter-host/cloudflare/*.sh`)
-- Cloudflared tunnel ingress (use `cloudflared/config.yml` directly)
 - One-off setup like `restic init`, `headscale users create`, etc.
   (use the per-service deploy.sh for those)
 
