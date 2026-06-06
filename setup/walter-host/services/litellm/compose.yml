@@ -13,7 +13,7 @@ services:
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
-      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASS}@litellm-db:5432/litellm
+      DATABASE_URL: "postgresql://litellm:${LITELLM_DB_PASS}@litellm-db:5432/litellm?connection_limit=10&pool_timeout=10&connect_timeout=10"
       STORE_MODEL_IN_DB: "True"
       UI_USERNAME: "${WALTER_INITIAL_USER:-admin}"
       UI_PASSWORD: ${LITELLM_UI_PASS}
