@@ -6,7 +6,6 @@
 #   2. Copies compose.yml + non-template files (excludes .env)
 #   3. Generates .env from .env.template if missing (NEVER overwrites)
 #   4. docker compose pull + up -d
-#   5. Waits for healthy
 
 - name: "[{{ service_name }}] decide placement"
   ansible.builtin.set_fact:
