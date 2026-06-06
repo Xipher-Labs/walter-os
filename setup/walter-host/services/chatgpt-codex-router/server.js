@@ -56,7 +56,7 @@ function loadModelMap(defaultMap) {
     process.exit(78);
   }
 
-  const normalizedMap = {};
+  const normalizedMap = Object.create(null);
   for (const [alias, model] of Object.entries(parsed)) {
     const normalizedAlias = alias.trim();
     const normalizedModel = typeof model === 'string' ? model.trim() : '';

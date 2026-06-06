@@ -20,7 +20,7 @@ assert_router_model_map_json_contract() {
   grep -q "const DEFAULT_MODEL_MAP" "$server"
   grep -q "function loadModelMap" "$server"
   grep -q "process.env.MODEL_MAP_JSON" "$server"
-  grep -q "const normalizedMap" "$server"
+  grep -q "const normalizedMap = Object.create(null)" "$server"
   grep -q "normalizedAlias = alias.trim()" "$server"
   grep -q "normalizedModel = typeof model === 'string' ? model.trim() : ''" "$server"
   grep -q "normalizedMap\\[normalizedAlias\\] = normalizedModel" "$server"
