@@ -32,6 +32,20 @@ setup() {
   [[ "$output" == *"--cidr"* ]]
 }
 
+@test "Hetzner break-glass SSH helper rejects missing flag values" {
+  run "$SCRIPT" --server --cidr 203.0.113.10/32
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --server"* ]]
+
+  run "$SCRIPT" --server walter-vm --cidr --apply
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --cidr"* ]]
+
+  run "$SCRIPT" --server walter-vm --firewall --remove
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --firewall"* ]]
+}
+
 @test "Hetzner break-glass SSH helper can plan teardown without CIDR" {
   run "$SCRIPT" --server walter-vm --remove
   [ "$status" -eq 0 ]

@@ -33,6 +33,17 @@ Default mode prints the hcloud commands without executing them.
 EOF
 }
 
+require_value() {
+  local flag="$1"
+  local value="${2-}"
+
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "missing value for $flag" >&2
+    usage
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)
@@ -46,14 +57,17 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --server)
+      require_value "$1" "${2-}"
       SERVER="${2:-}"
       shift 2
       ;;
     --cidr)
+      require_value "$1" "${2-}"
       CIDR="${2:-}"
       shift 2
       ;;
     --firewall)
+      require_value "$1" "${2-}"
       FIREWALL_NAME="${2:-}"
       shift 2
       ;;
