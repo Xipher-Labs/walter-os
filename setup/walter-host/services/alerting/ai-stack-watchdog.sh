@@ -76,6 +76,51 @@ transition() {
   elif [[ "$cur" == "0" && "$prev" == "1" ]]; then notify "✅ *Walter-VM AI*: $recover" && state_set "$key" 0; fi
 }
 
+# Run a command as root whether the watchdog runs as root (cron in /etc/cron.d)
+# or as walter (needs NOPASSWD sudo for the specific systemctl commands).
+as_root() { if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi; }
+
+# ---------- 0. cloudflared tunnel (MUST be first — if down, everything 530s) ----------
+# The 2026-06-06 outage: cloudflared stayed `active` (process alive) but
+# UNREGISTERED from the Argo Tunnel → origin 530 "origin has been unregistered
+# from Argo Tunnel" for authenticated traffic, and SSH-over-Access bad-handshake.
+# A plain `systemctl is-active` does NOT catch this (process is up). So probe
+# the metrics /ready endpoint when exposed, else scan recent logs for an
+# unrecovered disconnect. This check runs LOCALLY on the VM, so it can restart
+# cloudflared even while the tunnel is down; Telegram alerts go direct (not via
+# the tunnel), so they get out regardless.
+cf_healthy() {
+  # Preferred: cloudflared --metrics endpoint; /ready is 200 with
+  # readyConnections>0 only when at least one tunnel connection is registered.
+  if [[ -n "${CLOUDFLARED_METRICS:-}" ]] \
+     && curl -s --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null \
+        | grep -q '"readyConnections":[1-9]'; then
+    return 0
+  fi
+  # Fallback: must be active AND not show an unrecovered disconnect in the
+  # last 3 min (errors are OK if a re-registration followed them).
+  systemctl is-active --quiet cloudflared || return 1
+  local bad good
+  bad=$(journalctl -u cloudflared --since "3 min ago" --no-pager 2>/dev/null \
+        | grep -ciE "unregistered tunnel|lost connection|failed to (dial|serve|connect)|register tunnel.*error" || true)
+  good=$(journalctl -u cloudflared --since "3 min ago" --no-pager 2>/dev/null \
+         | grep -ciE "registered tunnel connection|connection.*registered" || true)
+  [[ "${bad:-0}" -eq 0 || "${good:-0}" -gt 0 ]]
+}
+if ! cf_healthy; then
+  as_root systemctl restart cloudflared >/dev/null 2>&1 || true
+  sleep 12
+  if cf_healthy; then cfst=0; else cfst=1; fi
+  transition "cloudflared_down" "1" \
+    "cloudflared tunnel down/unregistered → auto-restarted ($([ $cfst -eq 0 ] && echo recovered || echo STILL DOWN — needs Hetzner console)). Symptom: 530 'origin unregistered' + SSH bad-handshake; takes down ALL tunnelled services + the AI pipeline." \
+    "cloudflared tunnel healthy again"
+  [[ $cfst -eq 0 ]] && state_set "cloudflared_down" 0
+  # If still down, the gateway probes below will all fail — skip them this cycle.
+  [[ $cfst -ne 0 ]] && { echo "ai-stack-watchdog: cloudflared still down ($(date -u +%FT%TZ))"; exit 0; }
+else
+  transition "cloudflared_down" "0" "" "cloudflared tunnel healthy again"
+fi
+
 # ---------- 1. LiteLLM liveliness ----------
 code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${LITELLM_URL}/health/liveliness" 2>/dev/null || echo 000)
 if [[ "$code" != "200" ]]; then
