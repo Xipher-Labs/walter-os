@@ -42,9 +42,11 @@ assert_router_startup_model_probe_contract() {
 
   grep -q 'ROUTER_STARTUP_MODEL_PROBE: "${ROUTER_STARTUP_MODEL_PROBE:-1}"' "$compose"
   grep -q 'ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS: "${ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS:-240000}"' "$compose"
+  grep -q 'ROUTER_STARTUP_MODEL_PROBE_PROMPT: "${ROUTER_STARTUP_MODEL_PROBE_PROMPT:-Reply with exactly: ok}"' "$compose"
   grep -q "start_period: 10m" "$compose"
   grep -q "ROUTER_STARTUP_MODEL_PROBE" "$env_template"
   grep -q "ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS" "$env_template"
+  grep -q "ROUTER_STARTUP_MODEL_PROBE_PROMPT" "$env_template"
 }
 
 @test "chatgpt-codex-router probes advertised models at startup" {

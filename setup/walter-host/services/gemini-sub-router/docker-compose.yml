@@ -19,6 +19,7 @@ services:
       MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
       ROUTER_STARTUP_MODEL_PROBE: "${ROUTER_STARTUP_MODEL_PROBE:-1}"
       ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS: "${ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS:-240000}"
+      ROUTER_STARTUP_MODEL_PROBE_PROMPT: "${ROUTER_STARTUP_MODEL_PROBE_PROMPT:-Reply with exactly: ok}"
     volumes:
       - ${HOME}/.gemini:/home/appuser/.gemini:rw
       - /tmp/gemini-sub-router:/tmp:rw
