@@ -132,7 +132,7 @@ groups:
             relativeTimeRange: { from: 600, to: 0 }
             datasourceUid: prometheus
             model:
-              expr: node_load1 > on(instance, job) count by (instance, job) (node_cpu_seconds_total{mode="idle"})
+              expr: (node_load1 > on(instance, job) count by (instance, job) (node_cpu_seconds_total{mode="idle"})) or on(instance, job) (0 * node_load1)
               instant: true
               refId: A
               type: query

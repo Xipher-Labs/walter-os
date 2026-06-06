@@ -28,6 +28,7 @@ setup() {
   grep -Fq "Load 1m > runtime vCPU count" "$GRAFANA_RULES"
   grep -Fq "title: Load avg 1m > vCPU count" "$GRAFANA_RULES"
   grep -Fq 'node_load1 > on(instance, job) count by (instance, job) (node_cpu_seconds_total{mode="idle"})' "$GRAFANA_RULES"
+  grep -Fq 'or on(instance, job) (0 * node_load1)' "$GRAFANA_RULES"
   grep -Fq "params: [0]" "$GRAFANA_RULES"
   grep -Fq "summary: Walter-VM load1m > runtime vCPU count" "$GRAFANA_RULES"
 
