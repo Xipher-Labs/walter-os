@@ -2,7 +2,7 @@
 # Alerting role for Walter-VM.
 #
 # Ships watchdog scripts to the VM. Cron installation remains explicit because
-# the scripts require operator-owned Telegram and Hetzner credentials.
+# the scripts require root-owned Telegram and Hetzner credential files.
 
 - name: Ensure alerting service directory exists
   ansible.builtin.file:
@@ -18,7 +18,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "0700"
 
 - name: Ship Walter-VM watchdog script
   ansible.builtin.copy:
@@ -46,4 +46,4 @@
 
 - name: Report alerting credential requirement
   ansible.builtin.debug:
-    msg: "Alerting scripts are installed; create /etc/walter-vm/alerting.env and install cron.example manually when ready."
+    msg: "Alerting scripts are installed; create /etc/walter-vm/alerting.env with sudo install -m 600 and install cron.example manually when ready."

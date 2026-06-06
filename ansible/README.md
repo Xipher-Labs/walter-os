@@ -105,8 +105,9 @@ lives in `setup/walter-host/cloudflare/*.sh`.
 
 `roles/alerting/` ships the Walter-VM watchdog scripts and `cron.example` to
 `/opt/walter-vm/services/alerting/`. It does not install cron automatically
-because the scripts require operator-owned credentials in
-`/etc/walter-vm/alerting.env`.
+because the scripts require root-owned credentials in
+`/etc/walter-vm/alerting.env`. Create that file with `sudo install -m 600`
+after filling Telegram and Hetzner values.
 
 ## What this DOES NOT replace
 
