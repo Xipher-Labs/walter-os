@@ -120,6 +120,14 @@ Role steps (idempotent):
 4. `docker compose pull`
 5. `docker compose --env-file .env up -d`
 
+Set `service_state` when including the role to reconcile a service lifecycle:
+
+| `service_state` | Behavior |
+|---|---|
+| `present` (default) | Sync service files, pull images, and run `docker compose up -d` |
+| `stopped` | Run `docker compose stop`; containers remain defined |
+| `absent` | Run `docker compose down`; containers/networks are removed but the role never removes volumes |
+
 ## What this DOES NOT replace
 
 - Cloudflare DNS / Access apps (use `setup/walter-host/cloudflare/*.sh`)
