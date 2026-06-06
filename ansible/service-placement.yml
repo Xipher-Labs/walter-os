@@ -1,0 +1,213 @@
+# service-placement.yml — SINGLE SOURCE OF TRUTH for the two-VM topology.
+#
+# WHY: walter-vm ran ~30 services on one box. Under load spikes (observed load
+# 98 on 16 vCPU, swap full) heavy non-critical services (posthog) starved
+# cloudflared → the tunnel deregistered → the whole box "stopped responding",
+# taking the production-critical LLM path down with it. See ADR-0028.
+#
+# FIX: segregate services across two VMs + DUPLICATE the LLM path (active on
+# both) so the customer-facing AI gateway never shares fate with the homelab.
+# Every service also gets a hard resource cap so no single one can starve a VM.
+#
+# HOW TO READ: each service lists the VM(s) it runs on. `duplicated: true` =
+# runs on BOTH (HA). Resource caps are docker `mem_limit` / `cpus` (cgroup),
+# sized for a ~16 vCPU / 30 GiB box; scale proportionally for other sizes.
+# The Ansible playbook iterates this map and deploys each service only on its
+# assigned host(s) with its caps. To move a service: edit one line here.
+#
+# Placement rules (operator directives, 2026-06-06):
+#   - ALL LLM components are duplicated (litellm, its db, the 3 sub-routers,
+#     llm-proxies) → active on both VMs behind the gateway.
+#   - posthog (heavy analytics, the CPU hog) lives on ONE VM only (aux).
+#   - cloudflared + observability agents run on BOTH (each VM needs its own).
+#   - vm-core = critical path + light infra, isolated from heavy services.
+#   - vm-aux  = heavy / non-critical homelab + the SECONDARY LLM replica.
+
+placement_meta:
+  vms:
+    vm-core:
+      role: "Production-critical path + light infra. Nothing heavy lands here."
+      hetzner_type_min: "CPX41 (8 vCPU / 16 GiB) — current 16/30 class fine"
+    vm-aux:
+      role: "Heavy / non-critical homelab + secondary LLM replica."
+      hetzner_type_min: "CPX41+ — sized for posthog + plane + synapse"
+  llm_ha:
+    strategy: "active-active behind the gateway hostname"
+    detail: >-
+      Both VMs run a full litellm stack. The public llm.${WALTER_DOMAIN}
+      ingress balances/fails over between vm-core:4000 and vm-aux:4000 via
+      cloudflared load-balancing (or a small Caddy/HAProxy in front). If either
+      VM dies, the AI pipeline keeps serving from the other. litellm-db is
+      per-VM (each replica owns its own spend/key DB); virtual-key definitions
+      are identical via the same config.yaml. (Cross-VM DB replication is NOT
+      required for stateless gateway use — see ADR-0028 "open questions".)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DUPLICATED — the LLM path (active on BOTH vms). The whole reason for this work.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  litellm:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "4"
+    mem_limit: "3g"
+    notes: "Gateway. Bounded Prisma pool (ADR-0027). Healthcheck on /health/liveliness."
+  litellm-db:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "2"
+    mem_limit: "1g"
+    notes: "Per-VM Postgres (postgres:16-alpine). max_connections tuned + SELECT-1 healthcheck."
+  chatgpt-codex-router:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "2"
+    mem_limit: "1g"
+  claude-sub-router:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "2"
+    mem_limit: "1g"
+  gemini-sub-router:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "2"
+    mem_limit: "1g"
+  llm-proxies:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "2"
+    mem_limit: "1g"
+
+  # ───── INFRA — runs on BOTH (each VM needs its own copy) ─────
+  cloudflared:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "1"
+    mem_limit: "256m"
+    notes: "Per-VM tunnel connector. Restart=always + --ha-connections (ADR-0027)."
+  observability-agents:
+    vms: [vm-core, vm-aux]
+    duplicated: true
+    cpus: "1"
+    mem_limit: "512m"
+    notes: "node-exporter + promtail/cadvisor on each VM; ship to the single Grafana/Prom/Loki on vm-core."
+
+  # ───── vm-core ONLY — critical/light infra ─────
+  infisical:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "1.5g"
+    notes: "Secrets backend (+ db + redis). Single instance; litellm sidecar caches secrets so a transient outage doesn't break a running gateway."
+  observability:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "3g"
+    notes: "Grafana + Prometheus + Loki server. Single pane for both VMs."
+  headscale:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "512m"
+  wireguard:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "256m"
+  uptime-kuma:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "512m"
+  restic:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "512m"
+    notes: "Backups — also schedule on vm-aux for its stateful services."
+  syncthing:
+    vms: [vm-core]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "512m"
+
+  # ───── vm-aux ONLY — heavy / non-critical homelab ─────
+  posthog:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "4"
+    mem_limit: "6g"
+    notes: "HARD CAP — this is the CPU hog (224% observed). Single instance, isolated from the critical LLM path. Includes clickhouse + workers."
+  plane:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "3"
+    mem_limit: "4g"
+    notes: "Project mgmt stack (api/web/worker/db/redis/mq/minio)."
+  n8n:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+  metabase:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+  postiz:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+    profile: devrel
+  penpot:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+    profile: design
+  drawio:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "512m"
+  rocketchat:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+  synapse:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+    notes: "Matrix homeserver — heavy."
+  openclaw:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "1g"
+  hermes-agent:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "1g"
+    profile: hermes-agent
+  control-tower:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "1g"
+  homepage:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "1"
+    mem_limit: "256m"
+  forgejo:
+    vms: [vm-aux]
+    duplicated: false
+    cpus: "2"
+    mem_limit: "2g"
+    notes: "Self-hosted git. Non-critical for the product runtime."

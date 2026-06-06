@@ -1,12 +1,40 @@
 ---
+# Two-VM topology (ADR-0028). Service→host placement lives in
+# service-placement.yml; this file only declares hosts + groups.
+#
+#   vm_core: production-critical path (LLM primary) + light infra.
+#   vm_aux:  heavy / non-critical homelab + LLM secondary replica.
+#
+# Both reach Ansible over the Cloudflare Access SSH tunnel. Once the headscale
+# break-glass works (walter-os#363) add a tailnet ansible_host fallback so a
+# tunnel outage can't block config management too.
+#
+# NOTE: `walter_vm` is kept as an alias group pointing at vm_core so existing
+# `--limit walter_vm` / playbook `hosts: walter_vm` references keep working
+# until the playbook is migrated to `hosts: walter_vms`.
 all:
   vars:
     ansible_python_interpreter: /usr/bin/python3
     ansible_user: walter
   children:
+    walter_vms:
+      children:
+        vm_core:
+          hosts:
+            walter-vm-core:
+              # Current production box (16 vCPU / 30 GiB).
+              ansible_host: ssh.${WALTER_DOMAIN}
+              ansible_ssh_common_args: -o ProxyCommand="cloudflared access ssh --hostname=%h"
+              walter_vm_role: core
+        vm_aux:
+          hosts:
+            walter-vm-aux:
+              # NEW box — provision via Hetzner (operator: see ADR-0028 runbook).
+              # Wire its own cloudflared SSH hostname, then set it here.
+              ansible_host: ssh-aux.${WALTER_DOMAIN}
+              ansible_ssh_common_args: -o ProxyCommand="cloudflared access ssh --hostname=%h"
+              walter_vm_role: aux
+    # Back-compat alias: old references to `walter_vm` still resolve to core.
     walter_vm:
       hosts:
-        walter-os:
-          # Connect via cloudflared SSH tunnel (CF Access in front)
-          ansible_host: ssh.${WALTER_DOMAIN}
-          ansible_ssh_common_args: -o ProxyCommand="cloudflared access ssh --hostname=%h"
+        walter-vm-core: {}
