@@ -22,6 +22,10 @@ Server-side Headscale log:
 ERR user msg: capability version must be set code=400
 ```
 
+The client can still surface this as HTTP 500 even when Headscale logs the
+underlying registration error as `code=400`; check both sides before assuming
+the proxy or tunnel rewrote the status.
+
 Known affected combination from issue #363:
 
 - Headscale 0.26.0, pinned in `compose.yml`
