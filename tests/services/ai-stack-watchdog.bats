@@ -63,6 +63,19 @@ setup() {
   grep -q "skipping model probes" "$WATCHDOG"
 }
 
+@test "db saturation threshold is validated before integer comparison" {
+  grep -q "configure_db_sat_pct" "$WATCHDOG"
+  grep -q "invalid LITELLM_DB_SAT_PCT" "$WATCHDOG"
+  grep -q "DB_SAT_PCT=85" "$WATCHDOG"
+}
+
+@test "cloudflared log fallback evaluates the last relevant event" {
+  grep -q "last_event=" "$WATCHDOG"
+  grep -q "tail -n 1" "$WATCHDOG"
+  run grep -q "local bad good" "$WATCHDOG"
+  [ "$status" -ne 0 ]
+}
+
 @test "model probe detects missing LiteLLM master key without router restarts" {
   grep -q "missing_key" "$WATCHDOG"
   grep -q "master key is empty" "$WATCHDOG"

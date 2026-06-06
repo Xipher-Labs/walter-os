@@ -46,9 +46,20 @@ LITELLM_RESTART_SETTLE_SECONDS="${LITELLM_RESTART_SETTLE_SECONDS:-20}"
 TELEGRAM_CONNECT_TIMEOUT="${WALTER_TELEGRAM_CONNECT_TIMEOUT:-5}"
 TELEGRAM_MAX_TIME="${WALTER_TELEGRAM_MAX_TIME:-15}"
 
+configure_db_sat_pct() {
+  local candidate="${LITELLM_DB_SAT_PCT:-$DB_SAT_PCT}"
+  if [[ "$candidate" =~ ^([1-9][0-9]?|100)$ ]]; then
+    DB_SAT_PCT="$candidate"
+  else
+    echo "ai-stack-watchdog: invalid LITELLM_DB_SAT_PCT=${candidate:-<empty>}; using 85" >&2
+    DB_SAT_PCT=85
+  fi
+}
+
 [[ -f "$ENV_FILE" ]] || { echo "missing env: $ENV_FILE"; exit 2; }
 # shellcheck disable=SC1090
 source "$ENV_FILE"
+configure_db_sat_pct
 [[ -n "${WALTER_TELEGRAM_BOT_TOKEN:-}" && -n "${WALTER_TELEGRAM_CHAT_ID:-}" ]] || {
   echo "WALTER_TELEGRAM_{BOT_TOKEN,CHAT_ID} required"; exit 2; }
 
@@ -100,12 +111,13 @@ cf_healthy() {
   # Fallback: must be active AND not show an unrecovered disconnect in the
   # last 3 min (errors are OK if a re-registration followed them).
   systemctl is-active --quiet cloudflared || return 1
-  local bad good
-  bad=$(journalctl -u cloudflared --since "3 min ago" --no-pager 2>/dev/null \
-        | grep -ciE "unregistered tunnel|lost connection|failed to (dial|serve|connect)|register tunnel.*error" || true)
-  good=$(journalctl -u cloudflared --since "3 min ago" --no-pager 2>/dev/null \
-         | grep -ciE "registered tunnel connection|connection.*registered" || true)
-  [[ "${bad:-0}" -eq 0 || "${good:-0}" -gt 0 ]]
+  local last_event
+  last_event=$(journalctl -u cloudflared --since "3 min ago" --no-pager 2>/dev/null \
+        | grep -Ei "unregistered|lost connection|failed to (dial|serve|connect)|register tunnel.*error|registered tunnel connection|connection.*registered" \
+        | tail -n 1 || true)
+  [[ -z "$last_event" ]] && return 0
+  ! printf '%s\n' "$last_event" \
+    | grep -Eiq "unregistered|lost connection|failed to (dial|serve|connect)|register tunnel.*error"
 }
 if ! cf_healthy; then
   as_root systemctl restart cloudflared >/dev/null 2>&1 || true
