@@ -23,8 +23,10 @@ litellm_service_block() {
 
   grep -q "restart: unless-stopped" <<<"$block"
   grep -q "healthcheck:" <<<"$block"
+  grep -q "CMD-SHELL" <<<"$block"
   grep -q "http://localhost:4000/health/liveliness" <<<"$block"
   grep -q "timeout=5" <<<"$block"
+  grep -q ">/dev/null 2>&1" <<<"$block"
   grep -q "interval: 30s" <<<"$block"
   grep -q "timeout: 10s" <<<"$block"
   grep -q "retries: 5" <<<"$block"
