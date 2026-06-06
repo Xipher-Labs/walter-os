@@ -89,10 +89,20 @@ state_set() {
 }
 # 0→1 alerts a problem (after healing), 1→0 alerts recovery. Debounced.
 transition() {
-  local key="$1" cur="$2" alert="$3" recover="$4" prev
+  local key="$1" cur="$2" alert="$3" recover="$4" prev message next_state
   prev=$(state_get "$key")
-  if [[ "$cur" == "1" && "$prev" == "0" ]]; then notify "🚨 *Walter-VM AI*: $alert" && state_set "$key" 1
-  elif [[ "$cur" == "0" && "$prev" == "1" ]]; then notify "✅ *Walter-VM AI*: $recover" && state_set "$key" 0; fi
+  if [[ "$cur" == "1" && "$prev" == "0" ]]; then
+    message="🚨 *Walter-VM AI*: $alert"
+    next_state=1
+  elif [[ "$cur" == "0" && "$prev" == "1" ]]; then
+    message="✅ *Walter-VM AI*: $recover"
+    next_state=0
+  else
+    return 0
+  fi
+
+  notify "$message" && state_set "$key" "$next_state"
+  return 0
 }
 
 # The watchdog is installed in root cron because it calls docker and journalctl

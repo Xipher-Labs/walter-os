@@ -45,8 +45,20 @@ setup() {
 }
 
 @test "debounce state advances only after successful notification" {
-  grep -q 'notify ".*" && state_set "$key" 1' "$WATCHDOG"
-  grep -q 'notify ".*" && state_set "$key" 0' "$WATCHDOG"
+  grep -q 'next_state=1' "$WATCHDOG"
+  grep -q 'next_state=0' "$WATCHDOG"
+  grep -q 'notify "$message" && state_set "$key" "$next_state"' "$WATCHDOG"
+}
+
+@test "notification failure does not abort the watchdog cycle" {
+  run awk '
+    /^transition\(\) \{/ { in_transition=1 }
+    in_transition && /notify "\$message" && state_set "\$key" "\$next_state"/ { saw_transition=1 }
+    in_transition && /return 0/ { saw_return=1 }
+    in_transition && /^\}/ { in_transition=0 }
+    END { exit !(saw_transition && saw_return) }
+  ' "$WATCHDOG"
+  [ "$status" -eq 0 ]
 }
 
 @test "install docs use root crontab for docker and root log paths" {

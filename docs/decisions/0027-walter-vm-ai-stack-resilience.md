@@ -10,7 +10,7 @@
 
 Between 2026-06-02 and 2026-06-06 the Walter-VM AI stack (LiteLLM gateway +
 `litellm-db` + claude/gemini/codex sub-routers, fronted by Cloudflare Access +
-Argo Tunnel, consumed by the Licitar Railway workers) suffered four outages:
+Argo Tunnel, consumed by downstream workers) suffered four outages:
 
 1. **2026-06-02 (undetected 4 days)** — `litellm-db` exhausted Postgres
    connections ("too many clients already"); LiteLLM crash-looped; the
@@ -107,7 +107,7 @@ on them:
   `Restart=always`** + a `/ready` health-timer. *Note: `Restart=always` alone
   does NOT fix the alive-but-unregistered mode — the watchdog/health-timer
   does. Verify the deployed unit + config_src before editing.*
-- **[licitar] Land the probe-timeout fix** (PR #703, 25s→45s) and align the
+- **[downstream app] Land the probe-timeout fix** (25s→45s) and align the
   infra-status `/health` ping (3000 ms) to documented router latency.
 - **[VM-action] Reconcile the real vCPU count** and align watchdog + Grafana
   thresholds to it.
