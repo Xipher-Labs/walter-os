@@ -51,6 +51,20 @@ esac
 
 profile_label_upper="$(printf '%s' "$profile_label" | tr '[:lower:]' '[:upper:]')"
 
+is_uint() {
+  [[ "${1:-}" =~ ^[0-9]+$ ]]
+}
+
+require_uint() {
+  local name="$1"
+  local value="$2"
+
+  if ! is_uint "$value"; then
+    echo "ERROR: ${name} must be numeric; got '${value:-<empty>}'." >&2
+    exit 2
+  fi
+}
+
 detect_ram_mb() {
   if [[ -n "${WALTER_PREFLIGHT_RAM_MB:-}" ]]; then
     echo "$WALTER_PREFLIGHT_RAM_MB"
@@ -94,13 +108,24 @@ detect_disk_gb() {
     return
   fi
 
-  df -Pm / 2>/dev/null | awk 'NR == 2 { printf "%.0f\n", $2 / 1024 }'
+  local disk_mb
+  disk_mb="$(df -Pm / 2>/dev/null | awk 'NR == 2 { print $2 }' || true)"
+  if is_uint "$disk_mb"; then
+    awk -v mb="$disk_mb" 'BEGIN { printf "%.0f\n", mb / 1024 }'
+    return
+  fi
+
+  echo 0
 }
 
 ram_mb="$(detect_ram_mb)"
 vcpu="$(detect_vcpu)"
 disk_gb="$(detect_disk_gb)"
 failed=0
+
+require_uint "WALTER_PREFLIGHT_RAM_MB/detected RAM" "$ram_mb"
+require_uint "WALTER_PREFLIGHT_VCPU/detected vCPU" "$vcpu"
+require_uint "WALTER_PREFLIGHT_DISK_GB/detected disk" "$disk_gb"
 
 echo "Walter-host capacity preflight: profile=${profile_label}"
 echo "Detected: vCPU=${vcpu}, RAM=$((ram_mb / 1024)) GB, disk=${disk_gb} GB"

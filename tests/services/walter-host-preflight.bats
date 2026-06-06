@@ -78,6 +78,38 @@ EOF
   echo "$output" | grep -Fq "MEDIUM profile requires at least 16 GB RAM"
 }
 
+@test "preflight treats failing disk detection as unknown" {
+  [[ -x "$PREFLIGHT" ]]
+
+  cat >"$TEST_BIN/df" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$TEST_BIN/df"
+
+  run env \
+    PATH="$TEST_BIN:/usr/bin:/bin" \
+    WALTER_PREFLIGHT_RAM_MB=8192 \
+    WALTER_PREFLIGHT_VCPU=4 \
+    "$PREFLIGHT" floor
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "FLOOR profile requires at least 80 GB disk"
+}
+
+@test "preflight rejects non-numeric overrides before arithmetic" {
+  [[ -x "$PREFLIGHT" ]]
+
+  run env \
+    WALTER_PREFLIGHT_RAM_MB=not-a-number \
+    WALTER_PREFLIGHT_VCPU=8 \
+    WALTER_PREFLIGHT_DISK_GB=160 \
+    "$PREFLIGHT" medium
+
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -Fq "must be numeric"
+}
+
 @test "Walter-host docs recommend CX53 for full profile" {
   [[ -f "$WALTER_HOST_README" ]]
   [[ -f "$RESOURCE_BUDGET" ]]
