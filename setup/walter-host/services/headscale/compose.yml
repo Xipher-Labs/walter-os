@@ -15,6 +15,10 @@
 # do interactive Google login). Workaround: bypass CF Access for /derp and
 # specific Tailscale paths, OR use Headscale's built-in token auth + expose
 # raw via separate subdomain.
+#
+# Compatibility note: Headscale can lag newer Tailscale client capability
+# versions. If registration fails with capability-version drift, see RUNBOOK.md
+# before changing the pinned image or downgrading clients.
 
 services:
   headscale:
