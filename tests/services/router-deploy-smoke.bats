@@ -26,14 +26,16 @@ assert_router_deploy_contract() {
 
 @test "shared deploy smoke helper probes advertised router models" {
   local smoke="$PATTERN_DIR/deploy-smoke.sh"
+  local curl_lines
   [[ -x "$smoke" ]]
 
+  curl_lines="$(grep -F 'curl ' "$smoke")"
   grep -Fq '/v1/models' "$smoke"
   grep -Fq 'ROUTER_API_KEY' "$smoke"
   grep -Fq 'models_code=' "$smoke"
   grep -Fq 'HTTP ${models_code}' "$smoke"
   grep -Fq ': > "$tmp_body"' "$smoke"
-  ! grep -Fq '2>/dev/null' "$smoke"
+  [[ "$curl_lines" != *'2>/dev/null'* ]]
   grep -Fq 'sed -n' "$smoke"
   grep -Fq 'failed to parse ${ROUTER_NAME} /v1/models response' "$smoke"
   grep -Fq 'payload.get("data"' "$smoke"
@@ -63,6 +65,8 @@ assert_router_deploy_contract() {
   grep -Fq 'State.Health.Status' "$helper"
   grep -Fq 'deploy-smoke.sh' "$helper"
   grep -Fq 'ROUTER_BASE_URL' "$helper"
+  grep -Fq 'ROUTER_HEALTH_WAIT_ATTEMPTS:-190' "$helper"
+  grep -Fq 'ROUTER_HEALTH_WAIT_SECONDS:-10' "$helper"
   grep -Fq 'invalid router port' "$helper"
   grep -Fq 'invalid router API-key env var name' "$helper"
 }
