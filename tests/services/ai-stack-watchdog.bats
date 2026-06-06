@@ -19,8 +19,14 @@ setup() {
 
 @test "telegram notification failures are visible in cron logs" {
   grep -q "Telegram notification failed" "$WATCHDOG"
+  grep -q "return 1" "$WATCHDOG"
   run grep -q '>/dev/null || true' "$WATCHDOG"
   [ "$status" -ne 0 ]
+}
+
+@test "debounce state advances only after successful notification" {
+  grep -q 'notify ".*" && state_set "$key" 1' "$WATCHDOG"
+  grep -q 'notify ".*" && state_set "$key" 0' "$WATCHDOG"
 }
 
 @test "install docs use root crontab for docker and root log paths" {
@@ -44,6 +50,9 @@ setup() {
   grep -q "missing_key" "$WATCHDOG"
   grep -q "master key is empty" "$WATCHDOG"
   grep -q "LITELLM_MASTER_KEY.*LiteLLM service environment" "$WATCHDOG"
+  grep -q "litellm_master_key_missing" "$WATCHDOG"
+  run grep -q '[$][{]key[}]_auth' "$WATCHDOG"
+  [ "$status" -ne 0 ]
   run grep -q 'fix `/run/secrets/litellm.env`' "$WATCHDOG"
   [ "$status" -ne 0 ]
   grep -q "continue" "$WATCHDOG"

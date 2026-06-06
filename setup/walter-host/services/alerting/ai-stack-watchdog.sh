@@ -55,6 +55,7 @@ notify() {
     -d "chat_id=${WALTER_TELEGRAM_CHAT_ID}" \
     --data-urlencode "text=$1" -d "parse_mode=Markdown" >/dev/null; then
     echo "ai-stack-watchdog: Telegram notification failed" >&2
+    return 1
   fi
 }
 state_get() { [[ -f "$STATE_FILE" ]] && (grep -E "^${1}=" "$STATE_FILE" 2>/dev/null | cut -d= -f2) || echo "0"; }
@@ -67,8 +68,8 @@ state_set() {
 transition() {
   local key="$1" cur="$2" alert="$3" recover="$4" prev
   prev=$(state_get "$key")
-  if [[ "$cur" == "1" && "$prev" == "0" ]]; then notify "🚨 *Walter-VM AI*: $alert"; state_set "$key" 1
-  elif [[ "$cur" == "0" && "$prev" == "1" ]]; then notify "✅ *Walter-VM AI*: $recover"; state_set "$key" 0; fi
+  if [[ "$cur" == "1" && "$prev" == "0" ]]; then notify "🚨 *Walter-VM AI*: $alert" && state_set "$key" 1
+  elif [[ "$cur" == "0" && "$prev" == "1" ]]; then notify "✅ *Walter-VM AI*: $recover" && state_set "$key" 0; fi
 }
 
 # ---------- 1. LiteLLM liveliness ----------
@@ -138,12 +139,12 @@ except Exception:
     print("0")
 PY' 2>/dev/null | tr -d ' \n' || true)
   if [[ "$probe_result" == "missing_key" ]]; then
-    transition "${key}_auth" "1" \
-      "model \`$model\` probe skipped because LiteLLM master key is empty inside \`litellm\`; fix \`LITELLM_MASTER_KEY\` in the LiteLLM service environment before restarting routers" \
-      "model \`$model\` LiteLLM master key available again"
+    transition "litellm_master_key_missing" "1" \
+      "LiteLLM master key is empty inside \`litellm\`; model probes skipped; fix \`LITELLM_MASTER_KEY\` in the LiteLLM service environment before restarting routers" \
+      "LiteLLM master key available again"
     continue
   fi
-  transition "${key}_auth" "0" "" "model \`$model\` LiteLLM master key available again"
+  transition "litellm_master_key_missing" "0" "" "LiteLLM master key available again"
   if [[ "$probe_result" != "1" ]]; then
     prev_model_state=$(state_get "$key")
     if [[ "$prev_model_state" == "0" ]]; then
