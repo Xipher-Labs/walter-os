@@ -18,32 +18,40 @@ setup() {
 }
 
 @test "optional pgbouncer service runs in transaction mode" {
-  COMPOSE_FILE="$COMPOSE_FILE" ruby <<'RUBY'
-require "yaml"
-compose = YAML.load_file(ENV.fetch("COMPOSE_FILE"))
-service = compose.fetch("services").fetch("litellm-pgbouncer")
-env = service.fetch("environment")
+  python3 - "$COMPOSE_FILE" <<'PY'
+import sys
+import yaml
 
-abort "PgBouncer must be opt-in" unless service.fetch("profiles") == ["pgbouncer"]
-abort "PgBouncer image must be pinned" unless service.fetch("image") == "edoburu/pgbouncer:v1.24.1-p1"
-abort "PgBouncer must wait for litellm-db" unless service.fetch("depends_on").fetch("litellm-db").fetch("condition") == "service_healthy"
-abort "PgBouncer must use transaction pooling" unless env.fetch("POOL_MODE") == "transaction"
-abort "PgBouncer must target litellm-db" unless env.fetch("DB_HOST") == "litellm-db"
-abort "PgBouncer must expose litellm database" unless env.fetch("DB_NAME") == "litellm"
-RUBY
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    compose = yaml.safe_load(fh)
+
+service = compose["services"]["litellm-pgbouncer"]
+env = service["environment"]
+
+assert service["profiles"] == ["pgbouncer"], "PgBouncer must be opt-in"
+assert service["image"] == "edoburu/pgbouncer:v1.24.1-p1", "PgBouncer image must be pinned"
+assert service["depends_on"]["litellm-db"]["condition"] == "service_healthy", "PgBouncer must wait for litellm-db"
+assert env["POOL_MODE"] == "transaction", "PgBouncer must use transaction pooling"
+assert env["DB_HOST"] == "litellm-db", "PgBouncer must target litellm-db"
+assert env["DB_NAME"] == "litellm", "PgBouncer must expose litellm database"
+PY
 }
 
 @test "pgbouncer caps real backend connections independently of workers" {
-  COMPOSE_FILE="$COMPOSE_FILE" ruby <<'RUBY'
-require "yaml"
-compose = YAML.load_file(ENV.fetch("COMPOSE_FILE"))
-env = compose.fetch("services").fetch("litellm-pgbouncer").fetch("environment")
+  python3 - "$COMPOSE_FILE" <<'PY'
+import sys
+import yaml
 
-abort "missing DEFAULT_POOL_SIZE" unless env.fetch("DEFAULT_POOL_SIZE").include?("LITELLM_PGBOUNCER_POOL_SIZE:-20")
-abort "missing RESERVE_POOL_SIZE" unless env.fetch("RESERVE_POOL_SIZE").include?("LITELLM_PGBOUNCER_RESERVE_POOL_SIZE:-5")
-abort "missing MAX_DB_CONNECTIONS" unless env.fetch("MAX_DB_CONNECTIONS").include?("LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS:-25")
-abort "missing MAX_CLIENT_CONN" unless env.fetch("MAX_CLIENT_CONN").include?("LITELLM_PGBOUNCER_MAX_CLIENT_CONN:-200")
-RUBY
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    compose = yaml.safe_load(fh)
+
+env = compose["services"]["litellm-pgbouncer"]["environment"]
+
+assert "LITELLM_PGBOUNCER_POOL_SIZE:-20" in env["DEFAULT_POOL_SIZE"], "missing DEFAULT_POOL_SIZE"
+assert "LITELLM_PGBOUNCER_RESERVE_POOL_SIZE:-5" in env["RESERVE_POOL_SIZE"], "missing RESERVE_POOL_SIZE"
+assert "LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS:-25" in env["MAX_DB_CONNECTIONS"], "missing MAX_DB_CONNECTIONS"
+assert "LITELLM_PGBOUNCER_MAX_CLIENT_CONN:-200" in env["MAX_CLIENT_CONN"], "missing MAX_CLIENT_CONN"
+PY
 }
 
 @test "Walter Bridge docs explain how to enable optional pgbouncer" {

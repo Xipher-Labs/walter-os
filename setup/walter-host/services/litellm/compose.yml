@@ -15,8 +15,8 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       # Bound the Prisma/quaint pool + fail fast. Without these the pool defaults
       # to ~num_cpus*2+1 PER worker (16 vCPU box × --num_workers 2 ≈ 40+ backends,
-      # confirmed 43/100 live on 2026-06-06), so a reconnect storm during a
-      # crash-loop exhausts litellm-db's max_connections=100 → "too many clients"
+      # confirmed 43 live on 2026-06-06), so a reconnect storm during a
+      # crash-loop can exhaust litellm-db backend slots → "too many clients"
       # → undetected 4-day outage (ADR-0027, Incident 1). connection_limit=10 caps
       # client demand to ~20 backends; pool_timeout/connect_timeout turn a
       # saturated pool into a fast visible error instead of a silent hang.
