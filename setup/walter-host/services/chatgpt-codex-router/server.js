@@ -513,7 +513,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-const server = app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
   (async () => {
     try {
       await runStartupModelProbes();
