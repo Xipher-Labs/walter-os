@@ -3,9 +3,9 @@
 Headscale is optional mesh networking for Walter-VM. It is useful for private
 admin paths, but it is not the primary out-of-band recovery path.
 
-Do not rely on Headscale as the primary break-glass path. Use the Hetzner Cloud
-Firewall SSH allow-list documented in `docs/runbooks/break-glass-recovery.md`
-when Cloudflare Tunnel or Cloudflare Access becomes unavailable.
+Do not rely on Headscale as the primary break-glass path. Use the Walter-VM
+Hetzner Cloud Firewall SSH allow-list runbook when Cloudflare Tunnel or
+Cloudflare Access becomes unavailable.
 
 ## Registration Fails With HTTP 500
 

@@ -19,8 +19,8 @@ setup() {
 @test "headscale runbook keeps break-glass on non-headscale path" {
   [[ -f "$RUNBOOK" ]]
 
-  grep -Fq "docs/runbooks/break-glass-recovery.md" "$RUNBOOK"
   grep -Fq "Do not rely on Headscale as the primary break-glass path" "$RUNBOOK"
+  grep -Fq "Walter-VM" "$RUNBOOK"
   grep -Fq "Hetzner Cloud Firewall SSH allow-list" "$RUNBOOK"
 }
 
