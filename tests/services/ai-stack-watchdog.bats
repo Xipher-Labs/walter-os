@@ -6,6 +6,7 @@ setup() {
   ALERTING_DIR="$REPO_ROOT/setup/walter-host/services/alerting"
   WATCHDOG="$ALERTING_DIR/ai-stack-watchdog.sh"
   CRON_EXAMPLE="$ALERTING_DIR/cron.example"
+  CLOUDFLARED_DROPIN="$REPO_ROOT/setup/walter-host/services/cloudflared/restart-hardening.conf"
 }
 
 @test "ai stack watchdog files exist" {
@@ -84,4 +85,14 @@ setup() {
 @test "cron logrotate hint includes the AI watchdog log" {
   grep -q "/var/log/walter-ai-watchdog.log" "$CRON_EXAMPLE"
   grep -q "/var/log/walter-watchdog.log /var/log/walter-ai-watchdog.log /var/log/hetzner-spend.log" "$CRON_EXAMPLE"
+}
+
+@test "cloudflared start-limit hardening uses the systemd Unit section" {
+  awk '
+    /^\[Unit\]$/ { section="Unit"; next }
+    /^\[Service\]$/ { section="Service"; next }
+    /^StartLimitIntervalSec=0$/ && section == "Unit" { found_unit=1 }
+    /^StartLimitIntervalSec=/ && section == "Service" { found_service=1 }
+    END { exit !(found_unit && !found_service) }
+  ' "$CLOUDFLARED_DROPIN"
 }
