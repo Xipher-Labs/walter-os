@@ -4,8 +4,8 @@ Sizing guidance for the self-hosted stack (Mode 3 in the
 [README](../../README.md)). Mode 1 / Mode 2 installs don't need a VM at
 all — they run on the operator's workstation.
 
-**Minimum specs**: 4 vCPUs, 16 GB RAM, 80 GB SSD for core-only. Full stack
-(all profiles) requires 8 vCPUs, 32 GB RAM, 240 GB SSD.
+**Minimum specs**: 4 vCPUs, 8 GB RAM, 80 GB SSD for floor/core-only. Full stack
+(all profiles) requires 16 vCPUs, 32 GB RAM, 320 GB SSD.
 
 Before provisioning, run `./setup/walter-host/preflight-check.sh` to verify
 minimum requirements on an existing VM.
