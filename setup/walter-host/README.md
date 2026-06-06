@@ -5,8 +5,11 @@ where possible; safe to re-run.
 
 ## Target hardware
 
-Recommended: **Hetzner CPX41** or **CX43** (8 vCPU / 16GB / 160-240GB),
-Ubuntu 24.04 LTS. Other plans work — adjust as needed.
+Recommended for the full production stack: **Hetzner CX53** (16 vCPU /
+32 GB RAM / 320 GB SSD), Ubuntu 24.04 LTS. CPX41/CX43-sized hosts are
+reasonable for core/dev profiles, but alert thresholds in the bundled
+observability stack assume the confirmed 16 vCPU production host. Other plans
+work — adjust alert thresholds and capacity notes as needed.
 
 ## Order
 

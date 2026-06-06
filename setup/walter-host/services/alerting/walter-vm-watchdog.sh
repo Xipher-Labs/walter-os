@@ -90,11 +90,11 @@ check_transition "ram" "$r" \
   "RAM at ${RAM_PCT}% used (>90%)" \
   "RAM recovered, ${RAM_PCT}% used"
 
-# Load average 1m (we have 8 vCPU; alert if > 8.0)
+# Load average 1m (confirmed walter-vm has 16 vCPU; alert if > 16.0)
 LOAD_1M=$(awk '{print $1}' /proc/loadavg)
-LOAD_HIGH=$(awk -v l="$LOAD_1M" 'BEGIN { print (l > 8.0) ? 1 : 0 }')
+LOAD_HIGH=$(awk -v l="$LOAD_1M" 'BEGIN { print (l > 16.0) ? 1 : 0 }')
 check_transition "load" "$LOAD_HIGH" \
-  "load1m=${LOAD_1M} (>8.0, 8 vCPU pinned)" \
+  "load1m=${LOAD_1M} (>16.0, 16 vCPU pinned)" \
   "load1m back to ${LOAD_1M}"
 
 # Swap
