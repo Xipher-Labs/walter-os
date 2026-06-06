@@ -24,6 +24,6 @@ alternatives considered.
 ## Adding a new ADR
 
 1. Copy the structure from an existing ADR.
-2. Number sequentially: next is `0027-...`.
+2. Number sequentially: next is `0028-...`.
 3. Status starts as `Proposed`; update to `Accepted` when the implementing PR merges.
 4. Add a row to this table in the same PR.
