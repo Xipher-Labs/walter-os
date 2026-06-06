@@ -76,8 +76,8 @@ transition() {
   elif [[ "$cur" == "0" && "$prev" == "1" ]]; then notify "✅ *Walter-VM AI*: $recover" && state_set "$key" 0; fi
 }
 
-# Run a command as root whether the watchdog runs as root (cron in /etc/cron.d)
-# or as walter (needs NOPASSWD sudo for the specific systemctl commands).
+# The watchdog is installed in root cron because it calls docker and journalctl
+# directly. This helper is only a defensive fallback for systemctl operations.
 as_root() { if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi; }
 
 # ---------- 0. cloudflared tunnel (MUST be first — if down, everything 530s) ----------

@@ -41,6 +41,9 @@ setup() {
   grep -q "sudo crontab -e" "$WATCHDOG"
   grep -q "root crontab" "$CRON_EXAMPLE"
   grep -q "sudo crontab -e" "$CRON_EXAMPLE"
+  grep -q "installed in root cron because it calls docker and journalctl" "$WATCHDOG"
+  run grep -q "or as walter" "$WATCHDOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "litellm recovery remains debounced after successful auto-heal" {
@@ -95,4 +98,10 @@ setup() {
     /^StartLimitIntervalSec=/ && section == "Service" { found_service=1 }
     END { exit !(found_unit && !found_service) }
   ' "$CLOUDFLARED_DROPIN"
+}
+
+@test "cloudflared hardening drop-in does not claim to enable metrics" {
+  grep -q "This drop-in does not add --metrics" "$CLOUDFLARED_DROPIN"
+  run grep -q "Also expose the metrics endpoint" "$CLOUDFLARED_DROPIN"
+  [ "$status" -ne 0 ]
 }
