@@ -4,8 +4,10 @@ Headscale is optional mesh networking for Walter-VM. It is useful for private
 admin paths, but it is not the primary out-of-band recovery path.
 
 Do not rely on Headscale as the primary break-glass path. Use the Walter-VM
-Hetzner Cloud Firewall SSH allow-list runbook when Cloudflare Tunnel or
-Cloudflare Access becomes unavailable.
+Hetzner Cloud Firewall SSH allow-list path when Cloudflare Tunnel or Cloudflare
+Access becomes unavailable: temporarily allow TCP/22 from your current public
+IP/CIDR to the Walter-VM server, repair the VM over SSH, then remove that
+allow-list rule after normal access is healthy again.
 
 ## Registration Fails With HTTP 500
 
@@ -63,7 +65,8 @@ tunnel routing.
 
 Use the Hetzner Cloud Firewall SSH allow-list break-glass path, repair the VM,
 and keep Headscale out of the critical recovery path until version compatibility
-is known-good.
+is known-good. In Hetzner, the minimal action is to allow TCP/22 only from your
+current public IP/CIDR to Walter-VM, then remove that allow-list after recovery.
 
 ### Version Pin Path
 

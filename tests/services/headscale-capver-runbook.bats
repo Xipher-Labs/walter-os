@@ -22,6 +22,8 @@ setup() {
   grep -Fq "Do not rely on Headscale as the primary break-glass path" "$RUNBOOK"
   grep -Fq "Walter-VM" "$RUNBOOK"
   grep -Fq "Hetzner Cloud Firewall SSH allow-list" "$RUNBOOK"
+  grep -Fq "allow TCP/22 from your current public" "$RUNBOOK"
+  grep -Fq "remove that allow-list" "$RUNBOOK"
 }
 
 @test "headscale compose points operators to version-drift guidance" {
