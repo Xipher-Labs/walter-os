@@ -93,6 +93,11 @@ setup() {
   grep -q "continue" "$WATCHDOG"
 }
 
+@test "model probe docker exec is bounded" {
+  grep -q 'MODEL_EXEC_TIMEOUT="${LITELLM_MODEL_EXEC_TIMEOUT:-70s}"' "$WATCHDOG"
+  grep -q 'timeout "$MODEL_EXEC_TIMEOUT" docker exec -e M="$model"' "$WATCHDOG"
+}
+
 @test "model router restart debouncing is independent from alert delivery" {
   grep -q 'restart_key="${key}_restart"' "$WATCHDOG"
   grep -q 'prev_restart_state=$(state_get "$restart_key")' "$WATCHDOG"

@@ -42,6 +42,7 @@ PROBES=(
   "codex-sub:chatgpt-codex-router"
 )
 MODEL_TIMEOUT="${LITELLM_MODEL_PROBE_TIMEOUT:-50}"  # gemini-sub legitimately takes ~35s
+MODEL_EXEC_TIMEOUT="${LITELLM_MODEL_EXEC_TIMEOUT:-70s}"
 LITELLM_RESTART_SETTLE_SECONDS="${LITELLM_RESTART_SETTLE_SECONDS:-20}"
 TELEGRAM_CONNECT_TIMEOUT="${WALTER_TELEGRAM_CONNECT_TIMEOUT:-5}"
 TELEGRAM_MAX_TIME="${WALTER_TELEGRAM_MAX_TIME:-15}"
@@ -185,7 +186,7 @@ for entry in "${PROBES[@]}"; do
   model="${entry%%:*}"; router="${entry##*:}"
   key="model_${model//[^a-zA-Z0-9]/_}"
   restart_key="${key}_restart"
-  probe_result=$(docker exec -e M="$model" -e T="$MODEL_TIMEOUT" litellm sh -c 'set -a; . /run/secrets/litellm.env 2>/dev/null; set +a; python3 - <<PY 2>/dev/null
+  probe_result=$(timeout "$MODEL_EXEC_TIMEOUT" docker exec -e M="$model" -e T="$MODEL_TIMEOUT" litellm sh -c 'set -a; . /run/secrets/litellm.env 2>/dev/null; set +a; python3 - <<PY 2>/dev/null
 import os,json,urllib.request as u
 k=os.environ.get("LITELLM_MASTER_KEY","")
 if not k:
