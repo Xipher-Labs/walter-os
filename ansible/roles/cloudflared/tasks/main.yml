@@ -79,6 +79,7 @@
     owner: root
     group: root
     mode: "0600"
+  register: walter_cloudflared_credentials_copy
   when:
     - walter_cloudflared_credentials.stat.exists
     - walter_cloudflared_config.stat.exists
@@ -90,6 +91,7 @@
     owner: root
     group: root
     mode: "0644"
+  register: walter_cloudflared_config_copy
   when:
     - walter_cloudflared_credentials.stat.exists
     - walter_cloudflared_config.stat.exists
@@ -125,7 +127,12 @@
     name: cloudflared
     daemon_reload: "{{ walter_cloudflared_service.changed | default(false) }}"
     enabled: yes
-    state: started
+    state: >-
+      {{ 'restarted' if (
+        (walter_cloudflared_service.changed | default(false))
+        or (walter_cloudflared_credentials_copy.changed | default(false))
+        or (walter_cloudflared_config_copy.changed | default(false))
+      ) else 'started' }}
   when:
     - walter_cloudflared_credentials.stat.exists
     - walter_cloudflared_config.stat.exists

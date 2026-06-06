@@ -42,5 +42,7 @@ setup() {
 
   grep -Fq "checksum: sha256:1bd95f4082b320d541bee351560fc2765aa9f9cd8efa4c9e32135e63f252721d" "$CLOUDFLARED_ROLE"
   grep -Fq "CC94 B39C 77AE 7342 A68B 8962 8A68 2D30 8D4E 5E73" "$CLOUDFLARED_ROLE"
+  grep -Fq "walter_cloudflared_config_copy" "$CLOUDFLARED_ROLE"
+  grep -Fq "restarted" "$CLOUDFLARED_ROLE"
   ! grep -Fq "lsb-release" "$CLOUDFLARED_ROLE"
 }
