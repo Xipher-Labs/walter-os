@@ -13,6 +13,10 @@ setup() {
   [[ -f "$CRON_EXAMPLE" ]]
 }
 
+@test "ai stack watchdog fails fast on unexpected shell errors" {
+  grep -q "set -euo pipefail" "$WATCHDOG"
+}
+
 @test "litellm recovery remains debounced after successful auto-heal" {
   run grep -q 'state_set "litellm_down" 0' "$WATCHDOG"
   [ "$status" -ne 0 ]
@@ -27,6 +31,9 @@ setup() {
 @test "model probe detects missing LiteLLM master key without router restarts" {
   grep -q "missing_key" "$WATCHDOG"
   grep -q "master key is empty" "$WATCHDOG"
+  grep -q "LITELLM_MASTER_KEY.*LiteLLM service environment" "$WATCHDOG"
+  run grep -q 'fix `/run/secrets/litellm.env`' "$WATCHDOG"
+  [ "$status" -ne 0 ]
   grep -q "continue" "$WATCHDOG"
 }
 

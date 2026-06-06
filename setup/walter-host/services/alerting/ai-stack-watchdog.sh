@@ -28,7 +28,7 @@
 # Env required (/etc/walter-vm/alerting.env):
 #   WALTER_TELEGRAM_BOT_TOKEN, WALTER_TELEGRAM_CHAT_ID
 
-set -uo pipefail
+set -euo pipefail
 
 ENV_FILE="${WALTER_ALERTING_ENV:-/etc/walter-vm/alerting.env}"
 STATE_FILE="${WALTER_AI_WATCHDOG_STATE:-/var/run/walter-ai-watchdog.state}"
@@ -91,8 +91,8 @@ else
 fi
 
 # ---------- 2. litellm-db connection saturation ----------
-used=$(docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' \n')
-max=$(docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT setting FROM pg_settings WHERE name='max_connections';" 2>/dev/null | tr -d ' \n')
+used=$(docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' \n' || true)
+max=$(docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT setting FROM pg_settings WHERE name='max_connections';" 2>/dev/null | tr -d ' \n' || true)
 if [[ "${used:-}" =~ ^[0-9]+$ && "${max:-}" =~ ^[0-9]+$ && "$max" -gt 0 ]]; then
   pct=$(( used * 100 / max ))
   if [[ "$pct" -ge "$DB_SAT_PCT" ]]; then
@@ -134,10 +134,10 @@ try:
         print("1" if r.status==200 else "0")
 except Exception:
     print("0")
-PY' 2>/dev/null | tr -d ' \n')
+PY' 2>/dev/null | tr -d ' \n' || true)
   if [[ "$probe_result" == "missing_key" ]]; then
     transition "${key}_auth" "1" \
-      "model \`$model\` probe skipped because LiteLLM master key is empty inside \`litellm\`; fix \`/run/secrets/litellm.env\` before restarting routers" \
+      "model \`$model\` probe skipped because LiteLLM master key is empty inside \`litellm\`; fix \`LITELLM_MASTER_KEY\` in the LiteLLM service environment before restarting routers" \
       "model \`$model\` LiteLLM master key available again"
     continue
   fi
