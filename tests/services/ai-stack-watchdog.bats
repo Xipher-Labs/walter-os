@@ -69,6 +69,11 @@ setup() {
   grep -q "DB_SAT_PCT=85" "$WATCHDOG"
 }
 
+@test "db saturation psql probes are bounded" {
+  grep -q 'timeout 10s docker exec litellm-db psql .*pg_stat_activity' "$WATCHDOG"
+  grep -q 'timeout 10s docker exec litellm-db psql .*max_connections' "$WATCHDOG"
+}
+
 @test "cloudflared log fallback evaluates the last relevant event" {
   grep -q "last_event=" "$WATCHDOG"
   grep -q "tail -n 1" "$WATCHDOG"
