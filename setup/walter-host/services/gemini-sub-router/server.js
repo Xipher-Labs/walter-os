@@ -66,14 +66,18 @@ function loadModelMap(defaultMap) {
     process.exit(78);
   }
 
+  const normalizedMap = {};
   for (const [alias, model] of Object.entries(parsed)) {
-    if (alias.trim() === '' || typeof model !== 'string' || model.trim() === '') {
-      console.error('Invalid MODEL_MAP_JSON: aliases and model slugs must be non-empty strings');
+    const normalizedAlias = alias.trim();
+    const normalizedModel = typeof model === 'string' ? model.trim() : '';
+    if (normalizedAlias === '' || normalizedModel === '') {
+      console.error(`Invalid MODEL_MAP_JSON: alias "${alias}" and its model slug must be non-empty strings`);
       process.exit(78);
     }
+    normalizedMap[normalizedAlias] = normalizedModel;
   }
 
-  return Object.freeze({ ...defaultMap, ...parsed });
+  return Object.freeze({ ...defaultMap, ...normalizedMap });
 }
 
 const MODEL_MAP = loadModelMap(DEFAULT_MODEL_MAP);
