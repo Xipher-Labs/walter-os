@@ -7,6 +7,8 @@
 set -euo pipefail
 
 ACTION="plan"
+APPLY_REQUESTED=0
+REMOVE_REQUESTED=0
 FIREWALL_NAME="${WALTER_BREAK_GLASS_FIREWALL:-walter-vm-break-glass-ssh}"
 SERVER="${HCLOUD_SERVER_NAME:-}"
 CIDR="${WALTER_BREAK_GLASS_SSH_CIDR:-}"
@@ -32,10 +34,12 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)
       ACTION="apply"
+      APPLY_REQUESTED=1
       shift
       ;;
     --remove)
       ACTION="remove"
+      REMOVE_REQUESTED=1
       shift
       ;;
     --server)
@@ -61,6 +65,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$APPLY_REQUESTED" -eq 1 && "$REMOVE_REQUESTED" -eq 1 ]]; then
+  echo "--apply and --remove are mutually exclusive" >&2
+  usage
+  exit 2
+fi
 
 if [[ -z "$SERVER" ]]; then
   echo "missing required --server or HCLOUD_SERVER_NAME" >&2

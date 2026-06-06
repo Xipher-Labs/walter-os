@@ -40,6 +40,16 @@ setup() {
   [[ "$output" == *"hcloud firewall remove-from-resource walter-vm-break-glass-ssh --type server --server walter-vm"* ]]
 }
 
+@test "Hetzner break-glass SSH helper rejects apply plus remove" {
+  run "$SCRIPT" --server walter-vm --cidr 203.0.113.10/32 --apply --remove
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"mutually exclusive"* ]]
+
+  run "$SCRIPT" --server walter-vm --cidr 203.0.113.10/32 --remove --apply
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"mutually exclusive"* ]]
+}
+
 @test "Hetzner firewall rule template is SSH-only and operator-scoped" {
   [[ -f "$TEMPLATE" ]]
 
