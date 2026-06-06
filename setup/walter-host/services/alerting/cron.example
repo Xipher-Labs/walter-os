@@ -1,7 +1,7 @@
-# Walter-VM alerting cron — install on the VM as walter user.
+# Walter-VM alerting cron — install in root crontab on the VM.
 #
-# Editing:    crontab -e
-# Listing:    crontab -l
+# Editing:    sudo crontab -e
+# Listing:    sudo crontab -l
 # Logs:       /var/log/walter-watchdog.log
 #
 # Tier 2: every 5 min, debounced

@@ -23,7 +23,7 @@
 # Install:
 #   sudo cp ai-stack-watchdog.sh /opt/walter-vm/services/alerting/
 #   sudo chmod +x /opt/walter-vm/services/alerting/ai-stack-watchdog.sh
-#   crontab -e  # add the ai-stack line from cron.example
+#   sudo crontab -e  # add the ai-stack line from cron.example
 #
 # Env required (/etc/walter-vm/alerting.env):
 #   WALTER_TELEGRAM_BOT_TOKEN, WALTER_TELEGRAM_CHAT_ID
@@ -51,9 +51,11 @@ source "$ENV_FILE"
   echo "WALTER_TELEGRAM_{BOT_TOKEN,CHAT_ID} required"; exit 2; }
 
 notify() {
-  curl -fsS -X POST "https://api.telegram.org/bot${WALTER_TELEGRAM_BOT_TOKEN}/sendMessage" \
+  if ! curl -fsS -X POST "https://api.telegram.org/bot${WALTER_TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d "chat_id=${WALTER_TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=$1" -d "parse_mode=Markdown" >/dev/null || true
+    --data-urlencode "text=$1" -d "parse_mode=Markdown" >/dev/null; then
+    echo "ai-stack-watchdog: Telegram notification failed" >&2
+  fi
 }
 state_get() { [[ -f "$STATE_FILE" ]] && (grep -E "^${1}=" "$STATE_FILE" 2>/dev/null | cut -d= -f2) || echo "0"; }
 state_set() {

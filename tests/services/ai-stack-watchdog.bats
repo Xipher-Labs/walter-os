@@ -17,6 +17,18 @@ setup() {
   grep -q "set -euo pipefail" "$WATCHDOG"
 }
 
+@test "telegram notification failures are visible in cron logs" {
+  grep -q "Telegram notification failed" "$WATCHDOG"
+  run grep -q '>/dev/null || true' "$WATCHDOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "install docs use root crontab for docker and root log paths" {
+  grep -q "sudo crontab -e" "$WATCHDOG"
+  grep -q "root crontab" "$CRON_EXAMPLE"
+  grep -q "sudo crontab -e" "$CRON_EXAMPLE"
+}
+
 @test "litellm recovery remains debounced after successful auto-heal" {
   run grep -q 'state_set "litellm_down" 0' "$WATCHDOG"
   [ "$status" -ne 0 ]
