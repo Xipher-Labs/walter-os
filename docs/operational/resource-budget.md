@@ -79,11 +79,14 @@ The Walter-Bridge service stack declares per-container limits via the
 These are the first critical-path caps for #351 and should be extended to the
 rest of `setup/walter-host/services/*/compose.yml`.
 
-| Container | Default limit | Reservation | vCPU cap | Override env |
-|---|---:|---:|---:|---|
-| `litellm` | 1024 MB | 512 MB | 2.0 | `LITELLM_MEM_LIMIT`, `LITELLM_MEM_RESERVATION`, `LITELLM_CPUS` |
-| `litellm-db` | 1024 MB | 512 MB | 1.0 | `LITELLM_DB_MEM_LIMIT`, `LITELLM_DB_MEM_RESERVATION`, `LITELLM_DB_CPUS` |
-| `litellm-pgbouncer` | 128 MB | 64 MB | 0.25 | `LITELLM_PGBOUNCER_MEM_LIMIT`, `LITELLM_PGBOUNCER_MEM_RESERVATION`, `LITELLM_PGBOUNCER_CPUS` |
+| Container | Default limit | Reservation | vCPU cap | PIDs cap | Override env |
+|---|---:|---:|---:|---:|---|
+| `litellm` | 1024 MB | 512 MB | 2.0 | 512 | `LITELLM_MEM_LIMIT`, `LITELLM_MEM_RESERVATION`, `LITELLM_CPUS` |
+| `litellm-db` | 1024 MB | 512 MB | 1.0 | 256 | `LITELLM_DB_MEM_LIMIT`, `LITELLM_DB_MEM_RESERVATION`, `LITELLM_DB_CPUS` |
+| `litellm-pgbouncer` | 128 MB | 64 MB | 0.25 | 128 | `LITELLM_PGBOUNCER_MEM_LIMIT`, `LITELLM_PGBOUNCER_MEM_RESERVATION`, `LITELLM_PGBOUNCER_CPUS` |
+
+The PIDs caps are fixed in compose today; they intentionally do not have env
+overrides until the repo-wide #351 standard defines a shared naming scheme.
 
 ## Disk + bandwidth
 
