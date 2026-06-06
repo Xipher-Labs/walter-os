@@ -52,25 +52,49 @@ The fix is structural: **make health signals functional, bound and isolate
 resources, and guarantee an out-of-band recovery path** — not four point
 patches.
 
-## Hypotheses still needing live-VM confirmation
+## Hypotheses — CONFIRMED on live VM (2026-06-06)
 
-The verifiers flagged these as plausible but unproven; confirm before relying
-on them:
+The verifiers' caveats were checked directly. Results:
 
-- **Connection-leak mechanism.** Likely Prisma/quaint pool fan-out
-  (`~num_cpus*2+1` per worker × `--num_workers 2`) against default
-  `max_connections=100`, amplified by reconnect storms across crash-loops.
-  Confirm via `pg_stat_activity` grouping by application/state under load.
-- **VM size.** Sources conflict (watchdog asserts 8 vCPU, Grafana rule 16,
-  hosting doc differs). Confirm the actual Hetzner plan; if it is small,
-  load ~5 is itself a primary trigger.
-- **Image surface.** Confirm `litellm:v1.83.14-stable` actually serves
-  `/health/liveliness` + `/health/readiness` and honors libpq-style
-  `?connection_limit=&pool_timeout=&connect_timeout=` query params before
-  shipping those changes.
-- **Router config.** Do NOT assume `claude-code-router` is retired — it is a
-  live service (`llm-proxies/compose.yml`). Verify which proxy actually serves
-  `claude-sub*` before re-pointing any LiteLLM route.
+- **VM size — CORRECTED.** Actual box is **16 vCPU / 30 GiB** (`nproc=16`).
+  The earlier "probably 4 vCPU" was wrong (verifier was right to flag it) and
+  the watchdog's "8" is also wrong. **Implication: resource contention is NOT a
+  confirmed trigger** — observed load ~5 on 16 cores is ~31%. The connection
+  exhaustion is purely uncapped-pool × 100-limit × reconnect-storm, not
+  starvation. The "single overloaded VM" framing is downgraded; the live disease
+  is the false-green + single-instance + no-break-glass faces. (vCPU thresholds
+  in watchdog + Grafana still need aligning to 16 — issue #350.)
+- **Connection mechanism — CONFIRMED.** Live `pg_stat_activity` showed **43/100**
+  backends at steady state with the uncapped pool (consistent with ~num_cpus
+  fan-out × 2 workers). A `docker compose up -d litellm` (recreate) opens fresh
+  pools before old backends are reaped, so two quick recreates push past 100 →
+  "too many clients" → crash-loop. The `connection_limit=10` cap (this PR) holds
+  client demand at ~20.
+- **Image surface — CONFIRMED.** `ghcr.io/berriai/litellm:v1.83.14-stable` serves
+  both `/health/liveliness` and `/health/readiness` (200/200). Prisma honors the
+  libpq-style DSN params. Safe to ship both P0 changes.
+- **Router config — CONFIRMED.** `claude-sub*` is served by **`claude-sub-router`
+  (:1457)**; the legacy `claude-code-router` is **not running** on the VM. No
+  route re-pointing needed.
+
+## Operational lesson learned (2026-06-06, the hard way)
+
+Two incidents this session were **self-inflicted by hot-patching the live VM**:
+1. A routine `systemctl restart cloudflared` on the single-tunnel setup did NOT
+   re-register and locked out all remote access (SSH rides the same tunnel) —
+   recovered only via Hetzner console. **Never restart cloudflared without an
+   active out-of-band path (#346) in place.**
+2. A hot-patch of the litellm `compose.yml` used an 80 s startup wait, but cold
+   start to `/health/readiness` is **~95 s**. The false "didn't start" triggered
+   a revert, and the apply+revert double-recreate churned DB connections into a
+   crash-loop (re-triggered Incident 1); recovered by `docker restart litellm-db`
+   then `litellm`.
+
+**Rules adopted:** (a) litellm/critical changes land via PR + controlled deploy,
+not live hot-patch; (b) any litellm readiness wait must allow ≥120 s
+(`start_period: 120s`); (c) never recreate litellm twice in quick succession
+against an uncapped pool — flush `litellm-db` first if connections are high;
+(d) never operate the tunnel without a break-glass path.
 
 ## Permanent plan (prioritized; routed per repo)
 
