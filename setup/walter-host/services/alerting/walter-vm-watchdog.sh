@@ -90,11 +90,15 @@ check_transition "ram" "$r" \
   "RAM at ${RAM_PCT}% used (>90%)" \
   "RAM recovered, ${RAM_PCT}% used"
 
-# Load average 1m (confirmed walter-vm has 16 vCPU; alert if > 16.0)
+# Load average 1m (alert when load exceeds runtime vCPU count)
+CPU_CORES=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+if ! [[ "$CPU_CORES" =~ ^[0-9]+$ ]] || [[ "$CPU_CORES" -lt 1 ]]; then
+  CPU_CORES=1
+fi
 LOAD_1M=$(awk '{print $1}' /proc/loadavg)
-LOAD_HIGH=$(awk -v l="$LOAD_1M" 'BEGIN { print (l > 16.0) ? 1 : 0 }')
+LOAD_HIGH=$(awk -v l="$LOAD_1M" -v c="$CPU_CORES" 'BEGIN { print (l > c) ? 1 : 0 }')
 check_transition "load" "$LOAD_HIGH" \
-  "load1m=${LOAD_1M} (>16.0, 16 vCPU pinned)" \
+  "load1m=${LOAD_1M} (>runtime vCPU count ${CPU_CORES})" \
   "load1m back to ${LOAD_1M}"
 
 # Swap

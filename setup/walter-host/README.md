@@ -7,9 +7,9 @@ where possible; safe to re-run.
 
 Recommended for the full production stack: **Hetzner CX53** (16 vCPU /
 32 GB RAM / 320 GB SSD), Ubuntu 24.04 LTS. CPX41/CX43-sized hosts are
-reasonable for core/dev profiles, but alert thresholds in the bundled
-observability stack assume the confirmed 16 vCPU production host. Other plans
-work — adjust alert thresholds and capacity notes as needed.
+reasonable for core/dev profiles. Bundled load alerts derive the vCPU ceiling
+from runtime host metrics, so smaller or larger plans should not require manual
+threshold edits.
 
 ## Order
 

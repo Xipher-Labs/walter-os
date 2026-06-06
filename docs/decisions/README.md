@@ -15,7 +15,7 @@ alternatives considered.
 | [`0024-risk-based-verification.md`](0024-risk-based-verification.md) | Risk-Based Verification — verification ∝ risk × blast-radius + prototype mode | Proposed |
 | [`0025-delivery-orchestrator-agent.md`](0025-delivery-orchestrator-agent.md) | Delivery Orchestrator Agent — pipeline coordinator (not "CEO agent") | Proposed |
 | [`0026-walter-repo-config-schema.md`](0026-walter-repo-config-schema.md) | walter-repo-config.yaml — unified per-repo policy file | Accepted |
-| [`0027-ai-stack-capacity.md`](0027-ai-stack-capacity.md) | AI-stack capacity baseline — confirmed Walter-VM vCPU and load thresholds | Accepted |
+| [`0027-ai-stack-capacity.md`](0027-ai-stack-capacity.md) | AI-stack capacity baseline — runtime Walter-VM vCPU load thresholds | Accepted |
 
 > Note: ADRs 0013–0022 exist as files but predate this index table; they are
 > listed in `git log` + the spec cross-references. The table is being
