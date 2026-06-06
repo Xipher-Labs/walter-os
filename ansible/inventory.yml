@@ -10,8 +10,10 @@
 # tunnel outage can't block config management too.
 #
 # NOTE: `walter_vm` is kept as an alias group pointing at vm_core so existing
-# `--limit walter_vm` / playbook `hosts: walter_vm` references keep working
-# until the playbook is migrated to `hosts: walter_vms`.
+# `--limit walter_vm` / playbook `hosts: walter_vm` references keep working.
+# Current `ansible/walter-vm.yml` runs only against that compatibility group,
+# so it does not configure vm_aux until the playbook is migrated to
+# `hosts: walter_vms` and wired to service-placement.yml.
 all:
   vars:
     ansible_python_interpreter: /usr/bin/python3
