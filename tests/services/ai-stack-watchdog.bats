@@ -65,9 +65,14 @@ setup() {
   grep -q "continue" "$WATCHDOG"
 }
 
-@test "model router restarts only on the first failed transition" {
-  grep -q 'prev_model_state=$(state_get "$key")' "$WATCHDOG"
-  grep -q 'if \[\[ "$prev_model_state" == "0" \]\]; then' "$WATCHDOG"
+@test "model router restart debouncing is independent from alert delivery" {
+  grep -q 'restart_key="${key}_restart"' "$WATCHDOG"
+  grep -q 'prev_restart_state=$(state_get "$restart_key")' "$WATCHDOG"
+  grep -q 'if \[\[ "$prev_restart_state" == "0" \]\]; then' "$WATCHDOG"
+  grep -q 'state_set "$restart_key" 1' "$WATCHDOG"
+  grep -q 'state_set "$restart_key" 0' "$WATCHDOG"
+  run grep -q 'prev_model_state=$(state_get "$key")' "$WATCHDOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "cron logrotate hint includes the AI watchdog log" {

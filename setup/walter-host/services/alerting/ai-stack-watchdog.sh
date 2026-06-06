@@ -172,6 +172,7 @@ fi
 for entry in "${PROBES[@]}"; do
   model="${entry%%:*}"; router="${entry##*:}"
   key="model_${model//[^a-zA-Z0-9]/_}"
+  restart_key="${key}_restart"
   probe_result=$(docker exec -e M="$model" -e T="$MODEL_TIMEOUT" litellm sh -c 'set -a; . /run/secrets/litellm.env 2>/dev/null; set +a; python3 - <<PY 2>/dev/null
 import os,json,urllib.request as u
 k=os.environ.get("LITELLM_MASTER_KEY","")
@@ -195,14 +196,16 @@ PY' 2>/dev/null | tr -d ' \n' || true)
   fi
   transition "litellm_master_key_missing" "0" "" "LiteLLM master key available again"
   if [[ "$probe_result" != "1" ]]; then
-    prev_model_state=$(state_get "$key")
-    if [[ "$prev_model_state" == "0" ]]; then
+    prev_restart_state=$(state_get "$restart_key")
+    if [[ "$prev_restart_state" == "0" ]]; then
       docker restart "$router" >/dev/null 2>&1 || true
+      state_set "$restart_key" 1
     fi
     transition "$key" "1" \
       "model \`$model\` probe FAILED → auto-restarted \`$router\`. If it persists it is likely a config/auth issue (e.g. wrong upstream model slug), not a crash — check \`docker logs $router\`." \
       "model \`$model\` healthy again"
   else
+    state_set "$restart_key" 0
     transition "$key" "0" "" "model \`$model\` healthy again"
   fi
 done
