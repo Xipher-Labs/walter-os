@@ -7,6 +7,9 @@
 # Tier 2: every 5 min, debounced
 */5 * * * * /opt/walter-vm/services/alerting/walter-vm-watchdog.sh >>/var/log/walter-watchdog.log 2>&1
 
+# Tier 2 (AI stack): every 5 min — self-heals LiteLLM + litellm-db + sub-routers, debounced
+*/5 * * * * /opt/walter-vm/services/alerting/ai-stack-watchdog.sh >>/var/log/walter-ai-watchdog.log 2>&1
+
 # Tier 4: daily 09:00 BA time (UTC-3 → 12:00 UTC)
 0 12 * * * /opt/walter-vm/services/alerting/hetzner-spend-watch.sh >>/var/log/hetzner-spend.log 2>&1
 
