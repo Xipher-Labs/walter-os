@@ -17,6 +17,8 @@ services:
       # Generate: openssl rand -hex 32
       GSR_APIKEY: "${GSR_APIKEY:?GSR_APIKEY must be set — generate with: openssl rand -hex 32}"
       MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
+      ROUTER_STARTUP_MODEL_PROBE: "${ROUTER_STARTUP_MODEL_PROBE:-1}"
+      ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS: "${ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS:-240000}"
     volumes:
       - ${HOME}/.gemini:/home/appuser/.gemini:rw
       - /tmp/gemini-sub-router:/tmp:rw
@@ -29,7 +31,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 10m
 
 networks:
   litellm_net:
