@@ -24,6 +24,13 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "telegram notification calls are bounded by connect and total timeouts" {
+  grep -q 'TELEGRAM_CONNECT_TIMEOUT="${WALTER_TELEGRAM_CONNECT_TIMEOUT:-5}"' "$WATCHDOG"
+  grep -q 'TELEGRAM_MAX_TIME="${WALTER_TELEGRAM_MAX_TIME:-15}"' "$WATCHDOG"
+  grep -q -- '--connect-timeout "$TELEGRAM_CONNECT_TIMEOUT"' "$WATCHDOG"
+  grep -q -- '--max-time "$TELEGRAM_MAX_TIME"' "$WATCHDOG"
+}
+
 @test "debounce state advances only after successful notification" {
   grep -q 'notify ".*" && state_set "$key" 1' "$WATCHDOG"
   grep -q 'notify ".*" && state_set "$key" 0' "$WATCHDOG"

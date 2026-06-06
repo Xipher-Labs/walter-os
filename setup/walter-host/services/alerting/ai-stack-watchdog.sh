@@ -43,6 +43,8 @@ PROBES=(
 )
 MODEL_TIMEOUT="${LITELLM_MODEL_PROBE_TIMEOUT:-50}"  # gemini-sub legitimately takes ~35s
 LITELLM_RESTART_SETTLE_SECONDS="${LITELLM_RESTART_SETTLE_SECONDS:-20}"
+TELEGRAM_CONNECT_TIMEOUT="${WALTER_TELEGRAM_CONNECT_TIMEOUT:-5}"
+TELEGRAM_MAX_TIME="${WALTER_TELEGRAM_MAX_TIME:-15}"
 
 [[ -f "$ENV_FILE" ]] || { echo "missing env: $ENV_FILE"; exit 2; }
 # shellcheck disable=SC1090
@@ -52,6 +54,8 @@ source "$ENV_FILE"
 
 notify() {
   if ! curl -fsS -X POST "https://api.telegram.org/bot${WALTER_TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --connect-timeout "$TELEGRAM_CONNECT_TIMEOUT" \
+    --max-time "$TELEGRAM_MAX_TIME" \
     -d "chat_id=${WALTER_TELEGRAM_CHAT_ID}" \
     --data-urlencode "text=$1" -d "parse_mode=Markdown" >/dev/null; then
     echo "ai-stack-watchdog: Telegram notification failed" >&2
