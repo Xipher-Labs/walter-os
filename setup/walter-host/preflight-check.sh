@@ -73,7 +73,7 @@ detect_ram_mb() {
   fi
 
   if [[ -r /proc/meminfo && "${WALTER_PREFLIGHT_SKIP_PROC:-}" != "1" ]]; then
-    awk '/MemTotal:/ { printf "%.0f\n", $2 / 1024 }' /proc/meminfo
+    awk '/MemTotal:/ { printf "%d\n", int($2 / 1024) }' /proc/meminfo
     return
   fi
 
@@ -81,7 +81,7 @@ detect_ram_mb() {
     local mem_bytes
     mem_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
     if [[ "$mem_bytes" =~ ^[0-9]+$ ]]; then
-      awk -v bytes="$mem_bytes" 'BEGIN { printf "%.0f\n", bytes / 1024 / 1024 }'
+      awk -v bytes="$mem_bytes" 'BEGIN { printf "%d\n", int(bytes / 1024 / 1024) }'
       return
     fi
   fi
@@ -112,7 +112,7 @@ detect_disk_gb() {
   local disk_mb
   disk_mb="$(df -Pm / 2>/dev/null | awk 'NR == 2 { print $2 }' || true)"
   if is_uint "$disk_mb"; then
-    awk -v mb="$disk_mb" 'BEGIN { printf "%.0f\n", mb / 1024 }'
+    awk -v mb="$disk_mb" 'BEGIN { printf "%d\n", int(mb / 1024) }'
     return
   fi
 

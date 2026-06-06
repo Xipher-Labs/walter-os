@@ -98,6 +98,52 @@ EOF
   echo "$output" | grep -Fq "FLOOR profile requires at least 80 GB disk"
 }
 
+@test "preflight floors sysctl RAM detection instead of rounding up" {
+  [[ -x "$PREFLIGHT" ]]
+
+  cat >"$TEST_BIN/sysctl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-n hw.memsize" ]]; then
+  echo 34359738367
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/sysctl"
+
+  run env \
+    PATH="$TEST_BIN:/usr/bin:/bin" \
+    WALTER_PREFLIGHT_SKIP_PROC=1 \
+    WALTER_PREFLIGHT_VCPU=16 \
+    WALTER_PREFLIGHT_DISK_GB=320 \
+    "$PREFLIGHT" full
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "FULL profile requires at least 32 GB RAM"
+}
+
+@test "preflight floors disk detection instead of rounding up" {
+  [[ -x "$PREFLIGHT" ]]
+
+  cat >"$TEST_BIN/df" <<'EOF'
+#!/usr/bin/env bash
+cat <<'DF'
+Filesystem 1048576-blocks Used Available Capacity Mounted on
+/dev/root 327679 1 327678 1% /
+DF
+EOF
+  chmod +x "$TEST_BIN/df"
+
+  run env \
+    PATH="$TEST_BIN:/usr/bin:/bin" \
+    WALTER_PREFLIGHT_RAM_MB=32768 \
+    WALTER_PREFLIGHT_VCPU=16 \
+    "$PREFLIGHT" full
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "FULL profile requires at least 320 GB disk"
+}
+
 @test "preflight rejects non-numeric overrides before arithmetic" {
   [[ -x "$PREFLIGHT" ]]
 
