@@ -67,6 +67,7 @@ assert_router_deploy_contract() {
   grep -Fq 'ROUTER_BASE_URL' "$helper"
   grep -Fq 'ROUTER_HEALTH_WAIT_ATTEMPTS:-190' "$helper"
   grep -Fq 'ROUTER_HEALTH_WAIT_SECONDS:-10' "$helper"
+  grep -Fq 'LITELLM_SMOKE_MODELS="${LITELLM_SMOKE_MODELS-$DEFAULT_LITELLM_SMOKE_MODELS}"' "$helper"
   grep -Fq 'invalid router port' "$helper"
   grep -Fq 'invalid router API-key env var name' "$helper"
 }
