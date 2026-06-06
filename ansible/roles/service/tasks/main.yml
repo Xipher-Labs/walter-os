@@ -41,6 +41,12 @@
   register: svc_env
   when: walter_service_should_deploy | bool
 
+- name: "[{{ service_name }}] check if .env.template exists"
+  ansible.builtin.stat:
+    path: "{{ walter_services_dir }}/{{ service_name }}/.env.template"
+  register: svc_env_template
+  when: walter_service_should_deploy | bool
+
 - name: "[{{ service_name }}] copy .env.template → .env (first time only)"
   ansible.builtin.copy:
     src: "{{ walter_services_dir }}/{{ service_name }}/.env.template"
@@ -52,8 +58,7 @@
   when:
     - walter_service_should_deploy | bool
     - not (svc_env.stat.exists | default(false))
-    - "'.env.template' in (svc_files | default([]))"
-  ignore_errors: yes  # template may not exist for all services
+    - svc_env_template.stat.exists | default(false)
 
 - name: "[{{ service_name }}] docker compose pull"
   ansible.builtin.command:

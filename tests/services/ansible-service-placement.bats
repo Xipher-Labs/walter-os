@@ -34,6 +34,8 @@ setup() {
   grep -Fq "walter_enabled_services is not defined or service_name in walter_enabled_services" "$SERVICE_ROLE"
   grep -Fq "when: walter_service_should_deploy | bool" "$SERVICE_ROLE"
   grep -Fq "svc_env.stat.exists | default(false)" "$SERVICE_ROLE"
+  grep -Fq "svc_env_template.stat.exists | default(false)" "$SERVICE_ROLE"
+  ! grep -Fq "svc_files" "$SERVICE_ROLE"
 }
 
 @test "service placement example documents generic overlay shape" {
