@@ -8,6 +8,10 @@
 #   4. docker compose pull + up -d
 #   5. Waits for healthy
 
+- name: "[{{ service_name }}] decide placement"
+  ansible.builtin.set_fact:
+    walter_service_should_deploy: "{{ walter_enabled_services is not defined or service_name in walter_enabled_services }}"
+
 - name: "[{{ service_name }}] ensure service dir"
   ansible.builtin.file:
     path: "{{ walter_services_dir }}/{{ service_name }}"
@@ -15,6 +19,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: walter_service_should_deploy | bool
 
 - name: "[{{ service_name }}] sync compose.yml + supporting files"
   ansible.posix.synchronize:
@@ -28,11 +33,13 @@
     delete: no
   delegate_to: localhost
   become: no
+  when: walter_service_should_deploy | bool
 
 - name: "[{{ service_name }}] check if .env exists"
   ansible.builtin.stat:
     path: "{{ walter_services_dir }}/{{ service_name }}/.env"
   register: svc_env
+  when: walter_service_should_deploy | bool
 
 - name: "[{{ service_name }}] copy .env.template → .env (first time only)"
   ansible.builtin.copy:
@@ -43,7 +50,8 @@
     group: root
     mode: "0600"
   when:
-    - not svc_env.stat.exists
+    - walter_service_should_deploy | bool
+    - not (svc_env.stat.exists | default(false))
     - "'.env.template' in (svc_files | default([]))"
   ignore_errors: yes  # template may not exist for all services
 
@@ -53,6 +61,7 @@
     chdir: "{{ walter_services_dir }}/{{ service_name }}"
   register: pull_result
   changed_when: "'Downloaded' in pull_result.stdout or 'Pull complete' in pull_result.stdout"
+  when: walter_service_should_deploy | bool
 
 - name: "[{{ service_name }}] docker compose up -d"
   ansible.builtin.shell: |
@@ -65,3 +74,4 @@
     chdir: "{{ walter_services_dir }}/{{ service_name }}"
   register: up_result
   changed_when: "'Started' in up_result.stdout or 'Recreated' in up_result.stdout"
+  when: walter_service_should_deploy | bool
