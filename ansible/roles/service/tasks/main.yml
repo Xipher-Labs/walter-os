@@ -120,7 +120,9 @@
     cmd: docker compose stop
     chdir: "{{ walter_services_dir }}/{{ service_name }}"
   register: stop_result
-  changed_when: "'Stopped' in stop_result.stdout or 'Stopping' in stop_result.stdout"
+  changed_when: >
+    'Stopped' in ((stop_result.stdout | default('')) ~ (stop_result.stderr | default('')))
+    or 'Stopping' in ((stop_result.stdout | default('')) ~ (stop_result.stderr | default('')))
   when:
     - walter_service_state == 'stopped'
     - svc_dir.stat.exists | default(false)
@@ -130,7 +132,9 @@
     cmd: docker compose down
     chdir: "{{ walter_services_dir }}/{{ service_name }}"
   register: down_result
-  changed_when: "'Removed' in down_result.stdout or 'Removing' in down_result.stdout"
+  changed_when: >
+    'Removed' in ((down_result.stdout | default('')) ~ (down_result.stderr | default('')))
+    or 'Removing' in ((down_result.stdout | default('')) ~ (down_result.stderr | default('')))
   when:
     - walter_service_state == 'absent'
     - svc_dir.stat.exists | default(false)

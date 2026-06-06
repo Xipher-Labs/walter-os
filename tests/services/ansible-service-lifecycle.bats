@@ -29,6 +29,7 @@ setup() {
   [[ -f "$SERVICE_ROLE" ]]
 
   grep -Fq "docker compose stop" "$SERVICE_ROLE"
+  grep -Fq "stop_result.stderr | default('')" "$SERVICE_ROLE"
   ! grep -Fq "docker compose stop -v" "$SERVICE_ROLE"
 }
 
@@ -36,6 +37,7 @@ setup() {
   [[ -f "$SERVICE_ROLE" ]]
 
   grep -Fq "docker compose down" "$SERVICE_ROLE"
+  grep -Fq "down_result.stderr | default('')" "$SERVICE_ROLE"
   ! grep -Fq "docker compose down -v" "$SERVICE_ROLE"
 }
 
@@ -46,5 +48,6 @@ setup() {
   grep -Fq "present" "$README"
   grep -Fq "stopped" "$README"
   grep -Fq "absent" "$README"
+  grep -Fq 'default `present` state' "$README"
   grep -Fq "never removes volumes" "$README"
 }

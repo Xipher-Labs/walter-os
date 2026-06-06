@@ -113,7 +113,7 @@ setup/walter-host/services/<name>/
 ├── (other files)          # synced to VM (configs, scripts)
 ```
 
-Role steps (idempotent):
+Role steps for the default `present` state (idempotent):
 1. Create `/opt/walter-vm/services/<name>/`
 2. Rsync everything except `.env` (preserves operator-set values)
 3. Copy `.env.template` → `.env` only if `.env` doesn't exist yet
