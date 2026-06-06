@@ -30,6 +30,9 @@ assert_router_deploy_contract() {
 
   grep -Fq '/v1/models' "$smoke"
   grep -Fq 'ROUTER_API_KEY' "$smoke"
+  grep -Fq 'models_payload=' "$smoke"
+  grep -Fq 'failed to fetch ${ROUTER_NAME} /v1/models' "$smoke"
+  grep -Fq 'failed to parse ${ROUTER_NAME} /v1/models response' "$smoke"
   grep -Fq 'payload.get("data"' "$smoke"
   grep -Fq '/v1/chat/completions' "$smoke"
   grep -Fq 'max_tokens' "$smoke"
@@ -57,6 +60,8 @@ assert_router_deploy_contract() {
   grep -Fq 'State.Health.Status' "$helper"
   grep -Fq 'deploy-smoke.sh' "$helper"
   grep -Fq 'ROUTER_BASE_URL' "$helper"
+  grep -Fq 'invalid router port' "$helper"
+  grep -Fq 'invalid router API-key env var name' "$helper"
 }
 
 @test "each subscription router deploys with a real model smoke" {

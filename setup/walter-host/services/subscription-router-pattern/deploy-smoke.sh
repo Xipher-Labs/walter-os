@@ -78,9 +78,13 @@ post_completion() {
 
 echo "→ discovering advertised models from ${ROUTER_NAME}..."
 mapfile -t router_auth < <(auth_args "$ROUTER_API_KEY")
-mapfile -t router_models < <(
-  curl -fsS --max-time "$ROUTER_SMOKE_TIMEOUT_SECONDS" "${router_auth[@]}" "${ROUTER_BASE_URL%/}/v1/models" |
-    python3 -c '
+if ! models_payload="$(curl -fsS --max-time "$ROUTER_SMOKE_TIMEOUT_SECONDS" "${router_auth[@]}" "${ROUTER_BASE_URL%/}/v1/models" 2>"$tmp_body")"; then
+  echo "✗ failed to fetch ${ROUTER_NAME} /v1/models" >&2
+  sed -n '1,20p' "$tmp_body" >&2 || true
+  exit 1
+fi
+
+if ! models_text="$(printf '%s' "$models_payload" | python3 -c '
 import json
 import sys
 
@@ -89,8 +93,14 @@ for item in payload.get("data", []):
     model_id = item.get("id")
     if isinstance(model_id, str) and model_id:
         print(model_id)
-'
-)
+')"; then
+  echo "✗ failed to parse ${ROUTER_NAME} /v1/models response" >&2
+  exit 1
+fi
+router_models=()
+while IFS= read -r model; do
+  [[ -n "$model" ]] && router_models+=("$model")
+done <<< "$models_text"
 
 if [[ "${#router_models[@]}" -eq 0 ]]; then
   echo "✗ ${ROUTER_NAME} reported no advertised models" >&2

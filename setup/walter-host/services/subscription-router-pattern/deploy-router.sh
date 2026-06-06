@@ -22,6 +22,21 @@ ROUTER_PORT="$2"
 ROUTER_API_KEY_ENV="$3"
 DEFAULT_LITELLM_SMOKE_MODELS="$4"
 
+if [[ ! "$ROUTER_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "invalid router name: $ROUTER_NAME" >&2
+  exit 2
+fi
+
+if [[ ! "$ROUTER_PORT" =~ ^[0-9]+$ ]] || [[ "$ROUTER_PORT" -lt 1 || "$ROUTER_PORT" -gt 65535 ]]; then
+  echo "invalid router port: $ROUTER_PORT" >&2
+  exit 2
+fi
+
+if [[ ! "$ROUTER_API_KEY_ENV" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  echo "invalid router API-key env var name: $ROUTER_API_KEY_ENV" >&2
+  exit 2
+fi
+
 PATTERN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SVC_DIR="${SVC_DIR:-$(cd "$PATTERN_DIR/../$ROUTER_NAME" && pwd)}"
 ENV_FILE="${ENV_FILE:-$SVC_DIR/.env}"
