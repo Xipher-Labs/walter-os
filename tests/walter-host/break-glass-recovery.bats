@@ -50,6 +50,33 @@ setup() {
   [[ "$output" == *"mutually exclusive"* ]]
 }
 
+@test "Hetzner break-glass SSH helper documents plan-only teardown and reuse guard" {
+  run "$SCRIPT" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--remove is always plan-only"* ]]
+  [[ "$output" == *"--reuse-existing"* ]]
+}
+
+@test "Hetzner break-glass SSH helper refuses existing firewalls without explicit reuse" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/hcloud" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "firewall" && "$2" == "describe" ]]; then
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/hcloud"
+
+  run env PATH="$BATS_TEST_TMPDIR/bin:$PATH" "$SCRIPT" --server walter-vm --cidr 203.0.113.10/32 --apply
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"refusing to reuse existing firewall"* ]]
+
+  run env PATH="$BATS_TEST_TMPDIR/bin:$PATH" "$SCRIPT" --server walter-vm --cidr 203.0.113.10/32 --apply --reuse-existing
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Break-glass SSH firewall applied"* ]]
+}
+
 @test "Hetzner firewall rule template is SSH-only and operator-scoped" {
   [[ -f "$TEMPLATE" ]]
 

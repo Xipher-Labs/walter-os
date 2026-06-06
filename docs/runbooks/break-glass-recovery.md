@@ -66,8 +66,8 @@ sudo systemctl restart cloudflared
 Verify the normal path before removing break-glass access:
 
 ```bash
-cloudflared tunnel ingress validate /etc/cloudflared/config.yml
-systemctl is-active --quiet cloudflared
+sudo cloudflared tunnel ingress validate /etc/cloudflared/config.yml
+sudo systemctl is-active --quiet cloudflared
 ```
 
 ## Teardown

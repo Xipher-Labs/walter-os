@@ -9,6 +9,7 @@ set -euo pipefail
 ACTION="plan"
 APPLY_REQUESTED=0
 REMOVE_REQUESTED=0
+REUSE_EXISTING=0
 FIREWALL_NAME="${WALTER_BREAK_GLASS_FIREWALL:-walter-vm-break-glass-ssh}"
 SERVER="${HCLOUD_SERVER_NAME:-}"
 CIDR="${WALTER_BREAK_GLASS_SSH_CIDR:-}"
@@ -17,7 +18,7 @@ DESCRIPTION="${WALTER_BREAK_GLASS_DESCRIPTION:-Walter-OS break-glass SSH recover
 usage() {
   cat <<'EOF'
 Usage:
-  hetzner-break-glass-ssh.sh --server <server-name-or-id> --cidr <ip-or-cidr> [--firewall <name>] [--apply]
+  hetzner-break-glass-ssh.sh --server <server-name-or-id> --cidr <ip-or-cidr> [--firewall <name>] [--reuse-existing] [--apply]
   hetzner-break-glass-ssh.sh --server <server-name-or-id> [--firewall <name>] --remove
 
 Environment alternatives:
@@ -27,6 +28,8 @@ Environment alternatives:
   WALTER_BREAK_GLASS_DESCRIPTION
 
 Default mode prints the hcloud commands without executing them.
+--remove is always plan-only; it prints the teardown command and never executes it.
+--reuse-existing is required when --apply finds an existing firewall with the same name.
 EOF
 }
 
@@ -53,6 +56,10 @@ while [[ $# -gt 0 ]]; do
     --firewall)
       FIREWALL_NAME="${2:-}"
       shift 2
+      ;;
+    --reuse-existing)
+      REUSE_EXISTING=1
+      shift
       ;;
     -h|--help)
       usage
@@ -125,7 +132,13 @@ command -v hcloud >/dev/null 2>&1 || {
   exit 127
 }
 
-if ! hcloud firewall describe "$FIREWALL_NAME" >/dev/null 2>&1; then
+if hcloud firewall describe "$FIREWALL_NAME" >/dev/null 2>&1; then
+  if [[ "$REUSE_EXISTING" -ne 1 ]]; then
+    echo "refusing to reuse existing firewall '$FIREWALL_NAME' without --reuse-existing" >&2
+    echo "Verify the existing firewall is SSH-only and scoped to operator CIDRs before reuse." >&2
+    exit 2
+  fi
+else
   "${create_cmd[@]}"
 fi
 

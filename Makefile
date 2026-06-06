@@ -36,6 +36,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		hooks/branch-flow-guard.sh \
 		hooks/daily-audit-gate.sh \
 		hooks/pre-commit-tests.sh \
+		setup/walter-host/recovery/hetzner-break-glass-ssh.sh \
 		setup/walter-host/services/openclaw/deploy.sh \
 		skills/daily-supply-chain-audit/scripts/audit.sh \
 		scripts/walter/subcommands/bridge.sh
