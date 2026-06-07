@@ -38,7 +38,10 @@ expected = {
 for key, marker in expected.items():
     value = service.get(key)
     assert value, f"{service_name} missing {key}"
-    assert str(value).startswith(marker), f"{service_name} {key} is not overrideable by {prefix}: {value!r}"
+    assert str(value).startswith(marker), f"{service_name} {key} is not overridable by {prefix}: {value!r}"
+    assert str(value).endswith("}"), f"{service_name} {key} interpolation is malformed: {value!r}"
+    default = str(value)[len(marker):-1]
+    assert default.strip(), f"{service_name} {key} has an empty default"
 PY
 }
 
@@ -77,7 +80,7 @@ assert_compose_renders() {
   [ "$status" -eq 0 ]
 }
 
-@test "plane application services have overrideable resource limits" {
+@test "plane application services have overridable resource limits" {
   assert_service_limits "plane" "web" "PLANE_WEB"
   assert_service_limits "plane" "admin" "PLANE_ADMIN"
   assert_service_limits "plane" "space" "PLANE_SPACE"
@@ -89,14 +92,14 @@ assert_compose_renders() {
   assert_service_limits "plane" "proxy" "PLANE_PROXY"
 }
 
-@test "plane dependency services have overrideable resource limits" {
+@test "plane dependency services have overridable resource limits" {
   assert_service_limits "plane" "plane-db" "PLANE_DB"
   assert_service_limits "plane" "plane-redis" "PLANE_REDIS"
   assert_service_limits "plane" "plane-mq" "PLANE_MQ"
   assert_service_limits "plane" "plane-minio" "PLANE_MINIO"
 }
 
-@test "penpot stack has overrideable resource limits" {
+@test "penpot stack has overridable resource limits" {
   assert_service_limits "penpot" "penpot-frontend" "PENPOT_FRONTEND"
   assert_service_limits "penpot" "penpot-backend" "PENPOT_BACKEND"
   assert_service_limits "penpot" "penpot-exporter" "PENPOT_EXPORTER"
