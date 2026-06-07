@@ -19,8 +19,8 @@
 | `pass` + `gpg` (Linux fallback) | `sudo apt-get install -y pass gnupg` | Optional encrypted fallback if Secret Service is unavailable |
 | YubiKey / security key (optional) | physical + OS setup | Optional credential-store hardening, not required by Walter-OS |
 | `bw` (optional) | `brew install bitwarden-cli` | Only if you keep using BW for personal site passwords |
-| Anthropic Console access | https://console.anthropic.com ([Company] enterprise) | For step 2 |
-| B2 account (defer until step 6) | https://www.backblaze.com | Offsite backup target |
+| Anthropic Console access | [console.anthropic.com](https://console.anthropic.com) ([Company] enterprise) | For step 2 |
+| B2 account (defer until step 6) | [Backblaze](https://www.backblaze.com) | Offsite backup target |
 
 Verify:
 ```bash
@@ -30,6 +30,22 @@ which secret-tool || which pass
 ```
 
 If anything's missing, fix it before continuing.
+
+## Step 0 — AI capability profile (2 min)
+
+**Goal**: tell Walter-OS which AI tools this operator or device can actually
+use. This keeps workflows from assuming Claude, Codex, Copilot, Gemini, and a
+local LLM are all present.
+
+```bash
+walter providers configure --category llm
+walter ai configure --profile mixed
+walter ai status
+```
+
+Use `claude-only`, `codex-only`, `gemini-only`, or `local-only` instead of
+`mixed` when that matches the actual account/tool availability. Details:
+[`ai-capability-profiles.md`](ai-capability-profiles.md).
 
 ---
 
@@ -41,7 +57,7 @@ in-memory only, 12h session.
 
 ### 1a. Create Infisical Machine Identity (web UI, ~2 min)
 
-1. Open https://secrets.${WALTER_DOMAIN} (Google login via CF Access).
+1. Open `https://secrets.${WALTER_DOMAIN}` (Google login via CF Access).
 2. Switch project: **walter-os**.
 3. Sidebar → **Access Control** → **Identities** → **Create Identity**.
 4. Name: `operator-mac-A` (use `mac-B` for second device, etc.).
@@ -100,7 +116,7 @@ in `~/work/*` (compliance), personal Pro everywhere else.
 
 ### 2a. Get the key (~1 min)
 
-1. https://console.anthropic.com — log in with **[Company]'s enterprise
+1. [console.anthropic.com](https://console.anthropic.com) — log in with **[Company]'s enterprise
    workspace** (NOT your personal account).
 2. Sidebar → **API Keys** → **Create Key**.
 3. Name: `walter-os-mac-A`. Workspace: [Company]'s. Permissions:
@@ -111,7 +127,7 @@ in `~/work/*` (compliance), personal Pro everywhere else.
 
 Easiest: web UI.
 
-1. https://secrets.${WALTER_DOMAIN} → walter-os → env=`dev` →
+1. `https://secrets.${WALTER_DOMAIN}` → walter-os → env=`dev` →
    **+ Add Secret**.
 2. Key: `ANTHROPIC_ENTERPRISE_KEY`. Value: paste.
 3. Save.
@@ -281,7 +297,7 @@ the compounding loop starts.
 
 ### 5a. Create the private wiki Forgejo repo (~2 min)
 
-1. https://git.${WALTER_DOMAIN} (CF Access auth).
+1. `https://git.${WALTER_DOMAIN}` (CF Access auth).
 2. **+** → **New Repository**.
 3. Name: `walter-wiki`. Owner: your operator user. **Private**: ✅.
 4. Don't initialize with README (we'll push from local).
@@ -331,7 +347,7 @@ walter-os wiki lint --apply   # rebuild index.md from disk
 |---|---|
 | `/ingest` not recognized | Walter-OS commands need to be installed in `~/.claude/commands/`. Run `./install.sh --upgrade`. |
 | Agent doesn't propose any pages, just gives a summary | The `wiki-ingest` skill didn't trigger. Re-prompt: "Apply the wiki-ingest skill. Source: <url>." |
-| `git push wiki-private` fails authentication | SSH key not added to Forgejo. https://git.${WALTER_DOMAIN} → Settings → SSH Keys → add your `~/.ssh/id_ed25519.pub`. |
+| `git push wiki-private` fails authentication | SSH key not added to Forgejo. `https://git.${WALTER_DOMAIN}` → Settings → SSH Keys → add your `~/.ssh/id_ed25519.pub`. |
 
 ---
 
@@ -343,7 +359,7 @@ Backblaze B2.
 
 ### 6a. B2 account + bucket (~5 min)
 
-1. https://www.backblaze.com → Sign up (or log in if you have one).
+1. [Backblaze](https://www.backblaze.com) → Sign up (or log in if you have one).
 2. **B2 Cloud Storage** → **Buckets** → **Create Bucket**.
 3. Name: `walter-vm-backups` (must be globally unique — append `-yourname` if taken).
 4. **Files**: Private. **Encryption**: SSE-B2 (default).
@@ -456,7 +472,7 @@ you have alerts but no graphs.
 
 ### 7a. Open Grafana
 
-https://grafana.${WALTER_DOMAIN} → Google login via CF Access → enter
+`https://grafana.${WALTER_DOMAIN}` → Google login via CF Access → enter
 admin password (set during Grafana first-run; in Infisical as
 `GRAFANA_ADMIN_PASS` if you saved it there).
 
@@ -514,7 +530,7 @@ https://n8n.${WALTER_DOMAIN} → CF Access auth → set owner email + password
 
 After login, import workflows from JSON exports:
 - Sidebar → **Workflows** → **Import from File** → pick the JSON.
-- Operator-built or community ones (https://n8n.io/workflows).
+- Operator-built or community ones ([n8n workflows](https://n8n.io/workflows)).
 
 ### 8c. Penpot
 

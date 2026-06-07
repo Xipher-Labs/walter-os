@@ -64,6 +64,21 @@ Providers with API keys (Design B). Tracked at
 
 ## Operator action items (in order)
 
+### 0. AI capability profile (2 min)
+
+Tell Walter-OS which AI tools this operator or device can actually use. This is
+private metadata only; it does not store secrets.
+
+```bash
+walter providers configure --category llm
+walter ai configure --profile mixed
+walter ai status
+```
+
+Use `claude-only`, `codex-only`, `gemini-only`, or `local-only` when the
+operator does not have the full mixed toolchain. See
+[`ai-capability-profiles.md`](ai-capability-profiles.md).
+
 ### 1. Secrets runtime (5 min)
 
 ```bash

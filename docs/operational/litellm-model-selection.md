@@ -26,6 +26,18 @@ If `LITELLM_BASE_URL` is unavailable, `scripts/agents/lib/llm.sh` falls back
 to direct Anthropic (`ANTHROPIC_API_KEY`), then enterprise key
 (`ANTHROPIC_ENTERPRISE_KEY` when `WALTER_AGENT_CONTEXT=work`).
 
+This guide covers model aliases once an LLM backend exists. To declare which AI
+tools the operator actually has available for planning, review, UX/UI, image
+generation, research, or local-only compliance, run:
+
+```bash
+walter ai configure --profile mixed
+walter ai status
+```
+
+See [`ai-capability-profiles.md`](ai-capability-profiles.md) for Claude-only,
+Codex-only, Gemini-only, local-only, and mixed routing profiles.
+
 ---
 
 ## Cost tiers
