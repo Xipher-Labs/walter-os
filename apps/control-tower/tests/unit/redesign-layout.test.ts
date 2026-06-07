@@ -48,6 +48,11 @@ describe("redesign layout — AC-3 (responsive overview grid)", () => {
     const src = readFileSync(join(root, "app/page.tsx"), "utf8");
     expect(src).toContain("xl:col-span-12");
   });
+
+  it("surfaces preview evidence on the overview page", () => {
+    const src = readFileSync(join(root, "app/page.tsx"), "utf8");
+    expect(src).toContain("PreviewEvidencePanel");
+  });
 });
 
 describe("history page — server TopNav shell", () => {

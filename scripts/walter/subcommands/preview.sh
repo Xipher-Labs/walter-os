@@ -72,7 +72,7 @@ require_jq() {
 
 resolve_npx() {
   if [[ -n "${WALTER_PREVIEW_NPX:-}" ]]; then
-    if [[ -e "$WALTER_PREVIEW_NPX" && ! -d "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" ]]; then
+    if [[ -f "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" && ! -L "$WALTER_PREVIEW_NPX" ]]; then
       printf '%s\n' "$WALTER_PREVIEW_NPX"
       return 0
     fi

@@ -100,7 +100,7 @@ SH
   [[ "$(cat "$FAKE_NPX_LOG")" == *"--wait-for-timeout 1000"* ]]
 }
 
-@test "preview capture accepts executable npx symlinks consistently" {
+@test "preview capture rejects npx override symlinks" {
   install_fake_npx
   mv "$fake_bin/npx" "$fake_bin/npx-real"
   ln -s "$fake_bin/npx-real" "$fake_bin/npx"
@@ -112,8 +112,9 @@ SH
     --name home \
     --out "$TMP_DIR/out"
 
-  [ "$status" -eq 0 ]
-  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"npx is required for preview capture"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
 }
 
 @test "preview capture writes to a temp file before publishing screenshot" {
