@@ -13,7 +13,8 @@ services:
       HOME: /home/appuser
       # CCR_APIKEY: required when exposing to LiteLLM network.
       # Generate: openssl rand -hex 32
-      CCR_APIKEY: ${CCR_APIKEY:?CCR_APIKEY must be set — generate with: openssl rand -hex 32}
+      CCR_APIKEY: "${CCR_APIKEY:?CCR_APIKEY must be set — generate with: openssl rand -hex 32}"
+      MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
     volumes:
       # Bind-mount host's codex auth dir so token refresh survives restarts.
       # One-time login: docker exec -it chatgpt-codex-router codex login

@@ -31,11 +31,46 @@ if (REQUIRED_API_KEY) {
 // Model mapping: LiteLLM sends openai/<name>, we strip prefix and map to
 // actual Codex CLI slug. Codex CLI with ChatGPT account only supports the
 // slugs listed here (verified 2026-05-11 against /home/walter/.codex/models_cache.json).
-const MODEL_MAP = {
+const DEFAULT_MODEL_MAP = {
   'gpt-5':      'gpt-5.5',
   'gpt-5-mini': 'gpt-5.4-mini',
-  'o4-mini':    'gpt-5.3-codex',  // best reasoning model available via ChatGPT account
+  'o4-mini':    'gpt-5.5',  // gpt-5.3-codex rejected by ChatGPT account ("not supported when using Codex with a ChatGPT account"); gpt-5.5 is the strongest model the account accepts (2026-06-06)
 };
+
+function loadModelMap(defaultMap) {
+  const raw = process.env.MODEL_MAP_JSON;
+  if (!raw || raw.trim() === '') {
+    return Object.freeze({ ...defaultMap });
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.error(`Invalid MODEL_MAP_JSON: expected a JSON object (${err.message})`);
+    process.exit(78);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.error('Invalid MODEL_MAP_JSON: expected a JSON object mapping request aliases to CLI model slugs');
+    process.exit(78);
+  }
+
+  const normalizedMap = Object.create(null);
+  for (const [alias, model] of Object.entries(parsed)) {
+    const normalizedAlias = alias.trim();
+    const normalizedModel = typeof model === 'string' ? model.trim() : '';
+    if (normalizedAlias === '' || normalizedModel === '') {
+      console.error(`Invalid MODEL_MAP_JSON: alias "${alias}" and its model slug must be non-empty strings`);
+      process.exit(78);
+    }
+    normalizedMap[normalizedAlias] = normalizedModel;
+  }
+
+  return Object.freeze({ ...defaultMap, ...normalizedMap });
+}
+
+const MODEL_MAP = loadModelMap(DEFAULT_MODEL_MAP);
 
 // Accepted request-body model values (after stripping openai/ prefix)
 const ACCEPTED_MODELS = new Set(Object.keys(MODEL_MAP));

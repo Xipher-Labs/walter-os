@@ -17,6 +17,7 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | [`oss-trust-v0.5.0-small-batch.md`](oss-trust-v0.5.0-small-batch.md) | OSS Trust roadmap small-batch: C-3 pre-commit framework, D-1 GitHub Security Advisories partner, E-3 `@types/*` allowlist, E-4 `walter-os justify revoke` CLI. |
 | [`feature-state-ledger.md`](feature-state-ledger.md) | Persistent `.walter/features/<id>/state.yaml` runtime ledger for autonomous delivery state. |
 | [`post-merge-feedback-loop.md`](post-merge-feedback-loop.md) | Read-only AD-13 post-merge health classification before fix-PR/rollback automation. |
+| [`release-operations-automation.md`](release-operations-automation.md) | Read-only release doctor for version, changelog, tag, review, check, issue-link, and stacked-PR hygiene. |
 
 ## Worked Examples
 
