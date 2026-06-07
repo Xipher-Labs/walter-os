@@ -13,10 +13,10 @@ setup() {
 }
 
 @test "security policy includes private disclosure and response expectations" {
-  grep -q "security@xipherlabs.xyz" "$REPO_ROOT/SECURITY.md"
-  grep -q "GitHub Security Advisories" "$REPO_ROOT/SECURITY.md"
-  grep -q "acknowledge reports within 48 hours" "$REPO_ROOT/SECURITY.md"
-  grep -q "90-day responsible disclosure window" "$REPO_ROOT/SECURITY.md"
+  grep -Fq "security@xipherlabs.xyz" "$REPO_ROOT/SECURITY.md"
+  grep -Fq "GitHub Security Advisories" "$REPO_ROOT/SECURITY.md"
+  grep -Fq "acknowledge reports within 48 hours" "$REPO_ROOT/SECURITY.md"
+  grep -Fq "90-day responsible disclosure window" "$REPO_ROOT/SECURITY.md"
   grep -qi "acknowledge contributors" "$REPO_ROOT/SECURITY.md"
 }
 
@@ -32,13 +32,13 @@ setup() {
   [[ -f "$f" ]]
 
   for rule in CodeReviewID MaintainedID SecurityPolicyID CIIBestPracticesID FuzzingID; do
-    grep -q "$rule" "$f" || {
+    grep -Fq "$rule" "$f" || {
       echo "missing Scorecard rule: $rule"
       return 1
     }
   done
 
-  grep -q "Issue #396" "$f"
+  grep -Fq "Issue #396" "$f"
   grep -qi "manual GitHub setting" "$f"
   grep -qi "fuzzing is deferred" "$f"
 }

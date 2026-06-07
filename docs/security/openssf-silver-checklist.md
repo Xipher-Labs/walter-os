@@ -199,16 +199,16 @@ Total Silver criteria mapped: **55**
 Headline gaps blocking Silver:
 
 1. `achieve_passing` — prerequisite Passing badge not yet filed.
-2. Repo hygiene files missing or incomplete: `CODE_OF_CONDUCT.md`,
-   `CONTRIBUTING.md`, `GOVERNANCE.md`, `MAINTAINERS.md`.
+2. Repo governance files missing or incomplete: `GOVERNANCE.md`,
+   `MAINTAINERS.md`.
 3. `signed_releases` / `version_tags_signed` — no release process yet.
 4. `assurance_case` — threat model not written.
 5. `test_statement_coverage80` — no coverage measurement wired.
 
 Suggested next work order (smallest first):
 
-1. Add `CODE_OF_CONDUCT.md` (small PR).
-2. Extract `CONTRIBUTING.md` from `AGENTS.md`.
+1. Add `GOVERNANCE.md` (small PR).
+2. Add `MAINTAINERS.md`.
 3. Wire kcov for shell-script coverage; set 50% floor, ratchet up.
 4. Write `docs/security/threat-model.md`.
 5. File the Passing badge application, then this Silver checklist
