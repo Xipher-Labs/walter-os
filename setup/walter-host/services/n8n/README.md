@@ -189,11 +189,13 @@ Application: n8n.${WALTER_DOMAIN}
 Each external service still authenticates via its own webhook signature
 (GitHub HMAC, Plane bearer token, etc.) — n8n nodes verify those signatures.
 
-### Plane PR sync trigger
+### Plane PR sync adapters
 
-For the Plane ↔ Forgejo PR lifecycle, prefer calling the Walter-OS adapter from
-an Execute Command node instead of assembling shell commands from raw webhook
-JSON:
+For the Plane ↔ Forgejo PR lifecycle, call Walter-OS adapters from Execute
+Command nodes instead of assembling shell commands from raw webhook JSON.
+
+Use `plane-pr-sync-trigger.sh` for trusted internal workflows where n8n already
+knows the Plane issue ID:
 
 ```bash
 scripts/agents/plane-pr-sync-trigger.sh \
@@ -207,13 +209,62 @@ rejects newline-bearing fields, and calls `plane-pr-sync.sh` using argv arrays.
 It maps opened/reopened/synchronized PRs to `link`, merged PR closures to
 `merged`, and closed-unmerged PRs to no-op.
 
-Do not expose this script as a public HTTP listener by itself. The n8n workflow
-or webhook entrypoint must verify the Forgejo/Gitea webhook signature before it
-passes a payload to the adapter. The Plane issue ID should come from trusted
-workflow state or a prior Plane event, not from parsing arbitrary PR body text.
-`plane-pr-sync.sh link` writes a stable `walter-plane-issue:<id>` marker into
-Forgejo comments so a future signed-webhook adapter can resolve the issue
-without body parsing.
+Use `plane-pr-sync-webhook.sh` for public Forgejo/Gitea merge webhooks. n8n
+must preserve the original raw request body and pass the signature header
+through unchanged; do not JSON re-serialize the body before verification:
+
+```bash
+scripts/agents/plane-pr-sync-webhook.sh \
+  --event "$FORGEJO_EVENT" \
+  --signature "$FORGEJO_SIGNATURE" \
+  --payload-file "$RAW_FORGEJO_PAYLOAD"
+```
+
+Map `FORGEJO_EVENT` from `X-Gitea-Event` or `X-Forgejo-Event`. Map
+`FORGEJO_SIGNATURE` from `X-Gitea-Signature` or `X-Forgejo-Signature`. Store the
+shared secret in n8n/Infisical as `WALTER_FORGEJO_WEBHOOK_SECRET`; the adapter
+reads the secret from the environment and never from argv.
+
+Set `WALTER_FORGEJO_WEBHOOK_REPOS` to the comma-separated `owner/repo` names
+accepted by that webhook secret, for example:
+
+```bash
+export WALTER_FORGEJO_WEBHOOK_REPOS="Xipher-Labs/walter-os"
+```
+
+The allowlist is mandatory. A signed payload from any repo outside the allowlist
+fails closed before comment fetches or Plane mutation.
+
+Set `WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS` to the comma-separated Forgejo/Gitea
+logins whose PR comments may bind Plane issues, for example:
+
+```bash
+export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
+```
+
+This should be the automation account used by `plane-pr-sync.sh link`. Markers
+from other comment authors are ignored.
+
+`plane-pr-sync-webhook.sh` verifies HMAC-SHA256 over the raw payload before JSON
+parsing, comment fetches, or Plane/Forgejo mutation. It only acts on
+`pull_request.closed` events with `merged == true`; closed-unmerged PRs are
+no-op. For merged PRs it resolves exactly one `walter-plane-issue:<id>` marker
+from trusted Forgejo comment bodies, then calls `plane-pr-sync.sh` with argv
+arrays. Repeated copies of the same marker are accepted for webhook redelivery;
+missing markers or multiple distinct markers fail closed. PR title/body text is
+not a marker source.
+
+`plane-pr-sync.sh link` writes the stable marker into Forgejo comments before it
+moves Plane to review. If `tea` is missing, comment inspection fails, or the
+marker comment cannot be written, link fails closed instead of leaving a Plane
+issue in review without a trusted PR binding. Public merge webhooks should
+depend on that marker, not on arbitrary PR body text. When
+`WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS` contains a non-empty comma-separated
+list, existing markers from other authors do not satisfy the link-stage binding
+check.
+
+Neither adapter is a public HTTP listener. The full n8n workflow JSON remains
+out of scope until the CLI adapters are proven in operator use.
 
 ## Versioning / upgrades
 

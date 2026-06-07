@@ -9,6 +9,8 @@
  * Refs: docs/specs/control-tower-redesign.md (AC-2)
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   STATUS_TOKENS,
   agentStateToStatus,
@@ -56,6 +58,14 @@ describe("STATUS_TOKENS [AC-2]", () => {
     expect(STATUS_TOKENS.idle.pulse).toBe(false);
     expect(STATUS_TOKENS.ok.pulse).toBe(false);
     expect(STATUS_TOKENS.info.pulse).toBe(false);
+  });
+
+  it("keeps badge labels on one line in compact dashboard tables", () => {
+    const src = readFileSync(
+      join(__dirname, "../../app/components/ui/StatusBadge.tsx"),
+      "utf8"
+    );
+    expect(src).toContain("whitespace-nowrap");
   });
 });
 

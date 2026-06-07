@@ -6,13 +6,15 @@ name: Release
 # without rolling a new tag, but it must be dispatched on the same tag ref
 # as the input tag so SLSA provenance binds to the tag commit.
 #
-# Two jobs run in sequence:
+# Three jobs run in sequence:
 #   1. `release`  — creates the GitHub Release with auto-generated notes
 #                   (idempotent: skips if the release already exists).
 #   2. `security` — generates CycloneDX SBOM, SHA-256 checksums over the
 #                   full release payload, and a cosign keyless OIDC
 #                   signature. All artifacts uploaded with --clobber so
 #                   workflow_dispatch re-runs cleanly.
+#   3. `provenance` — emits SLSA Build L3 provenance for the release
+#                     security artifacts after checksums and cosign signing.
 #
 # Note: this workflow consolidated the previous `release-security.yml`
 # into the same workflow file. The split version relied on a
