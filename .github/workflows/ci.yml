@@ -110,42 +110,105 @@ jobs:
         working-directory: ansible
         run: ansible-playbook --syntax-check walter-vm.yml -i inventory.yml
 
+  bats-changes:
+    name: bats suite change detection
+    runs-on: ubuntu-latest
+    outputs:
+      run_all: ${{ steps.filter.outputs.run_all }}
+      hooks: ${{ steps.filter.outputs.hooks }}
+      agents_and_skills: ${{ steps.filter.outputs.agents_and_skills }}
+      wiki_and_observability: ${{ steps.filter.outputs.wiki_and_observability }}
+      cli_and_walter: ${{ steps.filter.outputs.cli_and_walter }}
+      oss_audit_and_github: ${{ steps.filter.outputs.oss_audit_and_github }}
+      compose_and_services: ${{ steps.filter.outputs.compose_and_services }}
+      install_contracts: ${{ steps.filter.outputs.install_contracts }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - name: Detect changed Bats suites
+        id: filter
+        run: |
+          set -euo pipefail
+
+          changed="$(mktemp)"
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            git ls-files > "$changed"
+            run_all=true
+          else
+            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${GITHUB_SHA}" > "$changed"
+            run_all=false
+          fi
+
+          # Changes to this workflow can affect every Bats suite and must
+          # exercise the full split matrix before the aggregate check passes.
+          if grep -Eq '^\.github/workflows/ci\.yml$' "$changed"; then
+            run_all=true
+          fi
+
+          set_bool() {
+            local key="$1"
+            local pattern="$2"
+            local value=false
+            if [[ "$run_all" == "true" ]] || grep -Eq "$pattern" "$changed"; then
+              value=true
+            fi
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+          }
+
+          printf 'run_all=%s\n' "$run_all" >> "$GITHUB_OUTPUT"
+          set_bool hooks '^(hooks/|tests/hooks/|tests/cloudflare/)'
+          set_bool agents_and_skills '^(scripts/agents/|agents/|skills/|tests/agents/|tests/skills/)'
+          set_bool wiki_and_observability '^(scripts/wiki\.sh|tests/wiki/|tests/litellm/|tests/walter-bridge/|setup/litellm/|setup/walter-bridge/)'
+          set_bool cli_and_walter '^(bin/walter|bin/walter-os|scripts/walter/|tests/cli/|tests/walter/)'
+          set_bool oss_audit_and_github '^(tests/oss/|tests/audit/|tests/github-actions/|\.github/workflows/(gitleaks|scorecard|osv-scanner|codeql|release)\.yml$)'
+          set_bool compose_and_services '^(compose\.yml|setup/walter-host/|tests/compose/|tests/walter-host/|tests/services/)'
+          set_bool install_contracts '^(install\.sh|Makefile|setup/personal-overlay-init\.sh|scripts/secrets-identity-init\.sh|tests/scripts/secrets-identity-init\.bats|tests/install/)'
+
   bats-suite:
     name: bats suite (${{ matrix.name }})
     runs-on: ubuntu-latest
+    needs: bats-changes
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: hooks
+            output: hooks
             paths: |
               tests/hooks/
               tests/cloudflare/
           - name: agents-and-skills
+            output: agents_and_skills
             paths: |
               tests/agents/
               tests/skills/
           - name: wiki-and-observability
+            output: wiki_and_observability
             paths: |
               tests/wiki/
               tests/litellm/
               tests/walter-bridge/
           - name: cli-and-walter
+            output: cli_and_walter
             paths: |
               tests/cli/
               tests/walter/
           - name: oss-audit-and-github
+            output: oss_audit_and_github
             paths: |
               tests/oss/
               tests/audit/
               tests/github-actions/
           - name: compose-and-services
+            output: compose_and_services
             paths: |
               tests/compose/
               tests/walter-host/
               tests/services/
           - name: install-contracts
+            output: install_contracts
             paths: |
               tests/scripts/secrets-identity-init.bats
               tests/install/hook-chain-content.bats
@@ -156,21 +219,38 @@ jobs:
               tests/install/reproducible-builds.bats
               tests/install/yq-flavor-and-arch.bats
     steps:
+      - name: Decide suite execution
+        id: decision
+        env:
+          RUN_ALL: ${{ needs['bats-changes'].outputs.run_all }}
+          SUITE_CHANGED: ${{ needs['bats-changes'].outputs[matrix.output] }}
+        run: |
+          if [[ "$RUN_ALL" == "true" || "$SUITE_CHANGED" == "true" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Running suite: ${{ matrix.name }}"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping suite: ${{ matrix.name }} (no relevant changes)"
+          fi
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        if: steps.decision.outputs.run == 'true'
         with:
           # P0-05 hotfix tests rely on `git submodule status` reflecting the
           # real pinned commit (not `-` for uninit). Without recursive init,
           # submodule-pin tests fail in CI even though the pin file is correct.
           submodules: recursive
       - name: Install bats + jq + flock + sqlite3 + python3-yaml + ripgrep
+        if: steps.decision.outputs.run == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -qq bats jq util-linux sqlite3 python3-yaml ripgrep
       - name: Configure git
+        if: steps.decision.outputs.run == 'true'
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "ci"
       - name: Run Bats suite
+        if: steps.decision.outputs.run == 'true'
         env:
           BATS_PATHS: ${{ matrix.paths }}
         run: |
@@ -179,12 +259,18 @@ jobs:
   bats:
     name: bats hooks tests
     runs-on: ubuntu-latest
-    needs: bats-suite
+    needs:
+      - bats-changes
+      - bats-suite
     if: always()
     steps:
       - name: Check split Bats suites
         run: |
-          if [ "${{ needs.bats-suite.result }}" != "success" ]; then
+          if [[ "${{ needs['bats-changes'].result }}" != "success" ]]; then
+            echo "Bats change detection failed."
+            exit 1
+          fi
+          if [[ "${{ needs['bats-suite'].result }}" != "success" ]]; then
             echo "One or more split Bats suites failed."
             exit 1
           fi
