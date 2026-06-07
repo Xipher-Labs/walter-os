@@ -276,7 +276,7 @@ cmd_configure() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --profile)
-        if [[ -z "${2:-}" ]]; then
+        if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
           echo "walter ai configure: --profile requires a value" >&2
           exit 2
         fi
@@ -284,7 +284,7 @@ cmd_configure() {
         shift 2
         ;;
       --set)
-        if [[ -z "${2:-}" ]]; then
+        if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
           echo "walter ai configure: --set requires capability=provider" >&2
           exit 2
         fi

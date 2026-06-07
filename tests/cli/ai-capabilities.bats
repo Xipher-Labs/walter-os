@@ -85,8 +85,20 @@ teardown() {
   echo "$output" | grep -q -- "--profile requires a value"
 }
 
+@test "walter ai configure rejects option-looking --profile value" {
+  run bash "$WALTER_BIN" ai configure --profile --set research=gemini
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q -- "--profile requires a value"
+}
+
 @test "walter ai configure rejects missing --set value" {
   run bash "$WALTER_BIN" ai configure --profile mixed --set
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q -- "--set requires capability=provider"
+}
+
+@test "walter ai configure rejects option-looking --set value" {
+  run bash "$WALTER_BIN" ai configure --profile mixed --set --help
   [ "$status" -eq 2 ]
   echo "$output" | grep -q -- "--set requires capability=provider"
 }
