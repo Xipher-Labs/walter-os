@@ -43,6 +43,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		setup/walter-host/services/openclaw/deploy.sh \
 		skills/daily-supply-chain-audit/scripts/audit.sh \
 		scripts/walter/subcommands/bridge.sh \
+		scripts/walter/subcommands/post-merge-check.sh \
 		scripts/walter/subcommands/feature-state.sh \
 		scripts/walter/subcommands/release.sh
 

@@ -10,7 +10,7 @@ setup() {
   export HOME="$TMP_DIR/home"
   export WALTER_CONFIG="$TMP_DIR/config"
   export WALTER_OS_HOME="$REPO_ROOT"
-  mkdir -p "$HOME" "$WALTER_CONFIG"
+  mkdir -p "$HOME" "$WALTER_CONFIG" "$TMP_DIR/repo"
 }
 
 teardown() {
@@ -136,6 +136,85 @@ write_fixture() {
   echo "$output" | jq -e '.signals.critical_alerts == ["api, elevated errors"]'
 }
 
+@test "AD-13: opt-in feature-state recording appends post-merge event" {
+  command -v ruby >/dev/null 2>&1 || skip "ruby required for feature-state YAML tests"
+  local fixture="$TMP_DIR/record-ledger.json"
+  local state_file="$TMP_DIR/repo/.walter/features/AD-13/state.yaml"
+  bash "$WALTER_OS_BIN" feature-state init AD-13 \
+    --repo "$TMP_DIR/repo" \
+    --title "Post-merge feedback loop" \
+    --issue 238 \
+    --idea "Record post-merge health decisions" >/dev/null
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci","status":"completed","conclusion":"failure"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check \
+    --fixture "$fixture" \
+    --json \
+    --record-feature-state AD-13 \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "investigate"'
+  ruby -ryaml -e '
+    state = YAML.safe_load(File.read(ARGV[0]))
+    event = state.fetch("post_merge").last
+    abort "stage" unless state["stage"] == "post-merge-investigate"
+    abort "decision" unless event["decision"] == "investigate"
+    abort "next_action" unless event["next_action"] == "open-fix-pr-candidate"
+    abort "merge_sha" unless event["merge_sha"] == "abc123def456"
+    abort "source" unless event["source"] == "post-merge-check"
+  ' "$state_file"
+}
+
+@test "AD-13: feature-state recording failures use runtime exit code" {
+  command -v ruby >/dev/null 2>&1 || skip "ruby required for feature-state YAML tests"
+  local fixture="$TMP_DIR/missing-ledger.json"
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci","status":"completed","conclusion":"success"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check \
+    --fixture "$fixture" \
+    --record-feature-state AD-13 \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"unable to record feature state"* ]]
+  [[ "$output" == *"feature-state exit 1"* ]]
+  [[ "$output" == *".walter/features/AD-13/state.yaml"* ]]
+}
+
+@test "AD-13: invalid feature id remains a usage error" {
+  local fixture="$TMP_DIR/invalid-feature-id.json"
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci","status":"completed","conclusion":"success"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check \
+    --fixture "$fixture" \
+    --record-feature-state ../escape \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"invalid feature id"* ]]
+}
+
+@test "AD-13: --repo without feature-state recording is a usage error" {
+  local fixture="$TMP_DIR/repo-without-recording.json"
+  write_fixture \
+    "$fixture" \
+    '[{"workflowName":"ci","status":"completed","conclusion":"success"}]'
+
+  run bash "$WALTER_OS_BIN" post-merge-check \
+    --fixture "$fixture" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"--repo requires --record-feature-state"* ]]
+}
+
 @test "regression: comma-bearing run and alert names do not inflate counts" {
   local fixture="$TMP_DIR/comma-names.json"
   write_fixture \
@@ -181,4 +260,14 @@ EOF
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"post-merge-check"* ]]
+  [[ "$output" == *"record-feature-state"* ]]
+}
+
+@test "AD-13: subcommand help documents --repo recording dependency" {
+  run bash "$WALTER_OS_BIN" post-merge-check --help
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--repo requires --record-feature-state"* ]]
+  [[ "$output" == *"current git repository root"* ]]
+  [[ "$output" == *"falling back to the current working directory"* ]]
 }
