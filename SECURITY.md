@@ -15,9 +15,9 @@ fixed on the latest minor and ships in the next release.
 
 | Version | Supported | Notes |
 |---|---|---|
-| Latest minor (currently 0.4.x — see `VERSION`) | yes | full security + functional support |
-| Previous minor (currently 0.3.x) | partial | CVSS ≥ 7.0 security fixes only |
-| Older minors (0.2.x, 0.1.x, and any prior) | no | EOL — upgrade to a supported line |
+| Latest minor (currently 0.6.x — see `VERSION`) | yes | full security + functional support |
+| Previous minor (currently 0.5.x) | partial | CVSS ≥ 7.0 security fixes only |
+| Older minors (0.4.x, 0.3.x, 0.2.x, 0.1.x, and any prior) | no | EOL — upgrade to a supported line |
 
 The "currently" labels are refreshed as part of the release checklist;
 if they ever disagree with `VERSION`, `VERSION` wins.
@@ -36,6 +36,9 @@ release-line cadence, NOT API stability.
 **Do not open a public GitHub issue for security vulnerabilities.**
 
 Email: `security@xipherlabs.xyz`
+
+Preferred private reporting channel:
+[GitHub Security Advisories](https://github.com/Xipher-Labs/walter-os/security/advisories/new)
 
 Include:
 - Description of the vulnerability and its potential impact
