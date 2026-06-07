@@ -19,9 +19,12 @@
 #   audit                       Run supply-chain audit now (foreground)
 #   status [--models]           Show audit + spend status, or model routing
 #   audit verify-chain [date]   Verify tamper-evident audit hash chain
+#   audit verify-chain --from-loki [--mock-loki <fixture>] [--loki-url <url>] [date]
+#                               Verify Loki-shipped audit rows from fixture or live Loki
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
+#   baseline-mcp-tools          Refresh MCP server + stdio tool baselines
 #   baseline-external-hooks     Refresh external/**/hooks/scripts/*.sh checksums
 #                               after an intentional submodule SHA bump (audit P1-07)
 #   enable-hook <name>          Enable a hook in ~/.claude/settings.json
@@ -66,10 +69,18 @@
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
-#   post-merge-check [--commit SHA] [--json]
-#                               Classify post-merge health evidence (read-only)
 #   semantic-gates <spec.md> [--repo DIR] [--json]
 #                               Run semantic spec/AC/architecture/test gates
+#   post-merge-check [--commit SHA] [--json] [--record-feature-state ID]
+#                               Classify post-merge health evidence (read-only by default)
+#   preview bundle --pr N --url URL --seed FILE --screenshot FILE
+#                               Package preview evidence for review (no deploy)
+#   preview plan --dry-run --pr N --provider NAME --app NAME --branch REF --seed FILE
+#                               Plan preview deploy contract (no deploy)
+#   feature-state {init|validate|record-post-merge}
+#                               Manage .walter/features/<id>/state.yaml ledgers
+#   release doctor --target vX.Y.Z|X.Y.Z [--json]
+#                               Check release readiness without mutating state
 #   repo-config {validate|defaults [balanced|hackathon]}
 #                               Validate walter-repo-config.yaml per-repo policy
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
@@ -79,6 +90,8 @@
 #   session {status|restart}    Manage time-bounded session state (#122 A-4)
 #   cap {mint|list|verify|revoke}
 #                               Manage session capability tokens (#122 A-2)
+#   svc {up|stop|down|restart|ps|logs|apply} <name> [--host H] [--dry-run]
+#                               Manage Walter-VM service compose lifecycle
 #   version                     Show current version + optional update check
 #   doctor                      Diagnose install state
 #   doctor --codex-startup      Diagnose Codex skill/plugin/MCP startup health
@@ -147,6 +160,120 @@ print_help() {
   awk '/^[^#]/ && NR > 1 { exit } /^#( |$)/ { sub(/^# ?/, ""); print }' "$0"
 }
 
+# ---------- svc (Walter-VM service lifecycle wrapper) ----------
+
+_shell_quote() {
+  printf '%q' "$1"
+}
+
+_svc_usage() {
+  cat >&2 <<'USAGE'
+Usage: walter-os svc <up|stop|down|restart|ps|logs|apply> <service> [options]
+
+Options:
+  --host <ssh-host>       Run over ssh on a Walter-VM host
+  --services-dir <path>   Service root (default: /opt/walter-vm/services)
+  --dry-run              Print the command instead of executing it
+
+Notes:
+  down never uses -v; Docker volumes are preserved.
+USAGE
+}
+
+_svc_compose_command() {
+  case "$1" in
+    up|apply) printf '%s\n' "docker compose pull && docker compose up -d" ;;
+    stop) printf '%s\n' "docker compose stop" ;;
+    down) printf '%s\n' "docker compose down" ;;
+    restart) printf '%s\n' "docker compose restart" ;;
+    ps) printf '%s\n' "docker compose ps" ;;
+    logs) printf '%s\n' "docker compose logs --tail=100" ;;
+    *) return 2 ;;
+  esac
+}
+
+cmd_svc() {
+  local action="${1:-}"
+  local service="${2:-}"
+  shift 2 2>/dev/null || true
+
+  if [[ "$action" =~ ^(-h|--help|help)$ ]]; then
+    _svc_usage
+    return 0
+  fi
+  if [[ -z "$action" || -z "$service" ]]; then
+    _svc_usage
+    return 2
+  fi
+
+  local host=""
+  local services_dir="${WALTER_VM_SERVICES_DIR:-/opt/walter-vm/services}"
+  local dry_run=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --host)
+        host="${2:-}"
+        shift 2
+        ;;
+      --services-dir)
+        services_dir="${2:-}"
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      -h|--help|help)
+        _svc_usage
+        return 0
+        ;;
+      *)
+        echo "walter-os svc: unknown option: $1" >&2
+        _svc_usage
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ ! "$service" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "walter-os svc: invalid service name: $service" >&2
+    return 2
+  fi
+  if [[ -n "$host" && ! "$host" =~ ^[A-Za-z0-9._:@-]+$ ]]; then
+    echo "walter-os svc: invalid ssh host: $host" >&2
+    return 2
+  fi
+
+  local compose_cmd
+  if ! compose_cmd="$(_svc_compose_command "$action")"; then
+    echo "walter-os svc: unknown action: $action" >&2
+    _svc_usage
+    return 2
+  fi
+
+  local service_dir="${services_dir%/}/${service}"
+  local remote_cmd
+  remote_cmd="cd $(_shell_quote "$service_dir") && ${compose_cmd}"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    if [[ -n "$host" ]]; then
+      printf 'ssh %s %s\n' "$(_shell_quote "$host")" "$(_shell_quote "$remote_cmd")"
+    else
+      printf '%s\n' "$remote_cmd"
+    fi
+    return 0
+  fi
+
+  if [[ -n "$host" ]]; then
+    # shellcheck disable=SC2029 # remote command is assembled from validated service/action inputs.
+    ssh "$host" "$remote_cmd"
+  else
+    cd "$service_dir"
+    bash -lc "$compose_cmd"
+  fi
+}
+
 # ---------- audit ----------
 
 cmd_audit() {
@@ -155,6 +282,54 @@ cmd_audit() {
       shift
       # shellcheck source=/dev/null
       source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh"
+      if [[ "${1:-}" == "--from-loki" ]]; then
+        shift
+        local fixture="" loki_url="" date_value=""
+        while [[ "$#" -gt 0 ]]; do
+          case "$1" in
+            --mock-loki)
+              if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+                echo "walter-os audit verify-chain --from-loki: --mock-loki <fixture> required" >&2
+                return 2
+              fi
+              fixture="$2"
+              shift 2
+              ;;
+            --loki-url)
+              if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+                echo "walter-os audit verify-chain --from-loki: --loki-url <url> required" >&2
+                return 2
+              fi
+              loki_url="$2"
+              shift 2
+              ;;
+            --*)
+              echo "walter-os audit verify-chain --from-loki: unsupported option: $1" >&2
+              echo "Usage: walter-os audit verify-chain --from-loki [--mock-loki <fixture>] [--loki-url <url>] [date]" >&2
+              return 2
+              ;;
+            *)
+              if [[ -n "$date_value" ]]; then
+                echo "walter-os audit verify-chain --from-loki: too many arguments" >&2
+                echo "Usage: walter-os audit verify-chain --from-loki [--mock-loki <fixture>] [--loki-url <url>] [date]" >&2
+                return 2
+              fi
+              date_value="$1"
+              shift
+              ;;
+          esac
+        done
+        if [[ -n "$fixture" && -n "$loki_url" ]]; then
+          echo "walter-os audit verify-chain --from-loki: choose either --mock-loki or --loki-url, not both" >&2
+          return 2
+        fi
+        if [[ -n "$fixture" ]]; then
+          walter_audit_verify_chain_from_loki_fixture "$fixture" "$date_value"
+          return $?
+        fi
+        walter_audit_verify_chain_from_loki_live "$date_value" "$loki_url"
+        return $?
+      fi
       walter_audit_verify_chain "$@"
       return $?
       ;;
@@ -497,6 +672,53 @@ cmd_baseline_mcp_tools() {
   local n
   n="$(jq 'length' "$baseline")"
   echo "✓ MCP server snapshot refreshed ($n servers): $baseline"
+
+  local cli_root helper=""
+  cli_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  for candidate in \
+      "${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs" \
+      "${cli_root}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"; do
+    if [[ -f "$candidate" ]]; then
+      helper="$candidate"
+      break
+    fi
+  done
+  local settings="$CLAUDE_SETTINGS"
+  local tool_baseline="${WALTER_CONFIG}/mcp-tool-snapshots.json"
+  if [[ ! -f "$settings" || -z "$helper" ]]; then
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "warning: node not found; skipped MCP tool-definition snapshot" >&2
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$tool_baseline")"
+  local tool_tmp; tool_tmp="$(mktemp "${tool_baseline}.tmp.XXXXXX")"
+  if node "$helper" --settings "$settings" --approved-registry "$baseline" > "$tool_tmp"; then
+    local tool_errors
+    if ! tool_errors="$(jq '.errors // {} | length' "$tool_tmp" 2>/dev/null)"; then
+      rm -f "$tool_tmp" "${tool_tmp}.sorted"
+      echo "warning: MCP tool-definition snapshot returned invalid JSON; baseline not refreshed" >&2
+      return 4
+    fi
+    if [[ "$tool_errors" -gt 0 ]]; then
+      echo "warning: MCP tool-definition snapshot had $tool_errors probe error(s); baseline not refreshed" >&2
+      jq -r '.errors | keys | join(", ")' "$tool_tmp" >&2 || true
+      rm -f "$tool_tmp" "${tool_tmp}.sorted"
+      return 4
+    fi
+    jq --sort-keys '{version: .version, source: .source, transport: .transport, servers: (.servers // {})}' \
+      "$tool_tmp" > "${tool_tmp}.sorted" && mv "${tool_tmp}.sorted" "$tool_baseline"
+    rm -f "$tool_tmp"
+    local tool_n
+    tool_n="$(jq '.servers | length' "$tool_baseline")"
+    echo "✓ MCP tool snapshot refreshed ($tool_n stdio servers): $tool_baseline"
+  else
+    rm -f "$tool_tmp" "${tool_tmp}.sorted"
+    echo "warning: MCP tool-definition snapshot failed; server-registry baseline was still refreshed" >&2
+    return 4
+  fi
 }
 
 # Re-snapshot external/**/hooks/scripts/*.{sh,py,js} after an intentional
@@ -2256,7 +2478,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|semantic-gates|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|svc|pr-score|post-merge-check|semantic-gates|preview|feature-state|release|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2298,12 +2520,16 @@ case "$cmd" in
   egress)             cmd_egress "$@" ;;
   session)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/session.sh" "$@" ;;
   cap)                exec "${WALTER_OS_HOME}/scripts/walter/subcommands/cap.sh" "$@" ;;
+  svc)                cmd_svc "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
   pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
   post-merge-check)   exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/post-merge-check.sh" "$@" ;;
   semantic-gates)     exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/semantic-gates.sh" "$@" ;;
+  preview)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/preview.sh" "$@" ;;
+  feature-state)      exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/feature-state.sh" "$@" ;;
+  release)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/release.sh" "$@" ;;
   repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;

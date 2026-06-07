@@ -24,7 +24,7 @@ model_list:
 
   - model_name: opus
     litellm_params:
-      model: claude-opus-4-5
+      model: claude-opus-4-8
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: haiku
@@ -42,7 +42,7 @@ model_list:
   # ===========================================================================
   - model_name: gpt
     litellm_params:
-      model: gpt-4o
+      model: gpt-5.5
       api_key: os.environ/OPENAI_API_KEY
 
   - model_name: gpt-4o-mini

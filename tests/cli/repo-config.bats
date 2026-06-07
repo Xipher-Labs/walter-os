@@ -56,6 +56,9 @@ YAML
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"safest defaults apply"* ]]
+  [[ "$output" == *"effective autonomy_mode: guided"* ]]
+  [[ "$output" == *"policy axis, not install tier"* ]]
+  [[ "$output" == *"hard-limit floor: non-overridable"* ]]
 }
 
 @test "explicit missing target fails instead of applying defaults" {
@@ -105,6 +108,14 @@ YAML
   [[ "$output" == *"invalid autonomy_mode"* ]]
 }
 
+@test "mode contract helper normalizes unknown modes to guided" {
+  run bash -c "source '$REPO_ROOT/scripts/walter/lib/repo-config.sh'; walter_repo_config_print_mode_contract sleepy"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"effective autonomy_mode: guided"* ]]
+  [[ "$output" == *"unknown mode requested; safest guided semantics apply"* ]]
+}
+
 @test "unknown top-level keys warn but do not fail" {
   write_valid_config
   printf '\nexperimental_knob: true\n' >> "$TMP_DIR/repo/walter-repo-config.yaml"
@@ -124,6 +135,31 @@ YAML
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"missing hard-floor approval: auth"* ]]
+}
+
+@test "full autonomy still cannot remove the hard-limit floor" {
+  write_valid_config
+  sed -i.bak 's/autonomy_mode: guided/autonomy_mode: full/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+  sed -i.bak '/  - secrets/d' "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing hard-floor approval: secrets"* ]]
+}
+
+@test "full autonomy cannot omit the hard-limit approval list" {
+  write_valid_config
+  sed -i.bak 's/autonomy_mode: guided/autonomy_mode: full/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+  sed -i.bak '/^human_approval_required_for:/,$d' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config validate "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing hard-floor approval list: human_approval_required_for"* ]]
 }
 
 @test "auto_merge.allowed_branches cannot include protected branches" {
@@ -199,6 +235,8 @@ YAML
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"repo-config: valid"* ]]
+  [[ "$output" == *"effective autonomy_mode: full"* ]]
+  [[ "$output" == *"hard-limit floor: non-overridable"* ]]
 }
 
 @test "repo-config defaults rejects unknown profile presets" {
