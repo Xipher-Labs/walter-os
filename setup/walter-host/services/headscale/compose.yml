@@ -21,7 +21,7 @@ services:
     mem_limit: "${HEADSCALE_MEM_LIMIT:-256m}"
     mem_reservation: "${HEADSCALE_MEM_RESERVATION:-128m}"
     cpus: "${HEADSCALE_CPUS:-0.5}"
-    pids_limit: 128
+    pids_limit: "${HEADSCALE_PIDS_LIMIT:-128}"
     image: headscale/headscale:0.26.0
     container_name: headscale
     restart: unless-stopped
@@ -42,7 +42,7 @@ services:
     mem_limit: "${HEADSCALE_ADMIN_MEM_LIMIT:-128m}"
     mem_reservation: "${HEADSCALE_ADMIN_MEM_RESERVATION:-64m}"
     cpus: "${HEADSCALE_ADMIN_CPUS:-0.25}"
-    pids_limit: 128
+    pids_limit: "${HEADSCALE_ADMIN_PIDS_LIMIT:-128}"
     # Switched from gurucomputing/headscale-ui (Caddy+TLS, hostile to CF tunnel)
     # to goodieshq/headscale-admin (modern svelte UI, HTTP plain on 80).
     #

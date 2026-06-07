@@ -14,7 +14,7 @@ services:
     mem_limit: "${WIREGUARD_MEM_LIMIT:-256m}"
     mem_reservation: "${WIREGUARD_MEM_RESERVATION:-128m}"
     cpus: "${WIREGUARD_CPUS:-0.5}"
-    pids_limit: 128
+    pids_limit: "${WIREGUARD_PIDS_LIMIT:-128}"
     image: ghcr.io/wg-easy/wg-easy:14
     container_name: wg-easy
     restart: unless-stopped

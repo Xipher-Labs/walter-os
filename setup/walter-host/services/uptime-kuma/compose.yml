@@ -3,7 +3,7 @@ services:
     mem_limit: "${UPTIME_KUMA_MEM_LIMIT:-384m}"
     mem_reservation: "${UPTIME_KUMA_MEM_RESERVATION:-192m}"
     cpus: "${UPTIME_KUMA_CPUS:-0.5}"
-    pids_limit: 256
+    pids_limit: "${UPTIME_KUMA_PIDS_LIMIT:-256}"
     image: louislam/uptime-kuma:2.3.2
     container_name: uptime-kuma
     restart: unless-stopped
