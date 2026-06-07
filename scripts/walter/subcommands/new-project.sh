@@ -19,6 +19,8 @@ source "$WALTER_LIB/lib/log.sh"
 source "$WALTER_LIB/lib/prompt.sh"
 # shellcheck source=/dev/null
 source "$WALTER_LIB/lib/litellm.sh"
+# shellcheck source=/dev/null
+source "$WALTER_LIB/lib/model-router.sh"
 # Load operator overlay (canonical personal-config location, sourced by bin/walter as well)
 # shellcheck source=/dev/null
 [[ -f "$HOME/.config/walter-os/overlay/personal.env" ]] && { set +u; source "$HOME/.config/walter-os/overlay/personal.env"; set -u; }
@@ -202,11 +204,16 @@ log_ok "Repo initialized"
 
 # ---------- Discovery flow (two passes + synth) ----------
 log_step "Discovery — Phase -1"
-log_dim "(uses LiteLLM gateway — claude-sonnet thinking + opus synthesis)"
+log_dim "(uses LiteLLM gateway with Walter model routing)"
 
 pitch=$(prompt_input "Brief pitch (1 sentence)")
 
 if prompt_confirm "Run the 2-pass AI discovery flow now? (skip with 'n')"; then
+  discovery_model=""
+  synth_model=""
+  walter_model_select_primary brainstorm discovery_model
+  walter_model_select_primary longform synth_model
+
   log_info "Pass 1: generating 12 sharp questions..."
 
   pass1_prompt="You are a senior product strategist + technical co-founder.
@@ -227,7 +234,7 @@ unknowns. Focus on:
 Output as numbered questions only — no preamble, no commentary.
 Keep each question 1 sentence."
 
-  questions1=$(litellm_chat "$pass1_prompt" "sonnet")
+  questions1=$(litellm_chat "$pass1_prompt" "$discovery_model")
   echo "$questions1" > docs/specs/discovery-pass-1-questions.md
 
   log_ok "Pass 1 questions saved to docs/specs/discovery-pass-1-questions.md"
@@ -258,7 +265,7 @@ Output as numbered questions only.
 
 $answers1"
 
-  questions2=$(litellm_chat "$pass2_prompt" "sonnet")
+  questions2=$(litellm_chat "$pass2_prompt" "$discovery_model")
   answers2=$(prompt_editor "$questions2
 
 ---
@@ -307,7 +314,7 @@ $answers1
 ## Pass 2
 $answers2"
 
-  spec=$(litellm_chat "$synth_prompt" "opus")
+  spec=$(litellm_chat "$synth_prompt" "$synth_model")
   echo "$spec" > "docs/specs/$name.md"
   log_ok "Functional spec written to docs/specs/$name.md"
 
@@ -339,7 +346,7 @@ PLANE_API_TOKEN="${PLANE_API_TOKEN:-}"
 if [[ -z "$PLANE_API_TOKEN" ]]; then
   # Fetch from Infisical workspace=walter-os env=dev
   PLANE_API_TOKEN=$(infisical secrets get PLANE_API_TOKEN \
-    --domain=https://secrets.${WALTER_DOMAIN} \
+    --domain="https://secrets.${WALTER_DOMAIN}" \
     --projectId=8b4d37fa-8a03-4176-9787-69cf4f171324 \
     --env=dev --plain 2>/dev/null || true)
 fi

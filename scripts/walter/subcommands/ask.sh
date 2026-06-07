@@ -17,6 +17,8 @@ source "${WALTER_OS_HOME}/scripts/walter/lib/log.sh"
 source "$LLM_LIB"
 # shellcheck source=/dev/null
 source "${WALTER_OS_HOME}/scripts/walter/lib/spend-record.sh"
+# shellcheck source=/dev/null
+source "${WALTER_OS_HOME}/scripts/walter/lib/model-router.sh"
 
 _no_ai_message() {
   cat >&2 <<'EOF'
@@ -44,6 +46,9 @@ if ! llm_available; then
   _no_ai_message
   exit 1
 fi
+
+model_tag=""
+walter_model_select_primary default model_tag
 
 # Collect Council state context (truncated to last 100 lines)
 context_parts=()
@@ -81,8 +86,8 @@ answer, say so clearly.
 
 $(printf '%s\n\n' "${context_parts[@]}")"
 
-response="$(llm_invoke_or_mock "walter-ask" "haiku" "$system_prompt" "$question" 512)"
+response="$(llm_invoke_or_mock "walter-ask" "$model_tag" "$system_prompt" "$question" 512)"
 
 printf '%s\n' "$response"
 
-_record_cli_spend "walter ask" "haiku" 512
+_record_cli_spend "walter ask" "$model_tag" 512

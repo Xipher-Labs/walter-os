@@ -20,6 +20,9 @@ setup() {
 
   # Ensure no mock file leaks between tests
   unset WALTER_LLM_MOCK_FILE
+  unset WALTER_MODEL_OVERRIDE WALTER_MODEL_DEFAULT WALTER_MODEL_LONGFORM
+  unset WALTER_MODEL_BRAINSTORM WALTER_MODEL_FRONTEND WALTER_MODEL_BACKEND_REVIEW
+  unset WALTER_AI_CAPABILITIES_FILE
 
   mkdir -p "${TEST_HOME}/.config/walter-os"
 
@@ -41,6 +44,31 @@ FAKE_WOS
 
 teardown() {
   rm -rf "$TEST_HOME"
+}
+
+install_curl_capture() {
+  local capture_file="$1"
+  cat > "${TEST_HOME}/bin/curl" <<CURL_STUB
+#!/usr/bin/env bash
+capture_file="${capture_file}"
+payload=""
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -d|--data|--data-raw|--data-binary)
+      shift
+      payload="\${1:-}"
+      ;;
+  esac
+  shift || true
+done
+printf '%s\n' "\$payload" >> "\$capture_file"
+printf '{"choices":[{"message":{"content":"captured-response"}}]}\n'
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+}
+
+last_spend_model() {
+  jq -r '.model' "${HOME}/.config/walter-os/cli-spend.jsonl" | tail -1
 }
 
 # -----------------------------------------------------------------------
@@ -122,12 +150,14 @@ teardown() {
 }
 
 @test "walter ask: records cost to cli-spend.jsonl [AC-2]" {
+  export WALTER_MODEL_DEFAULT=route-ask
   export WALTER_LLM_MOCK_FILE="${FIXTURES}/mock-ask.json"
   run bash "$WALTER_BIN" ask "test cost recording"
   [ "$status" -eq 0 ]
   local spend_file="${HOME}/.config/walter-os/cli-spend.jsonl"
   [ -f "$spend_file" ]
   grep -q "walter ask" "$spend_file"
+  [ "$(last_spend_model)" = "route-ask" ]
 }
 
 # -----------------------------------------------------------------------
@@ -429,6 +459,7 @@ teardown() {
   local skill_dir="${REPO_ROOT}/skills/test-cost-skill"
   mkdir -p "$skill_dir"
   printf '# Test Cost Skill\n\nContent for cost recording test.\n' > "${skill_dir}/SKILL.md"
+  export WALTER_MODEL_LONGFORM=route-explain
   export WALTER_LLM_MOCK_FILE="${FIXTURES}/mock-explain.json"
   run bash "$WALTER_BIN" explain test-cost-skill
   rm -rf "$skill_dir"
@@ -436,12 +467,14 @@ teardown() {
   local spend_file="${HOME}/.config/walter-os/cli-spend.jsonl"
   [ -f "$spend_file" ]
   grep -q "walter explain" "$spend_file"
+  [ "$(last_spend_model)" = "route-explain" ]
 }
 
 @test "walter pivot: records cost to cli-spend.jsonl [AC-7]" {
   local tmp_dir
   tmp_dir="$(mktemp -d)"
   printf '# AGENTS.md\nExisting project.\n' > "${tmp_dir}/AGENTS.md"
+  export WALTER_MODEL_BRAINSTORM=route-pivot
   export WALTER_LLM_MOCK_FILE="${FIXTURES}/mock-interview.json"
   cd "$tmp_dir"
   run bash "$WALTER_BIN" pivot
@@ -451,15 +484,98 @@ teardown() {
   local spend_file="${HOME}/.config/walter-os/cli-spend.jsonl"
   [ -f "$spend_file" ]
   grep -q "walter pivot" "$spend_file"
+  [ "$(last_spend_model)" = "route-pivot" ]
 }
 
 @test "walter new project --interactive: records cost to cli-spend.jsonl [AC-7]" {
+  export WALTER_MODEL_BRAINSTORM=route-interview
   export WALTER_LLM_MOCK_FILE="${FIXTURES}/mock-interview.json"
   run bash "$WALTER_BIN" new project --interactive
   [ "$status" -eq 0 ]
   local spend_file="${HOME}/.config/walter-os/cli-spend.jsonl"
   [ -f "$spend_file" ]
   grep -q "walter new project" "$spend_file"
+  [ "$(last_spend_model)" = "route-interview" ]
+}
+
+@test "walter ask: sends default model route to LiteLLM payload [AC-2]" {
+  local payload_file
+  payload_file="${TEST_HOME}/curl-payload.jsonl"
+  install_curl_capture "$payload_file"
+  export LITELLM_BASE_URL="http://litellm.test"
+  export LITELLM_API_KEY="sk-test"
+  export WALTER_MODEL_DEFAULT=route-ask
+
+  run bash "$WALTER_BIN" ask "what changed?"
+
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.model' "$payload_file")" = "route-ask" ]
+  [ "$(jq -r '.metadata.domain' "$payload_file")" = "default" ]
+}
+
+@test "walter explain: sends longform model route to LiteLLM payload [AC-3]" {
+  local payload_file skill_dir
+  payload_file="${TEST_HOME}/curl-payload.jsonl"
+  install_curl_capture "$payload_file"
+  skill_dir="${REPO_ROOT}/skills/test-route-skill"
+  mkdir -p "$skill_dir"
+  printf '# Test Route Skill\n\nContent for route test.\n' > "${skill_dir}/SKILL.md"
+  export LITELLM_BASE_URL="http://litellm.test"
+  export LITELLM_API_KEY="sk-test"
+  export WALTER_MODEL_LONGFORM=route-explain
+
+  run bash "$WALTER_BIN" explain test-route-skill
+
+  rm -rf "$skill_dir"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.model' "$payload_file")" = "route-explain" ]
+  [ "$(jq -r '.metadata.domain' "$payload_file")" = "longform" ]
+}
+
+@test "walter pivot: sends brainstorm model route to LiteLLM payload [AC-4]" {
+  local payload_file tmp_dir
+  payload_file="${TEST_HOME}/curl-payload.jsonl"
+  install_curl_capture "$payload_file"
+  tmp_dir="$(mktemp -d)"
+  printf '# AGENTS.md\nExisting project.\n' > "${tmp_dir}/AGENTS.md"
+  export LITELLM_BASE_URL="http://litellm.test"
+  export LITELLM_API_KEY="sk-test"
+  export WALTER_MODEL_BRAINSTORM=route-pivot
+
+  run bash -c "cd '$tmp_dir' && bash '$WALTER_BIN' pivot"
+
+  rm -rf "$tmp_dir"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.model' "$payload_file")" = "route-pivot" ]
+  [ "$(jq -r '.metadata.domain' "$payload_file")" = "brainstorm" ]
+}
+
+@test "walter new project --interactive: sends brainstorm route to LiteLLM payload [AC-1]" {
+  local payload_file
+  payload_file="${TEST_HOME}/curl-payload.jsonl"
+  install_curl_capture "$payload_file"
+  export LITELLM_BASE_URL="http://litellm.test"
+  export LITELLM_API_KEY="sk-test"
+  export WALTER_MODEL_BRAINSTORM=route-interview
+
+  run bash -c "printf 'demo-proj\ndevtools\nbash\nnone\nprojects\n' | bash '$WALTER_BIN' new project --interactive"
+
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.model' "$payload_file")" = "route-interview" ]
+  [ "$(jq -r '.metadata.domain' "$payload_file")" = "brainstorm" ]
+}
+
+@test "walter new project: discovery flow uses model router aliases [AC-1]" {
+  local cmd_file="${REPO_ROOT}/scripts/walter/subcommands/new-project.sh"
+
+  grep -q "model-router.sh" "$cmd_file"
+  grep -q 'walter_model_select_primary brainstorm discovery_model' "$cmd_file"
+  grep -q 'walter_model_select_primary longform synth_model' "$cmd_file"
+  grep -q 'litellm_chat "$pass1_prompt" "$discovery_model"' "$cmd_file"
+  grep -q 'litellm_chat "$pass2_prompt" "$discovery_model"' "$cmd_file"
+  grep -q 'litellm_chat "$synth_prompt" "$synth_model"' "$cmd_file"
+  ! grep -q 'litellm_chat "$pass1_prompt" "sonnet"' "$cmd_file"
+  ! grep -q 'litellm_chat "$synth_prompt" "opus"' "$cmd_file"
 }
 
 @test "walter ask: calls spend report --last 1d not --last 24h [AC-2]" {
