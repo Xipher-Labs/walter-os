@@ -35,8 +35,16 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+_chain_path_for() {
+  printf '%s/audit/chain-%s.jsonl\n' "$WALTER_CONFIG" "$1"
+}
+
 _root_path() {
   printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
+}
+
+_root_path_for() {
+  printf '%s/audit/root-%s.txt\n' "$WALTER_CONFIG" "$1"
 }
 
 _state_file() {
@@ -459,4 +467,156 @@ SH
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"ok: verified 2 row(s)"* ]]
+}
+
+@test "B-2: verify-chain rejects invalid date before path lookup" {
+  run bash "$WALTER_OS_BIN" audit verify-chain 'x/../../escape'
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid date"* ]]
+}
+
+@test "B-2: close-day writes root for a verified chain" {
+  _make_chain
+  rm -f "$(_root_path)"
+
+  run bash "$WALTER_OS_BIN" audit close-day 2026-05-31
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: closed audit day 2026-05-31"* ]]
+  expected="$(_sha256 "$(tail -n 1 "$(_chain_path)")")"
+  [ "$(cat "$(_root_path)")" = "$expected" ]
+}
+
+@test "B-2: close-day refuses to overwrite mismatched existing root" {
+  _make_chain
+  original_root="$(cat "$(_root_path)")"
+  printf '%064d' 0 > "$(_root_path)"
+  tampered_root="$(cat "$(_root_path)")"
+
+  run bash "$WALTER_OS_BIN" audit close-day 2026-05-31
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"root hash mismatch"* ]]
+  [ "$tampered_root" != "$original_root" ]
+  [ "$(cat "$(_root_path)")" = "$tampered_root" ]
+}
+
+@test "B-2: close-day fails when final row cannot be read" {
+  _make_chain
+  rm -f "$(_root_path)"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    tail() {
+      if [[ \"\$1\" == '-n' ]]; then
+        return 42
+      fi
+      command tail \"\$@\"
+    }
+    walter_audit_close_day 2026-05-31
+  "
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unable to read final row"* ]]
+  [ ! -f "$(_root_path)" ]
+}
+
+@test "B-2: close-day rejects invalid date before path construction" {
+  _make_chain
+  mkdir -p "$WALTER_CONFIG/audit/chain-x" "$WALTER_CONFIG/audit/root-x"
+  cp "$(_chain_path)" "$WALTER_CONFIG/escape.jsonl"
+
+  run bash "$WALTER_OS_BIN" audit close-day 'x/../../escape'
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid date"* ]]
+  [ ! -f "$WALTER_CONFIG/escape.txt" ]
+}
+
+@test "B-2: first row of a new day links previous day root" {
+  _make_chain
+  prev_root="$(cat "$(_root_path)")"
+
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+
+  jq -e --arg root "$prev_root" '.prev_chain_root == $root' "$(_chain_path_for 2026-06-01)"
+}
+
+@test "B-2: verify-chain --since walks linked days" {
+  _make_chain
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+
+  run bash "$WALTER_OS_BIN" audit verify-chain --since 2026-05-31 --until 2026-06-01
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified 2 day(s)"* ]]
+  [[ "$output" == *"2026-05-31..2026-06-01"* ]]
+}
+
+@test "B-2: verify-chain --since holds one audit snapshot lock" {
+  _make_chain
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+  child_status="$TMP_HOME/range-lock-child-status"
+  probe_script="$TMP_HOME/range-lock-probe.sh"
+  cat > "$probe_script" <<'SH'
+#!/usr/bin/env bash
+source "$AUDIT_LIB"
+eval "$(declare -f _walter_audit_verify_prev_chain_root | sed '1s/_walter_audit_verify_prev_chain_root/_original_walter_audit_verify_prev_chain_root/')"
+_walter_audit_verify_prev_chain_root() {
+  if [[ ! -f "$CHILD_STATUS" ]]; then
+    WALTER_AUDIT_NOW="2026-06-02T00:00:01Z" WALTER_AUDIT_LOCK_WAIT_SECONDS=0 \
+      bash -c "source \"$AUDIT_LIB\"; walter_audit_append Bash 'lock probe' allow approval-gate ok" >/dev/null 2>&1
+    printf '%s' "$?" > "$CHILD_STATUS"
+  fi
+  _original_walter_audit_verify_prev_chain_root "$@"
+}
+walter_audit_verify_chain_range 2026-05-31 2026-06-01
+SH
+  chmod +x "$probe_script"
+
+  run env AUDIT_LIB="$AUDIT_LIB" CHILD_STATUS="$child_status" bash "$probe_script"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: verified 2 day(s)"* ]]
+  [ -f "$child_status" ]
+  [ "$(cat "$child_status")" != "0" ]
+  [ ! -f "$(_chain_path_for 2026-06-02)" ]
+}
+
+@test "B-2: verify-chain --since detects cross-day root mismatch" {
+  _make_chain
+  WALTER_AUDIT_NOW="2026-06-01T00:00:01Z" \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'next day' allow approval-gate ok >/dev/null"
+  tampered="$(_rehash_row "$(sed -n '1p' "$(_chain_path_for 2026-06-01)" | jq -cS '.prev_chain_root = "deadbeef"')")"
+  printf '%s\n' "$tampered" > "$(_chain_path_for 2026-06-01)"
+  _sha256 "$tampered" > "$(_root_path_for 2026-06-01)"
+
+  run bash "$WALTER_OS_BIN" audit verify-chain --since 2026-05-31 --until 2026-06-01
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2026-06-01: prev_chain_root mismatch"* ]]
+
+  run env WALTER_AUDIT_NOW="2026-06-02T00:00:01Z" WALTER_AUDIT_LOCK_WAIT_SECONDS=0 \
+    bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after failed range' allow approval-gate ok"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "B-2: verify-chain --since reports missing python3 runtime clearly" {
+  _make_chain
+  mkdir -p "$BATS_TEST_TMPDIR/mock-bin"
+  cat > "$BATS_TEST_TMPDIR/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$BATS_TEST_TMPDIR/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$BATS_TEST_TMPDIR/mock-bin':\$PATH walter_audit_verify_chain_range 2026-05-31 2026-05-31"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
 }

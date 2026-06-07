@@ -185,7 +185,7 @@ SH
     source '$AUDIT_LIB'
     pids=()
     for i in \$(seq 1 12); do
-      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=90 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
+      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=30 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
       pids+=(\"\$!\")
     done
     status=0
@@ -537,6 +537,26 @@ SH
   [ -f "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl" ]
   [ ! -f "$WALTER_CONFIG/audit/chain-2026-05-30.jsonl" ]
   jq -e '.ts == "2026-05-31T00:00:01Z"' "$WALTER_CONFIG/audit/chain-2026-05-31.jsonl"
+}
+
+@test "B-2: append rejects invalid captured row date before path construction" {
+  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_NOW='2026-99-99T00:00:01Z' walter_audit_append Bash invalid-date allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid audit row date: 2026-99-99"* ]]
+  [ ! -e "$WALTER_CONFIG/audit/chain-2026-99-99.jsonl" ]
+  [ ! -e "$WALTER_CONFIG/audit/root-2026-99-99.txt" ]
+}
+
+@test "B-2: invalid previous day root preserves helper status" {
+  mkdir -p "$WALTER_CONFIG/audit"
+  printf '%s' "not-a-root" > "$WALTER_CONFIG/audit/root-2026-05-30.txt"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid root hash"* ]]
+  [ ! -e "$(_chain_path)" ]
 }
 
 @test "B-1: append preserves caller RETURN traps" {

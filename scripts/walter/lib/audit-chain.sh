@@ -52,6 +52,60 @@ walter_audit_date_from_timestamp() {
   esac
 }
 
+_walter_audit_valid_date() {
+  local date_value="$1"
+  [[ "$date_value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || return 1
+  _walter_audit_require_python3 || return 3
+  python3 - "$date_value" <<'PY' >/dev/null 2>&1
+from datetime import datetime
+import sys
+
+datetime.strptime(sys.argv[1], "%Y-%m-%d")
+PY
+}
+
+_walter_audit_date_add_days() {
+  local date_value="$1" day_delta="$2"
+  _walter_audit_require_python3 || return 3
+  python3 - "$date_value" "$day_delta" <<'PY'
+from datetime import datetime, timedelta
+import sys
+
+try:
+    date_value = datetime.strptime(sys.argv[1], "%Y-%m-%d")
+    day_delta = int(sys.argv[2])
+except (ValueError, IndexError):
+    sys.exit(2)
+print((date_value + timedelta(days=day_delta)).strftime("%Y-%m-%d"))
+PY
+}
+
+_walter_audit_previous_date() {
+  _walter_audit_date_add_days "$1" -1
+}
+
+_walter_audit_read_root_file() {
+  local root_path="$1" root_hash
+  [[ -f "$root_path" ]] || return 1
+  root_hash="$(cat "$root_path")" || return 1
+  if [[ ! "$root_hash" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "walter-audit-chain: invalid root hash: $root_path" >&2
+    return 2
+  fi
+  printf '%s' "$root_hash"
+}
+
+_walter_audit_previous_chain_root() {
+  local date_value="$1" previous_date previous_status previous_root_path previous_root
+  previous_date="$(_walter_audit_previous_date "$date_value")"
+  previous_status="$?"
+  [[ "$previous_status" -eq 0 ]] || return "$previous_status"
+  previous_root_path="$(walter_audit_root_path "$previous_date")"
+  [[ -f "$previous_root_path" ]] || return 0
+  previous_root="$(_walter_audit_read_root_file "$previous_root_path")" || return $?
+  printf '%s' "$previous_root"
+}
+
 walter_audit_hash_bytes() {
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 | awk '{print $1}'
@@ -849,7 +903,7 @@ walter_audit_append() {
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
-  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id session_status sig sign_status chain_created
+  local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id session_status sig sign_status chain_created prev_chain_root prev_chain_root_status prev_chain_root_field row_date_status
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
   mkdir -p "$audit_dir" || return 1
@@ -858,6 +912,12 @@ walter_audit_append() {
   _walter_audit_acquire_lock "$lock_path" || return 1
   timestamp="$(walter_audit_timestamp)"
   row_date="$(walter_audit_date_from_timestamp "$timestamp")"
+  _walter_audit_check_date_arg "$row_date" "audit row date"
+  row_date_status="$?"
+  if [[ "$row_date_status" -ne 0 ]]; then
+    _walter_audit_release_lock "$lock_path"
+    return "$row_date_status"
+  fi
   chain_path="$(walter_audit_chain_path "$row_date")"
   root_path="$(walter_audit_root_path "$row_date")"
 
@@ -928,6 +988,20 @@ walter_audit_append() {
     }
   fi
 
+  prev_chain_root=""
+  if [[ "$previous_hash" == "null" ]]; then
+    prev_chain_root="$(_walter_audit_previous_chain_root "$row_date")"
+    prev_chain_root_status="$?"
+    if [[ "$prev_chain_root_status" -ne 0 ]]; then
+      exec 9>&-
+      if [[ "$chain_created" -eq 1 ]]; then
+        rm -f -- "$chain_path" || true
+      fi
+      _walter_audit_release_lock "$lock_path"
+      return "$prev_chain_root_status"
+    fi
+  fi
+
   summary="$(walter_audit_input_summary "$input")"
   session_id="$(_walter_audit_current_session_id)"
   session_status="$?"
@@ -952,7 +1026,9 @@ walter_audit_append() {
       --arg decision_source "$source" \
       --arg decision_reason "$reason" \
       --arg prev_hash "$previous_hash" \
-      '{ts:$ts,session_id:$session_id,operator:$operator,event:$event,tool:$tool,input_summary:$input_summary,decision:$decision,decision_source:$decision_source,decision_reason:$decision_reason,prev_hash:$prev_hash}')" || {
+      --arg prev_chain_root "$prev_chain_root" \
+      '{ts:$ts,session_id:$session_id,operator:$operator,event:$event,tool:$tool,input_summary:$input_summary,decision:$decision,decision_source:$decision_source,decision_reason:$decision_reason,prev_hash:$prev_hash}
+       | if $prev_chain_root == "" then . else . + {prev_chain_root:$prev_chain_root} end')" || {
         exec 9>&-
         _walter_audit_release_lock "$lock_path"
         return 1
@@ -977,9 +1053,13 @@ walter_audit_append() {
       return 1
     }
   else
-    row_without_hash="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    prev_chain_root_field=""
+    if [[ -n "$prev_chain_root" ]]; then
+      prev_chain_root_field=",\"prev_chain_root\":$(walter_audit_json_string "$prev_chain_root")"
+    fi
+    row_without_hash="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash")${prev_chain_root_field},\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
     row_hash="$(walter_audit_hash_string "$row_without_hash")"
-    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash")${prev_chain_root_field},\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
     if sig="$(_walter_audit_sign_row "$row" "$session_id")"; then
       :
     else
@@ -988,7 +1068,7 @@ walter_audit_append() {
       _walter_audit_release_lock "$lock_path"
       return "$sign_status"
     fi
-    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash"),\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"sig\":$(walter_audit_json_string "$sig"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
+    row="{\"decision\":$(walter_audit_json_string "$decision"),\"decision_reason\":$(walter_audit_json_string "$reason"),\"decision_source\":$(walter_audit_json_string "$source"),\"event\":\"tool_invocation\",\"input_summary\":$(walter_audit_json_string "$summary"),\"operator\":$(walter_audit_json_string "${USER:-unknown}"),\"prev_hash\":$(walter_audit_json_string "$previous_hash")${prev_chain_root_field},\"row_hash\":$(walter_audit_json_string "$row_hash"),\"session_id\":$(walter_audit_json_string "$session_id"),\"sig\":$(walter_audit_json_string "$sig"),\"tool\":$(walter_audit_json_string "$tool"),\"ts\":$(walter_audit_json_string "$timestamp")}"
   fi
 
   if ! _walter_audit_fd_matches_path 9 "$chain_path"; then
@@ -1042,6 +1122,36 @@ walter_audit_append() {
   printf '%s\n' "$chain_path"
 }
 
+_walter_audit_check_date_arg() {
+  local date_value="$1" label="$2" valid_status
+  _walter_audit_valid_date "$date_value"
+  valid_status="$?"
+  if [[ "$valid_status" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$valid_status" -eq 3 ]]; then
+    return 3
+  fi
+  echo "walter-audit-chain: invalid ${label}: $date_value" >&2
+  return 2
+}
+
+_walter_audit_verify_chain_day_unlocked() {
+  local date_value="$1" chain_path root_path row_count root_hash previous_line
+  chain_path="$(walter_audit_chain_path "$date_value")"
+  root_path="$(walter_audit_root_path "$date_value")"
+  if [[ ! -f "$chain_path" ]]; then
+    echo "walter-audit-chain: chain not found: $chain_path" >&2
+    return 1
+  fi
+
+  row_count="$(_walter_audit_verify_chain_file_unlocked "$chain_path")" || return $?
+  previous_line="$(tail -n 1 "$chain_path")" || return 1
+  root_hash="$(walter_audit_hash_string "$previous_line")"
+  _walter_audit_verify_root_unlocked "$root_path" "$root_hash" || return $?
+  printf '%s %s\n' "$row_count" "$root_hash"
+}
+
 walter_audit_verify_chain() {
   [[ "$#" -le 1 ]] || {
     echo "walter-audit-chain: usage: walter_audit_verify_chain [date]" >&2
@@ -1052,7 +1162,39 @@ walter_audit_verify_chain() {
     return 3
   fi
 
-  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count verify_status root_hash previous_line
+  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path lock_path row_count verify_result verify_status
+  _walter_audit_check_date_arg "$date_value" "date" || return $?
+
+  audit_dir="$(walter_audit_dir)"
+  chain_path="$(walter_audit_chain_path "$date_value")"
+  lock_path="$(walter_audit_lock_path)"
+  mkdir -p "$audit_dir" || return 1
+  chmod 700 "$audit_dir" || return 1
+  _walter_audit_acquire_lock "$lock_path" || return 1
+  if verify_result="$(_walter_audit_verify_chain_day_unlocked "$date_value")"; then
+    verify_status=0
+    read -r row_count _ <<< "$verify_result"
+  else
+    verify_status="$?"
+  fi
+  _walter_audit_release_lock "$lock_path"
+  [[ "$verify_status" -eq 0 ]] || return "$verify_status"
+
+  printf 'ok: verified %s row(s): %s\n' "$row_count" "$chain_path"
+}
+
+walter_audit_close_day() {
+  [[ "$#" -le 1 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_close_day [date]" >&2
+    return 2
+  }
+  if ! _walter_audit_jq_available; then
+    echo "walter-audit-chain: jq required" >&2
+    return 3
+  fi
+
+  local date_value="${1:-$(walter_audit_date)}" audit_dir chain_path root_path lock_path row_count close_status root_hash previous_line
+  _walter_audit_check_date_arg "$date_value" "date" || return $?
   audit_dir="$(walter_audit_dir)"
   chain_path="$(walter_audit_chain_path "$date_value")"
   root_path="$(walter_audit_root_path "$date_value")"
@@ -1066,21 +1208,130 @@ walter_audit_verify_chain() {
     return 1
   fi
 
+  close_status=0
   if row_count="$(_walter_audit_verify_chain_file_unlocked "$chain_path")"; then
-    previous_line="$(tail -n 1 "$chain_path")"
-    root_hash="$(walter_audit_hash_string "$previous_line")"
-    if _walter_audit_verify_root_unlocked "$root_path" "$root_hash"; then
-      verify_status=0
+    if ! previous_line="$(tail -n 1 "$chain_path")" || [[ -z "$previous_line" ]]; then
+      echo "walter-audit-chain: unable to read final row: $chain_path" >&2
+      close_status=1
     else
-      verify_status="$?"
+      root_hash="$(walter_audit_hash_string "$previous_line")"
+    fi
+    if [[ "$close_status" -ne 0 ]]; then
+      :
+    elif [[ -f "$root_path" ]]; then
+      if _walter_audit_verify_root_unlocked "$root_path" "$root_hash"; then
+        close_status=0
+      else
+        close_status="$?"
+      fi
+    elif _walter_audit_write_root_unlocked "$root_path" "$root_hash"; then
+      close_status=0
+    else
+      close_status="$?"
     fi
   else
-    verify_status="$?"
+    close_status="$?"
   fi
   _walter_audit_release_lock "$lock_path"
-  [[ "$verify_status" -eq 0 ]] || return "$verify_status"
+  [[ "$close_status" -eq 0 ]] || return "$close_status"
 
-  printf 'ok: verified %s row(s): %s\n' "$row_count" "$chain_path"
+  printf 'ok: closed audit day %s (%s row(s)): %s\n' "$date_value" "$row_count" "$root_path"
+}
+
+_walter_audit_verify_prev_chain_root() {
+  local date_value="$1" expected_root="$2" chain_path first_line actual_root
+  chain_path="$(walter_audit_chain_path "$date_value")"
+  first_line="$(sed -n '1p' "$chain_path")" || return 1
+  actual_root="$(printf '%s\n' "$first_line" | jq -r '.prev_chain_root // empty')" || {
+    echo "walter-audit-chain: ${date_value}: invalid first row" >&2
+    return 1
+  }
+  if [[ "$actual_root" != "$expected_root" ]]; then
+    echo "walter-audit-chain: ${date_value}: prev_chain_root mismatch" >&2
+    echo "  expected: $expected_root" >&2
+    echo "  actual:   ${actual_root:-<missing>}" >&2
+    return 1
+  fi
+}
+
+_walter_audit_date_step() {
+  local date_value="$1" next_date next_status
+  next_date="$(_walter_audit_date_add_days "$date_value" 1)"
+  next_status="$?"
+  [[ "$next_status" -eq 0 ]] || return "$next_status"
+  printf '%s' "$next_date"
+}
+
+_walter_audit_previous_date_checked() {
+  local date_value="$1" previous_date previous_status
+  previous_date="$(_walter_audit_previous_date "$date_value")"
+  previous_status="$?"
+  [[ "$previous_status" -eq 0 ]] || return "$previous_status"
+  printf '%s' "$previous_date"
+}
+
+_walter_audit_verify_chain_range_unlocked() {
+  local since_date="$1" until_date="$2" current_date previous_date expected_root current_root day_count=0 verify_result step_status
+
+  current_date="$since_date"
+  expected_root=""
+  while [[ "$current_date" == "$until_date" || "$current_date" < "$until_date" ]]; do
+    verify_result="$(_walter_audit_verify_chain_day_unlocked "$current_date")" || return $?
+    read -r _ current_root <<< "$verify_result"
+
+    if [[ "$day_count" -eq 0 ]]; then
+      previous_date="$(_walter_audit_previous_date_checked "$current_date")"
+      step_status="$?"
+      [[ "$step_status" -eq 0 ]] || return "$step_status"
+      if [[ -f "$(walter_audit_root_path "$previous_date")" ]]; then
+        expected_root="$(_walter_audit_read_root_file "$(walter_audit_root_path "$previous_date")")" || return $?
+        _walter_audit_verify_prev_chain_root "$current_date" "$expected_root" || return $?
+      fi
+    else
+      _walter_audit_verify_prev_chain_root "$current_date" "$expected_root" || return $?
+    fi
+
+    expected_root="$current_root"
+    day_count=$((day_count + 1))
+    [[ "$current_date" != "$until_date" ]] || break
+    current_date="$(_walter_audit_date_step "$current_date")"
+    step_status="$?"
+    [[ "$step_status" -eq 0 ]] || return "$step_status"
+  done
+
+  printf 'ok: verified %s day(s): %s..%s\n' "$day_count" "$since_date" "$until_date"
+}
+
+walter_audit_verify_chain_range() {
+  [[ "$#" -ge 1 && "$#" -le 2 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_chain_range <since> [until]" >&2
+    return 2
+  }
+  if ! _walter_audit_jq_available; then
+    echo "walter-audit-chain: jq required" >&2
+    return 3
+  fi
+
+  local since_date="$1" until_date="${2:-$(walter_audit_date)}" audit_dir lock_path range_status
+  _walter_audit_check_date_arg "$since_date" "since date" || return $?
+  _walter_audit_check_date_arg "$until_date" "until date" || return $?
+  if [[ "$since_date" > "$until_date" ]]; then
+    echo "walter-audit-chain: --since must be on or before --until" >&2
+    return 2
+  fi
+
+  audit_dir="$(walter_audit_dir)"
+  lock_path="$(walter_audit_lock_path)"
+  mkdir -p "$audit_dir" || return 1
+  chmod 700 "$audit_dir" || return 1
+  _walter_audit_acquire_lock "$lock_path" || return 1
+  if _walter_audit_verify_chain_range_unlocked "$since_date" "$until_date"; then
+    range_status=0
+  else
+    range_status="$?"
+  fi
+  _walter_audit_release_lock "$lock_path"
+  return "$range_status"
 }
 
 _walter_audit_remove_loki_tmp() {
