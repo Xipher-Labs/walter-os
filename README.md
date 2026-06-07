@@ -6,19 +6,19 @@
 
 [![License: Apache-2.0 + AGPL-3.0](https://img.shields.io/badge/License-Apache--2.0%20%2B%20AGPL--3.0-blue.svg)](#license)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.6.0--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.1--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
 [![Security: default-deny egress](https://img.shields.io/badge/security-default--deny_egress-brightgreen.svg)](docs/operational/network-egress.md)
 
 </div>
 
-> **Status — alpha (v0.6.0).** Things iterate fast. **Pin to a tag** in production.
+> **Status — alpha (v0.6.1).** Things iterate fast. **Pin to a tag** in production.
 > Stability promise lands at v1.0 — see [the charter](docs/specs/walter-os-v1-0-stability-charter.md).
 > Breaking changes between minor versions are normal until then; every release is tagged + documented in [CHANGELOG.md](CHANGELOG.md).
-> v0.6.0 is the OSS Trust runtime-hardening cut: capability tokens,
-> process-isolation sandbox primitives, hidden secret mounts, audit-chain
-> rows, audit telemetry, and SLSA/reproducible-release groundwork. Release
-> readiness is tracked in [v0.6.0 release readiness](docs/operational/v0.6.0-release-readiness.md).
+> v0.6.1 is the post-v0.6 operational hardening cut: signed audit-chain
+> follow-ups, provider-selection polish, AI-stack resilience tracking, and
+> CodeQL/Scorecard follow-up issues. Release notes:
+> [v0.6.1 release notes](docs/operational/v0.6.1-release-notes.md).
 
 ---
 
@@ -73,7 +73,7 @@ flowchart TD
 |---|---|
 | Consistent agent behaviour across Claude / Codex / Cursor / Antigravity | One `AGENTS.md` cascade (global → context → repo), one skills library, one MCP profile |
 | Defense against prompt-injection exfil | Default-deny network egress allowlist + bash-denylist + approval-gate hooks |
-| Model choice by task strength | `WALTER_MODEL_*` routing preferences for Codex, Claude, Gemini aliases, and local Ollama |
+| Model choice by task strength | `walter providers configure` + `WALTER_MODEL_*` routing preferences for LiteLLM, Claude/Anthropic, Codex/OpenAI/GPT, Gemini, and local Ollama |
 | A reusable rigor + branch + review discipline | TDD-by-default, configurable branch flow, 3-round Copilot + Codex + reviewer-subagent loop |
 | A homelab / self-hosted backend (optional) | 25+ services: Plane, Forgejo, Grafana, n8n, Infisical, LiteLLM, Caddy, Cloudflared, Headscale, … |
 | A clear v1.0 stability promise | Four layers frozen at v1.0 with a deprecation policy + an executable conformance suite |
@@ -167,6 +167,25 @@ On first run, `install.sh` prompts to import the bundled egress allowlist (`cont
 
 Pre-built agent prompts are at [`setup/agent-install/tier-1.md`](setup/agent-install/tier-1.md) and [`setup/agent-install/tier-2.md`](setup/agent-install/tier-2.md) — paste them into your agent if you'd rather have it run the install for you.
 
+### Choose Your AI Providers
+
+Walter-OS does not require every supported AI tool to be installed. Claude
+Code, Codex CLI, Cursor, Antigravity, LiteLLM, Gemini, and Ollama are
+interoperable surfaces, not a mandatory bundle.
+
+After Mode 2, choose the LLM provider you actually have:
+
+```bash
+walter providers configure --category llm
+```
+
+The wizard writes `~/.config/walter-os/providers.yaml` and activates the
+matching env vars in your private overlay or `.env.local`. Current LLM slugs:
+`litellm`, `anthropic`, `openai`, `gemini`, and `ollama`. Use LiteLLM when you
+want one self-hosted gateway, direct Anthropic/OpenAI/Gemini when you only have
+one vendor account, and Ollama/local when compliance or security requires local
+inference.
+
 ### Mode 3 — Self-hosted stack (1–2h, optional)
 
 Deploys `setup/walter-host/`: a Docker compose stack with 25+ services behind Cloudflared + Caddy, secrets in Infisical, observability via Grafana/Loki/Prometheus, the Walter Council (6-agent autonomy layer), and the Control Tower UI.
@@ -205,6 +224,7 @@ walter-os audit
 # Manage MCP profiles
 walter-os profile default        # read-mostly, default
 walter-os profile high-risk      # opt-in, money-spending + provisioning
+walter providers configure --category llm
 ```
 
 A skill triggers when you describe the work it covers. For example, asking your agent to "spin up a new hackathon project" triggers [`hackathon-spinup`](skills/hackathon-spinup/SKILL.md); "review my UI" triggers [`web-design-guidelines`](skills/web-design-guidelines/SKILL.md). Full catalog: [`skills/INDEX.md`](skills/INDEX.md).
@@ -441,7 +461,7 @@ path, so service-specific config sync and `.env` exclusions still apply.
 Major version bumps may include breaking changes — read the [CHANGELOG](CHANGELOG.md) entry for the target version before pulling. To pin an upgrade to a tagged release:
 
 ```bash
-walter-os upgrade --target v0.6.0
+walter-os upgrade --target v0.6.1
 ```
 
 The `quarterly-upgrade-cadence` skill formalizes the pre-bump snapshot + tier-by-tier rollout + rollback procedure.
@@ -456,7 +476,7 @@ Rollback: `git checkout <prev-tag>` + `./install.sh --upgrade`. Symlinks are re-
 walter-os/
 ├── AGENTS.md                    # Global agent contract (loaded by all four tools)
 ├── CHANGELOG.md                 # SemVer changelog
-├── VERSION                      # Single-source semver (0.6.0)
+├── VERSION                      # Single-source semver (0.6.1)
 ├── LICENSE                      # AGPL-3.0-or-later (canonical text)
 ├── LICENSE-APACHE               # Apache-2.0 (canonical text — default tree)
 ├── NOTICE                       # Operator attribution + dual-license map

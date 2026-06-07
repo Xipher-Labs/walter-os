@@ -26,6 +26,9 @@ detect_provider() {
       if [[ -n "${OPENAI_API_KEY:-}" ]]; then
         echo "openai"; return
       fi
+      if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+        echo "gemini"; return
+      fi
       if [[ -n "${OLLAMA_BASE_URL:-}" ]]; then
         echo "ollama"; return
       fi

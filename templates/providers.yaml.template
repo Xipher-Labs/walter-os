@@ -6,7 +6,7 @@
 # wizard to make changes.
 #
 # Slugs per category:
-#   llm:                litellm | anthropic | openai | ollama
+#   llm:                litellm | anthropic | openai | gemini | ollama
 #   project_management: plane | linear | plane_cloud | none
 #   git:                forgejo | github | gitlab
 #   secrets:            infisical | doppler | onepassword | bitwarden | none

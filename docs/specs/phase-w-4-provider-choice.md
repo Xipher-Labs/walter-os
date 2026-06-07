@@ -15,8 +15,8 @@ significant barrier: a team already using Linear has to understand the full Walt
 codebase to figure out where to swap in their own project tracker.
 
 Every service category has at least one popular alternative: Linear vs Plane,
-GitHub vs Forgejo, Doppler vs Infisical, direct Anthropic vs LiteLLM proxy,
-Google Analytics vs Plausible, OpenAI embeddings vs local nomic. The configuration
+GitHub vs Forgejo, Doppler vs Infisical, direct Anthropic/OpenAI/Gemini vs
+LiteLLM proxy, Google Analytics vs Plausible, OpenAI embeddings vs local nomic. The configuration
 for each alternative is scattered across `mcp/servers.json`, `.env.local`, and
 script-level env var references. There is no single place to say "I use GitHub,
 not Forgejo" and have that propagate correctly.
@@ -71,7 +71,7 @@ needs to be rewritten to read YAML — they still read env vars.
 
 | Category | Options |
 |---|---|
-| LLM gateway | LiteLLM-proxy-all (self-host) \| Direct Anthropic \| Direct OpenAI \| Ollama local |
+| LLM gateway | LiteLLM-proxy-all (self-host) \| Direct Anthropic \| Direct OpenAI \| Direct Gemini \| Ollama local |
 | Project management | Plane self-host \| Linear \| Plane cloud \| None |
 | Git | Forgejo self-host \| GitHub \| GitLab |
 | Secrets | Infisical self-host \| Doppler \| 1Password CLI \| Bitwarden CLI \| None |
