@@ -32,7 +32,7 @@ expected = {
 for key, marker in expected.items():
     value = service.get(key)
     assert value, f"{service_name} missing {key}"
-    assert str(value).startswith(marker), f"{service_name} {key} is not overrideable by {prefix}: {value!r}"
+    assert str(value).startswith(marker), f"{service_name} {key} is not overridable by {prefix}: {value!r}"
     assert str(value).endswith("}"), f"{service_name} {key} interpolation is malformed: {value!r}"
     default = str(value)[len(marker):-1]
     assert default.strip(), f"{service_name} {key} has an empty default"
@@ -41,8 +41,8 @@ PY
 
 assert_compose_renders() {
   local service_dir="$1"
-  local compose="$SERVICES_ROOT/$service_dir/compose.yml"
-  local tmpdir="$BATS_TEST_TMPDIR/$service_dir"
+  local service_path="$SERVICES_ROOT/$service_dir"
+  local compose="$service_path/compose.yml"
 
   if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
     skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
@@ -54,25 +54,21 @@ assert_compose_renders() {
     skip "docker compose is not available"
   fi
 
-  mkdir -p "$tmpdir"
-  cp "$compose" "$tmpdir/compose.yml"
-  touch "$tmpdir/.env"
-
   run env \
     WALTER_DOMAIN=example.com \
     WALTER_TIMEZONE=UTC \
     OPENCLAW_GATEWAY_TOKEN=test \
     CCR_APIKEY=test \
-    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
+    docker compose --project-directory "$service_path" -f "$compose" config --quiet
   [ "$status" -eq 0 ]
 }
 
-@test "agent runtime services have overrideable resource limits" {
+@test "agent runtime services have overridable resource limits" {
   assert_service_limits "openclaw" "openclaw" "OPENCLAW"
   assert_service_limits "hermes-agent" "hermes-agent" "HERMES_AGENT"
 }
 
-@test "legacy subscription proxy service has overrideable resource limits" {
+@test "legacy subscription proxy service has overridable resource limits" {
   assert_service_limits "llm-proxies" "claude-code-router" "CLAUDE_CODE_ROUTER"
 }
 
