@@ -18,11 +18,18 @@ All outputs include an invisible **SynthID watermark**. Decline requests to remo
 ## Setup (once)
 
 ```bash
+walter ai configure --profile mixed --set image_generation=gemini
 pip install google-genai pillow
 export GEMINI_API_KEY="..."   # https://aistudio.google.com/apikey
 ```
 
-For the dotai repo, store the key in `~/.config/dotai/secrets.env` (gitignored), sourced by your shell.
+The helper script checks `~/.config/walter-os/ai-capabilities.yaml` (or
+`WALTER_AI_CAPABILITIES_FILE`) before calling Gemini. If `provider_gemini` is
+disabled or `route_image_generation` does not include `gemini`, it exits before
+loading SDK dependencies.
+
+Store the key in your private overlay or shell secret manager, never in the
+repository.
 
 ## 1. Text → Image (basic generation)
 
