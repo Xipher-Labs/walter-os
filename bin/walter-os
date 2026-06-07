@@ -69,6 +69,8 @@
 #                               Generate a valid [TYPE] -CATEGORY- title string
 #                               TYPE: FEAT/FIX/DOCS/CHORE/TEST  CATEGORY: SECURITY/BUSINESS/etc.
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
+#   semantic-gates <spec.md> [--repo DIR] [--json]
+#                               Run semantic spec/AC/architecture/test gates
 #   post-merge-check [--commit SHA] [--json] [--record-feature-state ID]
 #                               Classify post-merge health evidence (read-only by default)
 #   preview bundle --pr N --url URL --seed FILE --screenshot FILE
@@ -1501,7 +1503,7 @@ cmd_version() {
   #      specific GitHub org (see PR #73 / W-5 depersonalization
   #      audit) so the binary doesn't ship operator-org references.
   local update_repo="${WALTER_OS_UPDATE_REPO:-}"
-  if [[ -z "$update_repo" && -d "${WALTER_OS_HOME}/.git" ]]; then
+  if [[ -z "$update_repo" ]] && git -C "$WALTER_OS_HOME" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     local origin_url
     origin_url="$(git -C "$WALTER_OS_HOME" remote get-url origin 2>/dev/null || true)"
     # Match both git@github.com:owner/repo(.git) and https://github.com/owner/repo(.git)
@@ -2478,7 +2480,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|svc|pr-score|post-merge-check|preview|feature-state|release|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|svc|pr-score|post-merge-check|semantic-gates|preview|feature-state|release|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2526,6 +2528,7 @@ case "$cmd" in
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
   pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
   post-merge-check)   exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/post-merge-check.sh" "$@" ;;
+  semantic-gates)     exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/semantic-gates.sh" "$@" ;;
   preview)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/preview.sh" "$@" ;;
   feature-state)      exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/feature-state.sh" "$@" ;;
   release)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/release.sh" "$@" ;;

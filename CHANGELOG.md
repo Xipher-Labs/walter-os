@@ -97,6 +97,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Semantic gates first slice (#229).** Adds `walter-os semantic-gates` to
+  check spec completeness, AC testability, architecture-review evidence, and
+  test relevance before autonomous delivery work proceeds.
 - **Control Tower mobile nav polish (#311).** Lets the shared TopNav wrap on
   narrow viewports so the dashboard no longer creates horizontal page overflow
   on phone-width screens.
