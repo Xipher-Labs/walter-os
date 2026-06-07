@@ -636,3 +636,74 @@ walter_audit_verify_chain() {
 
   printf 'ok: verified %s row(s): %s\n' "$row_count" "$chain_path"
 }
+
+_walter_audit_remove_loki_tmp() {
+  local tmp_config="$1"
+  case "$tmp_config" in
+    "${TMPDIR:-/tmp}"/walter-audit-loki.*|/tmp/walter-audit-loki.*|/var/tmp/walter-audit-loki.*)
+      rm -rf "$tmp_config"
+      ;;
+  esac
+}
+
+walter_audit_verify_chain_from_loki_fixture() {
+  [[ "$#" -ge 1 && "$#" -le 2 ]] || {
+    echo "walter-audit-chain: usage: walter_audit_verify_chain_from_loki_fixture <fixture> [date]" >&2
+    return 2
+  }
+  local fixture="$1" date_value="${2:-$(walter_audit_date)}"
+  local tmp_config tmp_audit values_count previous_line root_hash verify_status
+
+  if [[ ! -f "$fixture" ]]; then
+    echo "walter-audit-chain: Loki fixture not found: $fixture" >&2
+    return 1
+  fi
+  if ! _walter_audit_jq_available; then
+    echo "walter-audit-chain: jq required" >&2
+    return 3
+  fi
+
+  tmp_config="$(mktemp -d "${TMPDIR:-/tmp}/walter-audit-loki.XXXXXX")" || return 1
+  tmp_audit="${tmp_config}/audit"
+  mkdir -p "$tmp_audit" || {
+    _walter_audit_remove_loki_tmp "$tmp_config"
+    return 1
+  }
+
+  values_count="$(jq '[.data.result[]?.values[]?] | length' "$fixture" 2>/dev/null)" || {
+    _walter_audit_remove_loki_tmp "$tmp_config"
+    echo "walter-audit-chain: invalid Loki fixture JSON: $fixture" >&2
+    return 1
+  }
+  if [[ "$values_count" -eq 0 ]]; then
+    _walter_audit_remove_loki_tmp "$tmp_config"
+    echo "walter-audit-chain: no audit-chain rows found in Loki fixture: $fixture" >&2
+    return 1
+  fi
+
+  jq -r '[.data.result[]?.values[]?] | sort_by(.[0]) | .[][1]' \
+    "$fixture" > "${tmp_audit}/chain-${date_value}.jsonl" || {
+      _walter_audit_remove_loki_tmp "$tmp_config"
+      echo "walter-audit-chain: failed to extract Loki fixture rows: $fixture" >&2
+      return 1
+    }
+  if [[ ! -s "${tmp_audit}/chain-${date_value}.jsonl" ]]; then
+    _walter_audit_remove_loki_tmp "$tmp_config"
+    echo "walter-audit-chain: no audit-chain rows found in Loki fixture: $fixture" >&2
+    return 1
+  fi
+
+  previous_line="$(tail -n 1 "${tmp_audit}/chain-${date_value}.jsonl")"
+  root_hash="$(walter_audit_hash_string "$previous_line")"
+  printf '%s' "$root_hash" > "${tmp_audit}/root-${date_value}.txt" || {
+    _walter_audit_remove_loki_tmp "$tmp_config"
+    return 1
+  }
+
+  WALTER_CONFIG="$tmp_config" walter_audit_verify_chain "$date_value"
+  verify_status="$?"
+  _walter_audit_remove_loki_tmp "$tmp_config"
+  [[ "$verify_status" -eq 0 ]] || return "$verify_status"
+
+  printf 'ok: verified from Loki fixture: %s\n' "$fixture"
+}

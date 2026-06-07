@@ -5,8 +5,24 @@
 #   1. Creates /opt/walter-vm/services/<svc>/
 #   2. Copies compose.yml + non-template files (excludes .env)
 #   3. Generates .env from .env.template if missing (NEVER overwrites)
-#   4. docker compose pull + up -d
-#   5. Waits for healthy
+#   4. Reconciles service_state: present -> pull/up, stopped -> stop,
+#      absent -> down without deleting volumes.
+
+- name: "[{{ service_name }}] resolve lifecycle state"
+  ansible.builtin.set_fact:
+    walter_service_state: "{{ service_state | default('present') }}"
+  changed_when: false
+
+- name: "[{{ service_name }}] validate lifecycle state"
+  ansible.builtin.assert:
+    that:
+      - walter_service_state in ['present', 'stopped', 'absent']
+    fail_msg: "service_state must be one of: present, stopped, absent"
+
+- name: "[{{ service_name }}] decide placement"
+  ansible.builtin.set_fact:
+    walter_service_should_deploy: "{{ walter_enabled_services is not defined or service_name in walter_enabled_services }}"
+  changed_when: false
 
 - name: "[{{ service_name }}] ensure service dir"
   ansible.builtin.file:
@@ -15,6 +31,9 @@
     owner: root
     group: root
     mode: "0755"
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'present'
 
 - name: "[{{ service_name }}] sync compose.yml + supporting files"
   ansible.posix.synchronize:
@@ -28,11 +47,25 @@
     delete: no
   delegate_to: localhost
   become: no
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'present'
 
 - name: "[{{ service_name }}] check if .env exists"
   ansible.builtin.stat:
     path: "{{ walter_services_dir }}/{{ service_name }}/.env"
   register: svc_env
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'present'
+
+- name: "[{{ service_name }}] check if .env.template exists"
+  ansible.builtin.stat:
+    path: "{{ walter_services_dir }}/{{ service_name }}/.env.template"
+  register: svc_env_template
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'present'
 
 - name: "[{{ service_name }}] copy .env.template → .env (first time only)"
   ansible.builtin.copy:
@@ -43,9 +76,13 @@
     group: root
     mode: "0600"
   when:
-    - not svc_env.stat.exists
-    - "'.env.template' in (svc_files | default([]))"
-  ignore_errors: yes  # template may not exist for all services
+    - >
+      (walter_service_should_deploy | bool)
+      and (walter_service_state == 'present')
+      and (svc_env is defined)
+      and (svc_env_template is defined)
+      and not (svc_env.stat.exists | default(false))
+      and (svc_env_template.stat.exists | default(false))
 
 - name: "[{{ service_name }}] docker compose pull"
   ansible.builtin.command:
@@ -53,6 +90,9 @@
     chdir: "{{ walter_services_dir }}/{{ service_name }}"
   register: pull_result
   changed_when: "'Downloaded' in pull_result.stdout or 'Pull complete' in pull_result.stdout"
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'present'
 
 - name: "[{{ service_name }}] docker compose up -d"
   ansible.builtin.shell: |
@@ -65,3 +105,40 @@
     chdir: "{{ walter_services_dir }}/{{ service_name }}"
   register: up_result
   changed_when: "'Started' in up_result.stdout or 'Recreated' in up_result.stdout"
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'present'
+
+- name: "[{{ service_name }}] check if service dir exists for teardown"
+  ansible.builtin.stat:
+    path: "{{ walter_services_dir }}/{{ service_name }}"
+  register: svc_dir
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state in ['stopped', 'absent']
+
+- name: "[{{ service_name }}] docker compose stop"
+  ansible.builtin.command:
+    cmd: docker compose stop
+    chdir: "{{ walter_services_dir }}/{{ service_name }}"
+  register: stop_result
+  changed_when: >
+    'Stopped' in ((stop_result.stdout | default('')) ~ (stop_result.stderr | default('')))
+    or 'Stopping' in ((stop_result.stdout | default('')) ~ (stop_result.stderr | default('')))
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'stopped'
+    - svc_dir.stat.exists | default(false)
+
+- name: "[{{ service_name }}] docker compose down"
+  ansible.builtin.command:
+    cmd: docker compose down
+    chdir: "{{ walter_services_dir }}/{{ service_name }}"
+  register: down_result
+  changed_when: >
+    'Removed' in ((down_result.stdout | default('')) ~ (down_result.stderr | default('')))
+    or 'Removing' in ((down_result.stdout | default('')) ~ (down_result.stderr | default('')))
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state == 'absent'
+    - svc_dir.stat.exists | default(false)

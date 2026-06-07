@@ -127,15 +127,20 @@ as_root() { if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@"; fi; }
 # cloudflared even while the tunnel is down; Telegram alerts go direct (not via
 # the tunnel), so they get out regardless.
 cf_healthy() {
-  # Preferred: cloudflared --metrics endpoint; /ready is 200 with
-  # readyConnections>0 only when at least one tunnel connection is registered.
+  # Preferred: cloudflared --metrics endpoint. /ready signals readiness via
+  # HTTP STATUS (200 = readyConnections>0; 503 = no ready connections), NOT the
+  # body. Codex R2: keying on the body ("readyConnections") false-flags a
+  # healthy tunnel whose body differs and restart-loops cloudflared every run.
+  # So decide on the status code; only fall through to the log-scan when the
+  # metrics endpoint itself is unreachable (000), never declare down on that.
   if [[ -n "${CLOUDFLARED_METRICS:-}" ]]; then
-    local ready_payload
-    ready_payload=$(curl -s --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null || true)
-    if [[ -n "$ready_payload" ]]; then
-      printf '%s\n' "$ready_payload" | grep -q '"readyConnections":[1-9]' && return 0
-      return 1
-    fi
+    local ready_code
+    ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null || echo 000)
+    case "$ready_code" in
+      200) return 0 ;;   # ready
+      000) : ;;          # metrics unreachable → fall through to log-scan fallback
+      *)   return 1 ;;   # 503 / other → not ready
+    esac
   fi
   # Fallback: must be active AND not show an unrecovered disconnect in the
   # last 3 min (errors are OK if a re-registration followed them).
@@ -205,6 +210,21 @@ if [[ "${used:-}" =~ ^[0-9]+$ && "${max:-}" =~ ^[0-9]+$ && "$max" -gt 0 ]]; then
   else
     transition "db_saturated" "0" "" "litellm-db connections back to normal (${used}/${max})"
   fi
+elif docker inspect litellm-db >/dev/null 2>&1; then
+  # Codex R2 [P2]: the pg_stat_activity / max_connections probes returned
+  # non-numeric — and the container EXISTS — which most often means the probe
+  # itself could not get a backend ("too many clients already"): i.e. the exact
+  # full-saturation case this check must heal. (If the gateway were simply down
+  # we'd have exited in section 1.) Treat an unreadable-but-present DB as
+  # saturated and restart db+litellm rather than silently skipping it.
+  docker restart litellm-db >/dev/null 2>&1 || true; sleep 8
+  docker restart litellm   >/dev/null 2>&1 || true
+  sleep "$LITELLM_RESTART_SETTLE_SECONDS"
+  code_after_db_restart=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${LITELLM_URL}/health/liveliness" 2>/dev/null || echo 000)
+  transition "db_saturated" "1" \
+    "litellm-db connection probe failed (likely 'too many clients already') → auto-restarted db+litellm (the 2026-06-02 saturation mode)" \
+    "litellm-db connections back to normal"
+  [[ "$code_after_db_restart" != "200" ]] && { echo "ai-stack-watchdog: litellm still down after db-saturation restart ($(date -u +%FT%TZ))"; exit 0; }
 fi
 
 # ---------- 3. Per-model functional probe ----------

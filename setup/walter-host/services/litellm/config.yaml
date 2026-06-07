@@ -26,13 +26,13 @@ model_list:
 
   - model_name: gpt
     litellm_params:
-      model: gpt-4o
+      model: gpt-5.5
       api_key: os.environ/OPENAI_API_KEY
 
   # High tier — hard reasoning, security review, complex refactor.
   - model_name: opus
     litellm_params:
-      model: anthropic/claude-opus-4-5
+      model: anthropic/claude-opus-4-8
       api_key: os.environ/ANTHROPIC_API_KEY
 
   # ============================================================================
@@ -49,7 +49,7 @@ model_list:
 
   - model_name: claude-sub-opus
     litellm_params:
-      model: openai/claude-opus-4-5
+      model: openai/claude-opus-4-8
       api_base: http://claude-code-router:3456/v1
       api_key: os.environ/CCR_APIKEY
 
@@ -84,7 +84,7 @@ model_list:
 
   - model_name: openrouter/claude-opus
     litellm_params:
-      model: openrouter/anthropic/claude-opus-4.5
+      model: openrouter/anthropic/claude-opus-4.8
       api_key: os.environ/OPENROUTER_API_KEY
 
   # Open-weight tier — useful when API-keyed primaries are budget-capped
