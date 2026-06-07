@@ -88,4 +88,39 @@ Verify an inclusive local date range with cross-day root continuity:
 walter-os audit verify-chain --since 2026-05-31 --until 2026-06-01
 ```
 
-This format protects the local chain with linked rows, per-row self-digests, per-row signatures, and the daily root. Linked `prev_hash` values detect accidental or repaired edits inside the chain, `row_hash` detects final-row edits even if the local root is rewritten, `sig` detects fabricated rows when the attacker lacks the original session private key, and `root-YYYY-MM-DD.txt` detects final-row tampering because it must match the hash of the day's last row. External anchoring remains a future stronger non-repudiation layer.
+This format protects the local chain with linked rows, per-row self-digests,
+per-row signatures, and the daily root. Linked `prev_hash` values detect
+accidental or repaired edits inside the chain, `row_hash` detects final-row
+edits even if the local root is rewritten, `sig` detects fabricated rows when
+the attacker lacks the original session private key, and
+`root-YYYY-MM-DD.txt` detects final-row tampering because it must match the
+hash of the day's last row.
+
+Optional Rekor anchoring writes a public daily-root receipt to:
+
+```text
+${WALTER_CONFIG:-$HOME/.config/walter-os}/audit/root-YYYY-MM-DD.rekor.json
+```
+
+The Rekor receipt stores a local canonical payload with the daily `root`,
+`date`, hashed `operator`, and `walter_os_version`. Walter-OS signs the
+payload's SHA-256 digest with the last row's session Ed25519 key, submits that
+digest/signature as a Rekor `hashedrekord`, and never includes audit row content,
+the plaintext operator id, or the local payload JSON in the public Rekor entry.
+Upload is disabled by default; it only runs when
+`WALTER_AUDIT_REKOR_UPLOAD=1` is set for `walter-os audit close-day`.
+Rekor anchoring is accepted only for past UTC audit dates, and the final row's
+session private key must still be available when the anchor is created.
+
+Verify a local root against its Rekor entry with:
+
+```bash
+walter-os audit verify-chain --check-rekor 2026-05-31
+```
+
+Use `--rekor-url <url>` or `WALTER_AUDIT_REKOR_URL` for a private Rekor
+instance. The default URL is `https://rekor.sigstore.dev`.
+
+Because the public entry is a `hashedrekord`, recovery still depends on local or
+backed-up receipt metadata. Rekor can prove the digest was timestamped, but it
+cannot reconstruct the original `date`/`root` payload after local receipt loss.

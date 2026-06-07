@@ -95,6 +95,12 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   row of a new day when the previous daily root exists, and lets
   `walter-os audit verify-chain --since <date> [--until <date>]` validate
   consecutive local audit days with cross-day root continuity.
+- **Audit-chain Rekor anchoring (#333/#122).** Adds opt-in Sigstore Rekor
+  anchoring for daily audit roots when `WALTER_AUDIT_REKOR_UPLOAD=1` is set
+  for `walter-os audit close-day`, stores local `root-YYYY-MM-DD.rekor.json`
+  receipts, and adds `walter-os audit verify-chain --check-rekor` to compare
+  the local root against the Rekor entry without uploading row contents or
+  plaintext operator identifiers.
 - **Audit-chain Loki fixture verification (#122).** Adds
   `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
   operators can verify Loki-shipped audit-chain rows with the same local
