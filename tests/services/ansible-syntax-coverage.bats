@@ -37,6 +37,28 @@ setup() {
   ! grep -Fq "operator-owned credentials" "$README"
 }
 
+@test "alerting role ships AI stack watchdog with executable mode" {
+  [[ -f "$ALERTING_ROLE" ]]
+
+  awk '
+    /^- name: / {
+      in_task = ($0 == "- name: Ship AI stack watchdog script")
+    }
+    in_task && /setup\/walter-host\/services\/alerting\/ai-stack-watchdog\.sh/ {
+      found_src = 1
+    }
+    in_task && /dest: "\{\{ walter_services_dir \}\}\/alerting\/ai-stack-watchdog\.sh"/ {
+      found_dest = 1
+    }
+    in_task && /mode: "0755"/ {
+      found_mode = 1
+    }
+    END {
+      exit !(found_src && found_dest && found_mode)
+    }
+  ' "$ALERTING_ROLE"
+}
+
 @test "cloudflared role pins package key and avoids unused packages" {
   [[ -f "$CLOUDFLARED_ROLE" ]]
 
