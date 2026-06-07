@@ -102,9 +102,13 @@ test.describe("Control Tower smoke tests", () => {
 
   test("(6) Cost Dashboard API returns agents array", async ({ page }) => {
     const response = await page.request.get("/api/spend?days=7");
-    // May return 200 (with fallback data) or 500 if LiteLLM is not configured
-    // In test env, LiteLLM is not available so we expect fallback
-    expect([200, 500]).toContain(response.status());
+    expect(response.status()).toBe(200);
+    const body = (await response.json()) as {
+      agents: unknown[];
+      source: "fallback" | "litellm";
+    };
+    expect(Array.isArray(body.agents)).toBe(true);
+    expect(["fallback", "litellm"]).toContain(body.source);
   });
 
   test("(7) Mode API returns consensus state", async ({ page }) => {
