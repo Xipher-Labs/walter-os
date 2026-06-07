@@ -62,9 +62,6 @@ function atomicWritePrivate(filePath: string, content: string): void {
  * would require a lock file or an async queue.
  */
 export function atomicAppend(filePath: string, jsonLine: string): void {
-  const dir = path.dirname(filePath);
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-
   const existing = readExistingFile(filePath) ?? "";
 
   const newContent = existing.endsWith("\n") || existing === ""
