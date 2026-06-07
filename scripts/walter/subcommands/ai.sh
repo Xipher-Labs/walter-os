@@ -399,7 +399,7 @@ validate_capabilities_file() {
 
   value="$(ai_yaml_value "$file" profile)"
   if [[ -n "$value" ]] && ! valid_profile "$value"; then
-    echo "walter ai validate: invalid profile: $value" >&2
+    echo "walter ai validate: invalid profile; expected claude-only, codex-only, local-only, or mixed" >&2
     invalid=1
   fi
 
@@ -408,7 +408,7 @@ validate_capabilities_file() {
     case "$value" in
       enabled|disabled|"") ;;
       *)
-        echo "walter ai validate: invalid $key: $value" >&2
+        echo "walter ai validate: invalid $key; expected enabled or disabled" >&2
         invalid=1
         ;;
     esac
@@ -417,7 +417,7 @@ validate_capabilities_file() {
   for key in route_code_review route_infra_security_backend route_planning route_ux_ui route_image_generation route_research route_compliance_local_only; do
     value="$(normalize_provider_route "$(ai_yaml_value "$file" "$key")")"
     if [[ -n "$value" ]] && ! valid_provider_route "$value"; then
-      echo "walter ai validate: invalid $key: $value" >&2
+      echo "walter ai validate: invalid $key; expected comma-separated providers from claude, codex, copilot, gemini, or ollama" >&2
       invalid=1
     fi
   done

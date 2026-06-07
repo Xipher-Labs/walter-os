@@ -226,6 +226,34 @@ YAML
   ! echo "$output" | grep -q "OPENAI_API_KEY"
 }
 
+@test "walter ai validate does not echo invalid values" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: OPENAI_API_KEY=secret-profile
+provider_claude: enabled
+provider_codex: secret-provider-token
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: sk-secret-route
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "invalid profile"
+  echo "$output" | grep -q "invalid provider_codex"
+  echo "$output" | grep -q "invalid route_image_generation"
+  ! echo "$output" | grep -q "secret-profile"
+  ! echo "$output" | grep -q "secret-provider-token"
+  ! echo "$output" | grep -q "sk-secret-route"
+  ! echo "$output" | grep -q "OPENAI_API_KEY"
+}
+
 @test "walter ai validate accepts indented keys and whitespace-only lines" {
   cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
   profile: mixed
