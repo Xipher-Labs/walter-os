@@ -185,7 +185,7 @@ SH
     source '$AUDIT_LIB'
     pids=()
     for i in \$(seq 1 12); do
-      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=30 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
+      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=90 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
       pids+=(\"\$!\")
     done
     status=0

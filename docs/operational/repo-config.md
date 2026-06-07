@@ -73,6 +73,20 @@ threshold while still requiring green CI and restricting auto-merge eligibility
 to `hackathon/*` source branches. It keeps the same hard-floor human approval
 categories as the balanced default.
 
+## Autonomy Modes
+
+`autonomy_mode` is a policy axis, not an install tier. A repo can run a small
+client-only install or a full self-hosted stack with any autonomy mode.
+
+| Mode | Contract |
+|---|---|
+| `lite` | Plan, report, and request approval. No autonomous code, PR, deploy, or merge progression. |
+| `guided` | Default human-in-the-loop delivery. Agents may prepare work and PRs; humans approve intent, architecture, merge, and production deploy. |
+| `full` | Policy-bounded autonomy for eligible non-protected paths. Protected actions, secrets, money, PHI, auth, destructive operations, and production deploys still require humans. |
+
+`walter-os repo-config validate` prints the effective mode and reminds callers
+that the hard-limit floor is non-overridable in every mode.
+
 ## Validation Rules
 
 The validator fails closed for malformed YAML, invalid enum values, wrong
