@@ -22,7 +22,8 @@
 # v2026.5.8, bump BASE_VERSION and rebuild — the `-stt` suffix marks the flavor.
 
 ARG BASE_VERSION=v2026.5.7
-FROM nousresearch/hermes-agent:${BASE_VERSION}
+# tag: nousresearch/hermes-agent:v2026.5.7
+FROM nousresearch/hermes-agent:${BASE_VERSION}@sha256:9462082533e603fc6ba4259c51d7722dcd8cbb0f348488ceedc35d06fa8f9324
 
 ARG BASE_VERSION
 ARG FASTER_WHISPER_VERSION=1.2.1

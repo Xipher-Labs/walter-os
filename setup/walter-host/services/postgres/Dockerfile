@@ -8,7 +8,8 @@
 # Refs: docs/specs/devrel-analytics-stack.md (V-prereq-6)
 # Refs: docs/operational/phase-v-tools-availability.md (Postgres extensions section)
 
-FROM postgres:17
+# tag: postgres:17
+FROM postgres:17@sha256:0027bef26712baaee437a4ea48fdf3d2d2e2bc5f0d81615374408ca320f3c7e3
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       postgresql-17-partman \

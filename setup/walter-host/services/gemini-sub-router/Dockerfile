@@ -1,4 +1,5 @@
-FROM node:22-slim
+# tag: node:22-slim
+FROM node:22-slim@sha256:7af03b14a13c8cdd38e45058fd957bf00a72bbe17feac43b1c15a689c029c732
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -13,8 +14,8 @@ RUN npm install -g @google/gemini-cli@0.42.0
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY server.js ./
 
