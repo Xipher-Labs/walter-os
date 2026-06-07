@@ -30,6 +30,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agents/lib/metrics.sh \
 		scripts/agents/lib/spend.sh \
 		scripts/walter/lib/audit-chain.sh \
+		scripts/walter/lib/feature-state.sh \
 		tests/lint-frontmatter.sh \
 		hooks/approval-gate.sh \
 		hooks/bash-denylist.sh \
@@ -42,6 +43,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		setup/walter-host/services/openclaw/deploy.sh \
 		skills/daily-supply-chain-audit/scripts/audit.sh \
 		scripts/walter/subcommands/bridge.sh \
+		scripts/walter/subcommands/feature-state.sh \
 		scripts/walter/subcommands/release.sh
 
 audit-secrets:  ## Run gitleaks on the working tree
