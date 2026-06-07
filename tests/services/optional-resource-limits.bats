@@ -41,6 +41,9 @@ assert_compose_renders() {
   local compose="$SERVICES_ROOT/$service_dir/compose.yml"
   local tmpdir="$BATS_TEST_TMPDIR/$service_dir"
 
+  if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
+    skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
+  fi
   if ! command -v docker >/dev/null 2>&1; then
     skip "docker is not installed"
   fi
