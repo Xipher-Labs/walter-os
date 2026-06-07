@@ -22,6 +22,13 @@ assert_permission_line() {
   grep -Eq "^[[:space:]]*${key}:[[:space:]]*${value}([[:space:]]*#.*)?$" <<<"$block"
 }
 
+assert_block_permission_line() {
+  local block="$1"
+  local key="$2"
+  local value="$3"
+  grep -Eq "^[[:space:]]*${key}:[[:space:]]*${value}([[:space:]]*#.*)?$" <<<"$block"
+}
+
 @test "read-only workflows declare explicit read or empty token permissions" {
   assert_permission_line "$REPO_ROOT/.github/workflows/ci.yml" "contents" "read"
 
@@ -35,12 +42,12 @@ assert_permission_line() {
 
 @test "CLA gate does not request broad actions or contents write scopes" {
   top_permissions="$(workflow_permissions_block "$REPO_ROOT/.github/workflows/cla.yml")"
-  [[ "$top_permissions" == *"contents: read"* ]]
-  [[ "$top_permissions" != *"issues: write"* ]]
-  [[ "$top_permissions" != *"pull-requests: write"* ]]
-  [[ "$top_permissions" != *"statuses: write"* ]]
-  ! grep -q '^  actions: write' "$REPO_ROOT/.github/workflows/cla.yml"
-  ! grep -q '^  contents: write' "$REPO_ROOT/.github/workflows/cla.yml"
+  assert_block_permission_line "$top_permissions" "contents" "read"
+  ! grep -Eq "^[[:space:]]*issues:[[:space:]]*write([[:space:]]*#.*)?$" <<<"$top_permissions"
+  ! grep -Eq "^[[:space:]]*pull-requests:[[:space:]]*write([[:space:]]*#.*)?$" <<<"$top_permissions"
+  ! grep -Eq "^[[:space:]]*statuses:[[:space:]]*write([[:space:]]*#.*)?$" <<<"$top_permissions"
+  ! grep -Eq '^[[:space:]]*actions:[[:space:]]*write([[:space:]]*#.*)?$' "$REPO_ROOT/.github/workflows/cla.yml"
+  ! grep -Eq '^[[:space:]]*contents:[[:space:]]*write([[:space:]]*#.*)?$' "$REPO_ROOT/.github/workflows/cla.yml"
   grep -Eq '^[[:space:]]*issues:[[:space:]]*write[[:space:]]*#.*comments on CLA signatures' "$REPO_ROOT/.github/workflows/cla.yml"
   grep -Eq '^[[:space:]]*pull-requests:[[:space:]]*write[[:space:]]*#.*labels / updates PR state' "$REPO_ROOT/.github/workflows/cla.yml"
   grep -Eq '^[[:space:]]*statuses:[[:space:]]*write[[:space:]]*#.*publishes CLA commit status' "$REPO_ROOT/.github/workflows/cla.yml"
@@ -49,9 +56,9 @@ assert_permission_line() {
 @test "CodeQL scopes SARIF upload permission to analysis job" {
   top_permissions="$(workflow_permissions_block "$REPO_ROOT/.github/workflows/codeql.yml")"
 
-  [[ "$top_permissions" == *"actions: read"* ]]
-  [[ "$top_permissions" == *"contents: read"* ]]
-  [[ "$top_permissions" != *"security-events: write"* ]]
+  assert_block_permission_line "$top_permissions" "actions" "read"
+  assert_block_permission_line "$top_permissions" "contents" "read"
+  ! grep -Eq "^[[:space:]]*security-events:[[:space:]]*write([[:space:]]*#.*)?$" <<<"$top_permissions"
 
   grep -Eq '^[[:space:]]*security-events:[[:space:]]*write[[:space:]]*#.*upload SARIF results' "$REPO_ROOT/.github/workflows/codeql.yml"
 }
