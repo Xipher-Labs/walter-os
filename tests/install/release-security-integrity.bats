@@ -17,6 +17,13 @@ setup() {
   [ -f "$WORKFLOW" ]
 }
 
+@test "release workflow header documents release security and provenance jobs" {
+  grep -Fq '# Three jobs run in sequence:' "$WORKFLOW"
+  grep -Fq "#   1. \`release\`" "$WORKFLOW"
+  grep -Fq "#   2. \`security\`" "$WORKFLOW"
+  grep -Fq "#   3. \`provenance\`" "$WORKFLOW"
+}
+
 @test "release workflow has no \`|| true\` after asset operations" {
   # `|| true` after gh release download / sha256sum / cosign / sbom would
   # swallow the failure and let a placeholder be signed. Regression for HIGH-1.
@@ -159,7 +166,7 @@ setup() {
   grep -E 'GITHUB_OUTPUT' "$WORKFLOW" >/dev/null
 }
 
-@test "release workflow emits SLSA3 provenance via upstream generator" {
+@test "release workflow emits SLSA Build L3 provenance via upstream generator" {
   grep -E 'name:[[:space:]]+SLSA provenance' "$WORKFLOW" >/dev/null
   grep -E 'needs:[[:space:]]+\[release, security\]' "$WORKFLOW" >/dev/null
   grep -E 'actions:[[:space:]]+read' "$WORKFLOW" >/dev/null

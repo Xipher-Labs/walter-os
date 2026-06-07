@@ -77,6 +77,11 @@ ssh root@<vm-ip> "tailscale up \
 
 ### Step C — Lock SSH (only after A + B verified)
 
+Before locking SSH, configure at least one break-glass recovery path that does
+not depend on the Cloudflare Tunnel. The recovery runbook covers a temporary
+Hetzner firewall rule for SSH from an operator-controlled IP/CIDR:
+[`docs/runbooks/break-glass-recovery.md`](../../docs/runbooks/break-glass-recovery.md).
+
 ```bash
 ssh root@<vm-ip> "bash" < setup/walter-host/lock-ssh.sh
 ```
