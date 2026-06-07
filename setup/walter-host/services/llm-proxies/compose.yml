@@ -17,6 +17,10 @@ services:
   claude-code-router:
     image: node:24-slim
     container_name: claude-code-router
+    mem_limit: "${CLAUDE_CODE_ROUTER_MEM_LIMIT:-512m}"
+    mem_reservation: "${CLAUDE_CODE_ROUTER_MEM_RESERVATION:-256m}"
+    cpus: "${CLAUDE_CODE_ROUTER_CPUS:-1.0}"
+    pids_limit: "${CLAUDE_CODE_ROUTER_PIDS_LIMIT:-256}"
     restart: unless-stopped
     working_dir: /app
     environment:
