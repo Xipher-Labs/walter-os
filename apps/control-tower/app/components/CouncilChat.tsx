@@ -29,6 +29,21 @@ function formatElapsed(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function createSessionId(sessionType: "chat" | "ideation"): string {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return `${sessionType}-${cryptoApi.randomUUID()}`;
+  }
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return `${sessionType}-${Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0")
+    ).join("")}`;
+  }
+  throw new Error("Web Crypto is required to create a Council Chat session");
+}
+
 function AgentCard({
   persona,
   response,
@@ -248,7 +263,7 @@ export default function CouncilChat({
     setSynthesis(null);
     setSpinResult(null);
 
-    const sid = `${sessionType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sid = createSessionId(sessionType);
     setSessionId(sid);
 
     const newResponses = initResponses();
