@@ -50,10 +50,21 @@ WALTER_AUDIT_REKOR_UPLOAD=1 walter-os audit close-day 2026-05-31
 ```
 
 Rekor anchoring only accepts past UTC audit dates. This prevents publishing a
-root for a day that can still receive later audit rows. The final row's session
-private key must also still be available when anchoring runs; scheduled
-next-day anchoring after session-key cleanup is a follow-up capability, not part
-of this slice.
+root for a day that can still receive later audit rows.
+
+Walter-OS also prepares bounded pending Rekor material whenever it updates a
+daily root while the final row's session private key is still available. That
+material lives beside the audit chain in `walter_audit_dir()`:
+
+```text
+${WALTER_AUDIT_DIR:-${WALTER_CONFIG:-$HOME/.config/walter-os}/audit}/root-YYYY-MM-DD.rekor.pending.json
+```
+
+It contains only the canonical root payload, payload digest, signature, public
+key, session id, and metadata needed for upload. It does not contain the session
+private key. If a scheduled next-day close job runs after session cleanup, the
+same `close-day --rekor-url ... <date>` command can consume matching pending
+material and upload the root without recreating the private key.
 
 To use a private Rekor instance:
 
@@ -101,6 +112,4 @@ This does not protect against a compromised session private key during the
 session itself, a compromised host that signs malicious-but-valid rows, or a
 missing external backup of local state and archived public keys. A Rekor
 `hashedrekord` entry alone proves the payload digest was timestamped; it does
-not recover the original `date`/`root` payload if the local receipt is lost. The
-current implementation also requires online anchoring before the final session
-private key is cleaned up.
+not recover the original `date`/`root` payload if the local receipt is lost.

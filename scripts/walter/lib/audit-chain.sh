@@ -41,6 +41,11 @@ walter_audit_rekor_receipt_path() {
   printf '%s/root-%s.rekor.json\n' "$(walter_audit_dir)" "$date_value"
 }
 
+walter_audit_rekor_pending_path() {
+  local date_value="${1:-$(walter_audit_date)}"
+  printf '%s/root-%s.rekor.pending.json\n' "$(walter_audit_dir)" "$date_value"
+}
+
 walter_audit_lock_path() {
   printf '%s/.chain.lock\n' "$(walter_audit_dir)"
 }
@@ -1174,6 +1179,7 @@ walter_audit_append() {
     _walter_audit_release_lock "$lock_path"
     return 1
   }
+  _walter_audit_rekor_refresh_pending_unlocked "$row_date" "$root_hash" "$chain_path" "$session_id" || true
   exec 9>&-
   _walter_audit_release_lock "$lock_path"
   printf '%s\n' "$chain_path"
@@ -1360,6 +1366,216 @@ _walter_audit_rekor_request_body() {
         signature: {content: $sig, publicKey: {content: $public_key}}
       }
     }'
+}
+
+_walter_audit_rekor_verify_digest_signature() {
+  local payload_hash="$1" sig="$2" public_key="$3" label="$4"
+  local tmp_dir digest_file sig_file pub_file openssl_bin
+
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-material)" || return 1
+  digest_file="$tmp_dir/payload.sha256.bin"
+  sig_file="$tmp_dir/sig.bin"
+  pub_file="$tmp_dir/pub.pem"
+  _walter_audit_hex_to_file "$payload_hash" "$digest_file" || {
+    rm -rf "$tmp_dir" || true
+    return 1
+  }
+  if ! _walter_audit_b64_decode_to_file "$sig" "$sig_file" >/dev/null 2>&1; then
+    rm -rf "$tmp_dir" || true
+    echo "walter-audit-chain: ${label} signature is invalid" >&2
+    return 1
+  fi
+  if ! _walter_audit_b64_any_decode_to_file "$public_key" "$pub_file" >/dev/null 2>&1; then
+    rm -rf "$tmp_dir" || true
+    echo "walter-audit-chain: ${label} public key is invalid" >&2
+    return 1
+  fi
+  if ! _walter_audit_resolve_openssl; then
+    rm -rf "$tmp_dir" || true
+    echo "walter-audit-chain: ED25519-capable openssl missing" >&2
+    return 3
+  fi
+  openssl_bin="$_WALTER_AUDIT_OPENSSL_BIN"
+  if ! "$openssl_bin" pkeyutl -verify -pubin -inkey "$pub_file" -rawin -in "$digest_file" -sigfile "$sig_file" >/dev/null 2>&1; then
+    rm -rf "$tmp_dir" || true
+    echo "walter-audit-chain: ${label} signature verification failed" >&2
+    return 1
+  fi
+  rm -rf "$tmp_dir" || true
+}
+
+_walter_audit_rekor_refresh_pending_unlocked() {
+  local date_value="$1" root_hash="$2" chain_path="$3" session_id="${4:-}"
+  local audit_dir payload payload_hash private_key public_key_file public_key tmp_dir digest_file sig sign_status pending_path tmp_pending
+
+  _walter_audit_jq_available || return 0
+  _walter_audit_check_date_arg "$date_value" "date" || return $?
+  _walter_audit_check_sha256_arg "$root_hash" "root hash" || return $?
+  [[ -f "$chain_path" ]] || return 1
+
+  if [[ -z "$session_id" ]]; then
+    session_id="$(_walter_audit_last_session_id_for_day "$chain_path")" || return $?
+  fi
+  [[ "$session_id" =~ ^[A-Za-z0-9._-]+$ ]] || return 2
+  private_key="$(_walter_audit_private_key_file "$session_id")"
+  [[ -f "$private_key" ]] || return 2
+  public_key_file="$(_walter_audit_public_key_file "$session_id")" || return 2
+  public_key="$(_walter_audit_b64_encode_file "$public_key_file")" || return 1
+  payload="$(_walter_audit_rekor_payload "$date_value" "$root_hash")" || return $?
+  payload_hash="$(walter_audit_hash_string "$payload")"
+
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-pending)" || return 1
+  digest_file="$tmp_dir/payload.sha256.bin"
+  _walter_audit_hex_to_file "$payload_hash" "$digest_file" || {
+    rm -rf "$tmp_dir" || true
+    return 1
+  }
+  if sig="$(_walter_audit_sign_file "$digest_file" "$session_id" "pending Rekor payload digest")"; then
+    :
+  else
+    sign_status="$?"
+    rm -rf "$tmp_dir" || true
+    return "$sign_status"
+  fi
+  _walter_audit_rekor_verify_digest_signature "$payload_hash" "$sig" "$public_key" "Rekor pending material" || {
+    rm -rf "$tmp_dir" || true
+    return $?
+  }
+
+  audit_dir="$(walter_audit_dir)"
+  mkdir -p "$audit_dir" || {
+    rm -rf "$tmp_dir" || true
+    return 1
+  }
+  chmod 700 "$audit_dir" || {
+    rm -rf "$tmp_dir" || true
+    return 1
+  }
+  pending_path="$(walter_audit_rekor_pending_path "$date_value")"
+  tmp_pending="${pending_path}.tmp.${BASHPID:-$$}"
+  jq -cS -n \
+    --arg created_at "$(walter_audit_timestamp)" \
+    --arg date "$date_value" \
+    --arg payload_sha256 "$payload_hash" \
+    --arg public_key "$public_key" \
+    --arg root "$root_hash" \
+    --arg session_id "$session_id" \
+    --arg sig "$sig" \
+    --argjson payload "$payload" \
+    '{
+      created_at: $created_at,
+      date: $date,
+      payload: $payload,
+      payload_sha256: $payload_sha256,
+      public_key: $public_key,
+      root: $root,
+      session_id: $session_id,
+      sig: $sig
+    }' > "$tmp_pending" || {
+      rm -f "$tmp_pending"
+      rm -rf "$tmp_dir" || true
+      return 1
+    }
+  chmod 600 "$tmp_pending" || {
+    rm -f "$tmp_pending"
+    rm -rf "$tmp_dir" || true
+    return 1
+  }
+  mv "$tmp_pending" "$pending_path" || {
+    rm -f "$tmp_pending"
+    rm -rf "$tmp_dir" || true
+    return 1
+  }
+  rm -rf "$tmp_dir" || true
+}
+
+_walter_audit_rekor_load_pending_material() {
+  local date_value="$1" root_hash="$2" session_id="$3" expected_public_key="$4"
+  local pending_path pending_date pending_root pending_session_id pending_payload stored_payload_hash computed_payload_hash
+  local payload_date payload_root pending_sig pending_public_key
+
+  WALTER_AUDIT_REKOR_PENDING_PAYLOAD=""
+  WALTER_AUDIT_REKOR_PENDING_PAYLOAD_HASH=""
+  WALTER_AUDIT_REKOR_PENDING_SIG=""
+  WALTER_AUDIT_REKOR_PENDING_PUBLIC_KEY=""
+
+  pending_path="$(walter_audit_rekor_pending_path "$date_value")"
+  [[ -f "$pending_path" ]] || return 10
+  jq -e 'type == "object"' "$pending_path" >/dev/null 2>&1 || {
+    echo "walter-audit-chain: invalid Rekor pending material JSON: $pending_path" >&2
+    return 1
+  }
+  pending_date="$(jq -er 'if ((.date | type) == "string" and (.date | length) > 0) then .date else empty end' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material missing date: $pending_path" >&2
+    return 1
+  }
+  if [[ "$pending_date" != "$date_value" ]]; then
+    echo "walter-audit-chain: Rekor pending material date mismatch: $pending_path" >&2
+    return 1
+  fi
+  pending_root="$(jq -er 'if ((.root | type) == "string" and (.root | length) > 0) then .root else empty end' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material missing root: $pending_path" >&2
+    return 1
+  }
+  if [[ "$pending_root" != "$root_hash" ]]; then
+    echo "walter-audit-chain: Rekor pending material root mismatch: $pending_path" >&2
+    return 1
+  fi
+  pending_session_id="$(jq -er 'if ((.session_id | type) == "string" and (.session_id | test("^[A-Za-z0-9._-]+$"))) then .session_id else empty end' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material missing session id: $pending_path" >&2
+    return 1
+  }
+  if [[ "$pending_session_id" != "$session_id" ]]; then
+    echo "walter-audit-chain: Rekor pending material session mismatch: $pending_path" >&2
+    return 1
+  fi
+  pending_payload="$(jq -cS '.payload' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: invalid Rekor pending material JSON: $pending_path" >&2
+    return 1
+  }
+  payload_date="$(printf '%s\n' "$pending_payload" | jq -er 'if ((.date | type) == "string" and (.date | length) > 0) then .date else empty end' 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material payload missing date: $pending_path" >&2
+    return 1
+  }
+  if [[ "$payload_date" != "$date_value" ]]; then
+    echo "walter-audit-chain: Rekor pending material payload date mismatch: $pending_path" >&2
+    return 1
+  fi
+  payload_root="$(printf '%s\n' "$pending_payload" | jq -er 'if ((.root | type) == "string" and (.root | length) > 0) then .root else empty end' 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material payload missing root: $pending_path" >&2
+    return 1
+  }
+  if [[ "$payload_root" != "$root_hash" ]]; then
+    echo "walter-audit-chain: Rekor pending material payload root mismatch: $pending_path" >&2
+    return 1
+  fi
+  computed_payload_hash="$(walter_audit_hash_string "$pending_payload")"
+  stored_payload_hash="$(jq -er 'if ((.payload_sha256 | type) == "string" and (.payload_sha256 | test("^[0-9a-f]{64}$"))) then .payload_sha256 else empty end' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material missing payload hash: $pending_path" >&2
+    return 1
+  }
+  if [[ "$computed_payload_hash" != "$stored_payload_hash" ]]; then
+    echo "walter-audit-chain: Rekor pending material payload hash mismatch: $pending_path" >&2
+    return 1
+  fi
+  pending_sig="$(jq -er 'if ((.sig | type) == "string" and (.sig | length) > 0) then .sig else empty end' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material missing signature: $pending_path" >&2
+    return 1
+  }
+  pending_public_key="$(jq -er 'if ((.public_key | type) == "string" and (.public_key | length) > 0) then .public_key else empty end' "$pending_path" 2>/dev/null)" || {
+    echo "walter-audit-chain: Rekor pending material missing public key: $pending_path" >&2
+    return 1
+  }
+  if [[ -n "$expected_public_key" && "$pending_public_key" != "$expected_public_key" ]]; then
+    echo "walter-audit-chain: Rekor pending material public key does not match final audit session key: $pending_path" >&2
+    return 1
+  fi
+  _walter_audit_rekor_verify_digest_signature "$stored_payload_hash" "$pending_sig" "$pending_public_key" "Rekor pending material" || return $?
+
+  WALTER_AUDIT_REKOR_PENDING_PAYLOAD="$pending_payload"
+  WALTER_AUDIT_REKOR_PENDING_PAYLOAD_HASH="$stored_payload_hash"
+  WALTER_AUDIT_REKOR_PENDING_SIG="$pending_sig"
+  WALTER_AUDIT_REKOR_PENDING_PUBLIC_KEY="$pending_public_key"
 }
 
 _walter_audit_rekor_entry_id_is_safe() {
@@ -1689,7 +1905,7 @@ walter_audit_rekor_upload() {
 
   local date_value="$1" root_hash="$2" chain_path="$3" configured_url="${4:-}" audit_dir chain_root
   local receipt_path receipt_date receipt_root receipt_url stored_rekor_url rekor_url timeout session_id payload payload_hash sig public_key_file public_key request_body entry_id
-  local sign_status
+  local sign_status pending_status
   local tmp_dir digest_file request_file response_file error_file headers_file status_file endpoint post_status fetched_entry_id
 
   _walter_audit_check_date_arg "$date_value" "date" || return $?
@@ -1769,30 +1985,41 @@ walter_audit_rekor_upload() {
   _walter_audit_require_python3 || return 3
 
   session_id="$(_walter_audit_last_session_id_for_day "$chain_path")" || return $?
-  payload="$(_walter_audit_rekor_payload "$date_value" "$root_hash")" || return $?
-  payload_hash="$(walter_audit_hash_string "$payload")"
-  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-upload)" || return 1
-  digest_file="$tmp_dir/payload.sha256.bin"
-  _walter_audit_hex_to_file "$payload_hash" "$digest_file" || {
-    rm -rf "$tmp_dir" || true
-    return 1
-  }
-  if sig="$(_walter_audit_sign_file "$digest_file" "$session_id" "Rekor payload digest")"; then
-    :
-  else
-    sign_status="$?"
-    rm -rf "$tmp_dir" || true
-    return "$sign_status"
-  fi
   public_key_file="$(_walter_audit_public_key_file "$session_id")" || {
-    rm -rf "$tmp_dir" || true
     echo "walter-audit-chain: cannot anchor Rekor receipt: public key missing for session ${session_id}" >&2
     return 2
   }
-  public_key="$(_walter_audit_b64_encode_file "$public_key_file")" || {
-    rm -rf "$tmp_dir" || true
-    return 1
-  }
+  public_key="$(_walter_audit_b64_encode_file "$public_key_file")" || return 1
+  tmp_dir="$(_walter_audit_mktemp_dir audit-rekor-upload)" || return 1
+  if _walter_audit_rekor_load_pending_material "$date_value" "$root_hash" "$session_id" "$public_key"; then
+    payload="$WALTER_AUDIT_REKOR_PENDING_PAYLOAD"
+    payload_hash="$WALTER_AUDIT_REKOR_PENDING_PAYLOAD_HASH"
+    sig="$WALTER_AUDIT_REKOR_PENDING_SIG"
+    public_key="$WALTER_AUDIT_REKOR_PENDING_PUBLIC_KEY"
+  else
+    pending_status="$?"
+    if [[ "$pending_status" -ne 10 ]]; then
+      rm -rf "$tmp_dir" || true
+      return "$pending_status"
+    fi
+    payload="$(_walter_audit_rekor_payload "$date_value" "$root_hash")" || {
+      rm -rf "$tmp_dir" || true
+      return $?
+    }
+    payload_hash="$(walter_audit_hash_string "$payload")"
+    digest_file="$tmp_dir/payload.sha256.bin"
+    _walter_audit_hex_to_file "$payload_hash" "$digest_file" || {
+      rm -rf "$tmp_dir" || true
+      return 1
+    }
+    if sig="$(_walter_audit_sign_file "$digest_file" "$session_id" "Rekor payload digest")"; then
+      :
+    else
+      sign_status="$?"
+      rm -rf "$tmp_dir" || true
+      return "$sign_status"
+    fi
+  fi
   request_body="$(_walter_audit_rekor_request_body "$payload" "$sig" "$public_key" "$payload_hash")" || {
     rm -rf "$tmp_dir" || true
     return 1
@@ -2064,6 +2291,7 @@ walter_audit_close_day() {
     close_status="$?"
   fi
   if [[ "$close_status" -eq 0 ]]; then
+    _walter_audit_rekor_refresh_pending_unlocked "$date_value" "$root_hash" "$chain_path" || true
     if [[ "${WALTER_AUDIT_REKOR_UPLOAD:-0}" == "1" ]]; then
       if walter_audit_rekor_upload "$date_value" "$root_hash" "$chain_path" "$rekor_url"; then
         upload_status=0

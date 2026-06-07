@@ -101,6 +101,10 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   receipts, and adds `walter-os audit verify-chain --check-rekor` to compare
   the local root against the Rekor entry without uploading row contents or
   plaintext operator identifiers.
+- **Scheduled audit-chain Rekor anchoring (#339/#122).** Persists bounded
+  `root-YYYY-MM-DD.rekor.pending.json` material while the session key is still
+  available, so next-day/scheduled `walter-os audit close-day` can anchor a
+  closed daily root after private-key cleanup without retaining the private key.
 - **Audit-chain Loki fixture verification (#122).** Adds
   `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
   operators can verify Loki-shipped audit-chain rows with the same local
