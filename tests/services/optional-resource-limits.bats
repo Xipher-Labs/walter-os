@@ -32,7 +32,7 @@ expected = {
 for key, marker in expected.items():
     value = service.get(key)
     assert value, f"{service_name} missing {key}"
-    assert str(value).startswith(marker), f"{service_name} {key} is not overrideable by {prefix}: {value!r}"
+    assert str(value).startswith(marker), f"{service_name} {key} is not overridable by {prefix}: {value!r}"
 PY
 }
 
@@ -75,14 +75,14 @@ assert_compose_renders() {
   [ "$status" -eq 0 ]
 }
 
-@test "authentik stack has overrideable resource limits" {
+@test "authentik stack has overridable resource limits" {
   assert_service_limits "authentik" "authentik-postgresql" "AUTHENTIK_POSTGRESQL"
   assert_service_limits "authentik" "authentik-redis" "AUTHENTIK_REDIS"
   assert_service_limits "authentik" "authentik-server" "AUTHENTIK_SERVER"
   assert_service_limits "authentik" "authentik-worker" "AUTHENTIK_WORKER"
 }
 
-@test "langfuse stack has overrideable resource limits" {
+@test "langfuse stack has overridable resource limits" {
   assert_service_limits "langfuse" "langfuse-web" "LANGFUSE_WEB"
   assert_service_limits "langfuse" "langfuse-worker" "LANGFUSE_WORKER"
   assert_service_limits "langfuse" "langfuse-postgres" "LANGFUSE_POSTGRES"
@@ -91,7 +91,7 @@ assert_compose_renders() {
   assert_service_limits "langfuse" "langfuse-minio" "LANGFUSE_MINIO"
 }
 
-@test "listmonk stack has overrideable resource limits" {
+@test "listmonk stack has overridable resource limits" {
   assert_service_limits "listmonk" "listmonk" "LISTMONK"
   assert_service_limits "listmonk" "listmonk-db" "LISTMONK_DB"
 }
