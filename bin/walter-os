@@ -81,8 +81,8 @@
 #                               Manage .walter/features/<id>/state.yaml ledgers
 #   release doctor --target vX.Y.Z|X.Y.Z [--json]
 #                               Check release readiness without mutating state
-#   repo-config {validate|defaults [balanced|hackathon]|verification-plan}
-#                               Validate walter-repo-config.yaml policy + verification depth
+#   repo-config {validate|defaults [balanced|hackathon]|verification-plan|capability-plan}
+#                               Validate walter-repo-config.yaml policy + autonomy, capability, and verification depth
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
 #                               Manage network egress allowlist (#122 A-2)

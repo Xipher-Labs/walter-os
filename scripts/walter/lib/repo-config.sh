@@ -248,9 +248,236 @@ _walter_repo_config_print_checks() {
   fi
 }
 
+_walter_repo_config_tier_name() {
+  case "${1:-0}" in
+    0) printf 'read_only\n' ;;
+    1) printf 'assisted\n' ;;
+    2) printf 'supervised_autonomy\n' ;;
+    3) printf 'bounded_autonomy\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+_walter_repo_config_bool_has() {
+  local haystack="$1"
+  local needle="$2"
+  grep -Fxq "$needle" <<<"$haystack"
+}
+
+_walter_repo_config_cap_min() {
+  local left="$1"
+  local right="$2"
+  if (( left < right )); then
+    printf '%s\n' "$left"
+  else
+    printf '%s\n' "$right"
+  fi
+}
+
+_walter_repo_config_print_capability_actions() {
+  local tier="$1"
+
+  printf 'allowed_actions:\n'
+  case "$tier" in
+    0)
+      printf '  - read\n'
+      printf '  - search\n'
+      printf '  - comment\n'
+      ;;
+    1)
+      printf '  - read\n'
+      printf '  - search\n'
+      printf '  - create_branch\n'
+      printf '  - implement\n'
+      printf '  - run_tests\n'
+      printf '  - open_pr\n'
+      ;;
+    2)
+      printf '  - read\n'
+      printf '  - search\n'
+      printf '  - create_branch\n'
+      printf '  - implement\n'
+      printf '  - run_tests\n'
+      printf '  - open_pr\n'
+      printf '  - deploy_preview\n'
+      ;;
+    3)
+      printf '  - read\n'
+      printf '  - search\n'
+      printf '  - create_branch\n'
+      printf '  - implement\n'
+      printf '  - run_tests\n'
+      printf '  - open_pr\n'
+      printf '  - deploy_preview\n'
+      printf '  - policy_auto_merge_non_protected\n'
+      ;;
+  esac
+}
+
+walter_repo_config_capability_plan() {
+  local target="${1:-$(pwd)}"
+  if [[ $# -gt 0 ]]; then
+    shift
+  fi
+  local input_risk="low"
+  local paths=()
+  local evidence_items=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --risk)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --risk\n' >&2
+          return 2
+        fi
+        input_risk="${2:-}"
+        shift 2
+        ;;
+      --risk=*)
+        input_risk="${1#--risk=}"
+        shift
+        ;;
+      --path)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --path\n' >&2
+          return 2
+        fi
+        paths+=("${2:-}")
+        shift 2
+        ;;
+      --path=*)
+        paths+=("${1#--path=}")
+        shift
+        ;;
+      --evidence)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --evidence\n' >&2
+          return 2
+        fi
+        evidence_items+=("${2:-}")
+        shift 2
+        ;;
+      --evidence=*)
+        evidence_items+=("${1#--evidence=}")
+        shift
+        ;;
+      --)
+        shift
+        while [[ $# -gt 0 ]]; do
+          paths+=("$1")
+          shift
+        done
+        ;;
+      --*)
+        printf 'repo-config: unknown option: %s\n' "$1" >&2
+        return 2
+        ;;
+      *)
+        paths+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  case "$input_risk" in
+    low|medium|high) ;;
+    *)
+      printf 'repo-config: invalid risk: %s\n' "$input_risk" >&2
+      return 2
+      ;;
+  esac
+
+  local evidence_set="" evidence normalized
+  for evidence in "${evidence_items[@]}"; do
+    normalized="${evidence//-/_}"
+    case "$normalized" in
+      ci|tests|coverage|sandbox|egress|rollback|branch_protection|history)
+        evidence_set="${evidence_set}${evidence_set:+$'\n'}${normalized}"
+        ;;
+      *)
+        printf 'repo-config: invalid evidence: %s\n' "$evidence" >&2
+        return 2
+        ;;
+    esac
+  done
+
+  local validation_output
+  if ! validation_output="$(walter_repo_config_validate "$target" 2>&1)"; then
+    printf '%s\n' "$validation_output"
+    return 1
+  fi
+
+  local config_path repo_ceiling=1 path hard_floor="no" path_risk="low" effective_risk
+  config_path="$(walter_repo_config_path "$target")"
+  if [[ -f "$config_path" ]]; then
+    repo_ceiling="$(yq e '.capability_tier_ceiling // 1' "$config_path" 2>/dev/null || printf '1')"
+  fi
+
+  for path in "${paths[@]}"; do
+    [[ -z "$path" ]] && continue
+    if _walter_repo_config_path_is_hard_floor "$path"; then
+      hard_floor="yes"
+      path_risk="$(_walter_repo_config_max_risk "$path_risk" high)"
+    elif _walter_repo_config_path_is_medium_risk "$path"; then
+      path_risk="$(_walter_repo_config_max_risk "$path_risk" medium)"
+    fi
+  done
+  effective_risk="$(_walter_repo_config_max_risk "$input_risk" "$path_risk")"
+
+  local evidence_tier=0
+  if _walter_repo_config_bool_has "$evidence_set" ci \
+      && _walter_repo_config_bool_has "$evidence_set" tests; then
+    evidence_tier=1
+  fi
+  if (( evidence_tier >= 1 )) \
+      && _walter_repo_config_bool_has "$evidence_set" sandbox \
+      && _walter_repo_config_bool_has "$evidence_set" egress \
+      && _walter_repo_config_bool_has "$evidence_set" rollback; then
+    evidence_tier=2
+  fi
+  if (( evidence_tier >= 2 )) \
+      && _walter_repo_config_bool_has "$evidence_set" branch_protection \
+      && _walter_repo_config_bool_has "$evidence_set" history \
+      && [[ "$effective_risk" == "low" && "$hard_floor" == "no" ]]; then
+    evidence_tier=3
+  fi
+
+  local risk_cap=3
+  case "$effective_risk" in
+    high) risk_cap=1 ;;
+    medium) risk_cap=2 ;;
+  esac
+  if [[ "$hard_floor" == "yes" ]]; then
+    risk_cap=1
+  fi
+
+  local effective_tier
+  effective_tier="$(_walter_repo_config_cap_min "$repo_ceiling" "$evidence_tier")"
+  effective_tier="$(_walter_repo_config_cap_min "$effective_tier" "$risk_cap")"
+
+  printf 'repo-config: capability plan\n'
+  printf 'policy: %s\n' "$config_path"
+  printf 'repo_ceiling: %s %s\n' "$repo_ceiling" "$(_walter_repo_config_tier_name "$repo_ceiling")"
+  printf 'evidence_tier: %s %s\n' "$evidence_tier" "$(_walter_repo_config_tier_name "$evidence_tier")"
+  printf 'risk_cap: %s %s\n' "$risk_cap" "$(_walter_repo_config_tier_name "$risk_cap")"
+  printf 'effective_tier: %s %s\n' "$effective_tier" "$(_walter_repo_config_tier_name "$effective_tier")"
+  printf 'input_risk: %s\n' "$input_risk"
+  printf 'path_risk: %s\n' "$path_risk"
+  printf 'effective_risk: %s\n' "$effective_risk"
+  printf 'hard_floor: %s\n' "$hard_floor"
+  if (( effective_tier < 3 )) || [[ "$hard_floor" == "yes" || "$effective_risk" == "high" ]]; then
+    printf 'human_gate: required\n'
+  else
+    printf 'human_gate: policy\n'
+  fi
+  _walter_repo_config_print_capability_actions "$effective_tier"
+}
+
 walter_repo_config_verification_plan() {
   local target="${1:-$(pwd)}"
-  shift || true
+  if [[ $# -gt 0 ]]; then
+    shift
+  fi
   local input_risk="low"
   local paths=()
 
