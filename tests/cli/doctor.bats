@@ -51,3 +51,73 @@ export WALTER_OS_SKIP_UPDATE_CHECK="1"
   # And the SSH check must be inside that gate (next line after the if)
   grep -EA 1 'CLIENT_ONLY (-ne|!=) 1' "$doctor_sh" | grep -qE 'ssh.*walter-vm'
 }
+
+@test "walter doctor accepts Infisical runtime without legacy secrets.env" {
+  local test_home="$BATS_TEST_TMPDIR/home-infisical"
+  local fake_bin="$BATS_TEST_TMPDIR/bin-infisical"
+  mkdir -p "$test_home/.config/walter-os" "$fake_bin"
+  printf 'INFISICAL_CLIENT_ID=client-id\n' >"$test_home/.config/walter-os/env"
+
+  cat >"$fake_bin/brew" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  cat >"$fake_bin/infisical" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "user" && "${2:-}" == "get" && "${3:-}" == "token" ]]; then
+  printf 'eyJ.test-token\n'
+  exit 0
+fi
+exit 0
+SH
+  cat >"$fake_bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then
+  printf 'Logged in to github.com\n'
+  exit 0
+fi
+exit 0
+SH
+  cat >"$fake_bin/docker" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "info" ]]; then
+  exit 0
+fi
+exit 0
+SH
+  for tool in cloudflared hcloud rclone jq; do
+    cat >"$fake_bin/$tool" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  done
+  chmod +x "$fake_bin"/brew "$fake_bin"/infisical "$fake_bin"/gh "$fake_bin"/docker "$fake_bin"/cloudflared "$fake_bin"/hcloud "$fake_bin"/rclone "$fake_bin"/jq
+
+  mkdir -p "$test_home/.claude" "$test_home/.codex"
+  ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.claude/CLAUDE.md"
+  ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.codex/AGENTS.md"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$fake_bin:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --client-only
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Infisical runtime configured"* ]]
+  [[ "$output" != *"secrets.env mode 600"* ]]
+}
+
+@test "walter doctor warns when only legacy secrets.env exists" {
+  local test_home="$BATS_TEST_TMPDIR/home-legacy"
+  mkdir -p "$test_home/.config/walter-os"
+  touch "$test_home/.config/walter-os/secrets.env"
+  chmod 600 "$test_home/.config/walter-os/secrets.env"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    bash "$REPO_ROOT/scripts/walter/subcommands/doctor.sh" --client-only
+
+  [[ "$output" == *"legacy plaintext secrets.env"* ]]
+}

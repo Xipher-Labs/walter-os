@@ -57,14 +57,57 @@ checkw() {
     warn=$((warn + 1))
   fi
 }
+check_secret_runtime() {
+  local config_dir="$HOME/.config/walter-os"
+  local secrets_file="$config_dir/secrets.env"
+  local env_file="$config_dir/env"
+  local has_infisical=0
+
+  if [[ -n "${INFISICAL_CLIENT_ID:-}" ]] \
+      || ([[ -f "$env_file" ]] && grep -qE '^INFISICAL_CLIENT_ID=.+' "$env_file" 2>/dev/null); then
+    has_infisical=1
+  fi
+
+  if [[ "$has_infisical" -eq 1 && ! -f "$secrets_file" ]]; then
+    log_ok "Infisical runtime configured (no legacy secrets.env)"
+    ok=$((ok + 1))
+  elif [[ "$has_infisical" -eq 1 && -f "$secrets_file" ]]; then
+    log_warn "Infisical runtime configured; legacy plaintext secrets.env still exists"
+    warn=$((warn + 1))
+  elif [[ -f "$secrets_file" ]]; then
+    log_warn "legacy plaintext secrets.env detected; migrate to Infisical machine identity"
+    warn=$((warn + 1))
+  else
+    log_err "secrets runtime configured (Infisical identity or legacy secrets.env)"
+    fail=$((fail + 1))
+  fi
+}
+check_legacy_secret_key() {
+  local label="$1" key="$2"
+  local secrets_file="$HOME/.config/walter-os/secrets.env"
+
+  if [[ ! -f "$secrets_file" ]]; then
+    log_warn "$label skipped (no legacy secrets.env; use Infisical runtime)"
+    warn=$((warn + 1))
+    return
+  fi
+
+  if grep -E "^${key}=" "$secrets_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d "'\"" | grep -q .; then
+    log_ok "$label"
+    ok=$((ok + 1))
+  else
+    log_warn "$label"
+    warn=$((warn + 1))
+  fi
+}
 
 log_step "Walter-OS doctor"
 
 check "WALTER_OS_HOME exists ($WALTER_OS_HOME)" "[[ -d '$WALTER_OS_HOME' ]]"
 check "AGENTS.md present"             "[[ -f '$WALTER_OS_HOME/AGENTS.md' ]]"
-check "~/.claude/CLAUDE.md symlink"   "[[ -L $HOME/.claude/CLAUDE.md ]]"
-check "~/.codex/AGENTS.md symlink"    "[[ -L $HOME/.codex/AGENTS.md ]]"
-check "~/.config/walter-os/secrets.env mode 600" "[[ \$(stat -f %A '$HOME/.config/walter-os/secrets.env' 2>/dev/null) == '600' ]]"
+check "\$HOME/.claude/CLAUDE.md symlink"   "[[ -L $HOME/.claude/CLAUDE.md ]]"
+check "\$HOME/.codex/AGENTS.md symlink"    "[[ -L $HOME/.codex/AGENTS.md ]]"
+check_secret_runtime
 
 check "brew installed"                "command -v brew"
 check "infisical CLI"                 "command -v infisical"
@@ -80,8 +123,8 @@ check "docker daemon (mac orbstack)"  "docker info"
 if [[ $CLIENT_ONLY -ne 1 ]]; then
   checkw "ssh walter-vm reachable"    "ssh -o ConnectTimeout=5 walter-vm 'true'"
 fi
-checkw "Anthropic API key set"        "[[ -n \$(grep ANTHROPIC_API_KEY $HOME/.config/walter-os/secrets.env 2>/dev/null | cut -d= -f2 | tr -d \"'\\\"\") ]]"
-checkw "OpenAI API key set"           "[[ -n \$(grep OPENAI_API_KEY $HOME/.config/walter-os/secrets.env 2>/dev/null | cut -d= -f2 | tr -d \"'\\\"\") ]]"
+check_legacy_secret_key "Anthropic API key set" "ANTHROPIC_API_KEY"
+check_legacy_secret_key "OpenAI API key set" "OPENAI_API_KEY"
 
 echo
 echo "Result: $ok ok / $warn warn / $fail fail"
