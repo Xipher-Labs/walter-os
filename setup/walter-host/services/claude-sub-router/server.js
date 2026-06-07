@@ -85,6 +85,25 @@ const MODEL_MAP = loadModelMap(DEFAULT_MODEL_MAP);
 
 const ACCEPTED_MODELS = new Set(Object.keys(MODEL_MAP));
 
+function startupModelProbeEnabled() {
+  const value = (process.env.ROUTER_STARTUP_MODEL_PROBE || '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
+function startupModelProbeTimeoutMs() {
+  const parsed = Number.parseInt(process.env.ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS || '240000', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 240000;
+}
+
+const STARTUP_MODEL_PROBE_ENABLED = startupModelProbeEnabled();
+const STARTUP_MODEL_PROBE_TIMEOUT_MS = startupModelProbeTimeoutMs();
+const STARTUP_MODEL_PROBE_PROMPT = process.env.ROUTER_STARTUP_MODEL_PROBE_PROMPT ||
+  'Reply with exactly: ok';
+const STARTUP_MODEL_PROBE_HEADER = 'x-router-startup-model-probe';
+const STARTUP_MODEL_PROBE_HEADER_VALUE = randomUUID();
+let startupModelProbeStatus = STARTUP_MODEL_PROBE_ENABLED ? 'pending' : 'skipped';
+let startupModelProbeFailure = null;
+
 function resolveModel(requestedModel) {
   if (typeof requestedModel !== 'string') {
     const err = new Error('model field must be a string');
@@ -244,6 +263,109 @@ function invokeClaude(claudeModel, prompt) {
   });
 }
 
+async function postStartupModelProbe(alias) {
+  const headers = { 'Content-Type': 'application/json' };
+  headers[STARTUP_MODEL_PROBE_HEADER] = STARTUP_MODEL_PROBE_HEADER_VALUE;
+  if (REQUIRED_API_KEY) {
+    headers.Authorization = `Bearer ${REQUIRED_API_KEY}`;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STARTUP_MODEL_PROBE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${PORT}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: `openai/${alias}`,
+        messages: [{ role: 'user', content: STARTUP_MODEL_PROBE_PROMPT }],
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    const body = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${body.slice(0, 500)}`);
+    }
+    if (body.trim() === '') {
+      throw new Error('empty completion response');
+    }
+    return body;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`probe timed out after ${STARTUP_MODEL_PROBE_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function startupModelProbeReadinessError() {
+  if (startupModelProbeStatus === 'pending') {
+    return { code: 'startup_model_probe_pending', detail: 'startup model probe pending' };
+  }
+  if (startupModelProbeStatus === 'failed') {
+    return { code: 'startup_model_probe_failed', detail: startupModelProbeFailure };
+  }
+  return null;
+}
+
+function isStartupModelProbeRequest(req) {
+  return req.header(STARTUP_MODEL_PROBE_HEADER) === STARTUP_MODEL_PROBE_HEADER_VALUE;
+}
+
+async function runStartupModelProbes() {
+  if (!STARTUP_MODEL_PROBE_ENABLED) {
+    startupModelProbeStatus = 'skipped';
+    process.stdout.write(
+      JSON.stringify({ ts: new Date().toISOString(), event: 'startup_model_probe_skipped' }) + '\n'
+    );
+    return;
+  }
+
+  for (const [alias, targetModel] of Object.entries(MODEL_MAP)) {
+    process.stdout.write(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        event: 'startup_model_probe_started',
+        alias,
+        target_model: targetModel,
+      }) + '\n'
+    );
+
+    try {
+      await postStartupModelProbe(alias);
+    } catch (err) {
+      const message = `Startup model probe failed for advertised model slug "${alias}" mapped to "${targetModel}"`;
+      startupModelProbeStatus = 'failed';
+      startupModelProbeFailure = message;
+      console.error(`${message}: ${err.message}`);
+      process.stdout.write(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'error',
+          event: 'startup_model_probe_failed',
+          alias,
+          target_model: targetModel,
+          detail: err.message,
+        }) + '\n'
+      );
+      throw new Error(message);
+    }
+  }
+
+  startupModelProbeStatus = 'passed';
+  process.stdout.write(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'startup_model_probe_passed',
+      models: Object.keys(MODEL_MAP),
+    }) + '\n'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Request logger
 // ---------------------------------------------------------------------------
@@ -276,6 +398,14 @@ app.use((req, res, next) => {
 // container needs `claude /login` on the host volume.
 // Unauthenticated endpoint — used by Docker healthcheck before auth is needed.
 app.get('/health', (req, res) => {
+  const probeError = startupModelProbeReadinessError();
+  if (probeError) {
+    return res.status(503).json({
+      status: probeError.code === 'startup_model_probe_pending' ? 'starting' : 'failed',
+      detail: probeError.detail,
+    });
+  }
+
   const fs = require('fs');
   const home = process.env.HOME || '/home/node';
   const path = `${home}/.claude/.credentials.json`;
@@ -304,6 +434,11 @@ app.get('/v1/models', (req, res) => {
 // POST /v1/chat/completions — main endpoint
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, tools, stream } = req.body || {};
+
+  const probeError = startupModelProbeReadinessError();
+  if (probeError && !isStartupModelProbeRequest(req)) {
+    return res.status(503).json({ error: probeError.code, detail: probeError.detail });
+  }
 
   if (tools && Array.isArray(tools) && tools.length > 0) {
     return res.status(400).json({ error: 'tool_use_not_supported' });
@@ -356,7 +491,23 @@ app.post('/v1/chat/completions', async (req, res) => {
 // Start
 // ---------------------------------------------------------------------------
 app.listen(PORT, '0.0.0.0', () => {
-  process.stdout.write(
-    JSON.stringify({ ts: new Date().toISOString(), event: 'server_started', port: PORT }) + '\n'
-  );
+  (async () => {
+    try {
+      await runStartupModelProbes();
+      process.stdout.write(
+        JSON.stringify({ ts: new Date().toISOString(), event: 'server_started', port: PORT }) + '\n'
+      );
+    } catch (err) {
+      startupModelProbeStatus = 'failed';
+      startupModelProbeFailure = startupModelProbeFailure || 'Startup model probe failed';
+      process.stdout.write(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'error',
+          event: 'server_started_with_failed_startup_model_probe',
+          detail: startupModelProbeFailure,
+        }) + '\n'
+      );
+    }
+  })();
 });
