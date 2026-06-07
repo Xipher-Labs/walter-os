@@ -200,7 +200,9 @@ flow is:
    `~/.config/walter-os/overlay/.env.local`.
 5. The wizard runs `walter providers configure` to let the operator select
    which providers to use (see `docs/specs/phase-w-4-provider-choice.md`).
-6. All subsequent agent behavior is driven by the OSS core; the overlay adds
+6. The operator runs `walter ai configure` to declare available AI runtimes
+   and write private `WALTER_MODEL_*` router preferences.
+7. All subsequent agent behavior is driven by the OSS core; the overlay adds
    the operator's personal context on top.
 
 The agent should never write personal config to the repo itself. If asked to
@@ -234,6 +236,14 @@ sets shell variables that scripts, hooks, and CLI tools read directly.
 | `WALTER_COPYRIGHT_YEAR` | Copyright year |
 | `WALTER_MATRIX_USER` | Matrix/Synapse default admin user printed in onboarding hints |
 | `WALTER_OPERATOR_EMAIL` | Operator email for ACME/Let's Encrypt and GitHub Codeowners |
+| `WALTER_MODEL_BACKEND_REVIEW` | Preferred model/runtime for backend, infrastructure, security, and data-correctness review |
+| `WALTER_MODEL_FRONTEND` | Preferred model/runtime for UX, UI, visual critique, and accessibility writing |
+| `WALTER_MODEL_LONGFORM` | Preferred model/runtime for docs, essays, proposals, and narrative content |
+| `WALTER_MODEL_QUICK_REFACTOR` | Preferred model/runtime for small code edits and mechanical refactors |
+| `WALTER_MODEL_PHI` | Local-only model/runtime for PHI, medical, privileged, or compliance-sensitive data |
+| `WALTER_MODEL_BRAINSTORM` | Preferred model/runtime list for planning, strategy, second opinions, and research synthesis |
+| `WALTER_MODEL_DEFAULT` | Fallback model/runtime when no stronger domain applies |
+| `WALTER_MODEL_OVERRIDE` | Per-invocation override for non-PHI domains |
 
 ### Precedence order (most-specific wins)
 
@@ -245,6 +255,11 @@ sets shell variables that scripts, hooks, and CLI tools read directly.
 The load order in `install.sh` and `bin/walter-os` implements this: the overlay
 is sourced first, then `.env.local` is sourced on top. Any variable set in
 `.env.local` overrides the overlay value. Shell exports override both.
+
+AI runtime availability and model-routing preferences written by
+`walter ai configure` live in `~/.config/walter-os/overlay/personal.env` so they
+are operator-private and shared across checkouts. Use project `.env.local`
+overrides only when a checkout intentionally needs a different routing policy.
 
 ### Bootstrap
 

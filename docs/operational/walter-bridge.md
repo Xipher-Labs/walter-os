@@ -32,11 +32,15 @@ agent.
 ## Model aliases (current config)
 
 [`setup/walter-host/services/litellm/config.yaml`](../../setup/walter-host/services/litellm/config.yaml)
-ships with **37 model aliases across 17 providers** (Anthropic, OpenAI,
-Google Gemini, Groq, DeepSeek, Mistral, Cohere, Azure OpenAI, AWS
-Bedrock, Google Vertex AI, xAI Grok, Perplexity, Together AI,
-DeepInfra, Replicate, Ollama, vLLM). Each provider is gracefully disabled
-when its env var is unset.
+ships with **18 model aliases** across direct API providers, subscription
+routers, OpenRouter, and Gemini image generation. Each provider is gracefully
+disabled when its env var is unset.
+
+Walter-Bridge is gateway configuration, not capability declaration. Run
+`walter ai configure` to record which runtimes are available on this
+machine/operator overlay; see
+[`ai-capability-profiles.md`](ai-capability-profiles.md) and
+[`multi-model-routing.md`](multi-model-routing.md).
 
 The 8 most commonly used aliases:
 
@@ -46,10 +50,10 @@ The 8 most commonly used aliases:
 | `haiku` | Claude Haiku | Fast, cheap Anthropic model |
 | `sonnet` | Claude Sonnet | Default for coding and content |
 | `opus` | Claude Opus | High reasoning tasks, complex refactors |
-| `gpt` | GPT-4o | OpenAI alternative |
-| `claude-sub` | Claude.ai Pro (via CCR router) | Subscription fallback |
-| `gemini-sub` | Gemini Advanced (via proxy) | Subscription fallback |
-| `codex-sub` | OpenAI Codex (via proxy) | Subscription fallback |
+| `gpt` | GPT-5.5 | OpenAI alternative |
+| `claude-sub` | Claude.ai Pro (via subscription router) | Optional subscription fallback; use only when declared available |
+| `gemini-sub` | Gemini Advanced (via proxy) | Optional subscription fallback; use only when declared available |
+| `codex-sub` | OpenAI Codex (via proxy) | Optional subscription fallback; use only when declared available |
 
 To add a new alias, add an entry to the `model_list` section of
 `config.yaml` and restart: `docker compose restart litellm`.

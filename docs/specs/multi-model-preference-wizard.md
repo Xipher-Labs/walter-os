@@ -1,4 +1,4 @@
-# Multi-Model Preference Wizard — spec
+# Multi-Model Preference Routing — spec
 
 **Status**: Partially implemented (core routing shipped; full LiteLLM usage analytics can iterate)
 **Issue**: #24 (`[FEAT] -OPERATIONS- multi-model preference wizard + domain-routing workflow`)
@@ -35,12 +35,12 @@ Walter-OS's value isn't picking the "best" model. It's **orchestrating each mode
 
 | # | Decision | Why |
 |---|---|---|
-| D-1 | **Preferences live in `~/.config/walter-os/overlay/personal.env`** with `WALTER_MODEL_*` env var keys. | Same overlay surface that ADR 0013 + the new env-allowlist parser (P1-09) already use. No new config surface to maintain. |
-| D-2 | **Six preference axes**: `BACKEND_REVIEW`, `FRONTEND`, `LONGFORM`, `QUICK_REFACTOR`, `PHI`, `BRAINSTORM`, plus a `DEFAULT` fallback. | Matches the bullet list in #24 (operator's design). Adding more axes later is backward-compatible (new env vars; old code keeps reading `DEFAULT`). |
-| D-3 | **Values are LiteLLM `model_name` aliases** as defined in `setup/walter-host/services/litellm/config.yaml` (e.g. the currently-shipped aliases `sonnet`, `opus`, `gpt`, `cheap`, `openrouter/claude`, `local-ollama` — list snapshotted at spec-writing time; the authoritative catalogue is the LiteLLM config). The wizard examples earlier in this doc that use `codex` / `claude` are SHORTHAND CHOICES the wizard offers and translates to the corresponding alias under the hood (e.g., "claude" → "sonnet" or "opus" depending on selection); the env vars persisted to personal.env carry the resolved aliases, not the shorthand. | One source of truth for what each name means. LiteLLM `config.yaml` is the catalogue. |
+| D-1 | **Preferences live in `~/.config/walter-os/overlay/personal.env`** with `WALTER_MODEL_*` env var keys. `walter ai configure` is the operator-facing command for declaring available AI runtimes and router preferences. | Same overlay surface that ADR 0013 + the new env-allowlist parser (P1-09) already use. No new config surface to maintain. |
+| D-2 | **Six domain preference axes plus `DEFAULT`**: `BACKEND_REVIEW`, `FRONTEND`, `LONGFORM`, `QUICK_REFACTOR`, `PHI`, `BRAINSTORM`, plus a `DEFAULT` fallback. | Matches the bullet list in #24 (operator's design). Adding more axes later is backward-compatible (new env vars; old code keeps reading `DEFAULT`). |
+| D-3 | **Values are runtime/model aliases** such as `codex`, `claude`, `gemini`, and `local-ollama`. `walter ai configure` persists router preferences to `~/.config/walter-os/overlay/personal.env`; `providers.yaml` and the LiteLLM config remain gateway/provider selection surfaces. | Capability declaration is separate from gateway alias configuration, so operators can use Claude-only, Codex-only, Gemini-only, local-only, or mixed installs without pretending every runtime is available. |
 | D-4 | **Comma-separated parallel mode**: `WALTER_MODEL_BACKEND_REVIEW=codex,claude` means "dispatch to Codex AND Claude in parallel, surface both outputs." Maps to the 3-round review pattern. Implementation note: `llm_invoke` today accepts a single model alias; the per-skill resolver (D-7 — `walter_model_for`) is responsible for parsing the comma-list and invoking `llm_invoke` N times in parallel, then merging the outputs. `llm_invoke` itself does NOT change. | Single-value = single model; comma-list = team. The plan should call out the resolver's parallel-fanout pattern explicitly. |
 | D-5 | **PHI is an override, not a preference.** `WALTER_MODEL_PHI=local-ollama` (the default) is a HARD cap — any skill that detects PHI tags refuses non-local models regardless of other settings. The current `skills/medical-data-compliance/SKILL.md` describes the POLICY but does not implement the env-driven routing check; this spec adds the implementation to the new `walter_model_for` resolver (D-7) so PHI tasks route locally regardless of other env vars. | The skill defines the rule; this spec wires it up so the rule has teeth at the routing layer. |
-| D-6 | **Interactive wizard at `setup/personal-overlay-init.sh`** asks the 6 axes during overlay scaffold. Re-run-friendly. | Operators new to the framework get good defaults; existing operators can re-run when they want to change. |
+| D-6 | **`walter ai configure`** writes both availability metadata and the managed `WALTER_MODEL_*` preference block. The overlay scaffold can point operators to this command instead of owning a separate wizard. | Keeps runtime declaration re-run-friendly and avoids duplicating routing prompts across setup scripts. |
 | D-7 | **Per-skill resolution function `walter_model_for <domain>`** lives in `scripts/walter/lib/model-router.sh` (new) and reads the env vars. Skills consult it instead of hardcoding. | Single point of truth. Easy to test. Skills don't all need to be rewritten at once. |
 | D-8 | **No HARD-LOCK to any model.** Operator can always override any skill via env var on a per-invocation basis (`WALTER_MODEL_OVERRIDE=opus walter ask ...`). | Per #24 AC-final bullet. Critical to maintain operator autonomy. |
 | D-9 | **`walter status --models`** subcommand reports usage breakdown per model + per domain + cost attribution. Composes with `ai-spend-tripwire`. | Observability is part of the feature. Without it, "did my preference actually take effect?" is unanswerable. |
@@ -60,10 +60,10 @@ Walter-OS's value isn't picking the "best" model. It's **orchestrating each mode
   - `DEFAULT`: `claude`
 - [x] bats coverage in `tests/walter/model-router.bats` for: unset → default; single value; comma-separated parallel; `WALTER_MODEL_OVERRIDE` always wins (except PHI).
 
-### AC-2 — Interactive wizard
-- [x] `setup/personal-overlay-init.sh` adds a model preference step with sensible defaults.
-- [x] Output written to `~/.config/walter-os/overlay/personal.env` as `WALTER_MODEL_<AXIS>=<value>` lines. Existing values are preserved.
-- [x] Wizard is non-interactive when stdin is not a TTY (CI / automated bootstrap). Falls back to defaults.
+### AC-2 — Profile-based configure command
+- [x] `walter ai configure` provides profile-based model preference setup with sensible defaults.
+- [x] Output written to `~/.config/walter-os/overlay/personal.env` as `WALTER_MODEL_<AXIS>=<value>` lines. Existing unrelated values are preserved.
+- [x] Command is non-interactive when stdin is not a TTY (CI / automated bootstrap). Falls back to defaults.
 - [x] `contexts/_examples/personal.env.example` documents all 7 vars with the recommended values and comments.
 
 ### AC-3 — Update 5 existing skills to consult preferences

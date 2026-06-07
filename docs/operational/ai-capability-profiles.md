@@ -23,7 +23,14 @@ The capability profile is private operator metadata written to:
 ~/.config/walter-os/ai-capabilities.yaml
 ```
 
-It does not store API keys or secrets.
+`walter ai configure` also writes the matching model-router preferences to:
+
+```text
+~/.config/walter-os/overlay/personal.env
+```
+
+It updates only the managed `WALTER_MODEL_*` keys and preserves unrelated
+operator settings. Neither file stores API keys or secrets.
 
 ## Path Decision
 
@@ -39,8 +46,8 @@ contexts/_examples/ai-capabilities.yaml.example
 ```
 
 It is an example rather than a runtime template because `walter ai configure`
-is the source of generated config. Keep the example synchronized with the
-generated schema and validate either file with:
+is the source of generated config and model-router preferences. Keep the
+example synchronized with the generated schema and validate either file with:
 
 ```bash
 walter ai validate
@@ -120,3 +127,12 @@ exists. If a `WALTER_MODEL_*` route points at a provider declared as
 `disabled`, the resolver keeps the route for backward compatibility but prints
 a warning so workflows do not silently assume Codex, Claude, Gemini, Copilot, or
 Ollama are available.
+
+After changing profiles, start a new shell or load the generated environment
+through the Walter-OS allowlist parser before running long-lived agent workflows
+that inherited an older environment:
+
+```bash
+source "$WALTER_OS_HOME/scripts/walter/lib/env-loader.sh"
+walter_env_load_allowlist "${WALTER_CONFIG:-$HOME/.config/walter-os}/overlay/personal.env"
+```

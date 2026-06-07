@@ -7,6 +7,21 @@ provider. The operator declares preferences in:
 ~/.config/walter-os/overlay/personal.env
 ```
 
+Generate the standard preferences from the declared AI capability profile:
+
+```bash
+walter ai configure --profile mixed
+```
+
+That command writes both `~/.config/walter-os/ai-capabilities.yaml` and the
+managed `WALTER_MODEL_*` block in `~/.config/walter-os/overlay/personal.env`.
+Manual edits are still supported for advanced operators.
+
+For the `mixed` profile, `WALTER_MODEL_PHI` is written as `ollama` because the
+capability profile declares the local Ollama runtime. The unset resolver default
+remains `local-ollama`; both values are treated as local-only by
+`walter_model_for phi`.
+
 The core resolver lives at:
 
 ```text
