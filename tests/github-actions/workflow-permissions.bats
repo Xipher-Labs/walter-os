@@ -34,12 +34,26 @@ assert_permission_line() {
 }
 
 @test "CLA gate does not request broad actions or contents write scopes" {
+  top_permissions="$(workflow_permissions_block "$REPO_ROOT/.github/workflows/cla.yml")"
+  [[ "$top_permissions" == *"contents: read"* ]]
+  [[ "$top_permissions" != *"issues: write"* ]]
+  [[ "$top_permissions" != *"pull-requests: write"* ]]
+  [[ "$top_permissions" != *"statuses: write"* ]]
   ! grep -q '^  actions: write' "$REPO_ROOT/.github/workflows/cla.yml"
   ! grep -q '^  contents: write' "$REPO_ROOT/.github/workflows/cla.yml"
-  assert_permission_line "$REPO_ROOT/.github/workflows/cla.yml" "contents" "read"
-  assert_permission_line "$REPO_ROOT/.github/workflows/cla.yml" "issues" "write"
-  assert_permission_line "$REPO_ROOT/.github/workflows/cla.yml" "pull-requests" "write"
-  assert_permission_line "$REPO_ROOT/.github/workflows/cla.yml" "statuses" "write"
+  grep -Eq '^[[:space:]]*issues:[[:space:]]*write[[:space:]]*#.*comments on CLA signatures' "$REPO_ROOT/.github/workflows/cla.yml"
+  grep -Eq '^[[:space:]]*pull-requests:[[:space:]]*write[[:space:]]*#.*labels / updates PR state' "$REPO_ROOT/.github/workflows/cla.yml"
+  grep -Eq '^[[:space:]]*statuses:[[:space:]]*write[[:space:]]*#.*publishes CLA commit status' "$REPO_ROOT/.github/workflows/cla.yml"
+}
+
+@test "CodeQL scopes SARIF upload permission to analysis job" {
+  top_permissions="$(workflow_permissions_block "$REPO_ROOT/.github/workflows/codeql.yml")"
+
+  [[ "$top_permissions" == *"actions: read"* ]]
+  [[ "$top_permissions" == *"contents: read"* ]]
+  [[ "$top_permissions" != *"security-events: write"* ]]
+
+  grep -Eq '^[[:space:]]*security-events:[[:space:]]*write[[:space:]]*#.*upload SARIF results' "$REPO_ROOT/.github/workflows/codeql.yml"
 }
 
 @test "OSV scanner keeps SARIF upload permission scoped to reusable job" {
