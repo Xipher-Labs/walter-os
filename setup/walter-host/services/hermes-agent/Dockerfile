@@ -15,17 +15,23 @@
 #
 # Build:
 #   docker compose --profile hermes-agent build           # via the compose block
-#   docker build --build-arg BASE_VERSION=v2026.5.7 .     # standalone
+#   docker build \
+#     --build-arg BASE_VERSION=v2026.5.7 \
+#     --build-arg BASE_IMAGE_REF=nousresearch/hermes-agent:v2026.5.7@sha256:9462082533e603fc6ba4259c51d7722dcd8cbb0f348488ceedc35d06fa8f9324 \
+#     .                                                   # standalone
 #
 # Versioning convention: tag this image `walter-os/hermes-agent:<BASE_VERSION>-stt`
 # so the upstream version is preserved in the tag. When upstream bumps to
-# v2026.5.8, bump BASE_VERSION and rebuild — the `-stt` suffix marks the flavor.
+# v2026.5.8, bump BASE_VERSION + BASE_IMAGE_REF together and rebuild — the
+# `-stt` suffix marks the flavor.
 
 ARG BASE_VERSION=v2026.5.7
+ARG BASE_IMAGE_REF=nousresearch/hermes-agent:v2026.5.7@sha256:9462082533e603fc6ba4259c51d7722dcd8cbb0f348488ceedc35d06fa8f9324
 # tag: nousresearch/hermes-agent:v2026.5.7
-FROM nousresearch/hermes-agent:${BASE_VERSION}@sha256:9462082533e603fc6ba4259c51d7722dcd8cbb0f348488ceedc35d06fa8f9324
+FROM ${BASE_IMAGE_REF}
 
 ARG BASE_VERSION
+ARG BASE_IMAGE_REF
 ARG FASTER_WHISPER_VERSION=1.2.1
 ENV HF_HOME=/opt/data/.cache/huggingface
 
@@ -54,4 +60,4 @@ LABEL org.opencontainers.image.title="walter-os/hermes-agent" \
       org.opencontainers.image.licenses="MIT" \
       walter-os.flavor="stt" \
       walter-os.faster-whisper="${FASTER_WHISPER_VERSION}" \
-      walter-os.upstream="nousresearch/hermes-agent:${BASE_VERSION}"
+      walter-os.upstream="${BASE_IMAGE_REF}"

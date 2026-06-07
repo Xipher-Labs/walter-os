@@ -5,7 +5,8 @@ Alternative to OpenClaw with 20+ platform integrations and an optional skill-lea
 
 Image: `walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION}-stt` (defaults to
 `walter-os/hermes-agent:v2026.5.7-stt`, built locally from `Dockerfile`, and
-extends `nousresearch/hermes-agent:${HERMES_AGENT_BASE_VERSION}` with pinned
+extends `HERMES_AGENT_BASE_IMAGE_REF`, a digest-pinned
+`nousresearch/hermes-agent:<version>@sha256:<digest>` reference, with pinned
 `faster-whisper` for local privacy-preserving STT — see `Dockerfile` header for
 the rationale).
 Dashboard: `https://hermes.${WALTER_DOMAIN}`
@@ -13,8 +14,10 @@ API: `http://localhost:8642` (OpenAI-compatible, local-only)
 
 **Upgrading the upstream Hermes version:**
 1. Bump `HERMES_AGENT_BASE_VERSION` in `.env`.
-2. `docker compose --profile hermes-agent build --no-cache` to rebuild.
-3. `docker compose --profile hermes-agent up -d --force-recreate`.
+2. Bump `HERMES_AGENT_BASE_IMAGE_REF` to the matching
+   `nousresearch/hermes-agent:<version>@sha256:<digest>`.
+3. `docker compose --profile hermes-agent build --no-cache` to rebuild.
+4. `docker compose --profile hermes-agent up -d --force-recreate`.
 
 For the decision matrix (Hermes vs OpenClaw vs vanilla LiteLLM-as-agent), see
 `docs/operational/agent-runtimes-comparison.md`.

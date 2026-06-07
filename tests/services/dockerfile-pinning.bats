@@ -46,6 +46,7 @@ setup() {
   dockerfile="$ROUTER_ROOT/hermes-agent/Dockerfile"
 
   grep -q '^# tag: nousresearch/hermes-agent:v2026.5.7$' "$dockerfile"
-  grep -q '^FROM nousresearch/hermes-agent:${BASE_VERSION}@sha256:' "$dockerfile"
+  grep -q '^ARG BASE_IMAGE_REF=nousresearch/hermes-agent:v2026.5.7@sha256:' "$dockerfile"
+  grep -q '^FROM ${BASE_IMAGE_REF}$' "$dockerfile"
   ! grep -q '^FROM nousresearch/hermes-agent:${BASE_VERSION}$' "$dockerfile"
 }
