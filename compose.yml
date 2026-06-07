@@ -72,7 +72,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./setup/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U walter"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -145,7 +145,7 @@ services:
     volumes:
       - plane_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PLANE_POSTGRES_USER:-plane}"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -888,7 +888,7 @@ services:
     volumes:
       - penpot_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U penpot -d penpot"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -1118,7 +1118,7 @@ services:
     volumes:
       - synapse_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 10

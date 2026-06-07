@@ -71,12 +71,43 @@ requires the one-minor-version notice cycle.
 
 Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime enforcement (#260), tamper-resistant capability mint approvals (#264), capability hook tokenization cleanup (#262), sandbox key-scan test decoupling (#263), vendored-skill pin enforcement (#255), Codex startup degradation diagnostics (#248/#259), optional app profiles (#207/#208/#210/#211/#212/#213), severity-gate runtime implementation, and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
 
+### Added
+
+- **Audit-chain Loki verification (#122/#332).** Extends
+  `walter-os audit verify-chain --from-loki` from fixture-only checks to
+  live Loki `query_range` calls via `--loki-url` or
+  `WALTER_AUDIT_LOKI_URL`, while preserving the same local hash-chain
+  verifier for Loki-shipped rows.
+- **MCP stdio tool-definition drift detection (#122).** Adds a
+  `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
+  persists approved tool baselines via `walter-os baseline-mcp-tools`, and
+  emits critical `mcp-tool-shadowing` findings when tool names,
+  descriptions, or schemas change. Probes are gated against the approved
+  server-registry baseline before any MCP command is spawned, and disabled or
+  manual/high-risk entries are not executed by the audit. HTTP/SSE transports
+  remain out of scope for this first runtime slice.
+- **Audit-chain Loki fixture verification (#122).** Adds
+  `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
+  operators can verify Loki-shipped audit-chain rows with the same local
+  hash-chain verifier before live Loki querying lands.
+
 ### Changed
 
+- **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
+  `walter-repo-config.yaml` policy axis, reports the effective mode during
+  validation, and keeps the hard-limit floor non-overridable in every mode.
+- **Signed Forgejo PR webhook adapter (#302).** Adds
+  `plane-pr-sync-webhook.sh` for HMAC-verified Forgejo/Gitea merge webhooks,
+  resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and
+  fails closed before Plane/Forgejo mutation on invalid signatures or ambiguous
+  markers.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
   max-fix-attempts escalation cap.
+- **Release operations doctor (#307).** Adds a read-only
+  `walter-os release doctor` check for release version, changelog, tag,
+  PR-review, status-check, issue-link, and stacked-PR hygiene.
 - **Plane ↔ Forgejo PR sync wiring (#237).** Adds a safe
   `plane-pr-sync-trigger.sh` adapter for Forgejo/Gitea `pull_request` payloads,
   records stable `walter-plane-issue:<id>` markers in PR comments, documents
@@ -195,6 +226,13 @@ rows, audit telemetry wiring, and release provenance/reproducibility gates.
   doctor status, and prints a rollback hint after local upgrades. The version
   update notice now points operators to `walter-os upgrade --dry-run` and a
   targeted `--target <tag>` command.
+
+### Fixed
+
+- **Control Tower `/api/spend` local-dev fallback (#312).** Network and
+  fetch failures now return the same safe zero-agent fallback payload as
+  non-2xx LiteLLM responses, so local development no longer accepts a
+  500 response when LiteLLM is unavailable.
 
 ---
 
