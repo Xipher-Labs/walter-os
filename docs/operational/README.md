@@ -18,6 +18,8 @@ commands, expected outputs, and troubleshooting. The audience is a technical ope
 | [`postiz-analytics-export.md`](postiz-analytics-export.md) | How to export Postiz analytics for manual ingestion into the DevRel analytics Postgres (Phase V workaround while Twitter API approval is pending) |
 | [`known-issues.md`](known-issues.md) | Active known issues on Walter-VM: claude-code-router daemon bind issue, headscale-admin `/admin/` path quirk, subscription proxy status |
 | [`v0.6.1-release-notes.md`](v0.6.1-release-notes.md) | Patch-release notes for provider selection, audit-chain hardening, upgrade commands, and remaining security follow-ups |
+| [`ai-capability-profiles.md`](ai-capability-profiles.md) | Operator AI runtime availability profiles, `walter ai configure`, and private capability metadata |
+| [`multi-model-routing.md`](multi-model-routing.md) | Task-domain model routing, `WALTER_MODEL_*` preferences, override rules, and PHI/local safeguards |
 | [`scorecard-hygiene.md`](scorecard-hygiene.md) | OpenSSF Scorecard alert disposition for project hygiene, including code-visible fixes and manual GitHub settings |
 | [`pinned-dependency-alerts.md`](pinned-dependency-alerts.md) | Documented dispositions for pinned dependency, release action, and upstream workflow warnings |
 | [`capability-tokens.md`](capability-tokens.md) | Capability-token runtime state, daily-audit hygiene checks, and operator recovery steps |

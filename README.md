@@ -192,8 +192,11 @@ The AI capability profile writes private metadata to
 `~/.config/walter-os/ai-capabilities.yaml` so Walter knows which AI tools are
 actually available for review, backend/security work, planning, UX/UI, image
 generation, research, and local-only compliance. Built-in profiles are
-`claude-only`, `codex-only`, `gemini-only`, `local-only`, and `mixed`. See
-[`ai-capability-profiles.md`](docs/operational/ai-capability-profiles.md).
+`claude-only`, `codex-only`, `gemini-only`, `local-only`, and `mixed`.
+It also writes the matching `WALTER_MODEL_*` router preferences to
+`~/.config/walter-os/overlay/personal.env`. See
+[`ai-capability-profiles.md`](docs/operational/ai-capability-profiles.md) and
+[`multi-model-routing.md`](docs/operational/multi-model-routing.md).
 
 ### Mode 3 — Self-hosted stack (1–2h, optional)
 
@@ -357,7 +360,7 @@ The operator's personal overlay lives at `~/.config/walter-os/overlay/` (private
 
 | Path | What it does |
 |---|---|
-| `~/.config/walter-os/overlay/personal.env` | Env vars (`WALTER_DOMAIN`, `WALTER_BRANCH_FLOW`, `WALTER_CONTEXT`, …) |
+| `~/.config/walter-os/overlay/personal.env` | Env vars (`WALTER_DOMAIN`, `WALTER_BRANCH_FLOW`, `WALTER_CONTEXT`, AI `WALTER_MODEL_*` routing, …) |
 | `~/.config/walter-os/overlay/contexts/<ctx>/AGENTS.md` | Per-context AGENTS.md override (loads instead of the repo template) |
 | `~/.config/walter-os/overlay/preferences.md` | Tooling preferences (shell, package managers, editor, container runtime) |
 | `~/.config/walter-os/egress-allowlist.txt` | Network egress allowlist — `walter-os egress {add,remove,list,test,import}` to manage |
@@ -418,6 +421,8 @@ The README only covers the top of the funnel. Deep-dive docs by topic:
 | Self-hosted stack catalogue (25+ services) | [`docs/operational/stack-overview.md`](docs/operational/stack-overview.md) |
 | VM sizing per profile combo | [`docs/operational/resource-budget.md`](docs/operational/resource-budget.md) |
 | LiteLLM gateway + CLI client setup | [`docs/operational/walter-bridge.md`](docs/operational/walter-bridge.md) |
+| AI capability profiles + runtime availability | [`docs/operational/ai-capability-profiles.md`](docs/operational/ai-capability-profiles.md) |
+| Multi-model task routing | [`docs/operational/multi-model-routing.md`](docs/operational/multi-model-routing.md) |
 | Default-deny egress allowlist guide | [`docs/operational/network-egress.md`](docs/operational/network-egress.md) |
 | Customization patterns (4 layers) | [`docs/operational/customization-patterns.md`](docs/operational/customization-patterns.md) |
 | Symptom-cause-fix troubleshooting | [`docs/operational/troubleshooting.md`](docs/operational/troubleshooting.md) |

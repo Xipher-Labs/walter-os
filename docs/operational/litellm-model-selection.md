@@ -19,24 +19,30 @@ curl -s "$LITELLM_BASE_URL/chat/completions" \
   -d '{"model": "sonnet", "messages": [{"role": "user", "content": "..."}]}'
 ```
 
-The alias-to-model mapping lives entirely in `setup/litellm/config.yaml`.
+The alias-to-model mapping lives in
+`setup/walter-host/services/litellm/config.yaml` for the Walter-Bridge stack.
 Agents never hard-code provider names or model slugs.
 
 If `LITELLM_BASE_URL` is unavailable, `scripts/agents/lib/llm.sh` falls back
 to direct Anthropic (`ANTHROPIC_API_KEY`), then enterprise key
 (`ANTHROPIC_ENTERPRISE_KEY` when `WALTER_AGENT_CONTEXT=work`).
 
-This guide covers model aliases once an LLM backend exists. To declare which AI
-tools the operator actually has available for planning, review, UX/UI, image
-generation, research, or local-only compliance, run:
+This guide covers model aliases once an LLM backend exists. LiteLLM aliases
+describe what the gateway can serve; `walter ai configure` declares what this
+operator actually has available. To declare which AI tools can be used for
+planning, review, UX/UI, image generation, research, or local-only compliance,
+run:
 
 ```bash
 walter ai configure --profile mixed
 walter ai status
 ```
 
-See [`ai-capability-profiles.md`](ai-capability-profiles.md) for Claude-only,
-Codex-only, Gemini-only, local-only, and mixed routing profiles.
+See [`ai-capability-profiles.md`](ai-capability-profiles.md) and
+[`multi-model-routing.md`](multi-model-routing.md) for Claude-only,
+Codex-only, Gemini-only, local-only, and mixed routing profiles. Workflows
+should query the model/runtime resolver before dispatching to Codex, Claude,
+Gemini/nanobanana, direct APIs, or local LLMs.
 
 ---
 
@@ -77,7 +83,7 @@ Choose the alias that matches the task's cost/quality trade-off.
 
 | Alias | Provider model | Notes |
 |---|---|---|
-| `walter-llm-local` | ollama/llama3.1 | Hardcoded to llama3.1. To change, edit `setup/litellm/config.yaml` and restart the LiteLLM container |
+| `walter-llm-local` | ollama/llama3.1 | Hardcoded to llama3.1. To change, edit `setup/walter-host/services/litellm/config.yaml` and restart the LiteLLM container |
 | `walter-llm-vllm` | openai/walter-vllm | GPU-accelerated vLLM. The loaded model is configured on the vLLM process, not via LiteLLM |
 | `walter-embed` | ollama/nomic-embed-text | Embeddings; required by Phase M RAG |
 
@@ -85,12 +91,14 @@ Choose the alias that matches the task's cost/quality trade-off.
 
 ## Privacy tier rules
 
-**PHI-tagged tasks MUST route to `walter-llm-local`.**
+**PHI-tagged tasks MUST route to a local alias.**
 
-The `medical-data-compliance` skill enforces this. Any agent processing data
-tagged with `medical/*` or matching PHI patterns must:
+The `medical-data-compliance` skill and `walter_model_for phi` enforce this.
+The resolver defaults to `local-ollama`; Walter-Bridge installations may map
+that local route to `walter-llm-local` or `walter-llm-vllm` behind LiteLLM.
+Any agent processing data tagged with `medical/*` or matching PHI patterns must:
 
-1. Use alias `walter-llm-local` (or `walter-llm-vllm` if the local GPU server is up).
+1. Use a local alias such as `local-ollama`, `walter-llm-local`, or `walter-llm-vllm`.
 2. Never call any external API alias (`sonnet`, `gpt`, `gemini`, etc.).
 3. Log the routing decision with `[LOCAL-ROUTED]` prefix so audits can verify.
 
@@ -108,7 +116,7 @@ should prefer `walter-llm-local` but are not hard-blocked on external routes.
 
 Three steps:
 
-### 1. Edit `setup/litellm/config.yaml`
+### 1. Edit `setup/walter-host/services/litellm/config.yaml`
 
 Add an entry under the appropriate tier section:
 
@@ -146,10 +154,10 @@ section:
 
 ```bash
 # Via Docker Compose (typical setup)
-docker compose -f setup/docker-compose.litellm.yml restart litellm
+docker compose -f setup/walter-host/services/litellm/compose.yml restart litellm
 
 # Or, if running standalone
-litellm --config setup/litellm/config.yaml --port 4000
+litellm --config setup/walter-host/services/litellm/config.yaml --port 4000
 ```
 
 The new alias is immediately available to all agents after restart. No agent
