@@ -60,10 +60,10 @@ _check_workflow_pins() {
 @test "readme-lint uses a pinned markdownlint package invocation" {
   local workflow="$REPO_ROOT/.github/workflows/readme-lint.yml"
 
-  run grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+' "$workflow"
+  run grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)' "$workflow"
   [ "$status" -eq 0 ]
 
-  run grep -Eq 'npm install -g markdownlint-cli([[:space:]]|$)' "$workflow"
+  run grep -Eq 'npm (install|i) -g markdownlint-cli([[:space:]]|$)' "$workflow"
   [ "$status" -eq 1 ]
 }
 
