@@ -104,6 +104,7 @@ _var_owned_by_llm_category() {
   # Check if this var belongs to the selected LLM provider
   case "${llm_choice}:${var}" in
     openai:OPENAI_API_KEY)   return 0 ;;
+    gemini:GEMINI_API_KEY)   return 0 ;;
     ollama:OLLAMA_BASE_URL)  return 0 ;;
   esac
   return 1
@@ -140,10 +141,11 @@ patch_env_for_category() {
         [litellm]="LITELLM_BASE_URL LITELLM_API_KEY"
         [anthropic]="ANTHROPIC_API_KEY ANTHROPIC_ENTERPRISE_KEY"
         [openai]="OPENAI_API_KEY"
+        [gemini]="GEMINI_API_KEY"
         [ollama]="OLLAMA_BASE_URL"
       )
       _walter_providers_nounset_restore
-      _patch_vars "$selected" "$env_file" "litellm anthropic openai ollama" llm_vars
+      _patch_vars "$selected" "$env_file" "litellm anthropic openai gemini ollama" llm_vars
       ;;
 
     project_management)

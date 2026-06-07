@@ -69,10 +69,32 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime enforcement (#260), tamper-resistant capability mint approvals (#264), capability hook tokenization cleanup (#262), sandbox key-scan test decoupling (#263), vendored-skill pin enforcement (#255), Codex startup degradation diagnostics (#248/#259), optional app profiles (#207/#208/#210/#211/#212/#213), severity-gate runtime implementation, and OpenClaw shrinkwrap implementation (#132 spec landed in v0.4.5 PR #140).
+No user-facing changes yet.
+
+## [0.6.1] — 2026-06-07
+
+**Post-v0.6 operational hardening release.**
+
+This release collects the follow-up work that landed after the OSS Trust
+runtime-hardening cut: audit-chain signing and Rekor anchoring, AI-stack
+resilience/readiness tracking, provider-selection polish, Control Tower
+operational UX improvements, and explicit issue coverage for GitHub
+code-scanning alerts.
+
+Remaining post-release follow-ups are tracked in the open security and
+operations issues: #122, #123, #225, #235, #342, #363, and #390-#396.
 
 ### Added
 
+- **Configurable AI provider selection (#397).** Extends
+  `walter providers configure --category llm` with direct Gemini support,
+  documents that Claude/Codex are supported tools rather than mandatory
+  dependencies, and keeps provider choices in
+  `~/.config/walter-os/providers.yaml` plus private env activation.
+- **Code-scanning remediation tracking (#390-#396).** Adds grouped follow-up
+  issues for open GitHub CodeQL/Scorecard alerts covering Control Tower file
+  IO, safe temp directories, randomness, least-privilege workflow tokens,
+  pinned dependencies, and Scorecard hygiene.
 - **MCP tool-definition drift detection (#122/#331).** Adds a
   `tools/list` JSON-RPC probe for stdio, HTTP, and SSE MCPs from Claude settings,
   persists approved tool baselines via `walter-os baseline-mcp-tools`, and
@@ -1276,7 +1298,8 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.6.0
 [0.5.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.1
 [0.5.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.0

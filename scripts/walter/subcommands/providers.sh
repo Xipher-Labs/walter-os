@@ -84,7 +84,7 @@ CATEGORY_ORDER=(llm project_management git secrets web_analytics search embeddin
 # Same bash-3.2-under-`set -u` workaround as CATEGORY_LABELS above.
 set +u
 declare -A CATEGORY_OPTIONS=(
-  [llm]="litellm:LiteLLM-proxy-all (self-host)|anthropic:Direct Anthropic|openai:Direct OpenAI|ollama:Ollama local"
+  [llm]="litellm:LiteLLM-proxy-all (self-host)|anthropic:Direct Anthropic|openai:Direct OpenAI|gemini:Direct Gemini|ollama:Ollama local"
   [project_management]="plane:Plane self-host|linear:Linear|plane_cloud:Plane cloud|none:None"
   [git]="forgejo:Forgejo self-host|github:GitHub|gitlab:GitLab"
   [secrets]="infisical:Infisical self-host|doppler:Doppler|onepassword:1Password CLI|bitwarden:Bitwarden CLI|none:None"
@@ -116,6 +116,10 @@ numbered menus, and writes the result to:
   ~/.config/walter-os/providers.yaml   (provider selections)
   .env.local                            (env var activation)
   mcp/servers.json                      (MCP enable/disable)
+
+Walter can run with any configured LLM provider; Claude and Codex are
+supported agent tools, not hard requirements. Use the LLM category to
+select LiteLLM, Anthropic/Claude, OpenAI/Codex/GPT, Gemini, or Ollama/local.
 EOF
 }
 

@@ -30,7 +30,7 @@ setup() {
   export WALTER_OS_HOME="$REPO_ROOT"
 
   # Unset all provider env vars so detection is predictable
-  unset ANTHROPIC_API_KEY OPENAI_API_KEY LITELLM_API_KEY LITELLM_BASE_URL
+  unset ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY LITELLM_API_KEY LITELLM_BASE_URL
   unset OLLAMA_BASE_URL
   unset PLANE_API_TOKEN PLANE_API_URL LINEAR_API_KEY
   unset GITHUB_TOKEN FORGEJO_TOKEN GITLAB_TOKEN
@@ -54,6 +54,7 @@ LINEAR_API_KEY=test-linear-key
 LITELLM_BASE_URL=http://litellm:4000
 LITELLM_API_KEY=sk-test
 ANTHROPIC_API_KEY=sk-ant-test
+GEMINI_API_KEY=gemini-test
 INFISICAL_CLIENT_ID=test-id
 INFISICAL_CLIENT_SECRET=test-secret
 BRAVE_API_KEY=test-brave-key
@@ -117,11 +118,19 @@ teardown() {
 }
 
 @test "detect.sh returns llm=anthropic when only ANTHROPIC_API_KEY is set [AC-1]" {
-  unset LITELLM_API_KEY LITELLM_BASE_URL OPENAI_API_KEY
+  unset LITELLM_API_KEY LITELLM_BASE_URL OPENAI_API_KEY GEMINI_API_KEY
   export ANTHROPIC_API_KEY="sk-ant-test"
   source "${PROVIDERS_LIB}/detect.sh"
   result="$(detect_provider llm)"
   [[ "$result" == "anthropic" ]]
+}
+
+@test "detect.sh returns llm=gemini when only GEMINI_API_KEY is set [AC-1]" {
+  unset LITELLM_API_KEY LITELLM_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_ENTERPRISE_KEY OPENAI_API_KEY OLLAMA_BASE_URL
+  export GEMINI_API_KEY="gemini-test"
+  source "${PROVIDERS_LIB}/detect.sh"
+  result="$(detect_provider llm)"
+  [[ "$result" == "gemini" ]]
 }
 
 @test "detect.sh returns project_management=plane when PLANE_API_TOKEN is set [AC-1]" {
@@ -197,7 +206,7 @@ teardown() {
   printf 'bogus-provider\n1\n1\n1\n1\n1\n1\n' \
     | bash "${SUBCOMMANDS}/providers.sh" configure
   # The resulting providers.yaml must exist and llm must be set to a known slug
-  grep -qE "^llm: (litellm|anthropic|openai|ollama)" "${TEST_HOME}/.config/walter-os/providers.yaml"
+  grep -qE "^llm: (litellm|anthropic|openai|gemini|ollama)" "${TEST_HOME}/.config/walter-os/providers.yaml"
 }
 
 @test "BLOCKER1: piping OOB index 99 defaults to first option (no crash) [AC-1]" {
@@ -207,7 +216,7 @@ teardown() {
   # '99' is out of bounds for any category menu
   printf '99\n1\n1\n1\n1\n1\n1\n' \
     | bash "${SUBCOMMANDS}/providers.sh" configure
-  grep -qE "^llm: (litellm|anthropic|openai|ollama)" "${TEST_HOME}/.config/walter-os/providers.yaml"
+  grep -qE "^llm: (litellm|anthropic|openai|gemini|ollama)" "${TEST_HOME}/.config/walter-os/providers.yaml"
 }
 
 # -----------------------------------------------------------------------
@@ -279,6 +288,18 @@ teardown() {
   local env_file="${TEST_HOME}/.env.local"
   patch_env_for_category "llm" "anthropic" "$env_file"
   grep -q "^#.*LITELLM_BASE_URL=" "$env_file"
+}
+
+@test "patch_env: selecting gemini for llm activates Gemini only [AC-3]" {
+  _require_bash_4_or_skip
+  source "${PROVIDERS_LIB}/patch_env.sh"
+  local env_file="${TEST_HOME}/.env.local"
+  echo "OPENAI_API_KEY=sk-openai-test" >> "$env_file"
+  patch_env_for_category "llm" "gemini" "$env_file"
+  grep -q "^GEMINI_API_KEY=" "$env_file"
+  grep -q "^#.*LITELLM_BASE_URL=" "$env_file"
+  grep -q "^#.*ANTHROPIC_API_KEY=" "$env_file"
+  grep -q "^#.*OPENAI_API_KEY=" "$env_file"
 }
 
 # -----------------------------------------------------------------------
@@ -513,7 +534,7 @@ teardown() {
 
 # -----------------------------------------------------------------------
 # BLOCKER 3: AC-7 end-to-end wizard + .env.local assertions
-# Menu order: llm(1=litellm,2=anthropic,3=openai,4=ollama)
+# Menu order: llm(1=litellm,2=anthropic,3=openai,4=gemini,5=ollama)
 #             pm(1=plane,2=linear,3=plane_cloud,4=none)
 #             git(1=forgejo,2=github,3=gitlab)
 #             secrets(1=infisical,2=doppler,3=onepassword,4=bitwarden,5=none)
@@ -535,6 +556,7 @@ LITELLM_BASE_URL=http://litellm:4000
 LITELLM_API_KEY=sk-test
 ANTHROPIC_API_KEY=sk-ant-test
 OPENAI_API_KEY=sk-openai-test
+GEMINI_API_KEY=gemini-test
 OLLAMA_BASE_URL=http://localhost:11434
 PLANE_API_TOKEN=test-plane
 LINEAR_API_KEY=test-linear
@@ -574,6 +596,7 @@ ENVEOF
   grep -q "^INFISICAL_CLIENT_ID=" "$E2E_ENV_LOCAL"
   # Cloud-only vars must be commented out
   grep -q "^#.*ANTHROPIC_API_KEY=" "$E2E_ENV_LOCAL"
+  grep -q "^#.*GEMINI_API_KEY=" "$E2E_ENV_LOCAL"
   grep -q "^#.*LINEAR_API_KEY=" "$E2E_ENV_LOCAL"
   grep -q "^#.*GITHUB_TOKEN=" "$E2E_ENV_LOCAL"
 }

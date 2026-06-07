@@ -170,14 +170,19 @@ setup() {
   grep -qE "Apache" README.md
 }
 
-# ── v0.6.0 release-relevant content ────────────────────────────────────────
+# ── v0.6.1 release-relevant content ────────────────────────────────────────
 
-@test "README.md version badge reflects v0.6.0-alpha" {
-  grep -qF "v0.6.0--alpha" README.md
+@test "README.md version badge reflects v0.6.1-alpha" {
+  grep -qF "v0.6.1--alpha" README.md
 }
 
-@test "README.md status line names v0.6.0" {
-  grep -qE "v0\.6\.0" README.md
+@test "README.md status line names v0.6.1" {
+  grep -qE "v0\.6\.1" README.md
+}
+
+@test "README.md explains configurable LLM providers" {
+  grep -qF "walter providers configure --category llm" README.md
+  grep -qF "gemini" README.md
 }
 
 # ── README cross-links + pinned doc invariants ─────────────────────────────
@@ -209,6 +214,10 @@ setup() {
 
 @test "cross-link: docs/operational/v0.6.0-release-readiness.md exists" {
   [ -f "docs/operational/v0.6.0-release-readiness.md" ]
+}
+
+@test "cross-link: docs/operational/v0.6.1-release-notes.md exists" {
+  [ -f "docs/operational/v0.6.1-release-notes.md" ]
 }
 
 @test "cross-link: docs/decisions/0013-solo-operator-merge-policy.md exists" {
