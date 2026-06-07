@@ -1,5 +1,9 @@
 services:
   homepage:
+    mem_limit: "${HOMEPAGE_MEM_LIMIT:-256m}"
+    mem_reservation: "${HOMEPAGE_MEM_RESERVATION:-128m}"
+    cpus: "${HOMEPAGE_CPUS:-0.5}"
+    pids_limit: 128
     # Pin updated 2026-05-11 — bump via release notes at https://github.com/gethomepage/homepage/releases
     image: ghcr.io/gethomepage/homepage:v1.0.4
     container_name: homepage
