@@ -16,8 +16,8 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
 - Support `link` and `merged` events.
 - Post a Plane comment with a stable marker and move the issue to `review` or
   `done`.
-- Add a Forgejo PR comment through `tea` when available, including the stable
-  `walter-plane-issue:<id>` marker for future webhook redeliveries.
+- Add a Forgejo PR comment through `tea`, including the stable
+  `walter-plane-issue:<id>` marker required by future webhook redeliveries.
 - Never merge, push, approve, or mutate git history.
 
 ## Non-goals
@@ -30,8 +30,9 @@ webhooks, n8n, or cron can call to keep Plane and PR state aligned.
 
 ## Acceptance Criteria
 
-- AC1: `link` comments on Plane, moves the issue to `review`, and comments on
-  the Forgejo PR.
+- AC1: `link` persists or finds the matching `walter-plane-issue:<id>` marker
+  in Forgejo PR comments before it comments on Plane or moves the issue to
+  `review`.
 - AC2: `merged` comments on Plane with the merge SHA, moves the issue to `done`,
   and comments on the Forgejo PR.
 - AC3: Missing Plane environment fails before any state change.
@@ -128,8 +129,19 @@ For test fixtures or an n8n workflow that already fetched comments safely, pass
 path should prefer `tea` so the marker source is Forgejo state written by the
 trusted `link` flow.
 
+`plane-pr-sync.sh link` treats the Forgejo marker as required state. If `tea` is
+missing, comments cannot be inspected, or the marker comment cannot be written,
+the command fails before moving Plane to `review`. Existing comments are only
+idempotent when they contain the matching `walter-plane-issue:<id>` marker;
+sync markers without the Plane issue binding do not satisfy the trust boundary.
+When `WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS` contains a non-empty
+comma-separated list, existing comments from authors outside that allowlist do
+not satisfy marker persistence; the link flow will write its own
+automation-authored marker instead.
+
 ## Related
 
 - Issue: #237
 - Issue: #302
+- Issue: #305
 - Roadmap: `docs/specs/autonomous-delivery-roadmap.md` AD-12

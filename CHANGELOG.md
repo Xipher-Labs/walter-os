@@ -111,6 +111,10 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and
   fails closed before Plane/Forgejo mutation on invalid signatures or ambiguous
   markers.
+- **Forgejo marker persistence hardening (#305).** Makes
+  `plane-pr-sync.sh link` fail closed before moving Plane to review when it
+  cannot persist or find the matching trusted `walter-plane-issue:<id>` marker
+  in Forgejo PR comments.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
