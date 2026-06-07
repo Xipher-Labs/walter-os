@@ -88,6 +88,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
+  `walter-repo-config.yaml` policy axis, reports the effective mode during
+  validation, and keeps the hard-limit floor non-overridable in every mode.
 - **Signed Forgejo PR webhook adapter (#302).** Adds
   `plane-pr-sync-webhook.sh` for HMAC-verified Forgejo/Gitea merge webhooks,
   resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and
