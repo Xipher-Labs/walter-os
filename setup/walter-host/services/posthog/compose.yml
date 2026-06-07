@@ -32,6 +32,10 @@ services:
             file: docker-compose.base.yml
             service: db
         image: ${DOCKER_REGISTRY_PREFIX:-}postgres:15.12-alpine
+        mem_limit: "${POSTHOG_DB_MEM_LIMIT:-2g}"
+        mem_reservation: "${POSTHOG_DB_MEM_RESERVATION:-1g}"
+        cpus: "${POSTHOG_DB_CPUS:-1.5}"
+        pids_limit: "${POSTHOG_DB_PIDS_LIMIT:-512}"
         logging: *default-logging
         volumes:
             - postgres-data:/var/lib/postgresql/data
@@ -40,6 +44,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: redis7
+        mem_limit: "${POSTHOG_REDIS7_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_REDIS7_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_REDIS7_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_REDIS7_PIDS_LIMIT:-256}"
         logging: *default-logging
         volumes:
             - redis7-data:/data
@@ -52,6 +60,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: clickhouse
+        mem_limit: "${POSTHOG_CLICKHOUSE_MEM_LIMIT:-4g}"
+        mem_reservation: "${POSTHOG_CLICKHOUSE_MEM_RESERVATION:-2g}"
+        cpus: "${POSTHOG_CLICKHOUSE_CPUS:-2.0}"
+        pids_limit: "${POSTHOG_CLICKHOUSE_PIDS_LIMIT:-1024}"
         restart: on-failure
         logging: *default-logging
         depends_on:
@@ -71,6 +83,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: zookeeper
+        mem_limit: "${POSTHOG_ZOOKEEPER_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_ZOOKEEPER_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_ZOOKEEPER_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_ZOOKEEPER_PIDS_LIMIT:-256}"
         logging: *default-logging
         volumes:
             - zookeeper-datalog:/datalog
@@ -80,6 +96,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: kafka
+        mem_limit: "${POSTHOG_KAFKA_MEM_LIMIT:-1g}"
+        mem_reservation: "${POSTHOG_KAFKA_MEM_RESERVATION:-512m}"
+        cpus: "${POSTHOG_KAFKA_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_KAFKA_PIDS_LIMIT:-512}"
         logging: *default-logging
         depends_on:
             - zookeeper
@@ -94,6 +114,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: worker
+        mem_limit: "${POSTHOG_WORKER_MEM_LIMIT:-1g}"
+        mem_reservation: "${POSTHOG_WORKER_MEM_RESERVATION:-512m}"
+        cpus: "${POSTHOG_WORKER_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_WORKER_PIDS_LIMIT:-512}"
         logging: *default-logging
         environment:
             SITE_URL: https://posthog.${WALTER_DOMAIN}
@@ -130,6 +154,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: web
+        mem_limit: "${POSTHOG_WEB_MEM_LIMIT:-1g}"
+        mem_reservation: "${POSTHOG_WEB_MEM_RESERVATION:-512m}"
+        cpus: "${POSTHOG_WEB_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_WEB_PIDS_LIMIT:-512}"
         command: /compose/start
         logging: *default-logging
         volumes:
@@ -170,6 +198,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: plugins
+        mem_limit: "${POSTHOG_PLUGINS_MEM_LIMIT:-1g}"
+        mem_reservation: "${POSTHOG_PLUGINS_MEM_RESERVATION:-512m}"
+        cpus: "${POSTHOG_PLUGINS_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_PLUGINS_PIDS_LIMIT:-512}"
         # Pulled 2026-05-12 from operator VM via docker inspect
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
@@ -202,6 +234,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: ingestion-general
+        mem_limit: "${POSTHOG_INGESTION_GENERAL_MEM_LIMIT:-768m}"
+        mem_reservation: "${POSTHOG_INGESTION_GENERAL_MEM_RESERVATION:-384m}"
+        cpus: "${POSTHOG_INGESTION_GENERAL_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_INGESTION_GENERAL_PIDS_LIMIT:-512}"
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
         environment:
@@ -218,6 +254,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: ingestion-sessionreplay
+        mem_limit: "${POSTHOG_INGESTION_SESSIONREPLAY_MEM_LIMIT:-768m}"
+        mem_reservation: "${POSTHOG_INGESTION_SESSIONREPLAY_MEM_RESERVATION:-384m}"
+        cpus: "${POSTHOG_INGESTION_SESSIONREPLAY_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_INGESTION_SESSIONREPLAY_PIDS_LIMIT:-512}"
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
         environment:
@@ -236,6 +276,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: recording-api
+        mem_limit: "${POSTHOG_RECORDING_API_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_RECORDING_API_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_RECORDING_API_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_RECORDING_API_PIDS_LIMIT:-256}"
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
         environment:
@@ -249,6 +293,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: ingestion-error-tracking
+        mem_limit: "${POSTHOG_INGESTION_ERROR_TRACKING_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_INGESTION_ERROR_TRACKING_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_INGESTION_ERROR_TRACKING_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_INGESTION_ERROR_TRACKING_PIDS_LIMIT:-256}"
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
         environment:
@@ -262,6 +310,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: ingestion-logs
+        mem_limit: "${POSTHOG_INGESTION_LOGS_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_INGESTION_LOGS_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_INGESTION_LOGS_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_INGESTION_LOGS_PIDS_LIMIT:-256}"
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
         depends_on:
@@ -273,6 +325,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: ingestion-traces
+        mem_limit: "${POSTHOG_INGESTION_TRACES_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_INGESTION_TRACES_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_INGESTION_TRACES_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_INGESTION_TRACES_PIDS_LIMIT:-256}"
         image: ${REGISTRY_URL:-ghcr.io/posthog/posthog}-node:${POSTHOG_NODE_TAG:-latest}
         logging: *default-logging
         depends_on:
@@ -284,6 +340,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: proxy
+        mem_limit: "${POSTHOG_PROXY_MEM_LIMIT:-256m}"
+        mem_reservation: "${POSTHOG_PROXY_MEM_RESERVATION:-128m}"
+        cpus: "${POSTHOG_PROXY_CPUS:-0.5}"
+        pids_limit: "${POSTHOG_PROXY_PIDS_LIMIT:-128}"
         logging: *default-logging
         ports:
             - '127.0.0.1:8100:8000'
@@ -301,6 +361,10 @@ services:
             file: docker-compose.base.yml
             service: objectstorage
 
+        mem_limit: "${POSTHOG_OBJECTSTORAGE_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_OBJECTSTORAGE_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_OBJECTSTORAGE_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_OBJECTSTORAGE_PIDS_LIMIT:-256}"
         restart: on-failure
         logging: *default-logging
         volumes:
@@ -314,6 +378,10 @@ services:
             file: docker-compose.base.yml
             service: seaweedfs
         container_name: '${SEAWEEDFS_DOCKER_NAME:-seaweedfs-main}'
+        mem_limit: "${POSTHOG_SEAWEEDFS_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_SEAWEEDFS_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_SEAWEEDFS_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_SEAWEEDFS_PIDS_LIMIT:-256}"
         restart: on-failure
         logging: *default-logging
         ports:
@@ -338,6 +406,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: asyncmigrationscheck
+        mem_limit: "${POSTHOG_ASYNC_MIGRATIONS_CHECK_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_ASYNC_MIGRATIONS_CHECK_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_ASYNC_MIGRATIONS_CHECK_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_ASYNC_MIGRATIONS_CHECK_PIDS_LIMIT:-256}"
         image: ${REGISTRY_URL:?required}:${POSTHOG_APP_TAG:?required}
         logging: *default-logging
         environment:
@@ -350,6 +422,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: temporal
+        mem_limit: "${POSTHOG_TEMPORAL_MEM_LIMIT:-1g}"
+        mem_reservation: "${POSTHOG_TEMPORAL_MEM_RESERVATION:-512m}"
+        cpus: "${POSTHOG_TEMPORAL_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_TEMPORAL_PIDS_LIMIT:-512}"
         logging: *default-logging
         environment:
             - ENABLE_ES=false
@@ -361,11 +437,19 @@ services:
         extends:
             file: docker-compose.base.yml
             service: elasticsearch
+        mem_limit: "${POSTHOG_ELASTICSEARCH_MEM_LIMIT:-2g}"
+        mem_reservation: "${POSTHOG_ELASTICSEARCH_MEM_RESERVATION:-1g}"
+        cpus: "${POSTHOG_ELASTICSEARCH_CPUS:-1.5}"
+        pids_limit: "${POSTHOG_ELASTICSEARCH_PIDS_LIMIT:-512}"
         logging: *default-logging
     temporal-admin-tools:
         extends:
             file: docker-compose.base.yml
             service: temporal-admin-tools
+        mem_limit: "${POSTHOG_TEMPORAL_ADMIN_TOOLS_MEM_LIMIT:-256m}"
+        mem_reservation: "${POSTHOG_TEMPORAL_ADMIN_TOOLS_MEM_RESERVATION:-128m}"
+        cpus: "${POSTHOG_TEMPORAL_ADMIN_TOOLS_CPUS:-0.5}"
+        pids_limit: "${POSTHOG_TEMPORAL_ADMIN_TOOLS_PIDS_LIMIT:-128}"
         logging: *default-logging
         depends_on:
             - temporal
@@ -373,6 +457,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: temporal-ui
+        mem_limit: "${POSTHOG_TEMPORAL_UI_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_TEMPORAL_UI_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_TEMPORAL_UI_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_TEMPORAL_UI_PIDS_LIMIT:-256}"
         logging: *default-logging
         ports:
             - 127.0.0.1:8181:8080
@@ -386,6 +474,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: temporal-django-worker
+        mem_limit: "${POSTHOG_TEMPORAL_DJANGO_WORKER_MEM_LIMIT:-1g}"
+        mem_reservation: "${POSTHOG_TEMPORAL_DJANGO_WORKER_MEM_RESERVATION:-512m}"
+        cpus: "${POSTHOG_TEMPORAL_DJANGO_WORKER_CPUS:-1.0}"
+        pids_limit: "${POSTHOG_TEMPORAL_DJANGO_WORKER_PIDS_LIMIT:-512}"
         logging: *default-logging
         volumes:
             - ./compose:/compose
@@ -406,6 +498,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: cyclotron-janitor
+        mem_limit: "${POSTHOG_CYCLOTRON_JANITOR_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_CYCLOTRON_JANITOR_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_CYCLOTRON_JANITOR_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_CYCLOTRON_JANITOR_PIDS_LIMIT:-256}"
         build:
             context: ./posthog/rust
         logging: *default-logging
@@ -424,6 +520,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: capture
+        mem_limit: "${POSTHOG_CAPTURE_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_CAPTURE_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_CAPTURE_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_CAPTURE_PIDS_LIMIT:-256}"
         logging: *default-logging
 
     replay-capture:
@@ -432,6 +532,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: replay-capture
+        mem_limit: "${POSTHOG_REPLAY_CAPTURE_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_REPLAY_CAPTURE_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_REPLAY_CAPTURE_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_REPLAY_CAPTURE_PIDS_LIMIT:-256}"
         logging: *default-logging
 
     property-defs-rs:
@@ -440,6 +544,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: property-defs-rs
+        mem_limit: "${POSTHOG_PROPERTY_DEFS_RS_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_PROPERTY_DEFS_RS_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_PROPERTY_DEFS_RS_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_PROPERTY_DEFS_RS_PIDS_LIMIT:-256}"
         logging: *default-logging
         depends_on:
             kafka-init:
@@ -451,6 +559,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: livestream
+        mem_limit: "${POSTHOG_LIVESTREAM_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_LIVESTREAM_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_LIVESTREAM_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_LIVESTREAM_PIDS_LIMIT:-256}"
         logging: *default-logging
         environment:
             - LIVESTREAM_JWT_SECRET=${POSTHOG_SECRET:?required}
@@ -463,6 +575,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: personhog-replica
+        mem_limit: "${POSTHOG_PERSONHOG_REPLICA_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_PERSONHOG_REPLICA_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_PERSONHOG_REPLICA_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_PERSONHOG_REPLICA_PIDS_LIMIT:-256}"
         logging: *default-logging
         environment:
             PRIMARY_DATABASE_URL: 'postgres://posthog:${POSTHOG_DB_PASS:?required}@db:5432/posthog'
@@ -476,6 +592,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: personhog-router
+        mem_limit: "${POSTHOG_PERSONHOG_ROUTER_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_PERSONHOG_ROUTER_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_PERSONHOG_ROUTER_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_PERSONHOG_ROUTER_PIDS_LIMIT:-256}"
         logging: *default-logging
         depends_on:
             - personhog-replica
@@ -486,6 +606,10 @@ services:
         extends:
             file: docker-compose.base.yml
             service: feature-flags
+        mem_limit: "${POSTHOG_FEATURE_FLAGS_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_FEATURE_FLAGS_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_FEATURE_FLAGS_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_FEATURE_FLAGS_PIDS_LIMIT:-256}"
         logging: *default-logging
         depends_on:
             - db
@@ -497,12 +621,20 @@ services:
         extends:
             file: docker-compose.base.yml
             service: hypercache-server
+        mem_limit: "${POSTHOG_HYPERCACHE_SERVER_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_HYPERCACHE_SERVER_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_HYPERCACHE_SERVER_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_HYPERCACHE_SERVER_PIDS_LIMIT:-256}"
         logging: *default-logging
         depends_on:
             - redis7
 
     kafka-init:
         image: docker.redpanda.com/redpandadata/redpanda:v25.1.9
+        mem_limit: "${POSTHOG_KAFKA_INIT_MEM_LIMIT:-256m}"
+        mem_reservation: "${POSTHOG_KAFKA_INIT_MEM_RESERVATION:-128m}"
+        cpus: "${POSTHOG_KAFKA_INIT_CPUS:-0.5}"
+        pids_limit: "${POSTHOG_KAFKA_INIT_PIDS_LIMIT:-128}"
         entrypoint: /bin/sh
         logging: *default-logging
         command:
@@ -546,6 +678,10 @@ services:
     cymbal:
         # Pulled 2026-05-12 from operator VM via docker inspect
         image: ghcr.io/posthog/posthog/cymbal@sha256:f1212fadbb00bc088b10becabdd23977d52adfa869e7f4b47eab0ca547afa990
+        mem_limit: "${POSTHOG_CYMBAL_MEM_LIMIT:-512m}"
+        mem_reservation: "${POSTHOG_CYMBAL_MEM_RESERVATION:-256m}"
+        cpus: "${POSTHOG_CYMBAL_CPUS:-0.75}"
+        pids_limit: "${POSTHOG_CYMBAL_PIDS_LIMIT:-256}"
         build:
             context: ./posthog/rust
             args:

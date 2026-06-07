@@ -20,6 +20,10 @@ services:
   syncthing:
     image: lscr.io/linuxserver/syncthing:2.0.16
     container_name: syncthing
+    mem_limit: "${SYNCTHING_MEM_LIMIT:-512m}"
+    mem_reservation: "${SYNCTHING_MEM_RESERVATION:-256m}"
+    cpus: "${SYNCTHING_CPUS:-0.75}"
+    pids_limit: "${SYNCTHING_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       PUID: 1000

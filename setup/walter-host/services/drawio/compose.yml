@@ -12,6 +12,10 @@ services:
   drawio:
     image: jgraph/drawio@sha256:ae3bc30c60bbfcdf89bf750782e8c38a6ad944a7a5d11b21ea64507e59cfd0e9
     container_name: drawio
+    mem_limit: "${DRAWIO_MEM_LIMIT:-512m}"
+    mem_reservation: "${DRAWIO_MEM_RESERVATION:-256m}"
+    cpus: "${DRAWIO_CPUS:-0.75}"
+    pids_limit: "${DRAWIO_PIDS_LIMIT:-256}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:8083:8080"
