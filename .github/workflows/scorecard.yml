@@ -23,12 +23,9 @@ jobs:
     name: scorecard analysis
     runs-on: ubuntu-latest
     permissions:
-      # Required for uploading SARIF results to code-scanning
-      security-events: write
-      # Required for Scorecard to read the repo
       contents: read
-      # Required for Scorecard's token analysis
-      actions: read
+      security-events: write   # upload Scorecard SARIF to code-scanning
+      actions: read            # inspect workflow token permissions
       id-token: write   # for OIDC publish to public Scorecard API
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd

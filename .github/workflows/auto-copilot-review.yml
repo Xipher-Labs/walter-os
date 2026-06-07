@@ -15,7 +15,7 @@ on:
     types: [opened, ready_for_review, reopened]
 
 permissions:
-  pull-requests: write
+  pull-requests: write   # gh api requests Copilot review + gh pr edit labels
   contents: read
 
 jobs:

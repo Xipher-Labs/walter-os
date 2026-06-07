@@ -21,8 +21,8 @@ on:
 # reviewers. The action does NOT need broader scopes.
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
+  pull-requests: write   # review-loop action comments / requests PR reviewers
+  issues: write          # review-loop action writes PR thread comments
 
 jobs:
   review:

@@ -29,10 +29,7 @@ on:
     - cron: '15 4 * * 2'   # weekly Tuesday 04:15 UTC
 
 permissions:
-  # Required to upload SARIF results to Security tab
-  security-events: write
   contents: read
-  actions: read
 
 # google/osv-scanner-action v2.x is published as a REUSABLE WORKFLOW, not a
 # composite action — the v2.3.8 commit has no `action.yml` at the repo root,
@@ -52,8 +49,11 @@ jobs:
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2
     # google/osv-scanner-action v2.3.8 (reusable workflow form)
     permissions:
+      # Required by the reusable workflow to upload SARIF results.
       security-events: write
+      # Required by the reusable workflow to read repository contents.
       contents: read
+      # Required by the reusable workflow to inspect workflow metadata.
       actions: read
     with:
       # Scope to the canonical monorepo JS lockfile.
