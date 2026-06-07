@@ -5,7 +5,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   WATCHDOG="$REPO_ROOT/setup/walter-host/services/alerting/walter-vm-watchdog.sh"
   GRAFANA_RULES="$REPO_ROOT/setup/walter-host/services/observability/grafana/provisioning/alerting/rules.yml"
-  CAPACITY_ADR="$REPO_ROOT/docs/decisions/0027-ai-stack-capacity.md"
+  CAPACITY_ADR="$REPO_ROOT/docs/decisions/0028-ai-stack-capacity.md"
 }
 
 @test "walter-vm watchdog derives load threshold from runtime CPU count" {

@@ -21,6 +21,10 @@ services:
     # Pinned from :4.03 on 2026-05-12 via docker inspect
     image: chrislusf/seaweedfs:4.03@sha256:d24be3bc1d6e8e305c095c446cb9a00d40e3afdac82fb2a1cc96f2d42c4a8e80
     container_name: seaweedfs-main
+    mem_limit: "${SEAWEEDFS_MEM_LIMIT:-512m}"
+    mem_reservation: "${SEAWEEDFS_MEM_RESERVATION:-256m}"
+    cpus: "${SEAWEEDFS_CPUS:-0.75}"
+    pids_limit: "${SEAWEEDFS_PIDS_LIMIT:-256}"
     restart: unless-stopped
     command: server -s3 -s3.port=8333 -dir=/data
     ports:

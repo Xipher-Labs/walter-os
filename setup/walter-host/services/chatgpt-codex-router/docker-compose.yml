@@ -5,6 +5,10 @@
 
 services:
   chatgpt-codex-router:
+    mem_limit: "${CHATGPT_CODEX_ROUTER_MEM_LIMIT:-512m}"
+    mem_reservation: "${CHATGPT_CODEX_ROUTER_MEM_RESERVATION:-256m}"
+    cpus: "${CHATGPT_CODEX_ROUTER_CPUS:-1.0}"
+    pids_limit: "${CHATGPT_CODEX_ROUTER_PIDS_LIMIT:-256}"
     build: .
     container_name: chatgpt-codex-router
     restart: unless-stopped
@@ -13,7 +17,11 @@ services:
       HOME: /home/appuser
       # CCR_APIKEY: required when exposing to LiteLLM network.
       # Generate: openssl rand -hex 32
-      CCR_APIKEY: ${CCR_APIKEY:?CCR_APIKEY must be set — generate with: openssl rand -hex 32}
+      CCR_APIKEY: "${CCR_APIKEY:?CCR_APIKEY must be set — generate with: openssl rand -hex 32}"
+      MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
+      ROUTER_STARTUP_MODEL_PROBE: "${ROUTER_STARTUP_MODEL_PROBE:-1}"
+      ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS: "${ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS:-240000}"
+      ROUTER_STARTUP_MODEL_PROBE_PROMPT: "${ROUTER_STARTUP_MODEL_PROBE_PROMPT:-Reply with exactly: ok}"
     volumes:
       # Bind-mount host's codex auth dir so token refresh survives restarts.
       # One-time login: docker exec -it chatgpt-codex-router codex login
@@ -28,7 +36,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30m
 
 networks:
   # Reuse the existing LiteLLM Docker network by its real name.

@@ -1,4 +1,4 @@
-# ADR-0027: AI-stack capacity baseline
+# ADR-0028: AI-stack capacity baseline
 
 **Status**: Accepted
 **Date**: 2026-06-06

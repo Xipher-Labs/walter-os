@@ -5,11 +5,23 @@ where possible; safe to re-run.
 
 ## Target hardware
 
-Recommended for the full production stack: **Hetzner CX53** (16 vCPU /
-32 GB RAM / 320 GB SSD), Ubuntu 24.04 LTS. CPX41/CX43-sized hosts are
-reasonable for core/dev profiles. Bundled load alerts derive the vCPU ceiling
-from runtime host metrics, so smaller or larger plans should not require manual
-threshold edits.
+Recommended for the **FULL profile**: **Hetzner CX53** or equivalent
+(16 vCPU / 32 GB RAM / 320 GB disk), Ubuntu 24.04 LTS. A **CX43**-class host
+(8 vCPU / 16 GB RAM / 160 GB disk) is the medium tier and should not run every
+Walter-host service on one VM.
+
+Before deploying, run:
+
+```bash
+./setup/walter-host/preflight-check.sh full
+```
+
+Use `floor` or `medium` for smaller service selections. Set
+`WALTER_PREFLIGHT_ALLOW_UNDERSIZED=1` only for an intentional, operator-owned
+override.
+
+Bundled load alerts derive the vCPU ceiling from runtime host metrics, so
+smaller or larger plans should not require manual threshold edits.
 
 ## Order
 
@@ -79,6 +91,11 @@ ssh root@<vm-ip> "tailscale up \
 ```
 
 ### Step C — Lock SSH (only after A + B verified)
+
+Before locking SSH, configure at least one break-glass recovery path that does
+not depend on the Cloudflare Tunnel. The recovery runbook covers a temporary
+Hetzner firewall rule for SSH from an operator-controlled IP/CIDR:
+[`docs/runbooks/break-glass-recovery.md`](../../docs/runbooks/break-glass-recovery.md).
 
 ```bash
 ssh root@<vm-ip> "bash" < setup/walter-host/lock-ssh.sh

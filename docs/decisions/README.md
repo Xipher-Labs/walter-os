@@ -15,7 +15,8 @@ alternatives considered.
 | [`0024-risk-based-verification.md`](0024-risk-based-verification.md) | Risk-Based Verification — verification ∝ risk × blast-radius + prototype mode | Proposed |
 | [`0025-delivery-orchestrator-agent.md`](0025-delivery-orchestrator-agent.md) | Delivery Orchestrator Agent — pipeline coordinator (not "CEO agent") | Proposed |
 | [`0026-walter-repo-config-schema.md`](0026-walter-repo-config-schema.md) | walter-repo-config.yaml — unified per-repo policy file | Accepted |
-| [`0027-ai-stack-capacity.md`](0027-ai-stack-capacity.md) | AI-stack capacity baseline — runtime Walter-VM vCPU load thresholds | Accepted |
+| [`0027-walter-vm-ai-stack-resilience.md`](0027-walter-vm-ai-stack-resilience.md) | Walter-VM AI-stack resilience — kill the "false green" failure mode | Proposed |
+| [`0028-ai-stack-capacity.md`](0028-ai-stack-capacity.md) | AI-stack capacity baseline — runtime Walter-VM vCPU load thresholds | Accepted |
 
 > Note: ADRs 0013–0022 exist as files but predate this index table; they are
 > listed in `git log` + the spec cross-references. The table is being
@@ -24,6 +25,6 @@ alternatives considered.
 ## Adding a new ADR
 
 1. Copy the structure from an existing ADR.
-2. Number sequentially: next is `0028-...`.
+2. Number sequentially: next is `0029-...`.
 3. Status starts as `Proposed`; update to `Accepted` when the implementing PR merges.
 4. Add a row to this table in the same PR.
