@@ -14,6 +14,7 @@ walter ai — configure AI tool availability and routing
 
 Usage:
   walter ai status
+  walter ai validate [path/to/ai-capabilities.yaml]
   walter ai configure --profile <profile> [--set <capability>=<provider>...]
   walter ai --help
 
@@ -33,6 +34,9 @@ Providers:
 
 The config is private operator metadata written to:
   ~/.config/walter-os/ai-capabilities.yaml
+
+Validate an existing config with:
+  walter ai validate
 EOF
 }
 
@@ -203,7 +207,12 @@ YAML
 yaml_value() {
   local key="$1"
   [[ -f "$AI_CAPABILITIES_FILE" ]] || return 0
-  awk -F': *' -v key="$key" '$1 == key { print $2; exit }' "$AI_CAPABILITIES_FILE"
+  ai_yaml_value "$AI_CAPABILITIES_FILE" "$key"
+}
+
+ai_yaml_value() {
+  local file="$1" key="$2"
+  awk -F': *' -v key="$key" '$1 == key { print $2; exit }' "$file"
 }
 
 detected_provider() {
@@ -324,11 +333,97 @@ cmd_configure() {
   echo "profile: $profile"
 }
 
+validate_capabilities_file() {
+  local file="$1" key value invalid=0
+  local -a required_keys=(
+    profile
+    provider_claude
+    provider_codex
+    provider_copilot
+    provider_gemini
+    provider_ollama
+    route_code_review
+    route_infra_security_backend
+    route_planning
+    route_ux_ui
+    route_image_generation
+    route_research
+    route_compliance_local_only
+  )
+
+  if [[ ! -f "$file" ]]; then
+    echo "walter ai validate: config not found: $file" >&2
+    return 1
+  fi
+  if [[ ! -r "$file" ]]; then
+    echo "walter ai validate: config not readable: $file" >&2
+    return 1
+  fi
+
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    if [[ ! "$line" =~ ^[a-z_]+:[[:space:]]*[^[:space:]].*$ ]]; then
+      echo "walter ai validate: invalid YAML line: $line" >&2
+      invalid=1
+    fi
+  done <"$file"
+
+  for key in "${required_keys[@]}"; do
+    value="$(ai_yaml_value "$file" "$key")"
+    if [[ -z "$value" ]]; then
+      echo "walter ai validate: missing required key: $key" >&2
+      invalid=1
+    fi
+  done
+
+  value="$(ai_yaml_value "$file" profile)"
+  if [[ -n "$value" ]] && ! valid_profile "$value"; then
+    echo "walter ai validate: invalid profile: $value" >&2
+    invalid=1
+  fi
+
+  for key in provider_claude provider_codex provider_copilot provider_gemini provider_ollama; do
+    value="$(ai_yaml_value "$file" "$key")"
+    case "$value" in
+      enabled|disabled|"") ;;
+      *)
+        echo "walter ai validate: invalid $key: $value" >&2
+        invalid=1
+        ;;
+    esac
+  done
+
+  for key in route_code_review route_infra_security_backend route_planning route_ux_ui route_image_generation route_research route_compliance_local_only; do
+    value="$(ai_yaml_value "$file" "$key")"
+    if [[ -n "$value" ]] && ! valid_provider_route "$value"; then
+      echo "walter ai validate: invalid $key: $value" >&2
+      invalid=1
+    fi
+  done
+
+  [[ "$invalid" -eq 0 ]]
+}
+
+cmd_validate() {
+  local file="${1:-$AI_CAPABILITIES_FILE}"
+  if [[ $# -gt 1 ]]; then
+    echo "walter ai validate: expected zero or one path argument" >&2
+    exit 2
+  fi
+
+  if validate_capabilities_file "$file"; then
+    echo "AI capability config valid: $file"
+  else
+    exit 1
+  fi
+}
+
 cmd="${1:-status}"
 shift || true
 
 case "$cmd" in
   status) cmd_status "$@" ;;
+  validate) cmd_validate "$@" ;;
   configure) cmd_configure "$@" ;;
   -h|--help|help) usage ;;
   *)

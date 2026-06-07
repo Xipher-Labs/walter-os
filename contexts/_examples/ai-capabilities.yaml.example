@@ -1,0 +1,19 @@
+# ai-capabilities.yaml - Walter-OS operator AI capability profile
+# Copy to ~/.config/walter-os/ai-capabilities.yaml or generate with:
+#   walter ai configure --profile mixed
+#
+# This file records provider availability and routing policy only.
+# Do not store API keys, tokens, endpoint credentials, or secrets here.
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama

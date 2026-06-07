@@ -119,3 +119,40 @@ teardown() {
   echo "$output" | grep -q "infra_security_backend.*ollama"
   echo "$output" | grep -q "compliance_local_only.*ollama"
 }
+
+@test "walter ai validate accepts generated capability config" {
+  bash "$WALTER_BIN" ai configure --profile mixed --set research=claude,gemini >/dev/null
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+  echo "$output" | grep -q "${WALTER_CONFIG}/ai-capabilities.yaml"
+}
+
+@test "walter ai validate rejects invalid route providers" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: banana
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "invalid route_image_generation"
+}
+
+@test "walter ai validate accepts the example template" {
+  run bash "$WALTER_BIN" ai validate "${REPO_ROOT}/contexts/_examples/ai-capabilities.yaml.example"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}

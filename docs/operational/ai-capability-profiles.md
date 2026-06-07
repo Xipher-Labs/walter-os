@@ -13,6 +13,7 @@ Use capability profiles for tool availability and routing policy:
 
 ```bash
 walter ai configure --profile mixed
+walter ai validate
 walter ai status
 ```
 
@@ -23,6 +24,28 @@ The capability profile is private operator metadata written to:
 ```
 
 It does not store API keys or secrets.
+
+## Path Decision
+
+The active capability file lives under `~/.config/walter-os/` because it is
+private operator metadata: it can reveal which AI tools, local LLMs, and review
+fallbacks are available on a specific machine. It should not be committed to a
+project repository.
+
+The committed example lives at:
+
+```text
+contexts/_examples/ai-capabilities.yaml.example
+```
+
+It is an example rather than a runtime template because `walter ai configure`
+is the source of generated config. Keep the example synchronized with the
+generated schema and validate either file with:
+
+```bash
+walter ai validate
+walter ai validate contexts/_examples/ai-capabilities.yaml.example
+```
 
 ## Profiles
 
@@ -88,5 +111,6 @@ Examples:
 Run this before opening or reviewing substantial PRs:
 
 ```bash
+walter ai validate
 walter ai status
 ```
