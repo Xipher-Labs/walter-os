@@ -44,7 +44,7 @@ generated schema and validate either file with:
 
 ```bash
 walter ai validate
-walter ai validate contexts/_examples/ai-capabilities.yaml.example
+walter ai validate "$WALTER_OS_HOME/contexts/_examples/ai-capabilities.yaml.example"
 ```
 
 ## Profiles

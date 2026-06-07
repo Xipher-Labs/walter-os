@@ -156,3 +156,48 @@ YAML
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "AI capability config valid:"
 }
+
+@test "walter ai validate accepts inline comments and CRLF files" {
+  config="${WALTER_CONFIG}/ai-capabilities.yaml"
+  printf '%s\r\n' \
+    'profile: mixed' \
+    'provider_claude: enabled  # planning and UX' \
+    'provider_codex: enabled' \
+    'provider_copilot: enabled' \
+    'provider_gemini: enabled' \
+    'provider_ollama: enabled' \
+    'route_code_review: copilot,codex  # preferred review order' \
+    'route_infra_security_backend: codex' \
+    'route_planning: claude' \
+    'route_ux_ui: claude' \
+    'route_image_generation: gemini' \
+    'route_research: gemini' \
+    'route_compliance_local_only: ollama' >"$config"
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}
+
+@test "walter ai validate accepts indented keys and whitespace-only lines" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+  profile: mixed
+    
+  provider_claude: enabled
+  provider_codex: enabled
+  provider_copilot: enabled
+  provider_gemini: enabled
+  provider_ollama: enabled
+  route_code_review: copilot,codex
+  route_infra_security_backend: codex
+  route_planning: claude
+  route_ux_ui: claude
+  route_image_generation: gemini
+  route_research: gemini
+  route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}

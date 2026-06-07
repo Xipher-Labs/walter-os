@@ -212,7 +212,20 @@ yaml_value() {
 
 ai_yaml_value() {
   local file="$1" key="$2"
-  awk -F': *' -v key="$key" '$1 == key { print $2; exit }' "$file"
+  awk -v key="$key" '
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ "^" key "[[:space:]]*:") {
+        sub(/^[^:]*:[[:space:]]*/, "", line)
+        sub(/[[:space:]]+#.*$/, "", line)
+        sub(/[[:space:]]+$/, "", line)
+        print line
+        exit
+      }
+    }
+  ' "$file"
 }
 
 detected_provider() {
@@ -360,9 +373,10 @@ validate_capabilities_file() {
     return 1
   fi
 
-  while IFS= read -r line; do
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    if [[ ! "$line" =~ ^[a-z_]+:[[:space:]]*[^[:space:]].*$ ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" =~ ^[[:space:]]*$ || "$line" =~ ^[[:space:]]*# ]] && continue
+    if [[ ! "$line" =~ ^[[:space:]]*[a-z_]+[[:space:]]*:[[:space:]]*[^[:space:]].*$ ]]; then
       echo "walter ai validate: invalid YAML line: $line" >&2
       invalid=1
     fi
