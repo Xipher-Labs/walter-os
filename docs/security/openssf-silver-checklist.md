@@ -45,7 +45,7 @@ Legend:
 |---|---|---|---|
 | `documentation_roadmap` | Roadmap covering ≥1 year. | ⚠️ | `README.md` documents Phase 1 + Phase 2 (local LLM node). Not labelled "roadmap". TODO: extract to `ROADMAP.md`. |
 | `documentation_architecture` | Architecture + high-level design documented. | ⚠️ | Spread across `AGENTS.md` and `docs/decisions/`. No single `ARCHITECTURE.md`. TODO: consolidate. |
-| `documentation_security` | Security expectations + limitations documented. | ⚠️ | `daily-supply-chain-audit` skill + this directory cover parts. Missing top-level `SECURITY.md`. TODO. |
+| `documentation_security` | Security expectations + limitations documented. | ✅ | Root `SECURITY.md`, duplicate `.github/SECURITY.md` for GitHub discoverability, `docs/security/`, and `daily-supply-chain-audit` skill. |
 | `documentation_quick_start` | Quick-start for new users. | ✅ | `README.md` contains an install / setup section + `install.sh --upgrade` flow. |
 | `documentation_current` | Docs in sync with code. | ⚠️ | AGENTS.md / README updated per phase. No automated check. Renovate keeps deps fresh. |
 | `documentation_achievements` | Link to recognition within 48h. | 🚧 | N/A until first external recognition. |
@@ -78,8 +78,8 @@ Legend:
 | ID | Description | Status | Evidence / TODO |
 |---|---|---|---|
 | `report_tracker` | Issue tracker in use. | ✅ | GitHub Issues + Plane (self-hosted). |
-| `vulnerability_report_credit` | Credit reporters unless they ask to be anonymous. | ⚠️ | Implicit policy. TODO: state explicitly in `SECURITY.md`. |
-| `vulnerability_response_process` | Documented procedure for handling vulnerability reports. | ❌ | TODO: `SECURITY.md` with private disclosure address + SLA. |
+| `vulnerability_report_credit` | Credit reporters unless they ask to be anonymous. | ✅ | `SECURITY.md` says responsible reporters are acknowledged in release notes. |
+| `vulnerability_response_process` | Documented procedure for handling vulnerability reports. | ✅ | `SECURITY.md` documents private advisory/email channels, report contents, 48-hour acknowledgement, 7-day update, and 90-day disclosure window. |
 
 ---
 
@@ -191,23 +191,23 @@ Legend:
 
 Total Silver criteria mapped: **55**
 
-- ✅ met: **15**
-- ⚠️ partial: **15**
-- ❌ unmet: **11**
+- ✅ met: **18**
+- ⚠️ partial: **13**
+- ❌ unmet: **10**
 - 🚧 N/A / deferred: **14**
 
 Headline gaps blocking Silver:
 
 1. `achieve_passing` — prerequisite Passing badge not yet filed.
-2. Repo hygiene files missing: `LICENSE`, `CODE_OF_CONDUCT.md`,
-   `CONTRIBUTING.md`, `GOVERNANCE.md`, `SECURITY.md`, `MAINTAINERS.md`.
+2. Repo hygiene files missing or incomplete: `CODE_OF_CONDUCT.md`,
+   `CONTRIBUTING.md`, `GOVERNANCE.md`, `MAINTAINERS.md`.
 3. `signed_releases` / `version_tags_signed` — no release process yet.
 4. `assurance_case` — threat model not written.
 5. `test_statement_coverage80` — no coverage measurement wired.
 
 Suggested next work order (smallest first):
 
-1. Add `LICENSE` + `CODE_OF_CONDUCT.md` + `SECURITY.md` (1 PR, ~30 min).
+1. Add `CODE_OF_CONDUCT.md` (small PR).
 2. Extract `CONTRIBUTING.md` from `AGENTS.md`.
 3. Wire kcov for shell-script coverage; set 50% floor, ratchet up.
 4. Write `docs/security/threat-model.md`.
