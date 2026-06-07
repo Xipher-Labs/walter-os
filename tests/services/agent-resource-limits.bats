@@ -33,6 +33,9 @@ for key, marker in expected.items():
     value = service.get(key)
     assert value, f"{service_name} missing {key}"
     assert str(value).startswith(marker), f"{service_name} {key} is not overrideable by {prefix}: {value!r}"
+    assert str(value).endswith("}"), f"{service_name} {key} interpolation is malformed: {value!r}"
+    default = str(value)[len(marker):-1]
+    assert default.strip(), f"{service_name} {key} has an empty default"
 PY
 }
 
@@ -41,6 +44,9 @@ assert_compose_renders() {
   local compose="$SERVICES_ROOT/$service_dir/compose.yml"
   local tmpdir="$BATS_TEST_TMPDIR/$service_dir"
 
+  if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
+    skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
+  fi
   if ! command -v docker >/dev/null 2>&1; then
     skip "docker is not installed"
   fi
