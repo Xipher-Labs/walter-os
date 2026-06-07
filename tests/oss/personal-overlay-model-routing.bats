@@ -35,3 +35,17 @@ ENV
   [ "$key_count" -eq 1 ]
   rm -rf "$tmpdir"
 }
+
+@test "personal overlay skeleton documents model routing keys" {
+  skeleton="$REPO_ROOT/contexts/_examples/walter-personal-skeleton/personal.env.template"
+  [[ -f "$skeleton" ]]
+
+  grep -q "^WALTER_MODEL_BACKEND_REVIEW=" "$skeleton"
+  grep -q "^WALTER_MODEL_FRONTEND=" "$skeleton"
+  grep -q "^WALTER_MODEL_LONGFORM=" "$skeleton"
+  grep -q "^WALTER_MODEL_QUICK_REFACTOR=" "$skeleton"
+  grep -q "^WALTER_MODEL_PHI=" "$skeleton"
+  grep -q "^WALTER_MODEL_BRAINSTORM=" "$skeleton"
+  grep -q "^WALTER_MODEL_DEFAULT=" "$skeleton"
+  grep -q "walter ai configure" "$skeleton"
+}

@@ -7,7 +7,15 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   ROUTER="$REPO_ROOT/scripts/walter/lib/model-router.sh"
+  TMP_CONFIG=""
   [[ -f "$ROUTER" ]] || skip "model-router.sh not present"
+  TMP_CONFIG="$(mktemp -d)"
+  export WALTER_CONFIG="$TMP_CONFIG"
+  unset WALTER_AI_CAPABILITIES_FILE
+}
+
+teardown() {
+  [[ -n "${TMP_CONFIG:-}" && -d "$TMP_CONFIG" ]] && rm -rf "$TMP_CONFIG"
 }
 
 @test "model-router: unset backend_review uses Codex default" {
@@ -127,4 +135,48 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"claude"* ]]
   [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: warns when route provider is disabled in ai-capabilities" {
+  local tmpdir capabilities
+  tmpdir="$(mktemp -d)"
+  capabilities="$tmpdir/ai-capabilities.yaml"
+  cat >"$capabilities" <<'YAML'
+profile: claude-only
+provider_claude: enabled
+provider_codex: disabled
+provider_copilot: disabled
+provider_gemini: disabled
+provider_ollama: disabled
+route_code_review: claude
+route_infra_security_backend: claude
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: none
+route_research: claude
+route_compliance_local_only: none
+YAML
+
+  run env WALTER_AI_CAPABILITIES_FILE="$capabilities" WALTER_MODEL_BACKEND_REVIEW=codex bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  rm -rf "$tmpdir"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"codex"* ]]
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"provider_codex is disabled"* ]]
+}
+
+@test "model-router: unreadable ai-capabilities file is ignored quietly" {
+  local tmpdir capabilities
+  tmpdir="$(mktemp -d)"
+  capabilities="$tmpdir/ai-capabilities.yaml"
+  touch "$capabilities"
+  chmod 000 "$capabilities"
+
+  run env WALTER_AI_CAPABILITIES_FILE="$capabilities" WALTER_MODEL_BACKEND_REVIEW=codex bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  chmod 600 "$capabilities"
+  rm -rf "$tmpdir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "codex" ]
 }
