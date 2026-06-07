@@ -128,7 +128,7 @@ prepare_doctor_symlinks() {
   : >"$test_home/.config/walter-os/env"
   cat >"$test_home/.config/walter-os/secrets.env" <<'ENV'
 export ANTHROPIC_API_KEY=legacy-anthropic
-export OPENAI_API_KEY=legacy-openai
+export OPENAI_API_KEY=legacy=openai
 ENV
   chmod 600 "$test_home/.config/walter-os/secrets.env"
   stub_doctor_tools "$fake_bin"
