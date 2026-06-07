@@ -31,14 +31,68 @@ if (REQUIRED_API_KEY) {
 // Model mapping: LiteLLM sends openai/<name>, we strip prefix and map to
 // actual Codex CLI slug. Codex CLI with ChatGPT account only supports the
 // slugs listed here (verified 2026-05-11 against /home/walter/.codex/models_cache.json).
-const MODEL_MAP = {
+const DEFAULT_MODEL_MAP = {
   'gpt-5':      'gpt-5.5',
   'gpt-5-mini': 'gpt-5.4-mini',
   'o4-mini':    'gpt-5.5',  // gpt-5.3-codex rejected by ChatGPT account ("not supported when using Codex with a ChatGPT account"); gpt-5.5 is the strongest model the account accepts (2026-06-06)
 };
 
+function loadModelMap(defaultMap) {
+  const raw = process.env.MODEL_MAP_JSON;
+  if (!raw || raw.trim() === '') {
+    return Object.freeze({ ...defaultMap });
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.error(`Invalid MODEL_MAP_JSON: expected a JSON object (${err.message})`);
+    process.exit(78);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.error('Invalid MODEL_MAP_JSON: expected a JSON object mapping request aliases to CLI model slugs');
+    process.exit(78);
+  }
+
+  const normalizedMap = Object.create(null);
+  for (const [alias, model] of Object.entries(parsed)) {
+    const normalizedAlias = alias.trim();
+    const normalizedModel = typeof model === 'string' ? model.trim() : '';
+    if (normalizedAlias === '' || normalizedModel === '') {
+      console.error(`Invalid MODEL_MAP_JSON: alias "${alias}" and its model slug must be non-empty strings`);
+      process.exit(78);
+    }
+    normalizedMap[normalizedAlias] = normalizedModel;
+  }
+
+  return Object.freeze({ ...defaultMap, ...normalizedMap });
+}
+
+const MODEL_MAP = loadModelMap(DEFAULT_MODEL_MAP);
+
 // Accepted request-body model values (after stripping openai/ prefix)
 const ACCEPTED_MODELS = new Set(Object.keys(MODEL_MAP));
+
+function startupModelProbeEnabled() {
+  const value = (process.env.ROUTER_STARTUP_MODEL_PROBE || '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
+function startupModelProbeTimeoutMs() {
+  const parsed = Number.parseInt(process.env.ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS || '240000', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 240000;
+}
+
+const STARTUP_MODEL_PROBE_ENABLED = startupModelProbeEnabled();
+const STARTUP_MODEL_PROBE_TIMEOUT_MS = startupModelProbeTimeoutMs();
+const STARTUP_MODEL_PROBE_PROMPT = process.env.ROUTER_STARTUP_MODEL_PROBE_PROMPT ||
+  'Reply with exactly: ok';
+const STARTUP_MODEL_PROBE_HEADER = 'x-router-startup-model-probe';
+const STARTUP_MODEL_PROBE_HEADER_VALUE = randomUUID();
+let startupModelProbeStatus = STARTUP_MODEL_PROBE_ENABLED ? 'pending' : 'skipped';
+let startupModelProbeFailure = null;
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -218,6 +272,109 @@ function invokeCodex(codexModel, prompt) {
   });
 }
 
+async function postStartupModelProbe(alias) {
+  const headers = { 'Content-Type': 'application/json' };
+  headers[STARTUP_MODEL_PROBE_HEADER] = STARTUP_MODEL_PROBE_HEADER_VALUE;
+  if (REQUIRED_API_KEY) {
+    headers.Authorization = `Bearer ${REQUIRED_API_KEY}`;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STARTUP_MODEL_PROBE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${PORT}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: `openai/${alias}`,
+        messages: [{ role: 'user', content: STARTUP_MODEL_PROBE_PROMPT }],
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    const body = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${body.slice(0, 500)}`);
+    }
+    if (body.trim() === '') {
+      throw new Error('empty completion response');
+    }
+    return body;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`probe timed out after ${STARTUP_MODEL_PROBE_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function startupModelProbeReadinessError() {
+  if (startupModelProbeStatus === 'pending') {
+    return { code: 'startup_model_probe_pending', detail: 'startup model probe pending' };
+  }
+  if (startupModelProbeStatus === 'failed') {
+    return { code: 'startup_model_probe_failed', detail: startupModelProbeFailure };
+  }
+  return null;
+}
+
+function isStartupModelProbeRequest(req) {
+  return req.header(STARTUP_MODEL_PROBE_HEADER) === STARTUP_MODEL_PROBE_HEADER_VALUE;
+}
+
+async function runStartupModelProbes() {
+  if (!STARTUP_MODEL_PROBE_ENABLED) {
+    startupModelProbeStatus = 'skipped';
+    process.stdout.write(
+      JSON.stringify({ ts: new Date().toISOString(), event: 'startup_model_probe_skipped' }) + '\n'
+    );
+    return;
+  }
+
+  for (const [alias, targetModel] of Object.entries(MODEL_MAP)) {
+    process.stdout.write(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        event: 'startup_model_probe_started',
+        alias,
+        target_model: targetModel,
+      }) + '\n'
+    );
+
+    try {
+      await postStartupModelProbe(alias);
+    } catch (err) {
+      const message = `Startup model probe failed for advertised model slug "${alias}" mapped to "${targetModel}"`;
+      startupModelProbeStatus = 'failed';
+      startupModelProbeFailure = message;
+      console.error(`${message}: ${err.message}`);
+      process.stdout.write(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'error',
+          event: 'startup_model_probe_failed',
+          alias,
+          target_model: targetModel,
+          detail: err.message,
+        }) + '\n'
+      );
+      throw new Error(message);
+    }
+  }
+
+  startupModelProbeStatus = 'passed';
+  process.stdout.write(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'startup_model_probe_passed',
+      models: Object.keys(MODEL_MAP),
+    }) + '\n'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Request logger middleware
 // ---------------------------------------------------------------------------
@@ -248,6 +405,14 @@ app.use((req, res, next) => {
 
 // GET /health — checks Codex CLI auth state (unauthenticated — used by Docker healthcheck)
 app.get('/health', (req, res) => {
+  const probeError = startupModelProbeReadinessError();
+  if (probeError) {
+    return res.status(503).json({
+      status: probeError.code === 'startup_model_probe_pending' ? 'starting' : 'failed',
+      detail: probeError.detail,
+    });
+  }
+
   const child = spawn('codex', ['login', 'status'], {
     env: { ...process.env, HOME: process.env.HOME || '/home/node' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -284,6 +449,11 @@ app.get('/v1/models', (req, res) => {
 // POST /v1/chat/completions — main endpoint
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, tools, stream } = req.body || {};
+
+  const probeError = startupModelProbeReadinessError();
+  if (probeError && !isStartupModelProbeRequest(req)) {
+    return res.status(503).json({ error: probeError.code, detail: probeError.detail });
+  }
 
   // Reject tool use (v1 limitation)
   if (tools && Array.isArray(tools) && tools.length > 0) {
@@ -344,7 +514,23 @@ app.post('/v1/chat/completions', async (req, res) => {
 // Start
 // ---------------------------------------------------------------------------
 app.listen(PORT, '0.0.0.0', () => {
-  process.stdout.write(
-    JSON.stringify({ ts: new Date().toISOString(), event: 'server_started', port: PORT }) + '\n'
-  );
+  (async () => {
+    try {
+      await runStartupModelProbes();
+      process.stdout.write(
+        JSON.stringify({ ts: new Date().toISOString(), event: 'server_started', port: PORT }) + '\n'
+      );
+    } catch (err) {
+      startupModelProbeStatus = 'failed';
+      startupModelProbeFailure = startupModelProbeFailure || 'Startup model probe failed';
+      process.stdout.write(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'error',
+          event: 'server_started_with_failed_startup_model_probe',
+          detail: startupModelProbeFailure,
+        }) + '\n'
+      );
+    }
+  })();
 });

@@ -14,7 +14,11 @@ services:
       HOME: /home/appuser
       # CSR_APIKEY: required when exposing to LiteLLM network.
       # Generate: openssl rand -hex 32
-      CSR_APIKEY: ${CSR_APIKEY:?CSR_APIKEY must be set — generate with: openssl rand -hex 32}
+      CSR_APIKEY: "${CSR_APIKEY:?CSR_APIKEY must be set — generate with: openssl rand -hex 32}"
+      MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
+      ROUTER_STARTUP_MODEL_PROBE: "${ROUTER_STARTUP_MODEL_PROBE:-1}"
+      ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS: "${ROUTER_STARTUP_MODEL_PROBE_TIMEOUT_MS:-240000}"
+      ROUTER_STARTUP_MODEL_PROBE_PROMPT: "${ROUTER_STARTUP_MODEL_PROBE_PROMPT:-Reply with exactly: ok}"
     volumes:
       # Bind-mount host's claude auth dir. The CLI refreshes OAuth tokens
       # on demand. Read-write so token refresh persists across restarts.
@@ -30,7 +34,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30m
 
 networks:
   litellm_net:

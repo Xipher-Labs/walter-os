@@ -23,12 +23,14 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/release/reproduce.sh \
 		scripts/agents/run.sh \
 		scripts/agents/main.sh \
+		scripts/agents/plane-pr-sync-webhook.sh \
 		scripts/agents/lib/plane.sh \
 		scripts/agents/lib/llm.sh \
 		scripts/agents/lib/alerts.sh \
 		scripts/agents/lib/metrics.sh \
 		scripts/agents/lib/spend.sh \
 		scripts/walter/lib/audit-chain.sh \
+		scripts/walter/lib/feature-state.sh \
 		tests/lint-frontmatter.sh \
 		hooks/approval-gate.sh \
 		hooks/bash-denylist.sh \
@@ -36,9 +38,13 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		hooks/branch-flow-guard.sh \
 		hooks/daily-audit-gate.sh \
 		hooks/pre-commit-tests.sh \
+		setup/walter-host/preflight-check.sh \
+		setup/walter-host/recovery/hetzner-break-glass-ssh.sh \
 		setup/walter-host/services/openclaw/deploy.sh \
 		skills/daily-supply-chain-audit/scripts/audit.sh \
-		scripts/walter/subcommands/bridge.sh
+		scripts/walter/subcommands/bridge.sh \
+		scripts/walter/subcommands/feature-state.sh \
+		scripts/walter/subcommands/release.sh
 
 audit-secrets:  ## Run gitleaks on the working tree
 	@command -v gitleaks >/dev/null 2>&1 || { echo "ERROR: gitleaks not installed. See https://github.com/gitleaks/gitleaks"; exit 1; }
