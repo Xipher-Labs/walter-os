@@ -84,6 +84,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
 - [x] bats coverage in `tests/walter/cap-cli.bats`.
 
 ### AC-3 — `hooks/capability-check.sh` PreToolUse hook
+
 - [x] Hook runs in the PreToolUse chain after `approval-gate.sh`.
 - [x] For `Edit`/`Write`: extracts `file_path`; checks every cap in the session's `caps-<session>/` dir for `tool` matching AND `scope.paths` glob matching.
 - [x] For `Bash`: extracts `command`; checks every cap for `tool=Bash` AND (a) `scope.patterns` regex matching OR (b) network destination in `scope.network` (parsed from curl/git/etc. like A-1 egress hook does).
@@ -98,6 +99,7 @@ renderer mangles multi-line fenced code blocks inside table cells.
   - Two-factor bypass (`WALTER_CAP_BYPASS=1` + `--allow-no-cap`) → allow with WARN
 
 ### AC-4 — Default skill capabilities
+
 - [x] `contexts/_examples/skill-capabilities.example.yml`:
   ```yaml
   # When these skills are autoloaded at session start, walter-os
@@ -123,14 +125,14 @@ renderer mangles multi-line fenced code blocks inside table cells.
 
 ### AC-5 — Daily-audit integration
 
-- [ ] `daily-supply-chain-audit` adds `check_cap_state()`:
+- [x] `daily-supply-chain-audit` adds `check_cap_state()`:
   - Orphaned `caps-<session>/` dirs (session ended but caps remain) → `info` finding `cap-cleanup-stale`
   - Token mode != 0600 → `high` finding (operator-side perms issue)
   - PASETO key file mode != 0600 → `crit` finding (signing-key exposure)
 
 ### AC-6 — Operator-facing docs + CHANGELOG
 
-- [ ] `docs/operational/capability-tokens.md` (new):
+- [x] `docs/operational/capability-tokens.md` (new):
   - Philosophy (layered above approval-gate, mandatory for high-tier ops)
   - Common workflow: skill auto-caps; operator-mints when needed
   - Troubleshooting (token expired, signature invalid, hook can't find cap)

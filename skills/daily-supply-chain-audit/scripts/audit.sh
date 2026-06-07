@@ -8,7 +8,8 @@ set -uo pipefail
 
 readonly WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
 readonly BASELINES_DIR="${WALTER_CONFIG}/baselines"
-readonly TODAY="$(date +%Y-%m-%d)"
+TODAY="$(date +%Y-%m-%d)"
+readonly TODAY
 readonly REPORT="${WALTER_CONFIG}/audit-${TODAY}.md"
 readonly STATUS="${WALTER_CONFIG}/audit-status.json"
 readonly CLAUDE_HOME="${HOME}/.claude"
@@ -1103,6 +1104,126 @@ check_egress_allowlist() {
   fi
 }
 
+# ---------- 8d. Capability-token state hygiene (#122 AC-5) ----------
+#
+# Capability tokens are session-scoped and live under:
+#   ~/.config/walter-os/state/session-<session>.json
+#   ~/.config/walter-os/state/session-<session>.key
+#   ~/.config/walter-os/state/caps-<session>/cap-<nonce>.paseto
+#
+# The enforcement hook fails closed for sensitive operations, but the daily
+# audit still needs to catch operator-side hygiene drift: stale token dirs after
+# a session ended, malformed state, loose token permissions, and exposed signing
+# keys.
+_audit_file_mode() {
+  local file="$1" mode=""
+  _AUDIT_FILE_MODE_RESULT=""
+  mode="$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null || true)"
+  [[ -n "$mode" ]] || return 1
+  _AUDIT_FILE_MODE_RESULT="$(printf '%s\n' "$mode" | awk '{printf "%03d", $1 + 0}')"
+  [[ -n "$_AUDIT_FILE_MODE_RESULT" ]]
+}
+
+check_cap_state() {
+  local state_dir="${WALTER_CONFIG}/state"
+  [[ -d "$state_dir" ]] || return 0
+
+  if ! command -v jq >/dev/null 2>&1; then
+    finding high "no-jq-cap-state" \
+      "jq not installed; cannot verify capability-token state" \
+      "Install jq with the OS package manager, then rerun the audit"
+    return 0
+  fi
+
+  local active_caps_tmp
+  if ! active_caps_tmp="$(mktemp)"; then
+    finding high "cap-state-tempfile-failed" \
+      "Could not create temporary file for capability-token state audit" \
+      "Check available disk space and temp directory permissions, then rerun the audit"
+    return 0
+  fi
+
+  local state_file
+  while IFS= read -r state_file; do
+    [[ -n "$state_file" ]] || continue
+
+    local session_id private_key public_key caps_dir expected_private expected_public expected_caps
+    if ! jq -e '
+      (.session_id | type == "string" and length > 0) and
+      (.capability_private_key_path | type == "string" and length > 0) and
+      (.capability_public_key_path | type == "string" and length > 0) and
+      (.capability_tokens_dir | type == "string" and length > 0)
+    ' "$state_file" >/dev/null 2>&1; then
+      finding high "cap-state-malformed" \
+        "Capability session state is missing required fields or is not valid JSON: $state_file" \
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
+      continue
+    fi
+
+    session_id="$(jq -r '.session_id' "$state_file")"
+    private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+    public_key="$(jq -r '.capability_public_key_path' "$state_file")"
+    caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
+    if [[ ! "$session_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      finding high "cap-state-malformed" \
+        "Capability session state has an unsafe session_id in $state_file" \
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
+      continue
+    fi
+
+    expected_private="${state_dir}/session-${session_id}.key"
+    expected_public="${state_dir}/session-${session_id}.pub"
+    expected_caps="${state_dir}/caps-${session_id}"
+    if [[ "$private_key" != "$expected_private" || "$public_key" != "$expected_public" || "$caps_dir" != "$expected_caps" ]]; then
+      finding high "cap-state-malformed" \
+        "Capability session state paths do not match session_id in $state_file" \
+        "Inspect $state_file; if stale, end the session and remove leftover capability material"
+      continue
+    fi
+
+    printf '%s\n' "$caps_dir" >> "$active_caps_tmp"
+
+    if [[ ! -f "$private_key" ]]; then
+      finding high "cap-state-missing" \
+        "Capability session state references missing private key: $private_key" \
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
+    elif _audit_file_mode "$private_key" && [[ "$_AUDIT_FILE_MODE_RESULT" != "600" ]]; then
+      finding crit "cap-key-perms" \
+        "Capability signing key is mode ${_AUDIT_FILE_MODE_RESULT}, expected 600: $private_key" \
+        "Run: chmod 600 '$private_key'  OR end the session and regenerate capability state"
+    fi
+
+    if [[ ! -d "$caps_dir" ]]; then
+      finding high "cap-state-missing" \
+        "Capability session state references missing token directory: $caps_dir" \
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
+      continue
+    fi
+
+    local token_file
+    while IFS= read -r token_file; do
+      [[ -n "$token_file" ]] || continue
+      if _audit_file_mode "$token_file" && [[ "$_AUDIT_FILE_MODE_RESULT" != "600" ]]; then
+        finding high "cap-token-perms" \
+          "Capability token file is mode ${_AUDIT_FILE_MODE_RESULT}, expected 600: $token_file" \
+          "Run: chmod 600 '$token_file'  OR revoke and re-mint the capability"
+      fi
+    done < <(find "$caps_dir" -type f -name '*.paseto' -print 2>/dev/null)
+  done < <(find "$state_dir" -maxdepth 1 -type f -name 'session-*.json' -print 2>/dev/null)
+
+  local caps_dir
+  while IFS= read -r caps_dir; do
+    [[ -n "$caps_dir" ]] || continue
+    if ! grep -Fxq "$caps_dir" "$active_caps_tmp" 2>/dev/null; then
+      finding info "cap-cleanup-stale" \
+        "Capability token directory has no matching active session state: $caps_dir" \
+        "Remove stale capability material after confirming no session is active: rm -r '$caps_dir'"
+    fi
+  done < <(find "$state_dir" -maxdepth 1 -type d -name 'caps-*' -print 2>/dev/null)
+
+  rm -f "$active_caps_tmp"
+}
+
 # ---------- 9. Notifications ----------
 
 notify() {
@@ -1132,6 +1253,7 @@ main() {
   check_min_release_age
   check_skill_scripts
   check_external_hooks
+  check_cap_state
   check_egress_allowlist
 
   # Write report
