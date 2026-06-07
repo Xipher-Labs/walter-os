@@ -55,7 +55,7 @@ assert_compose_renders() {
     WALTER_TELEGRAM_BOT_HANDLE=test \
     WALTER_OPENCLAW_BOT_HANDLE=test \
     WG_PASSWORD_HASH=test \
-    docker compose -f "$tmpdir/compose.yml" config --quiet
+    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
   [ "$status" -eq 0 ]
 }
 
