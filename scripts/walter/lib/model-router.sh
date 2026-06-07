@@ -246,6 +246,21 @@ walter_model_for() {
   echo "$fallback"
 }
 
+walter_model_select_primary() {
+  local requested="${1:-default}" var_name="${2:-WALTER_SELECTED_MODEL}"
+  local tmp value primary
+
+  [[ "$var_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+
+  tmp="$(mktemp "${TMPDIR:-/tmp}/walter-model.XXXXXX")" || return 1
+  walter_model_for "$requested" > "$tmp"
+  value="$(cat "$tmp")"
+  rm -f "$tmp"
+
+  IFS=',' read -r primary _ <<<"$value"
+  printf -v "$var_name" '%s' "$primary"
+}
+
 walter_models_print_effective() {
   local domain
   for domain in backend_review frontend longform quick_refactor phi brainstorm default; do

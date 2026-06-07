@@ -39,6 +39,13 @@ teardown() {
   [ "$output" = "claude,codex,gemini" ]
 }
 
+@test "model-router: primary selector chooses first route and preserves domain" {
+  run env WALTER_MODEL_BRAINSTORM=claude,codex,gemini bash -c "source '$ROUTER'; model=''; walter_model_select_primary brainstorm model; printf '%s|%s\n' \"\$model\" \"\$WALTER_MODEL_DOMAIN\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "claude|brainstorm" ]
+}
+
 @test "model-router: WALTER_MODEL_OVERRIDE wins for non-PHI domains" {
   run env WALTER_MODEL_OVERRIDE=gemini-pro WALTER_MODEL_BACKEND_REVIEW=claude bash -c "source '$ROUTER'; walter_model_for backend_review"
 

@@ -20,6 +20,8 @@ source "${WALTER_OS_HOME}/scripts/walter/lib/log.sh"
 source "$LLM_LIB"
 # shellcheck source=/dev/null
 source "${WALTER_OS_HOME}/scripts/walter/lib/spend-record.sh"
+# shellcheck source=/dev/null
+source "${WALTER_OS_HOME}/scripts/walter/lib/model-router.sh"
 
 _no_ai_message() {
   cat >&2 <<'EOF'
@@ -65,6 +67,9 @@ if ! llm_available; then
   exit 1
 fi
 
+model_tag=""
+walter_model_select_primary brainstorm model_tag
+
 skill_content="$(cat "${PIVOT_SKILL}/SKILL.md")"
 existing_agents_md="$(cat AGENTS.md 2>/dev/null || echo '')"
 
@@ -77,8 +82,8 @@ Answer the 4 questions according to the skill's interview flow."
 
 user_prompt="Please help me pivot/reconfigure this project. Generate the updated configuration."
 
-response="$(llm_invoke_or_mock "walter-pivot" "sonnet" "$system_prompt" "$user_prompt" 2048)"
+response="$(llm_invoke_or_mock "walter-pivot" "$model_tag" "$system_prompt" "$user_prompt" 2048)"
 
 printf '%s\n' "$response"
 
-_record_cli_spend "walter pivot" "sonnet" 2048
+_record_cli_spend "walter pivot" "$model_tag" 2048

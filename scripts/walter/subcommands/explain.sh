@@ -18,6 +18,8 @@ source "${WALTER_OS_HOME}/scripts/walter/lib/log.sh"
 source "$LLM_LIB"
 # shellcheck source=/dev/null
 source "${WALTER_OS_HOME}/scripts/walter/lib/spend-record.sh"
+# shellcheck source=/dev/null
+source "${WALTER_OS_HOME}/scripts/walter/lib/model-router.sh"
 
 skill_name="${1:-}"
 
@@ -27,7 +29,8 @@ if [[ -z "$skill_name" ]]; then
   echo "" >&2
   if [[ -d "$SKILLS_DIR" ]]; then
     echo "Available skills:" >&2
-    ls "$SKILLS_DIR" 2>/dev/null | sed 's/^/  /' >&2
+    find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null \
+      | sort | sed 's/^/  /' >&2
   fi
   exit 1
 fi
@@ -39,7 +42,8 @@ if [[ ! -f "$skill_md" ]]; then
   echo "" >&2
   if [[ -d "$SKILLS_DIR" ]]; then
     echo "Available skills:" >&2
-    ls "$SKILLS_DIR" 2>/dev/null | sed 's/^/  /' >&2
+    find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null \
+      | sort | sed 's/^/  /' >&2
   fi
   exit 1
 fi
@@ -51,6 +55,9 @@ if ! llm_available; then
   printf '%s\n' "$skill_content"
   exit 0
 fi
+
+model_tag=""
+walter_model_select_primary longform model_tag
 
 # Build stack context from providers.yaml if present
 stack_context=""
@@ -70,8 +77,8 @@ ${stack_context:-'(not configured)'}
 
 Be concise and practical. Do not repeat the skill name in the first word."
 
-response="$(llm_invoke_or_mock "walter-explain" "haiku" "$system_prompt" "$skill_content" 512)"
+response="$(llm_invoke_or_mock "walter-explain" "$model_tag" "$system_prompt" "$skill_content" 512)"
 
 printf '%s\n' "$response"
 
-_record_cli_spend "walter explain" "haiku" 512
+_record_cli_spend "walter explain" "$model_tag" 512

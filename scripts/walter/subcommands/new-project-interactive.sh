@@ -19,6 +19,8 @@ source "${WALTER_OS_HOME}/scripts/walter/lib/log.sh"
 source "$LLM_LIB"
 # shellcheck source=/dev/null
 source "${WALTER_OS_HOME}/scripts/walter/lib/spend-record.sh"
+# shellcheck source=/dev/null
+source "${WALTER_OS_HOME}/scripts/walter/lib/model-router.sh"
 
 _no_ai_message() {
   cat >&2 <<'EOF'
@@ -53,6 +55,9 @@ if ! llm_available; then
   exit 1
 fi
 
+model_tag=""
+walter_model_select_primary brainstorm model_tag
+
 # -----------------------------------------------------------------------
 # Interview: 5 questions sent to LLM in one shot for structured output.
 # In a real interactive session the operator would answer sequentially,
@@ -75,16 +80,14 @@ if [[ -n "${WALTER_LLM_MOCK_FILE:-}" && -f "${WALTER_LLM_MOCK_FILE}" ]]; then
     log_ok "Files written to disk (mock mode)." >&2
   fi
 
-  _record_cli_spend "walter new project --interactive" "sonnet" 2048
+  _record_cli_spend "walter new project --interactive" "$model_tag" 2048
   exit 0
 fi
 
 # Real interactive path
 if [[ "$pivot_mode" == "true" ]]; then
-  mode_label="RECONFIGURE (pivot)"
   mode_instruction="The operator wants to reconfigure an existing project."
 else
-  mode_label="NEW PROJECT"
   mode_instruction="The operator wants to create a new project."
 fi
 
@@ -135,7 +138,7 @@ walter plane create-epic --name \"<project>\" --description \"<desc>\"
 
 log_info "Sending to LLM..." >&2
 
-response="$(llm_invoke_or_mock "walter-new-interactive" "sonnet" "$system_prompt" "$user_content" 3000)"
+response="$(llm_invoke_or_mock "walter-new-interactive" "$model_tag" "$system_prompt" "$user_content" 3000)"
 
 # Output to stdout
 printf '%s\n' "$response"
@@ -161,4 +164,4 @@ if [[ "$write_to_disk" == "true" ]]; then
   fi
 fi
 
-_record_cli_spend "walter new project --interactive" "sonnet" 3000
+_record_cli_spend "walter new project --interactive" "$model_tag" 3000
