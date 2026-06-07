@@ -46,6 +46,7 @@ cloudflared.
 | n8n | ~512 MB | Node.js runtime |
 | Penpot | ~512 MB | Penpot app + Penpot exporter |
 | RocketChat | ~512 MB | Node.js, can spike to 1 GB |
+| Postiz | ~512 MB | Social scheduler app; Redis and Postgres are separate |
 | Control Tower | ~512 MB | Next.js app server |
 | LiteLLM | ~256 MB | Python; spikes to 512 MB under parallel requests |
 | Forgejo | ~256 MB | Go binary; very lean |

@@ -17,6 +17,10 @@ services:
   n8n:
     image: n8nio/n8n:2.18.7
     container_name: n8n
+    mem_limit: "${N8N_MEM_LIMIT:-768m}"
+    mem_reservation: "${N8N_MEM_RESERVATION:-384m}"
+    cpus: "${N8N_CPUS:-1.0}"
+    pids_limit: "${N8N_PIDS_LIMIT:-512}"
     restart: unless-stopped
     environment:
       # ---- Server / URL ----
@@ -101,6 +105,10 @@ services:
   n8n-pg:
     image: postgres:16-alpine
     container_name: n8n-pg
+    mem_limit: "${N8N_PG_MEM_LIMIT:-512m}"
+    mem_reservation: "${N8N_PG_MEM_RESERVATION:-256m}"
+    cpus: "${N8N_PG_CPUS:-0.75}"
+    pids_limit: "${N8N_PG_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       POSTGRES_DB: n8n
