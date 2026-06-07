@@ -1,0 +1,621 @@
+#!/usr/bin/env bash
+# scripts/walter/subcommands/preview.sh
+# Preview environment evidence bundling for AD-10.
+
+set -euo pipefail
+
+USAGE_ERROR_EXIT=64
+RUNTIME_ERROR_EXIT=4
+
+usage() {
+  cat <<'EOF'
+Usage: walter-os preview bundle --pr <number> --url <url> --seed <path> --screenshot <path> [--screenshot <path>...] [--out <dir>] [--json]
+       walter-os preview plan --dry-run --pr <number> --provider <provider> --app <name> --branch <branch> --seed <path> [--config <path>] [--out <dir>] [--json]
+       walter-os preview capture --pr <number> --url <url> --name <slug> [--out <dir>] [--wait-ms <ms>] [--json]
+
+Creates a local preview evidence bundle from an existing preview URL, captures
+screenshots, or writes a dry-run preview deployment plan. The commands do not
+deploy, mint credentials, or touch production secrets.
+
+Subcommands:
+  bundle    Build .walter/previews/preview-pr-<number>/ evidence bundle.
+  capture   Capture a screenshot artifact from an existing preview URL.
+  plan      Write a dry-run preview deployment plan.
+
+Options for bundle:
+  --pr <number>          Pull request number.
+  --url <url>            Preview URL. Must start with http:// or https://.
+  --seed <path>          Seed data manifest or fixture used for preview.
+  --screenshot <path>    Screenshot artifact. Repeat for multiple screenshots.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --json                 Print preview-report JSON instead of a short summary.
+
+Options for capture:
+  --pr <number>          Pull request number.
+  --url <url>            Preview URL. Must start with http:// or https://.
+  --name <slug>          Screenshot basename without extension.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --wait-ms <ms>         Playwright wait timeout before capture. Defaults to 1000.
+  --json                 Print screenshot artifact JSON.
+
+Options for plan:
+  --dry-run              Required. Plan only; never deploy.
+  --pr <number>          Pull request number.
+  --provider <provider>  One of local, vercel, cloudflare-pages, netlify,
+                         railway, forgejo-actions.
+  --app <name>           App/project slug for the preview target.
+  --branch <branch>      Branch/ref to deploy.
+  --seed <path>          Seed data manifest or fixture used for preview.
+  --config <path>        walter-repo-config.yaml path. Defaults to cwd.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --json                 Print preview-plan JSON instead of a short summary.
+EOF
+}
+
+die_usage() {
+  echo "walter-os preview: $1" >&2
+  echo >&2
+  usage >&2
+  exit "$USAGE_ERROR_EXIT"
+}
+
+die_runtime() {
+  echo "walter-os preview: $1" >&2
+  exit "$RUNTIME_ERROR_EXIT"
+}
+
+require_jq() {
+  if ! command -v jq >/dev/null 2>&1; then
+    die_runtime "jq is required"
+  fi
+}
+
+resolve_npx() {
+  if [[ -n "${WALTER_PREVIEW_NPX:-}" ]]; then
+    if [[ -e "$WALTER_PREVIEW_NPX" && ! -d "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" ]]; then
+      printf '%s\n' "$WALTER_PREVIEW_NPX"
+      return 0
+    fi
+    die_runtime "npx is required for preview capture"
+  fi
+  if command -v npx >/dev/null 2>&1; then
+    command -v npx
+    return 0
+  fi
+  die_runtime "npx is required for preview capture"
+}
+
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum -- "$path" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 -- "$path" | awk '{print $1}'
+  else
+    die_runtime "sha256sum or shasum is required"
+  fi
+}
+
+file_size() {
+  wc -c < "$1" | tr -d '[:space:]'
+}
+
+path_base() {
+  local path="$1"
+  printf '%s\n' "${path##*/}"
+}
+
+reject_secret_like_artifact() {
+  local path="$1" base lower
+  base="$(path_base "$path")"
+  lower="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
+
+  case "$lower" in
+    .env|.env.*|*.env|*.pem|*.key|*.p12|*.pfx|id_rsa|id_dsa|id_ed25519|*secret*|*token*|*credential*)
+      die_usage "refusing secret-like artifact: $path"
+      ;;
+  esac
+}
+
+validate_artifact() {
+  local path="$1"
+  if [[ -z "$path" ]]; then
+    die_usage "artifact path cannot be empty"
+  fi
+  if [[ -L "$path" ]]; then
+    die_usage "refusing symlink artifact: $path"
+  fi
+  if [[ ! -f "$path" || ! -r "$path" ]]; then
+    die_usage "artifact is not a readable file: $path"
+  fi
+  reject_secret_like_artifact "$path"
+}
+
+validate_positive_pr() {
+  local pr="$1"
+  [[ "$pr" =~ ^[1-9][0-9]*$ ]] || die_usage "--pr must be a positive integer"
+}
+
+validate_provider() {
+  local provider="$1"
+  case "$provider" in
+    local|vercel|cloudflare-pages|netlify|railway|forgejo-actions)
+      ;;
+    *)
+      die_usage "unsupported preview provider: $provider"
+      ;;
+  esac
+}
+
+validate_slug() {
+  local label="$1" value="$2"
+  [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || die_usage "${label} must be a safe slug"
+}
+
+validate_branch_ref() {
+  local branch="$1"
+  [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || die_usage "--branch must be a safe branch/ref"
+  case "$branch" in
+    /*|*..*|*//*)
+      die_usage "--branch must be a safe branch/ref"
+      ;;
+  esac
+}
+
+validate_wait_ms() {
+  local wait_ms="$1"
+  [[ "$wait_ms" =~ ^[0-9]+$ ]] || die_usage "--wait-ms must be a non-negative integer"
+  (( 10#$wait_ms <= 30000 )) || die_usage "--wait-ms must be <= 30000"
+}
+
+repo_config_path() {
+  local configured="$1"
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+  else
+    printf '%s\n' "$(pwd)/walter-repo-config.yaml"
+  fi
+}
+
+preview_deploy_enabled() {
+  local config_path="$1"
+  if [[ -e "$config_path" && ( ! -f "$config_path" || ! -r "$config_path" ) ]]; then
+    die_usage "config is not a readable file: $config_path"
+  fi
+  if [[ ! -f "$config_path" ]]; then
+    printf 'false\n'
+    return 0
+  fi
+
+  local count=0 value="" parsed
+  while IFS= read -r parsed; do
+    count=$((count + 1))
+    value="$(printf '%s' "$parsed" | tr '[:upper:]' '[:lower:]')"
+  done < <(sed -nE 's/^preview_deploy:[[:space:]]*([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])[[:space:]]*(#.*)?$/\1/p' < "$config_path")
+
+  if (( count > 1 )); then
+    die_usage "multiple preview_deploy keys in config: $config_path"
+  fi
+  if grep -Eq '^preview_deploy:' < "$config_path" && [[ -z "$value" ]]; then
+    die_usage "preview_deploy must be true or false in config: $config_path"
+  fi
+
+  printf '%s\n' "${value:-false}"
+}
+
+artifact_json() {
+  local source="$1" dest="$2"
+  jq -nc \
+    --arg source "$source" \
+    --arg path "$dest" \
+    --arg sha256 "$(sha256_file "$source")" \
+    --argjson bytes "$(file_size "$source")" \
+    '{
+      source: $source,
+      path: $path,
+      sha256: $sha256,
+      bytes: $bytes
+    }'
+}
+
+copy_artifact() {
+  local source="$1" dest_dir="$2" dest
+  dest="${dest_dir}/$(path_base "$source")"
+  if [[ -e "$dest" ]]; then
+    die_usage "duplicate artifact basename: $(path_base "$source")"
+  fi
+  cp -p -- "$source" "$dest"
+  printf '%s\n' "$dest"
+}
+
+cmd_capture() {
+  require_jq
+
+  local pr="" url="" name="" out_root=".walter/previews" wait_ms=1000 json_output=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --url)
+        url="${2:-}"
+        [[ -n "$url" ]] || die_usage "--url requires a value"
+        shift 2
+        ;;
+      --name)
+        name="${2:-}"
+        [[ -n "$name" ]] || die_usage "--name requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --wait-ms)
+        wait_ms="${2:-}"
+        [[ -n "$wait_ms" ]] || die_usage "--wait-ms requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  validate_positive_pr "$pr"
+  [[ "$url" =~ ^https?:// ]] || die_usage "preview URL must start with http:// or https://"
+  [[ -n "$name" ]] || die_usage "--name is required"
+  validate_slug "--name" "$name"
+  validate_wait_ms "$wait_ms"
+
+  local npx_path bundle_dir screenshot_dir screenshot_path screenshot_tmp generated_at capture_json ln_output
+  npx_path="$(resolve_npx)"
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  screenshot_dir="${bundle_dir}/screenshots"
+  screenshot_path="${screenshot_dir}/${name}.png"
+  reject_secret_like_artifact "$screenshot_path"
+  mkdir -p -- "$screenshot_dir"
+
+  if [[ -e "$screenshot_path" ]]; then
+    die_usage "screenshot already exists: $screenshot_path"
+  fi
+
+  screenshot_tmp="$(mktemp "${screenshot_dir}/.${name}.tmp.XXXXXX")" \
+    || die_runtime "could not create temporary screenshot path"
+  if ! "$npx_path" --no-install playwright screenshot --wait-for-timeout "$wait_ms" "$url" "$screenshot_tmp"; then
+    rm -f -- "$screenshot_tmp"
+    die_runtime "preview screenshot capture failed"
+  fi
+  validate_artifact "$screenshot_tmp"
+  if ! ln_output="$(ln -- "$screenshot_tmp" "$screenshot_path" 2>&1)"; then
+    rm -f -- "$screenshot_tmp"
+    if [[ -e "$screenshot_path" ]]; then
+      die_usage "screenshot already exists: $screenshot_path"
+    fi
+    if [[ -n "$ln_output" ]]; then
+      printf '%s\n' "$ln_output" >&2
+    fi
+    die_runtime "could not publish screenshot: $screenshot_path"
+  fi
+  rm -f -- "$screenshot_tmp"
+  validate_artifact "$screenshot_path"
+
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  capture_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg url "$url" \
+    --arg generated_at "$generated_at" \
+    --arg bundle_dir "$bundle_dir" \
+    --argjson screenshot "$(artifact_json "$screenshot_path" "$screenshot_path")" \
+    '{
+      schema_version: 1,
+      kind: "preview-screenshot",
+      pr: $pr,
+      url: $url,
+      generated_at: $generated_at,
+      bundle_dir: $bundle_dir,
+      screenshot: $screenshot,
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }')"
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$capture_json" | jq .
+  else
+    printf 'preview: screenshot written %s\n' "$screenshot_path"
+  fi
+}
+
+cmd_plan() {
+  require_jq
+
+  local pr="" provider="" app="" branch="" seed="" config="" out_root=".walter/previews" json_output=0 dry_run=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --provider)
+        provider="${2:-}"
+        [[ -n "$provider" ]] || die_usage "--provider requires a value"
+        shift 2
+        ;;
+      --app)
+        app="${2:-}"
+        [[ -n "$app" ]] || die_usage "--app requires a value"
+        shift 2
+        ;;
+      --branch)
+        branch="${2:-}"
+        [[ -n "$branch" ]] || die_usage "--branch requires a value"
+        shift 2
+        ;;
+      --seed)
+        seed="${2:-}"
+        [[ -n "$seed" ]] || die_usage "--seed requires a value"
+        shift 2
+        ;;
+      --config)
+        config="${2:-}"
+        [[ -n "$config" ]] || die_usage "--config requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  [[ "$dry_run" -eq 1 ]] || die_usage "preview plan requires --dry-run"
+  validate_positive_pr "$pr"
+  [[ -n "$provider" ]] || die_usage "--provider is required"
+  [[ -n "$app" ]] || die_usage "--app is required"
+  [[ -n "$branch" ]] || die_usage "--branch is required"
+  [[ -n "$seed" ]] || die_usage "--seed is required"
+  validate_provider "$provider"
+  validate_slug "--app" "$app"
+  validate_branch_ref "$branch"
+  validate_artifact "$seed"
+
+  local config_path preview_enabled
+  config_path="$(repo_config_path "$config")"
+  preview_enabled="$(preview_deploy_enabled "$config_path")"
+  if [[ "$preview_enabled" != "true" ]]; then
+    die_usage "preview_deploy is not enabled in config: $config_path"
+  fi
+
+  local bundle_dir plan_path generated_at plan_json
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  plan_path="${bundle_dir}/preview-plan.json"
+  mkdir -p -- "$bundle_dir"
+
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  plan_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg provider "$provider" \
+    --arg app "$app" \
+    --arg branch "$branch" \
+    --arg config_path "$config_path" \
+    --arg generated_at "$generated_at" \
+    --arg bundle_dir "$bundle_dir" \
+    --argjson seed "$(artifact_json "$seed" "$seed")" \
+    '{
+      schema_version: 1,
+      kind: "preview-plan",
+      pr: $pr,
+      provider: $provider,
+      app: $app,
+      branch: $branch,
+      generated_at: $generated_at,
+      bundle_dir: $bundle_dir,
+      config_path: $config_path,
+      seed_manifest: $seed,
+      actions: [
+        "deploy_ephemeral_preview",
+        "apply_seed_fixture",
+        "capture_screenshots",
+        "write_preview_bundle"
+      ],
+      safety: {
+        dry_run: true,
+        preview_deploy: true,
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }')"
+
+  printf '%s\n' "$plan_json" | jq . > "$plan_path"
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$plan_json" | jq .
+  else
+    printf 'preview: dry-run plan written %s\n' "$plan_path"
+    printf 'preview: provider %s app %s branch %s\n' "$provider" "$app" "$branch"
+  fi
+}
+
+cmd_bundle() {
+  require_jq
+
+  local pr="" url="" seed="" out_root=".walter/previews" json_output=0
+  local -a screenshots=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --url)
+        url="${2:-}"
+        [[ -n "$url" ]] || die_usage "--url requires a value"
+        shift 2
+        ;;
+      --seed)
+        seed="${2:-}"
+        [[ -n "$seed" ]] || die_usage "--seed requires a value"
+        shift 2
+        ;;
+      --screenshot)
+        screenshots+=("${2:-}")
+        [[ -n "${2:-}" ]] || die_usage "--screenshot requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  [[ "$pr" =~ ^[1-9][0-9]*$ ]] || die_usage "--pr must be a positive integer"
+  [[ "$url" =~ ^https?:// ]] || die_usage "preview URL must start with http:// or https://"
+  [[ -n "$seed" ]] || die_usage "--seed is required"
+  [[ "${#screenshots[@]}" -gt 0 ]] || die_usage "at least one --screenshot is required"
+
+  validate_artifact "$seed"
+  local screenshot
+  for screenshot in "${screenshots[@]}"; do
+    validate_artifact "$screenshot"
+  done
+
+  local bundle_dir seed_dir screenshot_dir report_path readme_path
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  seed_dir="${bundle_dir}/seed"
+  screenshot_dir="${bundle_dir}/screenshots"
+  report_path="${bundle_dir}/preview-report.json"
+  readme_path="${bundle_dir}/README.md"
+
+  mkdir -p -- "$seed_dir" "$screenshot_dir"
+
+  local seed_dest screenshots_json="[]" screenshot_dest
+  seed_dest="$(copy_artifact "$seed" "$seed_dir")"
+  for screenshot in "${screenshots[@]}"; do
+    screenshot_dest="$(copy_artifact "$screenshot" "$screenshot_dir")"
+    screenshots_json="$(jq -c \
+      --argjson item "$(artifact_json "$screenshot" "$screenshot_dest")" \
+      '. + [$item]' <<<"$screenshots_json")"
+  done
+
+  local generated_at report_json
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  report_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg url "$url" \
+    --arg generated_at "$generated_at" \
+    --arg bundle_dir "$bundle_dir" \
+    --argjson seed_manifest "$(artifact_json "$seed" "$seed_dest")" \
+    --argjson screenshots "$screenshots_json" \
+    '{
+      schema_version: 1,
+      pr: $pr,
+      url: $url,
+      generated_at: $generated_at,
+      bundle_dir: $bundle_dir,
+      seed_manifest: $seed_manifest,
+      screenshots: $screenshots,
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }')"
+
+  printf '%s\n' "$report_json" | jq . > "$report_path"
+  {
+    printf '# Preview Bundle PR #%s\n\n' "$pr"
+    printf -- '- URL: %s\n' "$url"
+    printf -- "- Seed manifest: \`%s\`\n" "${seed_dest#"$bundle_dir"/}"
+    printf -- '- Screenshots: %s\n' "${#screenshots[@]}"
+    printf -- '- Safety: production secrets rejected; deploy not performed.\n'
+  } > "$readme_path"
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$report_json" | jq .
+  else
+    printf 'preview: bundle written %s\n' "$bundle_dir"
+    printf 'preview: report %s\n' "$report_path"
+  fi
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  capture)
+    cmd_capture "$@"
+    ;;
+  plan)
+    cmd_plan "$@"
+    ;;
+  bundle)
+    cmd_bundle "$@"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    die_usage "unknown command: $cmd"
+    ;;
+esac

@@ -73,6 +73,13 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Added
 
+- **MCP tool-definition drift detection (#122/#331).** Adds a
+  `tools/list` JSON-RPC probe for stdio, HTTP, and SSE MCPs from Claude settings,
+  persists approved tool baselines via `walter-os baseline-mcp-tools`, and
+  emits critical `mcp-tool-shadowing` findings when tool names,
+  descriptions, or schemas change. Probes are gated against the approved
+  server-registry baseline before any MCP command or remote request runs, and
+  disabled or manual/high-risk entries are not executed by the audit.
 - **Audit-chain Loki verification (#122/#332).** Extends
   `walter-os audit verify-chain --from-loki` from fixture-only checks to
   live Loki `query_range` calls via `--loki-url` or
@@ -88,13 +95,46 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   row of a new day when the previous daily root exists, and lets
   `walter-os audit verify-chain --since <date> [--until <date>]` validate
   consecutive local audit days with cross-day root continuity.
+- **Audit-chain Loki fixture verification (#122).** Adds
+  `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
+  operators can verify Loki-shipped audit-chain rows with the same local
+  hash-chain verifier before live Loki querying lands.
 
 ### Changed
 
+- **Control Tower mobile nav polish (#311).** Lets the shared TopNav wrap on
+  narrow viewports so the dashboard no longer creates horizontal page overflow
+  on phone-width screens.
+- **Control Tower team readiness first slice (#308).** Adds a read-only
+  operator readiness panel for solo, second-device, teammate, service-health,
+  post-merge, and model/tool paths, with links to existing docs and safe CLI
+  commands.
+- **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
+  `walter-repo-config.yaml` policy axis, reports the effective mode during
+  validation, and keeps the hard-limit floor non-overridable in every mode.
+- **Capability tier planner (#232).** Adds the capability-plan repo-config
+  command so operators can compute `min(repo ceiling, evidence tier, risk cap)`
+  from explicit evidence signals while keeping hard-floor paths human-gated.
+- **Risk-based verification planner (#233).** Adds `walter-os repo-config
+  verification-plan` so operators can derive prototype/risk-based/production
+  check depth from repo policy, explicit risk, and changed paths while forcing
+  production verification for hard-floor files.
+- **Signed Forgejo PR webhook adapter (#302).** Adds
+  `plane-pr-sync-webhook.sh` for HMAC-verified Forgejo/Gitea merge webhooks,
+  resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and
+  fails closed before Plane/Forgejo mutation on invalid signatures or ambiguous
+  markers.
+- **Forgejo marker persistence hardening (#305).** Makes
+  `plane-pr-sync.sh link` fail closed before moving Plane to review when it
+  cannot persist or find the matching trusted `walter-plane-issue:<id>` marker
+  in Forgejo PR comments.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
   max-fix-attempts escalation cap.
+- **Release operations doctor (#307).** Adds a read-only
+  `walter-os release doctor` check for release version, changelog, tag,
+  PR-review, status-check, issue-link, and stacked-PR hygiene.
 - **Plane ↔ Forgejo PR sync wiring (#237).** Adds a safe
   `plane-pr-sync-trigger.sh` adapter for Forgejo/Gitea `pull_request` payloads,
   records stable `walter-plane-issue:<id>` markers in PR comments, documents
@@ -213,6 +253,13 @@ rows, audit telemetry wiring, and release provenance/reproducibility gates.
   doctor status, and prints a rollback hint after local upgrades. The version
   update notice now points operators to `walter-os upgrade --dry-run` and a
   targeted `--target <tag>` command.
+
+### Fixed
+
+- **Control Tower `/api/spend` local-dev fallback (#312).** Network and
+  fetch failures now return the same safe zero-agent fallback payload as
+  non-2xx LiteLLM responses, so local development no longer accepts a
+  500 response when LiteLLM is unavailable.
 
 ---
 

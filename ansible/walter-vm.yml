@@ -18,10 +18,63 @@
   vars:
     walter_services_dir: /opt/walter-vm/services
     walter_data_volume: /mnt/walter-vm-data
+    walter_service_placement_env_file: "{{ lookup('env', 'WALTER_SERVICE_PLACEMENT_FILE') | default('', true) }}"
+    walter_service_placement_path: "{{ walter_service_placement_file | default(walter_service_placement_env_file, true) }}"
 
   pre_tasks:
     - name: Verify reaching VM via Cloudflare Access tunnel
       ansible.builtin.ping:
+      tags: always
+
+    - name: Fail when service placement manifest path is relative
+      ansible.builtin.fail:
+        msg: "service placement manifest path must be absolute: {{ walter_service_placement_path }}"
+      when:
+        - walter_service_placement_path | length > 0
+        - not (walter_service_placement_path | regex_search('^/'))
+      tags: always
+
+    - name: Check optional service placement manifest
+      ansible.builtin.stat:
+        path: "{{ walter_service_placement_path }}"
+      delegate_to: localhost
+      become: no
+      register: walter_service_placement_stat
+      when: walter_service_placement_path | length > 0
+      tags: always
+
+    - name: Fail when configured service placement manifest is missing
+      ansible.builtin.fail:
+        msg: "service placement manifest does not exist: {{ walter_service_placement_path }}"
+      when:
+        - walter_service_placement_path | length > 0
+        - not walter_service_placement_stat.stat.exists
+      tags: always
+
+    - name: Load optional service placement manifest
+      ansible.builtin.include_vars:
+        file: "{{ walter_service_placement_path }}"
+        name: walter_service_placement
+      when:
+        - walter_service_placement_path | length > 0
+        - walter_service_placement_stat.stat.exists
+      tags: always
+
+    - name: Initialize host-scoped service placement
+      ansible.builtin.set_fact:
+        walter_enabled_services: []
+      changed_when: false
+      when: walter_service_placement is defined
+      tags: always
+
+    - name: Select services assigned to this host
+      ansible.builtin.set_fact:
+        walter_enabled_services: "{{ walter_enabled_services + [item.key] }}"
+      changed_when: false
+      loop: "{{ (walter_service_placement.services | default({})) | dict2items }}"
+      when:
+        - walter_service_placement is defined
+        - ((item.value.vms | default([])) | intersect(group_names)) | length > 0
       tags: always
 
   roles:

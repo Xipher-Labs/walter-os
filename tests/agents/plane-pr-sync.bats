@@ -64,8 +64,21 @@ CURL_MOCK
   cat > "$MOCK_DIR/tea" <<'TEA_MOCK'
 #!/usr/bin/env bash
 printf 'tea %s\n' "$*" >> "$CALL_LOG"
+posted_comment_file="$(dirname "$CALL_LOG")/posted-comment"
 if [[ " $* " == *" issues "* && " $* " == *" --comments "* && " $* " == *" --output json "* ]]; then
-  printf '{"comments":[{"body":"%s"}]}\n' "${TEA_EXISTING_COMMENTS:-}"
+  if [[ "${TEA_FAIL_VIEW:-0}" == "1" ]]; then
+    echo "simulated tea comment fetch failure" >&2
+    exit 96
+  fi
+  if [[ "${TEA_MALFORMED_VIEW:-0}" == "1" ]]; then
+    echo 'not-json'
+    exit 0
+  fi
+  if [[ -f "$posted_comment_file" ]]; then
+    printf '{"comments":[{"author":{"login":"%s"},"body":"%s"}]}\n' "${TEA_POST_AUTHOR:-${TEA_COMMENT_AUTHOR:-walter-bot}}" "$(cat "$posted_comment_file")"
+    exit 0
+  fi
+  printf '{"comments":[{"author":{"login":"%s"},"body":"%s"}]}\n' "${TEA_COMMENT_AUTHOR:-walter-bot}" "${TEA_EXISTING_COMMENTS:-}"
   exit 0
 fi
 case " $* " in
@@ -78,6 +91,16 @@ case " $* " in
       echo "simulated tea comment failure" >&2
       exit 98
     fi
+    if [[ "${TEA_DROP_COMMENT:-0}" == "1" ]]; then
+      exit 0
+    fi
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == "--comment" ]]; then
+        printf '%s' "${2:-}" > "$posted_comment_file"
+        break
+      fi
+      shift
+    done
     ;;
 esac
 exit 0
@@ -139,7 +162,7 @@ combined_output() {
 }
 
 @test "AC1: Forgejo comments are idempotent" {
-  export TEA_EXISTING_COMMENTS="[walter-pr-sync:acme/app#7:link] already posted"
+  export TEA_EXISTING_COMMENTS="[walter-plane-issue:issue-uuid] already posted"
 
   run bash "$SCRIPT" link \
     --issue "issue-uuid" \
@@ -151,6 +174,125 @@ combined_output() {
   [ "$status" -eq 0 ]
   grep -q 'tea issues view 7 --repo acme/app --comments --output json' "$CALL_LOG"
   if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: sync marker without Plane issue marker does not satisfy binding" {
+  export TEA_EXISTING_COMMENTS="[walter-pr-sync:acme/app#7:link] already posted"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"
+}
+
+@test "AC1: wrong Plane issue marker does not satisfy binding" {
+  export TEA_EXISTING_COMMENTS="[walter-plane-issue:other-issue] already posted"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"conflicting walter-plane-issue marker"* ]]
+  if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
+    return 1
+  fi
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: untrusted existing Plane issue marker does not satisfy binding" {
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
+  export TEA_COMMENT_AUTHOR="contributor"
+  export TEA_POST_AUTHOR="walter-bot"
+  export TEA_EXISTING_COMMENTS="[walter-plane-issue:issue-uuid] spoofed"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"
+}
+
+@test "AC1: trusted existing Plane issue marker satisfies binding" {
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
+  export TEA_COMMENT_AUTHOR="walter-bot"
+  export TEA_EXISTING_COMMENTS="[walter-plane-issue:issue-uuid] already posted"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  if grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: trusted newly posted marker satisfies binding" {
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
+  export TEA_POST_AUTHOR="walter-bot"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 0 ]
+  grep -q 'state-review' "$CALL_LOG"
+}
+
+@test "AC1: successful comment command without persisted marker aborts before Plane review" {
+  export TEA_DROP_COMMENT=1
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"Forgejo PR marker comment was not persisted"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: untrusted newly posted marker aborts before Plane review" {
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS="walter-bot"
+  export TEA_POST_AUTHOR="contributor"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"Forgejo PR marker comment is not trusted"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
     return 1
   fi
 }
@@ -172,7 +314,7 @@ combined_output() {
   grep -q 'state-review' "$CALL_LOG"
 }
 
-@test "AC1: Forgejo comment failure warns and continues" {
+@test "AC1: Forgejo marker persistence failure aborts before Plane review" {
   export TEA_FAIL_COMMENT=1
 
   run bash "$SCRIPT" link \
@@ -182,9 +324,62 @@ combined_output() {
     --repo "acme/app" \
     --branch "feature/thing"
 
-  [ "$status" -eq 0 ]
-  [[ "$(combined_output)" == *"WARN Forgejo PR comment failed"* ]]
-  grep -q 'state-review' "$CALL_LOG"
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"Forgejo PR marker comment failed"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: missing tea aborts before Plane review" {
+  rm -f "$MOCK_DIR/tea"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"tea is required to persist the Forgejo PR marker"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: Forgejo comment inspection failure aborts before Plane review" {
+  export TEA_FAIL_VIEW=1
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"failed to inspect Forgejo PR comments before marker persistence"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
+}
+
+@test "AC1: malformed Forgejo comment JSON aborts before Plane review" {
+  export TEA_MALFORMED_VIEW=1
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"failed to parse Forgejo PR comments before marker persistence"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
 }
 
 @test "AC2: merged comments with merge sha and moves Plane to done" {

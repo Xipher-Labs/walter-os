@@ -13,6 +13,10 @@ services:
   control-tower:
     image: walter-control-tower:latest
     container_name: control-tower
+    mem_limit: "${CONTROL_TOWER_MEM_LIMIT:-512m}"
+    mem_reservation: "${CONTROL_TOWER_MEM_RESERVATION:-256m}"
+    cpus: "${CONTROL_TOWER_CPUS:-1.0}"
+    pids_limit: "${CONTROL_TOWER_PIDS_LIMIT:-256}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
