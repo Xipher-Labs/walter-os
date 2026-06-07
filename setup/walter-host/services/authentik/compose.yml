@@ -6,6 +6,10 @@ services:
   authentik-postgresql:
     image: docker.io/library/postgres:16-alpine
     container_name: authentik-postgresql
+    mem_limit: "${AUTHENTIK_POSTGRESQL_MEM_LIMIT:-512m}"
+    mem_reservation: "${AUTHENTIK_POSTGRESQL_MEM_RESERVATION:-256m}"
+    cpus: "${AUTHENTIK_POSTGRESQL_CPUS:-0.75}"
+    pids_limit: "${AUTHENTIK_POSTGRESQL_PIDS_LIMIT:-256}"
     restart: unless-stopped
     profiles: ["authentik"]
     environment:
@@ -25,6 +29,10 @@ services:
   authentik-redis:
     image: docker.io/library/redis:7-alpine
     container_name: authentik-redis
+    mem_limit: "${AUTHENTIK_REDIS_MEM_LIMIT:-256m}"
+    mem_reservation: "${AUTHENTIK_REDIS_MEM_RESERVATION:-128m}"
+    cpus: "${AUTHENTIK_REDIS_CPUS:-0.5}"
+    pids_limit: "${AUTHENTIK_REDIS_PIDS_LIMIT:-128}"
     restart: unless-stopped
     profiles: ["authentik"]
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
@@ -41,6 +49,10 @@ services:
   authentik-server:
     image: ghcr.io/goauthentik/server:2026.5.2
     container_name: authentik-server
+    mem_limit: "${AUTHENTIK_SERVER_MEM_LIMIT:-1g}"
+    mem_reservation: "${AUTHENTIK_SERVER_MEM_RESERVATION:-512m}"
+    cpus: "${AUTHENTIK_SERVER_CPUS:-1.0}"
+    pids_limit: "${AUTHENTIK_SERVER_PIDS_LIMIT:-512}"
     restart: unless-stopped
     profiles: ["authentik"]
     command: server
@@ -70,6 +82,10 @@ services:
   authentik-worker:
     image: ghcr.io/goauthentik/server:2026.5.2
     container_name: authentik-worker
+    mem_limit: "${AUTHENTIK_WORKER_MEM_LIMIT:-768m}"
+    mem_reservation: "${AUTHENTIK_WORKER_MEM_RESERVATION:-384m}"
+    cpus: "${AUTHENTIK_WORKER_CPUS:-1.0}"
+    pids_limit: "${AUTHENTIK_WORKER_PIDS_LIMIT:-512}"
     restart: unless-stopped
     profiles: ["authentik"]
     command: worker

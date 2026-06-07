@@ -9,6 +9,10 @@ services:
   listmonk:
     image: listmonk/listmonk:v6.1.0
     container_name: listmonk
+    mem_limit: "${LISTMONK_MEM_LIMIT:-512m}"
+    mem_reservation: "${LISTMONK_MEM_RESERVATION:-256m}"
+    cpus: "${LISTMONK_CPUS:-0.75}"
+    pids_limit: "${LISTMONK_PIDS_LIMIT:-256}"
     restart: unless-stopped
     profiles: [listmonk]
     depends_on:
@@ -52,6 +56,10 @@ services:
   listmonk-db:
     image: postgres:17-alpine
     container_name: listmonk-db
+    mem_limit: "${LISTMONK_DB_MEM_LIMIT:-512m}"
+    mem_reservation: "${LISTMONK_DB_MEM_RESERVATION:-256m}"
+    cpus: "${LISTMONK_DB_CPUS:-0.75}"
+    pids_limit: "${LISTMONK_DB_PIDS_LIMIT:-256}"
     restart: unless-stopped
     profiles: [listmonk]
     environment:
