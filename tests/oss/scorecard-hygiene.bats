@@ -40,5 +40,6 @@ setup() {
 
   grep -Fq "Issue #396" "$f"
   grep -qi "manual GitHub setting" "$f"
-  grep -qi "fuzzing is deferred" "$f"
+  grep -Fq 'fast-check' "$f"
+  grep -Fq 'sanitize.fuzz.test.ts' "$f"
 }
