@@ -146,6 +146,11 @@ _walter_model_yaml_value() {
 _walter_model_provider_for_route() {
   local route="${1:-}"
 
+  if _walter_model_is_local "$route"; then
+    echo "ollama"
+    return 0
+  fi
+
   case "$route" in
     claude|haiku|sonnet|opus|claude-*|anthropic/*|openrouter/claude*)
       echo "claude" ;;
@@ -153,8 +158,6 @@ _walter_model_provider_for_route() {
       echo "codex" ;;
     gemini|gemini-*|cheap|nanobanana|google/*)
       echo "gemini" ;;
-    local|local-*|local/*|ollama|ollama/*|ollama:*|localhost:[0-9]*|127.0.0.1:[0-9]*|'[::1]:'[0-9]*)
-      echo "ollama" ;;
     copilot)
       echo "copilot" ;;
     none|"")

@@ -7,6 +7,7 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   ROUTER="$REPO_ROOT/scripts/walter/lib/model-router.sh"
+  TMP_CONFIG=""
   [[ -f "$ROUTER" ]] || skip "model-router.sh not present"
   TMP_CONFIG="$(mktemp -d)"
   export WALTER_CONFIG="$TMP_CONFIG"
@@ -14,7 +15,7 @@ setup() {
 }
 
 teardown() {
-  rm -rf "$TMP_CONFIG"
+  [[ -n "${TMP_CONFIG:-}" && -d "$TMP_CONFIG" ]] && rm -rf "$TMP_CONFIG"
 }
 
 @test "model-router: unset backend_review uses Codex default" {
