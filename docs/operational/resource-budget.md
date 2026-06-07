@@ -41,12 +41,12 @@ cloudflared.
 | PostHog (full) | ~8 GB | ClickHouse, Kafka, Temporal, ingestion, UI, and Rust services |
 | Langfuse | ~3 GB | Optional tracing/evals stack; ClickHouse is the main driver |
 | Metabase | ~1 GB | JVM-based; heap settable via `JAVA_OPTS` |
-| Plane | ~512 MB | Includes Plane API + worker + beat + frontend |
+| Plane | ~1.5 GB | Includes API, workers, frontend, proxy, DB, Redis, RabbitMQ, and MinIO |
 | Infisical | ~512 MB | Backend + frontend |
 | Authentik | ~512 MB | Optional SSO stack; server + worker plus DB/cache |
 | n8n | ~512 MB | Node.js runtime |
 | Listmonk | ~256 MB | Optional newsletter/devrel stack |
-| Penpot | ~512 MB | Penpot app + Penpot exporter |
+| Penpot | ~1 GB | Penpot app + exporter + DB/cache |
 | RocketChat | ~512 MB | Node.js, can spike to 1 GB |
 | Postiz | ~512 MB | Social scheduler app; Redis and Postgres are separate |
 | Control Tower | ~512 MB | Next.js app server |
