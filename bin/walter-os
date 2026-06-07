@@ -71,6 +71,8 @@
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
 #   post-merge-check [--commit SHA] [--json]
 #                               Classify post-merge health evidence (read-only)
+#   preview bundle --pr N --url URL --seed FILE --screenshot FILE
+#                               Package preview evidence for review (no deploy)
 #   feature-state {init|validate|record-post-merge}
 #                               Manage .walter/features/<id>/state.yaml ledgers
 #   release doctor --target vX.Y.Z|X.Y.Z [--json]
@@ -2356,7 +2358,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|feature-state|release|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|preview|feature-state|release|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2403,6 +2405,7 @@ case "$cmd" in
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
   pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
   post-merge-check)   exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/post-merge-check.sh" "$@" ;;
+  preview)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/preview.sh" "$@" ;;
   feature-state)      exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/feature-state.sh" "$@" ;;
   release)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/release.sh" "$@" ;;
   repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
