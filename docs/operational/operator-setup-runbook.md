@@ -207,6 +207,13 @@ cd ~ && codex --version          # uses ~/.codex (personal)
 **Goal**: this Mac joins the Walter mesh so it can reach walter-vm
 services via private hostnames (no CF Access middleman).
 
+Headscale is optional mesh networking, not the primary break-glass path. If
+registration returns HTTP 500 or Headscale logs `capability version must be
+set`, stop and use the Hetzner Cloud Firewall SSH allow-list recovery path
+instead of downgrading clients during an outage. Then read
+[`../../setup/walter-host/services/headscale/RUNBOOK.md`](../../setup/walter-host/services/headscale/RUNBOOK.md)
+before retrying Headscale.
+
 ### 4a. Generate a fresh preauth key on the VM
 
 ```bash
@@ -260,6 +267,7 @@ ssh walter@walter-vm.walter.local
 | Symptom | Fix |
 |---|---|
 | `tailscale up` errors "auth key invalid" | Key expired or already used (if non-reusable). Generate a new one. |
+| `tailscale up` returns HTTP 500 and Headscale logs `capability version must be set` | Tailscale client capability-version drift. Use the Hetzner Cloud Firewall SSH allow-list for break-glass, then follow the Headscale runbook before changing server or client versions. |
 | Headscale logs: "Listening without TLS but ServerURL does not start with http://" | Ignore. Cosmetic warning. |
 | `tailscale status` shows "logged out" | Did `--reset` succeed? Try `tailscale logout && tailscale up ...` again. |
 | Mac is in the mesh but can't reach 100.64.0.X | DERP issue. Check `tailscale netcheck`. Walter-vm is using Tailscale's public DERP servers (configured in `headscale config.yaml` lines 14-17). |
