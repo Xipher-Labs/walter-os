@@ -170,13 +170,34 @@ _walter_audit_session_state_file() {
   return 1
 }
 
+_walter_audit_touch_session_state() {
+  local repo="${WALTER_AUDIT_REPO:-${PWD}}" touch_output touch_status state_file
+  declare -F walter_session_touch >/dev/null 2>&1 || return 1
+  touch_output="$(walter_session_touch "$repo")"
+  touch_status="$?"
+  if [[ "$touch_status" -ne 0 ]]; then
+    printf '%s\n' "$touch_output" >&2
+    return "$touch_status"
+  fi
+  if _walter_audit_jq_available; then
+    state_file="$(printf '%s\n' "$touch_output" | jq -er 'if (.state_file | type) == "string" then .state_file else empty end' 2>/dev/null)" || return 1
+    [[ -f "$state_file" ]] || return 1
+    printf '%s' "$state_file"
+    return 0
+  fi
+  _walter_audit_session_state_file
+}
+
 _walter_audit_current_session_id() {
   local state_file session_id from_state=0
   if [[ -n "${WALTER_SESSION_ID:-}" ]]; then
     session_id="$WALTER_SESSION_ID"
   else
     from_state=1
-    state_file="$(_walter_audit_session_state_file)" || return 1
+    state_file="$(_walter_audit_session_state_file)" || state_file=""
+    if [[ -z "$state_file" || ! -f "$state_file" ]]; then
+      state_file="$(_walter_audit_touch_session_state)" || return $?
+    fi
     [[ -f "$state_file" ]] || return 1
     if _walter_audit_jq_available; then
       session_id="$(jq -er 'if (.session_id | type) == "string" then .session_id else empty end' "$state_file" 2>/dev/null)" || {
