@@ -24,10 +24,10 @@ with open(compose_path, "r", encoding="utf-8") as handle:
 
 service = compose["services"][service_name]
 expected = {
-    "mem_limit": f"${{{prefix}_MEM_LIMIT:-",
-    "mem_reservation": f"${{{prefix}_MEM_RESERVATION:-",
-    "cpus": f"${{{prefix}_CPUS:-",
-    "pids_limit": f"${{{prefix}_PIDS_LIMIT:-",
+    "mem_limit": "${" + prefix + "_MEM_LIMIT:-",
+    "mem_reservation": "${" + prefix + "_MEM_RESERVATION:-",
+    "cpus": "${" + prefix + "_CPUS:-",
+    "pids_limit": "${" + prefix + "_PIDS_LIMIT:-",
 }
 for key, marker in expected.items():
     value = service.get(key)
