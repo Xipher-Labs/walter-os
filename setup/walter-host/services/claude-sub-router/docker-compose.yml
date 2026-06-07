@@ -6,6 +6,10 @@
 
 services:
   claude-sub-router:
+    mem_limit: "${CLAUDE_SUB_ROUTER_MEM_LIMIT:-512m}"
+    mem_reservation: "${CLAUDE_SUB_ROUTER_MEM_RESERVATION:-256m}"
+    cpus: "${CLAUDE_SUB_ROUTER_CPUS:-1.0}"
+    pids_limit: "${CLAUDE_SUB_ROUTER_PIDS_LIMIT:-256}"
     build: .
     container_name: claude-sub-router
     restart: unless-stopped
