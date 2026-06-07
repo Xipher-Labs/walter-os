@@ -49,6 +49,8 @@ cloudflared.
 | Control Tower | ~512 MB | Next.js app server |
 | LiteLLM | ~256 MB | Python; spikes to 512 MB under parallel requests |
 | Forgejo | ~256 MB | Go binary; very lean |
+| Forgejo runner | ~512 MB | Depends on job payload; default cap leaves room for host jobs |
+| Renovate | ~512 MB | Node.js; dependency graph scans can spike higher |
 | Synapse | ~256 MB | Python; scales with rooms and users |
 | Prometheus | ~256 MB | Scales with metric count and retention |
 | Grafana | ~256 MB | Go binary |
@@ -61,6 +63,7 @@ cloudflared.
 | Headscale | ~64 MB | Go binary |
 | Headscale UI | ~32 MB | Static + minimal server |
 | wg-easy | ~32 MB | Node.js; very lean |
+| ntfy | ~64 MB | Optional notification relay |
 | Alerting | ~32 MB | Shared Grafana alerting pipeline |
 | Restic | ~64 MB | Go binary; peaks during backup window |
 | Drawio | ~128 MB | Java; varies with diagram complexity |
