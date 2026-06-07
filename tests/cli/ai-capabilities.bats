@@ -8,10 +8,17 @@ WALTER_BIN="${REPO_ROOT}/bin/walter"
 
 setup() {
   TEST_HOME="$(mktemp -d)"
+  TEST_BIN="${TEST_HOME}/bin"
   export HOME="$TEST_HOME"
   export WALTER_OS_HOME="$REPO_ROOT"
   export WALTER_CONFIG="${TEST_HOME}/.config/walter-os"
-  mkdir -p "$WALTER_CONFIG"
+  mkdir -p "$WALTER_CONFIG" "$TEST_BIN"
+  cat >"${TEST_BIN}/gh" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "${TEST_BIN}/gh"
+  export PATH="${TEST_BIN}:/usr/bin:/bin:/usr/sbin:/sbin"
 
   unset ANTHROPIC_API_KEY ANTHROPIC_ENTERPRISE_KEY OPENAI_API_KEY GEMINI_API_KEY OLLAMA_BASE_URL
 }

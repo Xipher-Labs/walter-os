@@ -271,7 +271,7 @@ cmd_status() {
 
 cmd_configure() {
   profile=""
-  overrides=()
+  local -a overrides=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -313,9 +313,11 @@ cmd_configure() {
   fi
 
   apply_profile_defaults "$profile"
-  for override in "${overrides[@]}"; do
-    set_route_override "$override"
-  done
+  if ((${#overrides[@]} > 0)); then
+    for override in "${overrides[@]}"; do
+      set_route_override "$override"
+    done
+  fi
   write_capabilities
 
   echo "AI capability profile written: $AI_CAPABILITIES_FILE"
