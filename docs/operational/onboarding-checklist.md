@@ -102,6 +102,13 @@ cd ~/work && codex
 
 ### 4. Tailscale via Headscale (5 min)
 
+Headscale is optional mesh networking. Do not treat it as the emergency
+break-glass path until registration is known-good for your Headscale and
+Tailscale client versions. If registration returns HTTP 500 or Headscale logs
+`capability version must be set`, use the Hetzner Cloud Firewall SSH allow-list
+recovery path and then follow
+[`../../setup/walter-host/services/headscale/RUNBOOK.md`](../../setup/walter-host/services/headscale/RUNBOOK.md).
+
 ```bash
 # Generate fresh preauth key on the VM:
 ssh walter-vm 'sudo docker exec headscale headscale preauthkeys create --user 1 --reusable'
@@ -162,7 +169,9 @@ each one.
 
 - **Headscale node enrollment**: requires `tailscale up` on the
   client device. Agent doesn't have shell access to your Mac's
-  Tailscale daemon.
+  Tailscale daemon, and capability-version drift can require an operator
+  decision about client pinning, server upgrade timing, or using the firewall
+  allow-list recovery path instead.
 - **Plane / Forgejo / RocketChat / n8n / Penpot first-runs**: each
   has a wizard that requires the operator's password decision.
   Bootstrapping these via API would mean the agent picks the
