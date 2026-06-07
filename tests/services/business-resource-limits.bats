@@ -70,7 +70,7 @@ assert_compose_renders() {
     POSTIZ_JWT_SECRET=test-postiz-jwt-secret \
     RESEND_API_KEY=test \
     SYNAPSE_DB_PASS=test \
-    docker compose -f "$tmpdir/compose.yml" config --quiet
+    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
   [ "$status" -eq 0 ]
 }
 
