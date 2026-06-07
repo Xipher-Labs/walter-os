@@ -26,12 +26,15 @@ on:
 permissions:
   actions: read
   contents: read
-  security-events: write   # required to upload SARIF results
 
 jobs:
   analyze:
     name: codeql analysis
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write   # required to upload SARIF results
     # CodeQL SARIF upload requires "Code scanning" enabled on the repo, which
     # is free for PUBLIC repos and a paid GHAS feature on PRIVATE repos.
     # Walter-OS is private during pre-v0.2.0 OSS prep. Gate the job so it

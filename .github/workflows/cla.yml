@@ -25,13 +25,15 @@ on:
 
 permissions:
   contents: read
-  issues: write          # contributor-assistant comments on CLA signatures
-  pull-requests: write   # contributor-assistant labels / updates PR state
-  statuses: write        # contributor-assistant publishes CLA commit status
 
 jobs:
   cla-assistant:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write          # contributor-assistant comments on CLA signatures
+      pull-requests: write   # contributor-assistant labels / updates PR state
+      statuses: write        # contributor-assistant publishes CLA commit status
     # Gate the entire job behind the activation variable.  Until the
     # operator opts in, the job is a no-op (succeeds without doing
     # anything) so the workflow file can ship without disrupting open PRs.
