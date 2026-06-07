@@ -92,6 +92,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Control Tower mobile nav polish (#311).** Lets the shared TopNav wrap on
+  narrow viewports so the dashboard no longer creates horizontal page overflow
+  on phone-width screens.
 - **Control Tower team readiness first slice (#308).** Adds a read-only
   operator readiness panel for solo, second-device, teammate, service-health,
   post-merge, and model/tool paths, with links to existing docs and safe CLI

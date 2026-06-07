@@ -2,7 +2,9 @@
  * Control Tower smoke tests.
  * Tests: (1) page loads, (2) agent board renders 6 cards, (3) SSE connects,
  * (4) timeline renders, (5) cost dashboard renders,
- * (6) HA Status renders, (7) mode toggle visible, (8) nav links work.
+ * (6) HA Status renders, (7) mode toggle visible, (8) nav links work,
+ * (9) mobile nav does not create horizontal overflow,
+ * (10) council chat loads, (11) history page loads.
  *
  * Tailscale enforcement is disabled in test env (TAILSCALE_ENFORCE=false).
  * Control Tower token auth is satisfied by the Playwright context header.
@@ -138,14 +140,47 @@ test.describe("Control Tower smoke tests", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
-  test("(9) Council Chat page loads", async ({ page }) => {
+  test("(9) TopNav fits without horizontal overflow on mobile", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.locator("nav")).toBeVisible();
+
+    const updateBadge = page.locator(
+      "[data-testid='update-badge'], [data-testid='update-badge-no-link']"
+    );
+    if (process.env.WALTER_VERSION && process.env.WALTER_UPDATE_AVAILABLE) {
+      await expect(updateBadge.first()).toBeVisible();
+    } else if ((await updateBadge.count()) > 0) {
+      await expect(updateBadge.first()).toBeVisible();
+    }
+
+    const metrics = await page.evaluate(() => {
+      const nav = document.querySelector("nav");
+      if (!nav) {
+        throw new Error("TopNav is missing from the dashboard.");
+      }
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        docScrollWidth: document.documentElement.scrollWidth,
+        navScrollWidth: nav.scrollWidth,
+        navClientWidth: nav.clientWidth,
+      };
+    });
+
+    expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+    expect(metrics.navScrollWidth).toBeLessThanOrEqual(metrics.navClientWidth + 1);
+  });
+
+  test("(10) Council Chat page loads", async ({ page }) => {
     await page.goto("/council");
     await expect(page.locator("h1")).toContainText("Council Chat");
     await expect(page.locator("textarea")).toBeVisible();
     await expect(page.locator("button", { hasText: "Send to Council" })).toBeVisible();
   });
 
-  test("(10) History page loads with the shared nav rendered", async ({
+  test("(11) History page loads with the shared nav rendered", async ({
     page,
   }) => {
     await page.goto("/history");
