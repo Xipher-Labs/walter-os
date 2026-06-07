@@ -77,6 +77,8 @@ source "$LIB_DIR/alerts.sh"
 source "$LIB_DIR/vote.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/mode.sh"
+# shellcheck disable=SC1091
+source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
 
 AUDIT="$WALTER_OS_HOME/scripts/agent-audit-log.sh"
 WATCHDOG="$WALTER_OS_HOME/scripts/agent-runtime-watchdog.sh"
@@ -113,6 +115,16 @@ case "$AGENT" in
   liaison)    EXPECTED_LANE="digest" ;;
   *)          EXPECTED_LANE="" ;;  # unknown agent → don't lane-check
 esac
+
+_agent_model_domain() {
+  case "${1:-}" in
+    coder|reviewer|security-auditor) echo "backend_review" ;;
+    researcher|triage|architect)     echo "brainstorm" ;;
+    liaison|tech-writer|devrel-writer) echo "longform" ;;
+    janitor)                         echo "quick_refactor" ;;
+    *)                               echo "default" ;;
+  esac
+}
 
 # ---------- pull issue + check lane/context ----------
 
@@ -358,13 +370,10 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-# Pick model based on agent
-case "$AGENT" in
-  liaison|janitor|triage)  MODEL="haiku" ;;
-  researcher|reviewer)     MODEL="sonnet" ;;
-  coder)                   MODEL="sonnet" ;;
-  *)                       MODEL="haiku" ;;
-esac
+# Pick model based on the agent's domain and operator-configured availability.
+MODEL_DOMAIN="$(_agent_model_domain "$AGENT")"
+MODEL=""
+walter_model_select_primary "$MODEL_DOMAIN" MODEL
 
 # ---------- invoke LLM under watchdog ----------
 
@@ -522,9 +531,11 @@ metric_set "walter_council_heartbeat_age_seconds" "agent=\"${AGENT}\"" 0 || true
 # ---------- lesson extraction (T-12) ----------
 # After a successful task, ask the LLM "what did you learn?" and write it.
 # Only runs on success (DONE or REVIEW), not on failure/needs-operator.
-# Uses a cheap/haiku call with max 200 tokens. Tags from Plane issue labels.
+# Uses the routed default model with max 200 tokens. Tags from Plane issue labels.
 if [[ "$RESULT_LABEL" == "success" ]]; then
   _LESSON_EXTRACT_RUNNER="$(mktemp -t walter-lesson-runner.XXXXXX)"
+  LESSON_MODEL=""
+  walter_model_select_primary default LESSON_MODEL
   # Note: _LESSON_EXTRACT_RUNNER is cleaned by the consolidated _run_cleanup trap above.
   # SECURITY: WALTER_LESSON_TITLE is exported so it reaches the runner via env.
   # TITLE must NOT be interpolated into the heredoc — it comes from Plane and is
@@ -536,7 +547,7 @@ set -uo pipefail
 source "$LIB_DIR/llm.sh"
 # WALTER_LESSON_TITLE comes from env — not interpolated from Plane data.
 _safe_title="\${WALTER_LESSON_TITLE:-unknown task}"
-llm_invoke "$AGENT" "haiku" \
+llm_invoke "$AGENT" "$LESSON_MODEL" \
   "You are extracting a lesson from a completed agent task. Be concise." \
   "What is ONE key thing you learned or discovered while completing the task titled: \${_safe_title}? If nothing notable, say NOTHING_TO_LEARN. Format: single sentence (≤120 chars), no preamble." \
   200

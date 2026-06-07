@@ -8,6 +8,7 @@ setup() {
 
   export WALTER_CONFIG="$(mktemp -d -t walter-vote-XXXXXX)"
   export WALTER_ALERT_LOG="$WALTER_CONFIG/events.log"
+  unset WALTER_MODEL_OVERRIDE WALTER_MODEL_BACKEND_REVIEW WALTER_MODEL_ROUTER_SH
 
   # Mock LLM: create a mock llm.sh that returns configurable yes/no
   MOCK_LIB_DIR="$(mktemp -d -t walter-mock-lib-XXXXXX)"
@@ -95,6 +96,35 @@ _vote_council_clean() {
   result=$(_vote_council_clean "test-123" "fix lint" '["researcher","reviewer","coder"]')
   quorum=$(echo "$result" | jq -r '.quorum_met' 2>/dev/null || echo "false")
   [[ "$quorum" == "true" ]]
+}
+
+@test "vote_council routes vote model through model router" {
+  [[ -f "$LIB" ]] || skip "vote.sh not found"
+  MODEL_ARGS_FILE="$(mktemp -t walter-vote-model-args-XXXXXX)"
+  export MODEL_ARGS_FILE MOCK_LIB_DIR WALTER_CONFIG LIB
+  export WALTER_MODEL_BACKEND_REVIEW="codex-routed"
+  export WALTER_MODEL_ROUTER_SH="$BATS_TEST_DIRNAME/../../scripts/walter/lib/model-router.sh"
+
+  cat > "$MOCK_LIB_DIR/llm.sh" <<'MOCK_LLM'
+#!/usr/bin/env bash
+WALTER_LLM_LIB_VERSION=1
+llm_invoke() {
+  printf '%s\n' "$2" >> "$MODEL_ARGS_FILE"
+  echo "yes - routed model accepted"
+}
+MOCK_LLM
+
+  result=$(bash -c '
+    export LLM_SH="$MOCK_LIB_DIR/llm.sh"
+    export WALTER_CONSENSUS_VOTES_LOG="/dev/null"
+    source "$LIB"
+    vote_council "test-routed" "fix model routing" "[\"researcher\",\"reviewer\"]" 2>/dev/null
+  ' 2>/dev/null || echo "FAILED")
+
+  echo "$result" | jq . >/dev/null 2>&1
+  grep -qFx "codex-routed" "$MODEL_ARGS_FILE"
+  ! grep -qFx "haiku" "$MODEL_ARGS_FILE"
+  rm -f "$MODEL_ARGS_FILE"
 }
 
 # --- Fix 1: Shell injection prevention via env-var pass + sanitization ---

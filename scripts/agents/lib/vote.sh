@@ -38,6 +38,30 @@ _vote_llm_sh() {
   echo "${script_dir}/llm.sh"
 }
 
+_vote_model_router_sh() {
+  if [[ -n "${WALTER_MODEL_ROUTER_SH:-}" && -f "${WALTER_MODEL_ROUTER_SH}" ]]; then
+    echo "$WALTER_MODEL_ROUTER_SH"
+    return 0
+  fi
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  echo "${script_dir}/../../walter/lib/model-router.sh"
+}
+
+_vote_select_model() {
+  local model="haiku"
+  local router_sh
+  router_sh="$(_vote_model_router_sh)"
+
+  if [[ -f "$router_sh" ]]; then
+    # shellcheck disable=SC1090,SC1091
+    source "$router_sh"
+    walter_model_select_primary backend_review model || model="haiku"
+  fi
+
+  printf '%s' "$model"
+}
+
 # _vote_sanitize_task_desc <raw_desc> → prints sanitized version on stdout
 # Strips control characters and prompt-injection markers to prevent:
 #   1. Shell injection via shell-interpolation in bash -c
@@ -80,6 +104,8 @@ _vote_invoke_agent() {
   local agent="$1" task_desc="$2" outfile="$3"
   local llm_sh
   llm_sh="$(_vote_llm_sh)"
+  local vote_model
+  vote_model="$(_vote_select_model)"
 
   # Sanitize task_desc before embedding in prompts (defense in depth)
   local task_desc_safe
@@ -99,9 +125,10 @@ Answer: yes or no (first line), then one sentence reason."
       WALTER_VOTE_SYSTEM="$system_prompt" \
       WALTER_VOTE_USER="$user_prompt" \
       WALTER_VOTE_AGENT="$agent" \
+      WALTER_VOTE_MODEL="$vote_model" \
         bash -c '
           source "$1"
-          llm_invoke "$WALTER_VOTE_AGENT" "haiku" "$WALTER_VOTE_SYSTEM" "$WALTER_VOTE_USER" 100
+          llm_invoke "$WALTER_VOTE_AGENT" "$WALTER_VOTE_MODEL" "$WALTER_VOTE_SYSTEM" "$WALTER_VOTE_USER" 100
         ' _ "$llm_sh" 2>/dev/null
     ) || response=""
   fi

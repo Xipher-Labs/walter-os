@@ -5,8 +5,10 @@
 setup() {
   RUN_SH="$BATS_TEST_DIRNAME/../../scripts/agents/run.sh"
   METRICS_LIB="$BATS_TEST_DIRNAME/../../scripts/agents/lib/metrics.sh"
+  MODEL_ROUTER_LIB="$BATS_TEST_DIRNAME/../../scripts/walter/lib/model-router.sh"
   [[ -f "$RUN_SH" ]] || skip "run.sh not found"
   [[ -f "$METRICS_LIB" ]] || skip "metrics.sh not found"
+  [[ -f "$MODEL_ROUTER_LIB" ]] || skip "model-router.sh not found"
 
   # Isolated env
   WALTER_METRICS_DIR="$(mktemp -d -t walter-run-metrics-XXXXXX)"
@@ -15,6 +17,7 @@ setup() {
   export WALTER_METRICS_LOCK="$WALTER_METRICS_FILE.lock"
   export WALTER_OS_HOME="$BATS_TEST_DIRNAME/../.."
   export WALTER_CONFIG="$(mktemp -d -t walter-config-XXXXXX)"
+  unset WALTER_MODEL_OVERRIDE WALTER_MODEL_BACKEND_REVIEW WALTER_MODEL_DEFAULT
 }
 
 teardown() {
@@ -37,6 +40,27 @@ teardown() {
 
 @test "run.sh emits walter_council_tokens_total at task end" {
   grep -q "walter_council_tokens_total" "$RUN_SH"
+}
+
+@test "run.sh sources model-router.sh for Council model selection" {
+  grep -q "model-router\.sh" "$RUN_SH"
+  grep -q "walter_model_select_primary" "$RUN_SH"
+}
+
+@test "run.sh maps Council agents to model routing domains" {
+  grep -q "_agent_model_domain" "$RUN_SH"
+  grep -q "coder|reviewer|security-auditor" "$RUN_SH"
+  grep -q "backend_review" "$RUN_SH"
+  grep -q "researcher|triage|architect" "$RUN_SH"
+  grep -q "brainstorm" "$RUN_SH"
+  grep -q "liaison|tech-writer|devrel-writer" "$RUN_SH"
+  grep -q "longform" "$RUN_SH"
+}
+
+@test "run.sh does not hardcode primary Council models" {
+  ! grep -q 'MODEL="haiku"' "$RUN_SH"
+  ! grep -q 'MODEL="sonnet"' "$RUN_SH"
+  ! grep -q 'llm_invoke "$AGENT" "haiku"' "$RUN_SH"
 }
 
 @test "run.sh emits walter_council_heartbeat_age_seconds" {
@@ -103,6 +127,32 @@ teardown() {
   # Assert: the metrics file contains the expected counter value (1234)
   [[ -f "$WALTER_METRICS_FILE" ]]
   grep -qF 'walter_council_tokens_total{agent="test-agent",model="sonnet"} 1234' "$WALTER_METRICS_FILE"
+}
+
+@test "token metrics use routed model value" {
+  # Source metrics and router libs.
+  # shellcheck source=/dev/null
+  source "$METRICS_LIB"
+  # shellcheck source=/dev/null
+  source "$MODEL_ROUTER_LIB"
+  metrics_init
+
+  OUTFILE_RAW="$(mktemp -t walter-test-raw.XXXXXX)"
+  printf '{"usage":{"total_tokens":1234}}\n' > "$OUTFILE_RAW"
+
+  AGENT="reviewer"
+  MODEL=""
+  export WALTER_MODEL_BACKEND_REVIEW="codex-pro"
+  walter_model_select_primary backend_review MODEL
+  TOKENS_USED=$(jq -r '.usage.total_tokens // 0' "$OUTFILE_RAW" 2>/dev/null || echo 0)
+  TOKENS_USED="${TOKENS_USED:-0}"
+  if [[ "$TOKENS_USED" -gt 0 ]]; then
+    metric_inc "walter_council_tokens_total" "agent=\"${AGENT}\",model=\"${MODEL}\"" "$TOKENS_USED"
+  fi
+
+  rm -f "$OUTFILE_RAW"
+
+  grep -qF 'walter_council_tokens_total{agent="reviewer",model="codex-pro"} 1234' "$WALTER_METRICS_FILE"
 }
 
 # ---- M1: trap consolidation — lesson runner trap must not overwrite main cleanup ----
