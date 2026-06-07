@@ -68,7 +68,7 @@ assert_compose_renders() {
     LISTMONK_POSTGRES_PASSWORD=test \
     LISTMONK_ADMIN_USER=test \
     LISTMONK_ADMIN_PASSWORD=test-password \
-    docker compose -f "$tmpdir/compose.yml" config --quiet
+    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
   [ "$status" -eq 0 ]
 }
 
