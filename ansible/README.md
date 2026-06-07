@@ -128,10 +128,40 @@ Set `service_state` when including the role to reconcile a service lifecycle:
 | `stopped` | Run `docker compose stop`; containers remain defined |
 | `absent` | Run `docker compose down`; containers/networks are removed but the role never removes volumes |
 
+## Cloudflared role contract
+
+`roles/cloudflared/` installs the `cloudflared` package and can install the
+tunnel as a systemd service when tunnel files already exist locally.
+
+By default it looks for:
+
+```
+/tmp/walter-cf/
+├── credentials.json
+└── config.yml
+```
+
+Override the source directory with:
+
+```bash
+WALTER_CLOUDFLARED_LOCAL_DIR=/path/to/walter-cf ansible-playbook walter-vm.yml --tags cloudflared
+```
+
+If those files are absent, the role installs the package but skips service
+configuration. Creating tunnels, DNS records, and Cloudflare Access apps still
+lives in `setup/walter-host/cloudflare/*.sh`.
+
+## Alerting role contract
+
+`roles/alerting/` ships the Walter-VM watchdog scripts and `cron.example` to
+`/opt/walter-vm/services/alerting/`. It does not install cron automatically
+because the scripts require root-owned credentials in
+`/etc/walter-vm/alerting.env`. Create that file with `sudo install -m 600`
+after filling Telegram and Hetzner values.
+
 ## What this DOES NOT replace
 
 - Cloudflare DNS / Access apps (use `setup/walter-host/cloudflare/*.sh`)
-- Cloudflared tunnel ingress (use `cloudflared/config.yml` directly)
 - One-off setup like `restic init`, `headscale users create`, etc.
   (use the per-service deploy.sh for those)
 

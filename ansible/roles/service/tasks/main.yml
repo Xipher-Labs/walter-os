@@ -113,7 +113,9 @@
   ansible.builtin.stat:
     path: "{{ walter_services_dir }}/{{ service_name }}"
   register: svc_dir
-  when: walter_service_state in ['stopped', 'absent']
+  when:
+    - walter_service_should_deploy | bool
+    - walter_service_state in ['stopped', 'absent']
 
 - name: "[{{ service_name }}] docker compose stop"
   ansible.builtin.command:
@@ -124,6 +126,7 @@
     'Stopped' in ((stop_result.stdout | default('')) ~ (stop_result.stderr | default('')))
     or 'Stopping' in ((stop_result.stdout | default('')) ~ (stop_result.stderr | default('')))
   when:
+    - walter_service_should_deploy | bool
     - walter_service_state == 'stopped'
     - svc_dir.stat.exists | default(false)
 
@@ -136,5 +139,6 @@
     'Removed' in ((down_result.stdout | default('')) ~ (down_result.stderr | default('')))
     or 'Removing' in ((down_result.stdout | default('')) ~ (down_result.stderr | default('')))
   when:
+    - walter_service_should_deploy | bool
     - walter_service_state == 'absent'
     - svc_dir.stat.exists | default(false)

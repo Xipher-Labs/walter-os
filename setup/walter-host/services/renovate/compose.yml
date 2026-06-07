@@ -12,6 +12,10 @@ services:
     profiles: [renovate]
     image: renovate/renovate:43.195.4
     container_name: walter-renovate
+    mem_limit: "${RENOVATE_MEM_LIMIT:-2g}"
+    mem_reservation: "${RENOVATE_MEM_RESERVATION:-512m}"
+    cpus: "${RENOVATE_CPUS:-2.0}"
+    pids_limit: "${RENOVATE_PIDS_LIMIT:-512}"
     restart: "no"
     environment:
       - RENOVATE_CONFIG_FILE=/usr/src/app/config.js
