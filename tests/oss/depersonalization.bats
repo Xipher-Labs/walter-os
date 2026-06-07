@@ -37,6 +37,7 @@ count_matches() {
     | grep -v "$REPO_ROOT/.claude/" \
     | grep -v "$REPO_ROOT/.git/" \
     | grep -v "$REPO_ROOT/SECURITY.md" \
+    | grep -v "$REPO_ROOT/.github/SECURITY.md" \
     | grep -v "$REPO_ROOT/CODE_OF_CONDUCT.md" \
     | grep -v "$REPO_ROOT/CONTRIBUTING.md" \
     | grep -v "$REPO_ROOT/README.md" \
@@ -319,6 +320,7 @@ count_matches() {
     | grep -v "$REPO_ROOT/.claude/" \
     | grep -v "$REPO_ROOT/.git/" \
     | grep -v "$REPO_ROOT/SECURITY.md" \
+    | grep -v "$REPO_ROOT/.github/SECURITY.md" \
     | grep -v "$REPO_ROOT/CODE_OF_CONDUCT.md" \
     | grep -v "$REPO_ROOT/CONTRIBUTING.md" \
     | grep -v "$REPO_ROOT/README.md" \

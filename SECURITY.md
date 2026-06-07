@@ -57,7 +57,7 @@ public disclosure to allow time for a fix and coordinated release.
 A PGP key for encrypted reports will be published at `keys.openpgp.org`
 under `security@xipherlabs.xyz`. Until then, unencrypted email is acceptable.
 
-PGP fingerprint: [PGP key coming in v0.2.1 — for now use email only]
+PGP fingerprint: TBD - key not yet published; for now use email only.
 
 ---
 
@@ -88,4 +88,4 @@ in release notes.
 ## Cross-reference
 
 For commercial licensing enquiries (separate from security), see
-[COMMERCIAL.md](https://github.com/Xipher-Labs/walter-os/blob/main/COMMERCIAL.md).
+[COMMERCIAL.md](/COMMERCIAL.md).
