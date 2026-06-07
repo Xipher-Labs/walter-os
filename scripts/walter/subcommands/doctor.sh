@@ -74,12 +74,27 @@ check_secret_runtime() {
   elif [[ "$has_infisical" -eq 1 && -f "$secrets_file" ]]; then
     log_warn "Infisical runtime configured; legacy plaintext secrets.env still exists"
     warn=$((warn + 1))
+    check_legacy_secrets_file_mode "$secrets_file"
   elif [[ -f "$secrets_file" ]]; then
     log_warn "legacy plaintext secrets.env detected; migrate to Infisical machine identity"
     warn=$((warn + 1))
+    check_legacy_secrets_file_mode "$secrets_file"
   else
     log_err "secrets runtime missing (configure Infisical identity or legacy secrets.env)"
     fail=$((fail + 1))
+  fi
+}
+check_legacy_secrets_file_mode() {
+  local secrets_file="$1"
+  local mode
+
+  mode="$(stat -f '%Lp' "$secrets_file" 2>/dev/null || stat -c '%a' "$secrets_file" 2>/dev/null || true)"
+  if [[ "$mode" == "600" ]]; then
+    log_ok "legacy secrets.env mode 600"
+    ok=$((ok + 1))
+  else
+    log_warn "legacy secrets.env mode should be 600"
+    warn=$((warn + 1))
   fi
 }
 check_legacy_secret_key() {
@@ -91,7 +106,7 @@ check_legacy_secret_key() {
     return
   fi
 
-  if grep -E "^${key}=" "$secrets_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d "'\"" | grep -q .; then
+  if grep -E "^(export[[:space:]]+)?${key}=" "$secrets_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d "'\"" | grep -q .; then
     log_ok "$label"
     ok=$((ok + 1))
   else

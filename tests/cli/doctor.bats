@@ -127,8 +127,8 @@ prepare_doctor_symlinks() {
   mkdir -p "$test_home/.config/walter-os"
   : >"$test_home/.config/walter-os/env"
   cat >"$test_home/.config/walter-os/secrets.env" <<'ENV'
-ANTHROPIC_API_KEY=legacy-anthropic
-OPENAI_API_KEY=legacy-openai
+export ANTHROPIC_API_KEY=legacy-anthropic
+export OPENAI_API_KEY=legacy-openai
 ENV
   chmod 600 "$test_home/.config/walter-os/secrets.env"
   stub_doctor_tools "$fake_bin"
@@ -142,4 +142,48 @@ ENV
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"legacy plaintext secrets.env"* ]]
+  [[ "$output" == *"legacy secrets.env mode 600"* ]]
+  [[ "$output" == *"Anthropic API key set"* ]]
+  [[ "$output" == *"OpenAI API key set"* ]]
+}
+
+@test "walter doctor warns on permissive legacy secrets.env mode" {
+  local test_home="$BATS_TEST_TMPDIR/home-legacy-mode"
+  local fake_bin="$BATS_TEST_TMPDIR/bin-legacy-mode"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  cat >"$test_home/.config/walter-os/secrets.env" <<'ENV'
+export ANTHROPIC_API_KEY=legacy-anthropic
+export OPENAI_API_KEY=legacy-openai
+ENV
+  chmod 644 "$test_home/.config/walter-os/secrets.env"
+  stub_doctor_tools "$fake_bin"
+  prepare_doctor_symlinks "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$fake_bin:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --client-only
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"legacy secrets.env mode should be 600"* ]]
+}
+
+@test "walter doctor fails when no secrets runtime is configured" {
+  local test_home="$BATS_TEST_TMPDIR/home-no-runtime"
+  local fake_bin="$BATS_TEST_TMPDIR/bin-no-runtime"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  stub_doctor_tools "$fake_bin"
+  prepare_doctor_symlinks "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$fake_bin:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --client-only
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"secrets runtime missing"* ]]
 }
