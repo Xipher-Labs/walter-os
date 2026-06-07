@@ -38,9 +38,13 @@ PY
 
 assert_compose_renders() {
   local service_dir="$1"
+  local compose_profiles="${2:-}"
   local compose="$SERVICES_ROOT/$service_dir/compose.yml"
   local tmpdir="$BATS_TEST_TMPDIR/$service_dir"
 
+  if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
+    skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
+  fi
   if ! command -v docker >/dev/null 2>&1; then
     skip "docker is not installed"
   fi
@@ -55,6 +59,7 @@ assert_compose_renders() {
   run env \
     WALTER_DOMAIN=example.com \
     WALTER_TIMEZONE=UTC \
+    COMPOSE_PROFILES="$compose_profiles" \
     FORGEJO_DB_PASS=test \
     FORGEJO_INSTANCE_URL=https://git.example.com \
     RENOVATE_TOKEN=test \
@@ -82,10 +87,10 @@ assert_compose_renders() {
 
 @test "lightweight service compose files render with defaults" {
   assert_compose_renders "forgejo"
-  assert_compose_renders "forgejo-runner"
-  assert_compose_renders "renovate"
+  assert_compose_renders "forgejo-runner" "forgejo-runner"
+  assert_compose_renders "renovate" "renovate"
   assert_compose_renders "control-tower"
   assert_compose_renders "drawio"
-  assert_compose_renders "ntfy"
+  assert_compose_renders "ntfy" "ntfy"
   assert_compose_renders "syncthing"
 }
