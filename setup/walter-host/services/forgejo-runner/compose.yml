@@ -2,6 +2,10 @@ services:
   forgejo-runner:
     image: code.forgejo.org/forgejo/runner:12.10.2
     container_name: forgejo-runner
+    mem_limit: "${FORGEJO_RUNNER_MEM_LIMIT:-2g}"
+    mem_reservation: "${FORGEJO_RUNNER_MEM_RESERVATION:-512m}"
+    cpus: "${FORGEJO_RUNNER_CPUS:-2.0}"
+    pids_limit: "${FORGEJO_RUNNER_PIDS_LIMIT:-512}"
     profiles: ["forgejo-runner"]
     restart: unless-stopped
     environment:

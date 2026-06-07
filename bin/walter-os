@@ -19,6 +19,8 @@
 #   audit                       Run supply-chain audit now (foreground)
 #   status [--models]           Show audit + spend status, or model routing
 #   audit verify-chain [date]   Verify tamper-evident audit hash chain
+#   audit verify-chain --from-loki --mock-loki <fixture> [date]
+#                               Verify Loki-shipped audit rows from fixture JSON
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
@@ -69,6 +71,8 @@
 #   pr-score [PR] [--json]      Score PR readiness from checks, reviews, risk, and issue links
 #   post-merge-check [--commit SHA] [--json]
 #                               Classify post-merge health evidence (read-only)
+#   release doctor --target vX.Y.Z|X.Y.Z [--json]
+#                               Check release readiness without mutating state
 #   repo-config {validate|defaults [balanced|hackathon]}
 #                               Validate walter-repo-config.yaml per-repo policy
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
@@ -154,6 +158,43 @@ cmd_audit() {
       shift
       # shellcheck source=/dev/null
       source "${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh"
+      if [[ "${1:-}" == "--from-loki" ]]; then
+        shift
+        local fixture="" date_value=""
+        while [[ "$#" -gt 0 ]]; do
+          case "$1" in
+            --mock-loki)
+              if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+                echo "walter-os audit verify-chain --from-loki: --mock-loki <fixture> required" >&2
+                return 2
+              fi
+              fixture="$2"
+              shift 2
+              ;;
+            --*)
+              echo "walter-os audit verify-chain --from-loki: unsupported option: $1" >&2
+              echo "Usage: walter-os audit verify-chain --from-loki --mock-loki <fixture> [date]" >&2
+              return 2
+              ;;
+            *)
+              if [[ -n "$date_value" ]]; then
+                echo "walter-os audit verify-chain --from-loki: too many arguments" >&2
+                echo "Usage: walter-os audit verify-chain --from-loki --mock-loki <fixture> [date]" >&2
+                return 2
+              fi
+              date_value="$1"
+              shift
+              ;;
+          esac
+        done
+        if [[ -z "$fixture" ]]; then
+          echo "walter-os audit verify-chain --from-loki: --mock-loki <fixture> required for this release" >&2
+          echo "Live Loki querying is not implemented yet; export a query_range response JSON and pass --mock-loki." >&2
+          return 2
+        fi
+        walter_audit_verify_chain_from_loki_fixture "$fixture" "$date_value"
+        return $?
+      fi
       walter_audit_verify_chain "$@"
       return $?
       ;;
@@ -2302,7 +2343,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|pr-score|post-merge-check|release|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2349,6 +2390,7 @@ case "$cmd" in
   pr-title)           exec "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-title.sh" "$@" ;;
   pr-score)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/pr-score.sh" "$@" ;;
   post-merge-check)   exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/post-merge-check.sh" "$@" ;;
+  release)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/release.sh" "$@" ;;
   repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
   version)            cmd_version "$@" ;;
   doctor)             cmd_doctor "$@" ;;
