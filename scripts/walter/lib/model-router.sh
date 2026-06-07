@@ -121,14 +121,79 @@ _walter_model_all_routes_local() {
   return 0
 }
 
+_walter_model_capabilities_file() {
+  echo "${WALTER_AI_CAPABILITIES_FILE:-${WALTER_CONFIG:-$HOME/.config/walter-os}/ai-capabilities.yaml}"
+}
+
+_walter_model_yaml_value() {
+  local file="$1" key="$2"
+  awk -v key="$key" '
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ "^" key "[[:space:]]*:") {
+        sub(/^[^:]*:[[:space:]]*/, "", line)
+        sub(/[[:space:]]+#.*$/, "", line)
+        sub(/[[:space:]]+$/, "", line)
+        print line
+        exit
+      }
+    }
+  ' "$file"
+}
+
+_walter_model_provider_for_route() {
+  local route="${1:-}"
+
+  case "$route" in
+    claude|haiku|sonnet|opus|claude-*|anthropic/*|openrouter/claude*)
+      echo "claude" ;;
+    codex|codex-*|gpt|gpt-*|openai/*)
+      echo "codex" ;;
+    gemini|gemini-*|cheap|nanobanana|google/*)
+      echo "gemini" ;;
+    local|local-*|local/*|ollama|ollama/*|ollama:*|localhost:[0-9]*|127.0.0.1:[0-9]*|'[::1]:'[0-9]*)
+      echo "ollama" ;;
+    copilot)
+      echo "copilot" ;;
+    none|"")
+      echo "none" ;;
+    *)
+      echo "" ;;
+  esac
+}
+
+_walter_model_warn_disabled_providers() {
+  local value="${1:-}"
+  local file provider state route
+  local -a routes
+
+  file="$(_walter_model_capabilities_file)"
+  [[ -f "$file" ]] || return 0
+
+  IFS=',' read -ra routes <<<"$value"
+  for route in "${routes[@]}"; do
+    provider="$(_walter_model_provider_for_route "$route")"
+    [[ -n "$provider" && "$provider" != "none" ]] || continue
+
+    state="$(_walter_model_yaml_value "$file" "provider_${provider}")"
+    if [[ "$state" == "disabled" ]]; then
+      echo "walter-model-router: WARN provider_${provider} is disabled in $file but route uses ${route}" >&2
+    fi
+  done
+}
+
 walter_model_phi_lock() {
   local configured="${WALTER_MODEL_PHI:-local-ollama}"
   if walter_model_value_valid "$configured" && _walter_model_all_routes_local "$configured"; then
+    _walter_model_warn_disabled_providers "$configured"
     echo "$configured"
     return 0
   fi
 
   echo "walter-model-router: WARN WALTER_MODEL_PHI must point to a local model; using local-ollama" >&2
+  _walter_model_warn_disabled_providers "local-ollama"
   echo "local-ollama"
 }
 
@@ -149,6 +214,7 @@ walter_model_for() {
 
   if [[ -n "${WALTER_MODEL_OVERRIDE:-}" ]]; then
     if walter_model_value_valid "$WALTER_MODEL_OVERRIDE"; then
+      _walter_model_warn_disabled_providers "$WALTER_MODEL_OVERRIDE"
       echo "$WALTER_MODEL_OVERRIDE"
       return 0
     fi
@@ -160,16 +226,19 @@ walter_model_for() {
   fallback="$(walter_model_default_for "$requested")"
 
   if [[ -z "$configured" ]]; then
+    _walter_model_warn_disabled_providers "$fallback"
     echo "$fallback"
     return 0
   fi
 
   if walter_model_value_valid "$configured"; then
+    _walter_model_warn_disabled_providers "$configured"
     echo "$configured"
     return 0
   fi
 
   echo "walter-model-router: WARN invalid ${env_key} ignored; using ${fallback}" >&2
+  _walter_model_warn_disabled_providers "$fallback"
   echo "$fallback"
 }
 

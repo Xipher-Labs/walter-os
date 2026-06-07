@@ -114,3 +114,9 @@ Run this before opening or reviewing substantial PRs:
 walter ai validate
 walter ai status
 ```
+
+`scripts/walter/lib/model-router.sh` also reads the capability file when it
+exists. If a `WALTER_MODEL_*` route points at a provider declared as
+`disabled`, the resolver keeps the route for backward compatibility but prints
+a warning so workflows do not silently assume Codex, Claude, Gemini, Copilot, or
+Ollama are available.
