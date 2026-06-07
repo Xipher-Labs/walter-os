@@ -1,6 +1,7 @@
 # Multi-stage Dockerfile for Walter Council Control Tower
 # Stage 1: builder
-FROM node:22-alpine AS builder
+# tag: node:22-alpine
+FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS builder
 
 WORKDIR /app
 
@@ -24,7 +25,8 @@ WORKDIR /app/apps/control-tower
 RUN pnpm build
 
 # Stage 2: runner
-FROM node:22-alpine AS runner
+# tag: node:22-alpine
+FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runner
 
 WORKDIR /app
 

@@ -28,6 +28,7 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
 
 @test ".env.template declares the Hermes base image version" {
     grep -q '^HERMES_AGENT_BASE_VERSION=v[0-9]' "$SERVICE_DIR/.env.template"
+    grep -q '^HERMES_AGENT_BASE_IMAGE_REF=nousresearch/hermes-agent:v[0-9].*@sha256:[a-f0-9]\{64\}$' "$SERVICE_DIR/.env.template"
 }
 
 @test ".env.template has LITELLM_HERMES_KEY" {
@@ -66,6 +67,11 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
         after_from && /^ARG BASE_VERSION$/ { found=1 }
         END { exit(found ? 0 : 1) }
     ' "$SERVICE_DIR/Dockerfile"
+    awk '
+        /^FROM / { after_from=1; next }
+        after_from && /^ARG BASE_IMAGE_REF$/ { found=1 }
+        END { exit(found ? 0 : 1) }
+    ' "$SERVICE_DIR/Dockerfile"
 }
 
 @test "Dockerfile pins faster-whisper version" {
@@ -93,10 +99,14 @@ SERVICE_DIR="$REPO_ROOT/setup/walter-host/services/hermes-agent"
 
 @test "compose.yml uses one Hermes base version variable for image and build arg" {
     expected_version="$(sed -n 's/^HERMES_AGENT_BASE_VERSION=//p' "$SERVICE_DIR/.env.template")"
+    expected_ref="$(sed -n 's/^HERMES_AGENT_BASE_IMAGE_REF=//p' "$SERVICE_DIR/.env.template")"
     [ -n "$expected_version" ]
+    [ -n "$expected_ref" ]
     grep -q "^ARG BASE_VERSION=${expected_version}$" "$SERVICE_DIR/Dockerfile"
+    grep -q "^ARG BASE_IMAGE_REF=${expected_ref}$" "$SERVICE_DIR/Dockerfile"
     grep -q "image: walter-os/hermes-agent:\${HERMES_AGENT_BASE_VERSION:-${expected_version}}-stt" "$SERVICE_DIR/compose.yml"
     grep -q "BASE_VERSION: \${HERMES_AGENT_BASE_VERSION:-${expected_version}}" "$SERVICE_DIR/compose.yml"
+    grep -q "BASE_IMAGE_REF: \${HERMES_AGENT_BASE_IMAGE_REF:-${expected_ref}}" "$SERVICE_DIR/compose.yml"
 }
 
 @test "services inventory documents the Walter Hermes STT image" {
