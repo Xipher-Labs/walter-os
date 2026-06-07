@@ -82,7 +82,9 @@ operational UX improvements, and explicit issue coverage for GitHub
 code-scanning alerts.
 
 Remaining post-release follow-ups are tracked in the open security and
-operations issues: #122, #123, #225, #235, #342, #363, and #390-#396.
+operations issues: #122, #123, #225, #235, #342, and #363. The GitHub
+code-scanning follow-up set #390-#396 was closed before the final v0.6.1
+cut.
 
 ### Added
 
@@ -95,6 +97,14 @@ operations issues: #122, #123, #225, #235, #342, #363, and #390-#396.
   issues for open GitHub CodeQL/Scorecard alerts covering Control Tower file
   IO, safe temp directories, randomness, least-privilege workflow tokens,
   pinned dependencies, and Scorecard hygiene.
+- **Capability-token state audit (#122).** Adds daily supply-chain audit
+  checks for malformed capability session state, stale `caps-*` directories,
+  missing capability material, token files broader than `0600`, and exposed
+  session signing keys. Operator recovery guidance now lives in
+  `docs/operational/capability-tokens.md`.
+- **AI-stack watchdog Ansible deployment (#342).** Ships
+  `ai-stack-watchdog.sh` through the Walter-VM alerting Ansible role so the
+  Ansible-managed install path matches the standalone setup/cron examples.
 - **MCP tool-definition drift detection (#122/#331).** Adds a
   `tools/list` JSON-RPC probe for stdio, HTTP, and SSE MCPs from Claude settings,
   persists approved tool baselines via `walter-os baseline-mcp-tools`, and
@@ -179,6 +189,10 @@ operations issues: #122, #123, #225, #235, #342, #363, and #390-#396.
   `vercel-optimize` and `writing-guidelines` upstream entries, and keeps both
   out of the global Walter-OS skill surface pending dedicated safety/network
   review.
+- **Doctor secrets-runtime parity (#123).** Aligns `walter doctor` with the
+  Infisical-first clean-install behavior while preserving deterministic legacy
+  `secrets.env` migration warnings, mode-`0600` checks, and support for
+  exported legacy key syntax.
 
 ---
 
