@@ -27,10 +27,10 @@ export default function TopNav({
 }) {
   return (
     <nav className="border-b border-border bg-surface-1/80 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-6 py-3">
+      <div className="mx-auto flex max-w-[1600px] flex-col items-stretch gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
         <Link
           href="/"
-          className="flex items-center gap-2 font-semibold text-foreground transition-colors hover:text-accent"
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground transition-colors hover:text-accent"
         >
           <span
             aria-hidden="true"
@@ -39,7 +39,7 @@ export default function TopNav({
           Walter Council
           <span className="text-subtle font-normal">Control Tower</span>
         </Link>
-        <div className="flex items-center gap-1 text-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
           {LINKS.map((link) => {
             const isActive = active === link.href;
             return (
@@ -58,7 +58,7 @@ export default function TopNav({
             );
           })}
           {showVersion && (
-            <span className="ml-2 border-l border-border pl-3">
+            <span className="ml-1 min-w-0 max-w-full border-l border-border pl-3 sm:ml-2">
               <VersionBadge />
             </span>
           )}

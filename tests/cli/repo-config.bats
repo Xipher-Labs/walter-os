@@ -364,6 +364,14 @@ YAML
   [[ "$output" == *"plan: prototype"* ]]
 }
 
+@test "verification-plan defaults target to pwd without shell noise" {
+  run bash -c "cd '$TMP_DIR/repo' && '$WALTER_OS_BIN' repo-config verification-plan"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: verification plan"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
 @test "verification-plan raises script changes to medium risk checks" {
   write_valid_config
 
@@ -529,6 +537,186 @@ YAML
   [[ "$output" == *"unknown option: --unknown"* ]]
 
   run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" -- --unknown
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: low"* ]]
+}
+
+@test "capability-plan defaults to read-only without evidence" {
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 1 assisted"* ]]
+  [[ "$output" == *"evidence_tier: 0 read_only"* ]]
+  [[ "$output" == *"effective_tier: 0 read_only"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan defaults target to pwd without shell noise" {
+  run bash -c "cd '$TMP_DIR/repo' && '$WALTER_OS_BIN' repo-config capability-plan"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-config: capability plan"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan computes assisted with CI and tests evidence" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --evidence ci \
+    --evidence tests
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"evidence_tier: 1 assisted"* ]]
+  [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+  [[ "$output" == *"allowed_actions:"* ]]
+  [[ "$output" == *"  - open_pr"* ]]
+}
+
+@test "capability-plan caps rich evidence by repo ceiling" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback \
+    --evidence branch_protection \
+    --evidence history
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 1 assisted"* ]]
+  [[ "$output" == *"evidence_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan requires human gate for supervised autonomy" {
+  write_valid_config
+  sed -i.bak 's/capability_tier_ceiling: 1/capability_tier_ceiling: 2/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 2 supervised_autonomy"* ]]
+  [[ "$output" == *"evidence_tier: 2 supervised_autonomy"* ]]
+  [[ "$output" == *"effective_tier: 2 supervised_autonomy"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan allows bounded autonomy only with ceiling and evidence" {
+  write_valid_config
+  sed -i.bak 's/capability_tier_ceiling: 1/capability_tier_ceiling: 3/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback \
+    --evidence branch_protection \
+    --evidence history
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo_ceiling: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"evidence_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"effective_tier: 3 bounded_autonomy"* ]]
+  [[ "$output" == *"human_gate: policy"* ]]
+  [[ "$output" == *"  - policy_auto_merge_non_protected"* ]]
+}
+
+@test "capability-plan caps hard-floor paths at assisted and requires human gate" {
+  write_valid_config
+  sed -i.bak 's/capability_tier_ceiling: 1/capability_tier_ceiling: 3/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path install.sh \
+    --evidence ci \
+    --evidence tests \
+    --evidence sandbox \
+    --evidence egress \
+    --evidence rollback \
+    --evidence branch_protection \
+    --evidence history
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hard_floor: yes"* ]]
+  [[ "$output" == *"effective_tier: 1 assisted"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+}
+
+@test "capability-plan rejects unknown evidence names" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --evidence vibes
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid evidence: vibes"* ]]
+}
+
+@test "capability-plan rejects missing risk values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --risk
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --risk"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan rejects missing path values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --risk low --path
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan rejects option-looking missing path values" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --path --risk low
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+}
+
+@test "capability-plan rejects missing evidence values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --evidence
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --evidence"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "capability-plan rejects unknown options unless forced positional" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" --unknown
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option: --unknown"* ]]
+
+  run "$WALTER_OS_BIN" repo-config capability-plan "$TMP_DIR/repo" -- --unknown
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"path_risk: low"* ]]

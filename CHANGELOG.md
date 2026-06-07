@@ -92,6 +92,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Control Tower mobile nav polish (#311).** Lets the shared TopNav wrap on
+  narrow viewports so the dashboard no longer creates horizontal page overflow
+  on phone-width screens.
 - **Control Tower team readiness first slice (#308).** Adds a read-only
   operator readiness panel for solo, second-device, teammate, service-health,
   post-merge, and model/tool paths, with links to existing docs and safe CLI
@@ -99,6 +102,9 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 - **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
   `walter-repo-config.yaml` policy axis, reports the effective mode during
   validation, and keeps the hard-limit floor non-overridable in every mode.
+- **Capability tier planner (#232).** Adds the capability-plan repo-config
+  command so operators can compute `min(repo ceiling, evidence tier, risk cap)`
+  from explicit evidence signals while keeping hard-floor paths human-gated.
 - **Risk-based verification planner (#233).** Adds `walter-os repo-config
   verification-plan` so operators can derive prototype/risk-based/production
   check depth from repo policy, explicit risk, and changed paths while forcing

@@ -74,6 +74,8 @@ export default defineConfig({
           LITELLM_MOCK_PORT: litellmMockPort,
           LITELLM_BASE_URL: `http://127.0.0.1:${litellmMockPort}`,
           LITELLM_API_KEY: "control-tower-e2e-key",
+          WALTER_VERSION: "0.0.0-test",
+          WALTER_UPDATE_AVAILABLE: "0.0.1-test",
         },
       },
 
