@@ -8,11 +8,11 @@ that must be changed in GitHub by an operator.
 
 | Alert | Rule | Repository-visible action | Remaining action |
 |---|---|---|---|
-| #45 | `CodeReviewID` | `AGENTS.md` and `docs/security/branch-protection.md` document the PR review policy and required branch protection. | Manual GitHub setting: require pull requests and at least one approving review on `main`; include administrators; dismiss stale approvals. Read-only check on 2026-06-07 showed `required_approving_review_count: 0`, so this is still unresolved in GitHub settings. |
-| #46 | `MaintainedID` | This repository has active commits, CI, release docs, and an open maintenance process. | No repo setting. Scorecard should clear after fresh activity is visible on the default branch and the weekly Scorecard run refreshes. |
+| #45 | `CodeReviewID` | `AGENTS.md` and `docs/security/branch-protection.md` document the PR review policy and required branch protection. On 2026-06-07, `main` was updated to require one approval while preserving the solo-maintainer bypass. | Scorecard still reports `Found 0/30 approved changesets`. Clearing the alert requires future merged PRs with approving reviews, or an explicit solo-operator exception until a second human reviewer exists. |
+| #46 | `MaintainedID` | This repository has active commits, CI, release docs, and an open maintenance process. | Scorecard still reports `Repository was created within the last 90 days`. No repo setting can clear this early-age signal; re-check after the 90-day window and the next Scorecard refresh. |
 | #47 | `SecurityPolicyID` | Root `SECURITY.md` exists and `.github/SECURITY.md` duplicates it for GitHub/Scorecard discoverability. | None expected after merge; wait for the next Scorecard run. |
 | #48 | `CIIBestPracticesID` | `docs/security/openssf-silver-checklist.md` and `docs/specs/openssf-badges.md` record the OpenSSF Best Practices badge path. | Manual process: file the OpenSSF Passing badge at bestpractices.dev, then add the approved badge URL to `README.md`. |
-| #50 | `FuzzingID` | Fuzzing is deferred because Walter-OS currently has shell/config/documentation-heavy surfaces and no dedicated parser/codec target selected for fuzzing. | Create a follow-up issue when a durable target lands, preferably for repo-config parsing, wiki frontmatter validation, or workflow normalization. |
+| #50 | `FuzzingID` | Control Tower now includes a bounded `fast-check` property-based fuzz target for prompt-sanitization boundaries. | Re-run Scorecard after merge. If the alert remains open, keep the fuzz target for coverage but treat Scorecard detection as requiring a stronger integration such as OSS-Fuzz or CIFuzz. |
 
 ## Safe read-only checks
 
@@ -30,11 +30,14 @@ branch protection is not configured or the token lacks repository
 administration read permission. Do not infer protection from local hooks; the
 GitHub setting is the server-side control Scorecard can observe.
 
-Observed on 2026-06-07 from the read-only branch-protection endpoint:
+Observed on 2026-06-07 from the read-only branch-protection endpoint after
+the review-protection setting update:
 
 - `enforce_admins.enabled: true`
 - `required_pull_request_reviews.dismiss_stale_reviews: true`
-- `required_pull_request_reviews.required_approving_review_count: 0`
+- `required_pull_request_reviews.required_approving_review_count: 1`
+- `required_pull_request_reviews.bypass_pull_request_allowances.users:`
+  contains the maintainer account
 - `required_linear_history.enabled: true`
 - `allow_force_pushes.enabled: false`
 - `allow_deletions.enabled: false`
@@ -63,5 +66,13 @@ boundary. Candidate targets:
 - `hooks/wiki-validator.sh` frontmatter handling.
 - Workflow normalization helpers used by `tests/install/workflow-lint.bats`.
 
-Until one of those surfaces is factored into a reusable function or library,
-property-style Bats coverage is the lower-risk test investment.
+The first maintained target is the Control Tower prompt-sanitization boundary:
+
+```bash
+pnpm --dir apps/control-tower exec vitest run tests/unit/sanitize.fuzz.test.ts
+WALTER_FUZZ_RUNS=1000 pnpm --dir apps/control-tower exec vitest run tests/unit/sanitize.fuzz.test.ts
+```
+
+The default CI budget is intentionally small (`WALTER_FUZZ_RUNS=100` by
+default) because it runs as part of the existing Control Tower unit-test job.
+Use a higher local budget before changing `apps/control-tower/lib/sanitize.ts`.
