@@ -34,10 +34,11 @@ services:
       # rate-limited or budget-capped. Leave unset to skip openrouter/*
       # routes; LiteLLM will exclude them at runtime.
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      # claude-sub aliases (route via claude-code-router): config.yaml resolves
-      # `api_key: os.environ/CCR_APIKEY` for `claude-sub` + `claude-sub-opus`.
-      # Pass the same key the router uses so LiteLLM can authenticate.
+      # Subscription router aliases. Pass the same keys each router uses so
+      # LiteLLM can authenticate through the internal OpenAI-compatible hop.
       CCR_APIKEY: ${CCR_APIKEY:-}
+      CSR_APIKEY: ${CSR_APIKEY:-}
+      GSR_APIKEY: ${GSR_APIKEY:-}
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
