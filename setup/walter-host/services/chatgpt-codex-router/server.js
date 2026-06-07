@@ -34,7 +34,7 @@ if (REQUIRED_API_KEY) {
 const MODEL_MAP = {
   'gpt-5':      'gpt-5.5',
   'gpt-5-mini': 'gpt-5.4-mini',
-  'o4-mini':    'gpt-5.3-codex',  // best reasoning model available via ChatGPT account
+  'o4-mini':    'gpt-5.5',  // gpt-5.3-codex rejected by ChatGPT account ("not supported when using Codex with a ChatGPT account"); gpt-5.5 is the strongest model the account accepts (2026-06-06)
 };
 
 // Accepted request-body model values (after stripping openai/ prefix)
