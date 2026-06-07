@@ -5,6 +5,10 @@ services:
   infisical-backend:
     image: infisical/infisical:v0.159.25
     container_name: infisical-backend
+    mem_limit: "${INFISICAL_BACKEND_MEM_LIMIT:-768m}"
+    mem_reservation: "${INFISICAL_BACKEND_MEM_RESERVATION:-384m}"
+    cpus: "${INFISICAL_BACKEND_CPUS:-1.0}"
+    pids_limit: "${INFISICAL_BACKEND_PIDS_LIMIT:-512}"
     restart: unless-stopped
     depends_on:
       infisical-db:
@@ -34,6 +38,10 @@ services:
   infisical-db:
     image: postgres:16-alpine
     container_name: infisical-db
+    mem_limit: "${INFISICAL_DB_MEM_LIMIT:-512m}"
+    mem_reservation: "${INFISICAL_DB_MEM_RESERVATION:-256m}"
+    cpus: "${INFISICAL_DB_CPUS:-0.75}"
+    pids_limit: "${INFISICAL_DB_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       POSTGRES_USER: infisical
@@ -52,6 +60,10 @@ services:
   infisical-redis:
     image: redis:7-alpine
     container_name: infisical-redis
+    mem_limit: "${INFISICAL_REDIS_MEM_LIMIT:-256m}"
+    mem_reservation: "${INFISICAL_REDIS_MEM_RESERVATION:-128m}"
+    cpus: "${INFISICAL_REDIS_CPUS:-0.5}"
+    pids_limit: "${INFISICAL_REDIS_PIDS_LIMIT:-128}"
     restart: unless-stopped
     command: redis-server --requirepass "${INFISICAL_REDIS_PASS}"
     volumes:
