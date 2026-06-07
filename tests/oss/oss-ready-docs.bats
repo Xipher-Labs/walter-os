@@ -64,6 +64,17 @@ setup() {
 @test "SECURITY.md states no bug bounty" {
   grep -q "do not currently run a bug bounty" "$REPO_ROOT/SECURITY.md"
 }
+@test "SECURITY.md supported versions match current release line" {
+  version="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
+  major_minor="${version%.*}"
+  previous_minor="$(awk -F. -v major="${version%%.*}" -v minor="${major_minor#*.}" 'BEGIN { print major "." (minor - 1) }')"
+
+  grep -q "currently ${major_minor}\\.x" "$REPO_ROOT/SECURITY.md"
+  grep -q "currently ${previous_minor}\\.x" "$REPO_ROOT/SECURITY.md"
+}
+@test "SECURITY.md links private GitHub advisory reporting" {
+  grep -q "https://github.com/Xipher-Labs/walter-os/security/advisories/new" "$REPO_ROOT/SECURITY.md"
+}
 
 # --- CODE_OF_CONDUCT.md content ---
 @test "CODE_OF_CONDUCT.md is Contributor Covenant 2.1" {
