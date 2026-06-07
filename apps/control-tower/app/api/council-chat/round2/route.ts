@@ -15,6 +15,10 @@
 import { COUNCIL_R2_ORDER } from "@/lib/council-personas";
 import { getSession, updateSession } from "@/server/council/history";
 import type { R2Response } from "@/server/council/history";
+import {
+  createLLMSessionSnapshot,
+  isValidCouncilSessionId,
+} from "@/server/council/session-safety";
 import { sanitizeForPrompt, quoteFenceForLLM } from "@/lib/sanitize";
 import { applyR2Budget } from "@/lib/r2-budget";
 
@@ -133,8 +137,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { session_id } = body;
-  if (!session_id?.trim()) {
+  if (typeof session_id !== "string" || !session_id.trim()) {
     return Response.json({ error: "session_id is required" }, { status: 400 });
+  }
+  if (!isValidCouncilSessionId(session_id)) {
+    return Response.json({ error: "invalid session_id" }, { status: 400 });
   }
 
   const session = getSession(session_id);
@@ -144,6 +151,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 404 }
     );
   }
+  const safeSession = createLLMSessionSnapshot(session);
 
   const encoder = new TextEncoder();
   const r2Results: R2Response[] = [];
@@ -184,8 +192,8 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         const prompt = buildR2Prompt(
-          session.message,
-          session.round1!,
+          safeSession.message,
+          safeSession.round1,
           persona.id
         );
 

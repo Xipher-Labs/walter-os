@@ -13,6 +13,10 @@
 import { COUNCIL_PERSONAS } from "@/lib/council-personas";
 import { getSession, updateSession } from "@/server/council/history";
 import type { SynthesisResult } from "@/server/council/history";
+import {
+  createLLMSessionSnapshot,
+  isValidCouncilSessionId,
+} from "@/server/council/session-safety";
 import { sanitizeForPrompt, quoteFenceForLLM } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
@@ -73,8 +77,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { session_id } = body;
-  if (!session_id?.trim()) {
+  if (typeof session_id !== "string" || !session_id.trim()) {
     return Response.json({ error: "session_id is required" }, { status: 400 });
+  }
+  if (!isValidCouncilSessionId(session_id)) {
+    return Response.json({ error: "invalid session_id" }, { status: 400 });
   }
 
   const session = getSession(session_id);
@@ -84,11 +91,12 @@ export async function POST(request: Request): Promise<Response> {
       { status: 404 }
     );
   }
+  const safeSession = createLLMSessionSnapshot(session);
 
   const prompt = SYNTHESIS_PROMPT_TEMPLATE(
-    session.message,
-    session.round1,
-    session.round2
+    safeSession.message,
+    safeSession.round1,
+    safeSession.round2
   );
 
   const controller = new AbortController();

@@ -16,6 +16,7 @@
 import { COUNCIL_PERSONAS } from "@/lib/council-personas";
 import { persistSession } from "@/server/council/history";
 import type { R1Response } from "@/server/council/history";
+import { isValidCouncilSessionId } from "@/server/council/session-safety";
 import { sanitizeForPrompt } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
@@ -110,11 +111,19 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { message, session_id, session_type = "chat" } = body;
-  if (!message?.trim() || !session_id?.trim()) {
+  if (
+    typeof message !== "string" ||
+    typeof session_id !== "string" ||
+    !message.trim() ||
+    !session_id.trim()
+  ) {
     return Response.json(
       { error: "message and session_id are required" },
       { status: 400 }
     );
+  }
+  if (!isValidCouncilSessionId(session_id)) {
+    return Response.json({ error: "invalid session_id" }, { status: 400 });
   }
 
   const encoder = new TextEncoder();
