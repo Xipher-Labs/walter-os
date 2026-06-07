@@ -17,6 +17,24 @@ code change, a repository setting, or a documented dismissal.
 |---|---|---|
 | `#54` | `.github/workflows/readme-lint.yml` | Replaced floating `npm install -g markdownlint-cli` with `npx --yes markdownlint-cli@0.48.0`. `tests/install/workflow-pins.bats` now verifies the workflow keeps a versioned markdownlint invocation. |
 
+## Node 24 Release Warnings
+
+The v0.6.1 release workflow emitted GitHub Actions Node.js 20 deprecation
+warnings from two places:
+
+- Walter-OS-owned release jobs. These use direct `actions/checkout` calls and
+  should stay pinned to a commit whose action metadata declares `runs.using:
+  node24`.
+- The upstream SLSA reusable workflow
+  `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0`.
+  Walter-OS intentionally uses the upstream semver tag for verifier identity
+  compatibility. As of the v0.6.1 audit, `v2.1.0` is the latest upstream
+  release, and its internal helper actions still emit Node.js 20 warnings.
+
+Do not fork the SLSA generator just to silence this warning. Re-check upstream
+SLSA releases during the next release hardening pass and bump only when the
+verifier-compatible reusable workflow publishes a Node 24-ready release.
+
 ## Future Hardening
 
 The router Dockerfile exception is intentionally narrow. A stronger future flow
