@@ -13,6 +13,53 @@ WALTER_BIN="${REPO_ROOT}/bin/walter"
 export WALTER_OS_HOME="${REPO_ROOT}"
 export WALTER_OS_SKIP_UPDATE_CHECK="1"
 
+stub_doctor_tools() {
+  local fake_bin="$1"
+  mkdir -p "$fake_bin"
+
+  cat >"$fake_bin/brew" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  cat >"$fake_bin/infisical" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "user" && "${2:-}" == "get" && "${3:-}" == "token" ]]; then
+  printf 'eyJ.test-token\n'
+  exit 0
+fi
+exit 0
+SH
+  cat >"$fake_bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then
+  printf 'Logged in to github.com\n'
+  exit 0
+fi
+exit 0
+SH
+  cat >"$fake_bin/docker" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "info" ]]; then
+  exit 0
+fi
+exit 0
+SH
+  for tool in cloudflared hcloud rclone jq; do
+    cat >"$fake_bin/$tool" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  done
+  chmod +x "$fake_bin"/brew "$fake_bin"/infisical "$fake_bin"/gh "$fake_bin"/docker "$fake_bin"/cloudflared "$fake_bin"/hcloud "$fake_bin"/rclone "$fake_bin"/jq
+}
+
+prepare_doctor_symlinks() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude" "$test_home/.codex"
+  ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.claude/CLAUDE.md"
+  ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.codex/AGENTS.md"
+}
+
 # --- source-level checks (no network required) ---
 
 @test "doctor.sh handles --client-only flag (source check)" {
@@ -54,48 +101,13 @@ export WALTER_OS_SKIP_UPDATE_CHECK="1"
 
 @test "walter doctor accepts Infisical runtime without legacy secrets.env" {
   local test_home="$BATS_TEST_TMPDIR/home-infisical"
+  local test_config="$BATS_TEST_TMPDIR/config-infisical"
   local fake_bin="$BATS_TEST_TMPDIR/bin-infisical"
-  mkdir -p "$test_home/.config/walter-os" "$fake_bin"
-  printf 'INFISICAL_CLIENT_ID=client-id\n' >"$test_home/.config/walter-os/env"
-
-  cat >"$fake_bin/brew" <<'SH'
-#!/usr/bin/env bash
-exit 0
-SH
-  cat >"$fake_bin/infisical" <<'SH'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "user" && "${2:-}" == "get" && "${3:-}" == "token" ]]; then
-  printf 'eyJ.test-token\n'
-  exit 0
-fi
-exit 0
-SH
-  cat >"$fake_bin/gh" <<'SH'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then
-  printf 'Logged in to github.com\n'
-  exit 0
-fi
-exit 0
-SH
-  cat >"$fake_bin/docker" <<'SH'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "info" ]]; then
-  exit 0
-fi
-exit 0
-SH
-  for tool in cloudflared hcloud rclone jq; do
-    cat >"$fake_bin/$tool" <<'SH'
-#!/usr/bin/env bash
-exit 0
-SH
-  done
-  chmod +x "$fake_bin"/brew "$fake_bin"/infisical "$fake_bin"/gh "$fake_bin"/docker "$fake_bin"/cloudflared "$fake_bin"/hcloud "$fake_bin"/rclone "$fake_bin"/jq
-
-  mkdir -p "$test_home/.claude" "$test_home/.codex"
-  ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.claude/CLAUDE.md"
-  ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.codex/AGENTS.md"
+  mkdir -p "$test_home/.config/walter-os" "$test_config"
+  printf 'export WALTER_CONFIG=%q\n' "$test_config" >"$test_home/.config/walter-os/env"
+  printf 'export INFISICAL_CLIENT_ID=client-id\n' >"$test_config/env"
+  stub_doctor_tools "$fake_bin"
+  prepare_doctor_symlinks "$test_home"
 
   run env \
     HOME="$test_home" \
@@ -106,18 +118,28 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"Infisical runtime configured"* ]]
   [[ "$output" != *"secrets.env mode 600"* ]]
+  [[ "$output" == *"skipped (no legacy secrets.env; use Infisical runtime)"* ]]
 }
 
 @test "walter doctor warns when only legacy secrets.env exists" {
   local test_home="$BATS_TEST_TMPDIR/home-legacy"
+  local fake_bin="$BATS_TEST_TMPDIR/bin-legacy"
   mkdir -p "$test_home/.config/walter-os"
-  touch "$test_home/.config/walter-os/secrets.env"
+  : >"$test_home/.config/walter-os/env"
+  cat >"$test_home/.config/walter-os/secrets.env" <<'ENV'
+ANTHROPIC_API_KEY=legacy-anthropic
+OPENAI_API_KEY=legacy-openai
+ENV
   chmod 600 "$test_home/.config/walter-os/secrets.env"
+  stub_doctor_tools "$fake_bin"
+  prepare_doctor_symlinks "$test_home"
 
   run env \
     HOME="$test_home" \
+    PATH="$fake_bin:$PATH" \
     WALTER_OS_HOME="${REPO_ROOT}" \
-    bash "$REPO_ROOT/scripts/walter/subcommands/doctor.sh" --client-only
+    "${WALTER_BIN}" doctor --client-only
 
+  [ "$status" -eq 0 ]
   [[ "$output" == *"legacy plaintext secrets.env"* ]]
 }

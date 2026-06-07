@@ -15,6 +15,7 @@ if [[ ! "$WALTER_OS_HOME" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
   echo "doctor: invalid WALTER_OS_HOME value (contains unsafe characters)" >&2
   exit 2
 fi
+WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
 
 # ---------- arg parse ----------
 CLIENT_ONLY=0
@@ -58,13 +59,12 @@ checkw() {
   fi
 }
 check_secret_runtime() {
-  local config_dir="$HOME/.config/walter-os"
-  local secrets_file="$config_dir/secrets.env"
-  local env_file="$config_dir/env"
+  local secrets_file="$WALTER_CONFIG/secrets.env"
+  local env_file="$WALTER_CONFIG/env"
   local has_infisical=0
 
   if [[ -n "${INFISICAL_CLIENT_ID:-}" ]] \
-      || ([[ -f "$env_file" ]] && grep -qE '^INFISICAL_CLIENT_ID=.+' "$env_file" 2>/dev/null); then
+      || ([[ -f "$env_file" ]] && grep -qE '^(export[[:space:]]+)?INFISICAL_CLIENT_ID=.+' "$env_file" 2>/dev/null); then
     has_infisical=1
   fi
 
@@ -78,17 +78,16 @@ check_secret_runtime() {
     log_warn "legacy plaintext secrets.env detected; migrate to Infisical machine identity"
     warn=$((warn + 1))
   else
-    log_err "secrets runtime configured (Infisical identity or legacy secrets.env)"
+    log_err "secrets runtime missing (configure Infisical identity or legacy secrets.env)"
     fail=$((fail + 1))
   fi
 }
 check_legacy_secret_key() {
   local label="$1" key="$2"
-  local secrets_file="$HOME/.config/walter-os/secrets.env"
+  local secrets_file="$WALTER_CONFIG/secrets.env"
 
   if [[ ! -f "$secrets_file" ]]; then
-    log_warn "$label skipped (no legacy secrets.env; use Infisical runtime)"
-    warn=$((warn + 1))
+    log_info "$label skipped (no legacy secrets.env; use Infisical runtime)"
     return
   fi
 
