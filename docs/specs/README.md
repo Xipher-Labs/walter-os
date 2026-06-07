@@ -15,8 +15,11 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | [`walter-bridge-litellm-expansion.md`](walter-bridge-litellm-expansion.md) | LiteLLM/provider expansion for the Walter bridge. |
 | [`openclaw.md`](openclaw.md) | OpenClaw gateway trust model and runtime contract. |
 | [`oss-trust-v0.5.0-small-batch.md`](oss-trust-v0.5.0-small-batch.md) | OSS Trust roadmap small-batch: C-3 pre-commit framework, D-1 GitHub Security Advisories partner, E-3 `@types/*` allowlist, E-4 `walter-os justify revoke` CLI. |
+| [`feature-state-ledger.md`](feature-state-ledger.md) | Persistent `.walter/features/<id>/state.yaml` runtime ledger for autonomous delivery state. |
 | [`post-merge-feedback-loop.md`](post-merge-feedback-loop.md) | Read-only AD-13 post-merge health classification before fix-PR/rollback automation. |
+| [`autonomy-modes.md`](autonomy-modes.md) | AD-6 Lite/Guided/Full autonomy-mode contract for `walter-repo-config.yaml`. |
 | [`preview-environment-bundle.md`](preview-environment-bundle.md) | First AD-10 preview evidence bundle primitive for seed data, screenshots, and report JSON. |
+| [`release-operations-automation.md`](release-operations-automation.md) | Read-only release doctor for version, changelog, tag, review, check, issue-link, and stacked-PR hygiene. |
 
 ## Worked Examples
 

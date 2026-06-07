@@ -51,6 +51,10 @@ services:
   langfuse-web:
     image: docker.io/langfuse/langfuse:3.176.0
     container_name: langfuse-web
+    mem_limit: "${LANGFUSE_WEB_MEM_LIMIT:-1536m}"
+    mem_reservation: "${LANGFUSE_WEB_MEM_RESERVATION:-768m}"
+    cpus: "${LANGFUSE_WEB_CPUS:-1.5}"
+    pids_limit: "${LANGFUSE_WEB_PIDS_LIMIT:-512}"
     restart: unless-stopped
     profiles: [langfuse]
     depends_on:
@@ -84,6 +88,10 @@ services:
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3.176.0
     container_name: langfuse-worker
+    mem_limit: "${LANGFUSE_WORKER_MEM_LIMIT:-1536m}"
+    mem_reservation: "${LANGFUSE_WORKER_MEM_RESERVATION:-768m}"
+    cpus: "${LANGFUSE_WORKER_CPUS:-1.5}"
+    pids_limit: "${LANGFUSE_WORKER_PIDS_LIMIT:-512}"
     restart: unless-stopped
     profiles: [langfuse]
     depends_on:
@@ -105,6 +113,10 @@ services:
   langfuse-postgres:
     image: docker.io/postgres:16-alpine
     container_name: langfuse-postgres
+    mem_limit: "${LANGFUSE_POSTGRES_MEM_LIMIT:-1g}"
+    mem_reservation: "${LANGFUSE_POSTGRES_MEM_RESERVATION:-512m}"
+    cpus: "${LANGFUSE_POSTGRES_CPUS:-1.0}"
+    pids_limit: "${LANGFUSE_POSTGRES_PIDS_LIMIT:-512}"
     restart: unless-stopped
     profiles: [langfuse]
     environment:
@@ -116,7 +128,7 @@ services:
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -127,6 +139,10 @@ services:
   langfuse-clickhouse:
     image: docker.io/clickhouse/clickhouse-server:25.3-alpine
     container_name: langfuse-clickhouse
+    mem_limit: "${LANGFUSE_CLICKHOUSE_MEM_LIMIT:-2g}"
+    mem_reservation: "${LANGFUSE_CLICKHOUSE_MEM_RESERVATION:-1g}"
+    cpus: "${LANGFUSE_CLICKHOUSE_CPUS:-2.0}"
+    pids_limit: "${LANGFUSE_CLICKHOUSE_PIDS_LIMIT:-1024}"
     restart: unless-stopped
     profiles: [langfuse]
     user: "101:101"
@@ -149,6 +165,10 @@ services:
   langfuse-redis:
     image: docker.io/redis:7-alpine
     container_name: langfuse-redis
+    mem_limit: "${LANGFUSE_REDIS_MEM_LIMIT:-256m}"
+    mem_reservation: "${LANGFUSE_REDIS_MEM_RESERVATION:-128m}"
+    cpus: "${LANGFUSE_REDIS_CPUS:-0.5}"
+    pids_limit: "${LANGFUSE_REDIS_PIDS_LIMIT:-128}"
     restart: unless-stopped
     profiles: [langfuse]
     environment:
@@ -168,6 +188,10 @@ services:
   langfuse-minio:
     image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: langfuse-minio
+    mem_limit: "${LANGFUSE_MINIO_MEM_LIMIT:-512m}"
+    mem_reservation: "${LANGFUSE_MINIO_MEM_RESERVATION:-256m}"
+    cpus: "${LANGFUSE_MINIO_CPUS:-0.75}"
+    pids_limit: "${LANGFUSE_MINIO_PIDS_LIMIT:-256}"
     restart: unless-stopped
     profiles: [langfuse]
     command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
