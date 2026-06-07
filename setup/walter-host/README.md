@@ -20,6 +20,9 @@ Use `floor` or `medium` for smaller service selections. Set
 `WALTER_PREFLIGHT_ALLOW_UNDERSIZED=1` only for an intentional, operator-owned
 override.
 
+Bundled load alerts derive the vCPU ceiling from runtime host metrics, so
+smaller or larger plans should not require manual threshold edits.
+
 ## Order
 
 ```
