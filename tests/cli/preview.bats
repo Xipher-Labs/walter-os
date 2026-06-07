@@ -69,12 +69,14 @@ if [[ -z "$output" ]]; then
   echo "missing screenshot path" >&2
   exit 2
 fi
+printf '%s\n' "$output" > "${FAKE_NPX_OUTPUT:?}"
 printf 'fake png bytes\n' > "$output"
 SH
   chmod +x "$fake_bin/npx"
   export PATH="$fake_bin:$PATH"
   export WALTER_PREVIEW_NPX="$fake_bin/npx"
   export FAKE_NPX_LOG="$TMP_DIR/npx.log"
+  export FAKE_NPX_OUTPUT="$TMP_DIR/npx-output.log"
 }
 
 @test "preview capture writes a screenshot artifact with Playwright CLI" {
@@ -96,6 +98,75 @@ SH
   [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
   [[ "$(cat "$FAKE_NPX_LOG")" == *"--no-install playwright screenshot"* ]]
   [[ "$(cat "$FAKE_NPX_LOG")" == *"--wait-for-timeout 1000"* ]]
+}
+
+@test "preview capture rejects npx override symlinks" {
+  install_fake_npx
+  mv "$fake_bin/npx" "$fake_bin/npx-real"
+  ln -s "$fake_bin/npx-real" "$fake_bin/npx"
+  export WALTER_PREVIEW_NPX="$fake_bin/npx"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"npx is required for preview capture"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+}
+
+@test "preview capture writes to a temp file before publishing screenshot" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [[ "$(cat "$FAKE_NPX_OUTPUT")" != "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [[ "$(cat "$FAKE_NPX_OUTPUT")" == "$TMP_DIR/out/preview-pr-235/screenshots/."*".tmp."* ]]
+  [[ ! -e "$(cat "$FAKE_NPX_OUTPUT")" ]]
+}
+
+@test "preview capture reports non-overwrite publish failures as runtime errors" {
+  install_fake_npx
+  cat > "$fake_bin/ln" <<'SH'
+#!/usr/bin/env bash
+echo "hardlink exploded" >&2
+exit 1
+SH
+  chmod +x "$fake_bin/ln"
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"hardlink exploded"* ]]
+  [[ "$output" == *"could not publish screenshot"* ]]
+  [[ "$output" != *"screenshot already exists"* ]]
+}
+
+@test "preview capture treats wait-ms values as base 10" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --wait-ms 08
+
+  [ "$status" -eq 0 ]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
 }
 
 @test "preview capture rejects non-http preview URLs" {

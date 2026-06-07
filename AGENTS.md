@@ -250,9 +250,13 @@ gh api -X POST \
 
 ```bash
 # If ~/.codex/config.toml has parse errors, use the minimal bypass that
-# still inherits the operator's auth.json:
+# still inherits the operator's auth.json. NOTE: the minimal config MUST pin
+# `model = "gpt-5.5"` — without it Codex falls back to its built-in default
+# (`gpt-5.3-codex`), which a ChatGPT-account login rejects with HTTP 400
+# ("not supported when using Codex with a ChatGPT account") and the review
+# silently produces no findings.
 mkdir -p /tmp/codex-minimal \
-  && echo 'approval_policy = "never"' > /tmp/codex-minimal/config.toml \
+  && printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' > /tmp/codex-minimal/config.toml \
   && cp ~/.codex/auth.json /tmp/codex-minimal/
 CODEX_HOME=/tmp/codex-minimal codex review --base <target-branch> \
   > /tmp/codex-review.txt 2>&1

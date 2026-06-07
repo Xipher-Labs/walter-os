@@ -191,23 +191,170 @@ plane_comment_once() {
   plane_issue_comment "$issue" "$body"
 }
 
+forgejo_trusted_authors_json() {
+  jq -Rn --arg authors "${WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS:-}" '
+    $authors
+    | split(",")
+    | map(gsub("^\\s+|\\s+$"; ""))
+    | map(select(length > 0))
+  '
+}
+
+forgejo_comments_have_marker() {
+  local comments_json="$1" marker="$2" trusted_authors_json="$3"
+  jq -e --arg marker "$marker" --argjson trusted_authors "$trusted_authors_json" '
+    def comment_author:
+      .user.login? //
+      .author.login? //
+      .author.username? //
+      .poster.login? //
+      .poster.username? //
+      .username? //
+      .user? //
+      .author? //
+      empty;
+    def trusted_comment:
+      ($trusted_authors | length) == 0 or
+      ((comment_author | strings) as $login | ($trusted_authors | index($login)));
+    def comment_bodies:
+      if type == "array" then
+        .[]?
+      elif type == "object" then
+        .comments[]?, .Comments[]?
+      else
+        empty
+      end
+      | select(trusted_comment)
+      | (.body? // .Body? // empty);
+    [comment_bodies | strings | select(contains($marker))] | length > 0
+  ' >/dev/null <<<"$comments_json"
+}
+
+forgejo_comments_have_conflicting_plane_marker() {
+  local comments_json="$1" marker="$2" trusted_authors_json="$3" expected_issue
+  expected_issue="${marker#\[walter-plane-issue:}"
+  expected_issue="${expected_issue%\]}"
+  jq -e --arg expected_issue "$expected_issue" --argjson trusted_authors "$trusted_authors_json" '
+    def comment_author:
+      .user.login? //
+      .author.login? //
+      .author.username? //
+      .poster.login? //
+      .poster.username? //
+      .username? //
+      .user? //
+      .author? //
+      empty;
+    def trusted_comment:
+      ($trusted_authors | length) == 0 or
+      ((comment_author | strings) as $login | ($trusted_authors | index($login)));
+    def comment_bodies:
+      if type == "array" then
+        .[]?
+      elif type == "object" then
+        .comments[]?, .Comments[]?
+      else
+        empty
+      end
+      | select(trusted_comment)
+      | (.body? // .Body? // empty);
+    [
+      comment_bodies
+      | strings
+      | scan("\\[walter-plane-issue:([^]\\r\\n\\]]+)\\]")
+      | .[0]
+    ]
+    | unique
+    | map(select(. != $expected_issue))
+    | length > 0
+  ' >/dev/null <<<"$comments_json"
+}
+
 forgejo_comment_once() {
-  local marker="$1" body="$2" existing
+  local marker="$1" body="$2" mode="${3:-optional}" existing trusted_authors_json trusted_author_count jq_status
   if ! command -v tea >/dev/null 2>&1; then
+    if [[ "$mode" == "required" ]]; then
+      echo "plane-pr-sync: tea is required to persist the Forgejo PR marker" >&2
+      exit 3
+    fi
     echo "plane-pr-sync: WARN tea not found; skipped Forgejo PR comment" >&2
     return 0
   fi
   if existing="$(tea issues view "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
-    if jq -e --arg marker "$marker" '.. | strings | select(contains($marker))' \
-        >/dev/null <<<"$existing"; then
+    trusted_authors_json="$(forgejo_trusted_authors_json)"
+    if [[ "$mode" == "required" && "$marker" == \[walter-plane-issue:* ]]; then
+      if forgejo_comments_have_conflicting_plane_marker "$existing" "$marker" "$trusted_authors_json"; then
+        echo "plane-pr-sync: conflicting walter-plane-issue marker already exists; aborting before Plane state change" >&2
+        exit 3
+      else
+        jq_status=$?
+      fi
+      if [[ "$jq_status" -gt 1 ]]; then
+        echo "plane-pr-sync: failed to parse Forgejo PR comments before marker persistence" >&2
+        exit 3
+      fi
+    fi
+    if forgejo_comments_have_marker "$existing" "$marker" "$trusted_authors_json"; then
       return 0
+    else
+      jq_status=$?
+    fi
+    if [[ "$jq_status" -gt 1 ]]; then
+      if [[ "$mode" == "required" ]]; then
+        echo "plane-pr-sync: failed to parse Forgejo PR comments before marker persistence" >&2
+        exit 3
+      fi
+      echo "plane-pr-sync: WARN could not parse Forgejo PR comments; attempting comment" >&2
     fi
   else
+    if [[ "$mode" == "required" ]]; then
+      echo "plane-pr-sync: failed to inspect Forgejo PR comments before marker persistence" >&2
+      exit 3
+    fi
     echo "plane-pr-sync: WARN could not inspect Forgejo PR comments; attempting comment" >&2
   fi
   if ! tea issues comment "$pr_number" --repo "$repo" --comment "$body" >/dev/null 2>&1; then
+    if [[ "$mode" == "required" ]]; then
+      echo "plane-pr-sync: Forgejo PR marker comment failed; aborting before Plane state change" >&2
+      exit 3
+    fi
     echo "plane-pr-sync: WARN Forgejo PR comment failed; continuing" >&2
   fi
+  if [[ "$mode" != "required" ]]; then
+    return 0
+  fi
+  trusted_author_count="$(jq -r 'length' <<<"$trusted_authors_json")"
+  if existing="$(tea issues view "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
+    if [[ "$marker" == \[walter-plane-issue:* ]]; then
+      if forgejo_comments_have_conflicting_plane_marker "$existing" "$marker" "$trusted_authors_json"; then
+        echo "plane-pr-sync: conflicting walter-plane-issue marker exists after marker persistence" >&2
+        exit 3
+      else
+        jq_status=$?
+      fi
+      if [[ "$jq_status" -gt 1 ]]; then
+        echo "plane-pr-sync: failed to parse Forgejo PR comments after marker persistence" >&2
+        exit 3
+      fi
+    fi
+    if forgejo_comments_have_marker "$existing" "$marker" "$trusted_authors_json"; then
+      return 0
+    else
+      jq_status=$?
+    fi
+    if [[ "$jq_status" -gt 1 ]]; then
+      echo "plane-pr-sync: failed to parse Forgejo PR comments after marker persistence" >&2
+      exit 3
+    fi
+    if [[ "$trusted_author_count" -gt 0 ]]; then
+      echo "plane-pr-sync: Forgejo PR marker comment is not trusted; aborting before Plane state change" >&2
+    else
+      echo "plane-pr-sync: Forgejo PR marker comment was not persisted; aborting before Plane state change" >&2
+    fi
+    exit 3
+  fi
+  echo "plane-pr-sync: failed to verify Forgejo PR marker after persistence" >&2
+  exit 3
 }
 
 short_sha() {
@@ -219,9 +366,10 @@ marker="[walter-pr-sync:${repo}#${pr_number}:${event}]"
 case "$event" in
   link)
     comment="${marker} [walter-plane-issue:${issue}] PR linked: ${pr_url} (branch: ${branch}). Requesting Plane issue move to review."
+    issue_marker="[walter-plane-issue:${issue}]"
+    forgejo_comment_once "$issue_marker" "$comment" "required"
     plane_comment_once "$marker" "$comment"
     plane_issue_set_state "$issue" "review"
-    forgejo_comment_once "$marker" "$comment"
     ;;
   merged)
     comment="${marker} [walter-plane-issue:${issue}] PR merged: ${pr_url} at $(short_sha "$merge_sha"). Requesting Plane issue move to done."

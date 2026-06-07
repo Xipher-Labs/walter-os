@@ -366,11 +366,122 @@ check_mcp_scanners() {
   # day creates alert fatigue. It's documented in the SKILL.md as optional.
 }
 
-# ---------- 5. MCP server-registry drift ----------
+# ---------- 5. MCP server-registry + tool-definition drift ----------
 # (Function still named check_tool_definitions for backward compat with
-# audit_main() invocation order; Phase 1 closes the no-op gap at the
-# registry level. Phase 2 — tool-schema drift via stdio JSON-RPC — is
-# follow-up under #117.)
+# audit_main() invocation order. It now performs two checks: static
+# registry drift and tools/list drift for approved default-profile MCPs.)
+
+_mcp_tool_snapshot_helper() {
+  local script_dir script_root
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_root="${script_dir%/skills/daily-supply-chain-audit/scripts}"
+  local -a candidates=()
+  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
+    candidates+=("${WALTER_OS_HOME}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs")
+  fi
+  candidates+=(
+    "${script_root}/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+    "${HOME}/walter-os/skills/daily-supply-chain-audit/scripts/mcp-tool-snapshot.mjs"
+  )
+  for candidate in "${candidates[@]}"; do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_mcp_tool_node_major_version() {
+  node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null
+}
+
+check_mcp_runtime_tool_definitions() {
+  local settings="${CLAUDE_HOME}/settings.json"
+  [[ -f "$settings" ]] || return 0
+
+  local helper
+  if ! helper="$(_mcp_tool_snapshot_helper)"; then
+    finding info "mcp-tool-snapshot-helper-missing" \
+      "MCP tool-definition snapshot helper not found; tools/list drift check skipped" \
+      "Run install.sh --upgrade from a current Walter-OS checkout"
+    return 0
+  fi
+
+  if ! command -v node >/dev/null 2>&1; then
+    finding high "no-node-mcp-tool-drift" \
+      "Node.js 18+ not installed; cannot probe MCP tool definitions" \
+      "Install Node.js 18+ or run walter-os baseline-mcp-tools from a Node-enabled host"
+    return 0
+  fi
+
+  local node_major
+  if ! node_major="$(_mcp_tool_node_major_version)" || [[ ! "$node_major" =~ ^[0-9]+$ || "$node_major" -lt 18 ]]; then
+    finding high "node-too-old-mcp-tool-drift" \
+      "Node.js 18+ required for HTTP/SSE MCP tool-definition probing" \
+      "Upgrade Node.js to 18+ or run walter-os baseline-mcp-tools from a Node.js 18+ host"
+    return 0
+  fi
+
+  local baseline="${WALTER_CONFIG}/mcp-tool-snapshots.json"
+  if [[ ! -f "$baseline" ]]; then
+    finding high "mcp-tool-baseline-missing" \
+      "MCP tool snapshot baseline missing; refusing to approve current tools/list output during audit" \
+      "Review MCP config, then run: walter-os baseline-mcp-tools"
+    return 0
+  fi
+
+  local snapshot_tmp; snapshot_tmp="$(mktemp "${baseline}.current.XXXXXX")"
+  local server_baseline="${WALTER_CONFIG}/mcp-server-snapshots.json"
+  if [[ ! -f "$server_baseline" ]]; then
+    rm -f "$snapshot_tmp"
+    finding high "mcp-server-baseline-missing" \
+      "MCP server registry baseline missing; refusing to execute MCP probes" \
+      "Run: walter-os baseline-mcp-tools after reviewing mcp/servers.json"
+    return 0
+  fi
+
+  if ! node "$helper" --settings "$settings" --approved-registry "$server_baseline" > "$snapshot_tmp"; then
+    rm -f "$snapshot_tmp"
+    finding high "mcp-tool-snapshot-failed" \
+      "Failed to snapshot MCP tool definitions from $settings" \
+      "Run: node $helper --settings $settings --approved-registry $server_baseline"
+    return 0
+  fi
+
+  local error_count
+  error_count="$(jq '.errors // {} | length' "$snapshot_tmp" 2>/dev/null || echo 0)"
+  if [[ "$error_count" -gt 0 ]]; then
+    finding high "mcp-tool-probe-errors" \
+      "MCP tool snapshot reported $error_count probe error(s)" \
+      "Run: node $helper --settings $settings --approved-registry $server_baseline | jq '.errors'"
+  fi
+
+  local current_servers
+  if ! current_servers="$(jq --sort-keys '.servers // {}' "$snapshot_tmp" 2>/dev/null)"; then
+    rm -f "$snapshot_tmp"
+    finding high "mcp-tool-snapshot-unparseable" \
+      "MCP tool snapshot helper returned invalid JSON" \
+      "Run: node $helper --settings $settings --approved-registry $server_baseline"
+    return 0
+  fi
+
+  local stored_servers
+  if ! stored_servers="$(jq --sort-keys '.servers // {}' "$baseline" 2>/dev/null)"; then
+    rm -f "$snapshot_tmp"
+    finding high "mcp-tool-baseline-unparseable" \
+      "MCP tool snapshot baseline is not valid JSON: $baseline" \
+      "Review the file. If safe: walter-os baseline-mcp-tools"
+    return 0
+  fi
+
+  rm -f "$snapshot_tmp"
+  if [[ "$current_servers" != "$stored_servers" ]]; then
+    finding crit "mcp-tool-shadowing" \
+      "MCP tool definitions changed since the approved baseline" \
+      "Review current tools/list output. If safe: walter-os baseline-mcp-tools"
+  fi
+}
 
 check_tool_definitions() {
   # Closes issue #117 (external review F4) Phase 1: snapshot the STATIC
@@ -381,9 +492,8 @@ check_tool_definitions() {
   #   - command / args changed → HIGH (different binary or version)
   #   - trust level changed → MEDIUM
   #
-  # Phase 2 (follow-up, not in this MVP): connect to each running MCP via
-  # stdio JSON-RPC, listTools, snapshot {name, schema, description} per
-  # tool, diff against baseline. Requires walter-os to ship an MCP client.
+  # The runtime tools/list drift check runs after the static registry
+  # comparison so registry drift cannot mask tool-definition drift.
   # Registry path resolution (Copilot R3 #129): prefer the explicit
   # WALTER_OS_HOME env var, then walk up from the script's own location
   # (handles `audit.sh` run from a non-default checkout), then fall back
@@ -391,11 +501,18 @@ check_tool_definitions() {
   # file, emit an INFO finding rather than silently returning — a
   # missing registry should be visible in the audit report.
   local registry=""
-  local script_root="${BASH_SOURCE[0]%/skills/*}"
-  for candidate in \
-      "${WALTER_OS_HOME:-}/mcp/servers.json" \
-      "${script_root}/mcp/servers.json" \
-      "${HOME}/walter-os/mcp/servers.json"; do
+  local script_dir script_root
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_root="${script_dir%/skills/daily-supply-chain-audit/scripts}"
+  local -a registry_candidates=()
+  if [[ -n "${WALTER_OS_HOME:-}" ]]; then
+    registry_candidates+=("${WALTER_OS_HOME}/mcp/servers.json")
+  fi
+  registry_candidates+=(
+    "${script_root}/mcp/servers.json"
+    "${HOME}/walter-os/mcp/servers.json"
+  )
+  for candidate in "${registry_candidates[@]}"; do
     if [[ -n "$candidate" && -f "$candidate" ]]; then
       registry="$candidate"
       break
@@ -441,12 +558,16 @@ check_tool_definitions() {
     mkdir -p "$(dirname "$baseline")"
     local tmp; tmp="$(mktemp "${baseline}.tmp.XXXXXX")"
     printf '%s\n' "$current" > "$tmp" && mv "$tmp" "$baseline"
+    check_mcp_runtime_tool_definitions
     return 0
   fi
 
   local stored
   stored="$(cat "$baseline")"
-  [[ "$current" == "$stored" ]] && return 0
+  if [[ "$current" == "$stored" ]]; then
+    check_mcp_runtime_tool_definitions
+    return 0
+  fi
 
   local current_names stored_names
   current_names="$(jq -r 'keys[]' <<<"$current" | sort -u)"
@@ -507,6 +628,8 @@ check_tool_definitions() {
         "REVIEW: diff <(jq '.\"$name\"' $baseline) <(jq '.servers.\"$name\"' $registry). If safe: walter-os baseline-mcp-tools"
     fi
   done < <(comm -12 <(printf '%s\n' "$current_names") <(printf '%s\n' "$stored_names"))
+
+  check_mcp_runtime_tool_definitions
 }
 
 # ---------- 6. Minimum release age check ----------

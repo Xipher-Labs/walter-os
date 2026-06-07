@@ -115,6 +115,30 @@ For local-only access without exposing through Cloudflared, replace
 `https://bridge.your-domain/v1` with `http://localhost:4000/v1` in
 any of the configs above.
 
+## Optional PgBouncer
+
+Walter-Bridge connects directly to `litellm-db` by default. To decouple
+LiteLLM worker fan-out from real Postgres backends, enable the optional
+`litellm-pgbouncer` service and point `LITELLM_DATABASE_URL` at it:
+
+```env
+LITELLM_DATABASE_URL=postgresql://litellm:${LITELLM_DB_PASS}@litellm-pgbouncer:5432/litellm?connection_limit=10&pool_timeout=10&connect_timeout=10
+LITELLM_PGBOUNCER_POOL_SIZE=20
+LITELLM_PGBOUNCER_RESERVE_POOL_SIZE=5
+LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS=25
+LITELLM_PGBOUNCER_MAX_CLIENT_CONN=200
+```
+
+Then start the profile:
+
+```bash
+docker compose --profile pgbouncer up -d litellm-pgbouncer litellm
+```
+
+PgBouncer runs in `transaction` mode. The default backend cap keeps real
+Postgres connections flat even when LiteLLM worker count or client fan-out
+increases; raise it only after checking `litellm-db` headroom.
+
 ## Ready-to-use templates
 
 [`setup/walter-host/services/litellm/clients/`](../../setup/walter-host/services/litellm/clients/)

@@ -6,6 +6,7 @@ import HAStatus from "@/app/components/HAStatus";
 import AlertFeed from "@/app/components/AlertFeed";
 import ModeIndicator from "@/app/components/ModeIndicator";
 import PreviewEvidencePanel from "@/app/components/PreviewEvidencePanel";
+import OperatorReadiness from "@/app/components/OperatorReadiness";
 import TopNav from "@/app/components/ui/TopNav";
 
 /**
@@ -52,6 +53,11 @@ export default function DashboardPage() {
           {/* Centrepiece: the agent board spans full width. */}
           <div className="md:col-span-2 xl:col-span-12">
             <AgentStatusBoard />
+          </div>
+
+          {/* Read-only operating paths and verification commands. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <OperatorReadiness />
           </div>
 
           {/* Operational pair: service health + spend. */}

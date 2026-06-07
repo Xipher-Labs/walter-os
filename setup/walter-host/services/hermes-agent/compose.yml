@@ -14,6 +14,10 @@ services:
     # First-time build (~30s): `docker compose --profile hermes-agent build`.
     # `up` auto-builds if the tag is missing locally.
     image: walter-os/hermes-agent:${HERMES_AGENT_BASE_VERSION:-v2026.5.7}-stt
+    mem_limit: "${HERMES_AGENT_MEM_LIMIT:-2g}"
+    mem_reservation: "${HERMES_AGENT_MEM_RESERVATION:-1g}"
+    cpus: "${HERMES_AGENT_CPUS:-2.0}"
+    pids_limit: "${HERMES_AGENT_PIDS_LIMIT:-1024}"
     build:
       context: .
       dockerfile: Dockerfile

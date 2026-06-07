@@ -15,6 +15,10 @@ services:
   web:
     image: makeplane/plane-frontend@sha256:20d83ae9257415593a0522b607b3827dde429d8511b1bcf97f6313e55fc60c09
     container_name: plane-web
+    mem_limit: "${PLANE_WEB_MEM_LIMIT:-256m}"
+    mem_reservation: "${PLANE_WEB_MEM_RESERVATION:-128m}"
+    cpus: "${PLANE_WEB_CPUS:-0.5}"
+    pids_limit: "${PLANE_WEB_PIDS_LIMIT:-128}"
     restart: always
     <<: *plane-app-env
     depends_on:
@@ -23,6 +27,10 @@ services:
   admin:
     image: makeplane/plane-admin@sha256:82a2b82f34a24b95e2b663327c34d32828d24680aef258f901ebc0adc27542ea
     container_name: plane-admin
+    mem_limit: "${PLANE_ADMIN_MEM_LIMIT:-256m}"
+    mem_reservation: "${PLANE_ADMIN_MEM_RESERVATION:-128m}"
+    cpus: "${PLANE_ADMIN_CPUS:-0.5}"
+    pids_limit: "${PLANE_ADMIN_PIDS_LIMIT:-128}"
     restart: always
     <<: *plane-app-env
     depends_on:
@@ -31,6 +39,10 @@ services:
   space:
     image: makeplane/plane-space@sha256:d03aa511c5292b6feb3119fc8d399e0e2f8c2e5b308c076779691cff54bd3451
     container_name: plane-space
+    mem_limit: "${PLANE_SPACE_MEM_LIMIT:-256m}"
+    mem_reservation: "${PLANE_SPACE_MEM_RESERVATION:-128m}"
+    cpus: "${PLANE_SPACE_CPUS:-0.5}"
+    pids_limit: "${PLANE_SPACE_PIDS_LIMIT:-128}"
     restart: always
     <<: *plane-app-env
     depends_on:
@@ -39,6 +51,10 @@ services:
   live:
     image: makeplane/plane-live@sha256:d9ce8992425d9724ccd972f532dd46476b64c53c9e886f0a4eda8915f8b700d2
     container_name: plane-live
+    mem_limit: "${PLANE_LIVE_MEM_LIMIT:-256m}"
+    mem_reservation: "${PLANE_LIVE_MEM_RESERVATION:-128m}"
+    cpus: "${PLANE_LIVE_CPUS:-0.5}"
+    pids_limit: "${PLANE_LIVE_PIDS_LIMIT:-128}"
     restart: always
     <<: *plane-app-env
     depends_on:
@@ -47,6 +63,10 @@ services:
   api:
     image: makeplane/plane-backend@sha256:2da6972c81a0ac797c9d04db448aa5985e1257fc5d9724b165e9c07791e8cc64
     container_name: plane-api
+    mem_limit: "${PLANE_API_MEM_LIMIT:-768m}"
+    mem_reservation: "${PLANE_API_MEM_RESERVATION:-384m}"
+    cpus: "${PLANE_API_CPUS:-1.0}"
+    pids_limit: "${PLANE_API_PIDS_LIMIT:-512}"
     restart: always
     command: ./bin/docker-entrypoint-api.sh
     <<: *plane-app-env
@@ -58,6 +78,10 @@ services:
   worker:
     image: makeplane/plane-backend@sha256:2da6972c81a0ac797c9d04db448aa5985e1257fc5d9724b165e9c07791e8cc64
     container_name: plane-worker
+    mem_limit: "${PLANE_WORKER_MEM_LIMIT:-768m}"
+    mem_reservation: "${PLANE_WORKER_MEM_RESERVATION:-384m}"
+    cpus: "${PLANE_WORKER_CPUS:-1.0}"
+    pids_limit: "${PLANE_WORKER_PIDS_LIMIT:-512}"
     restart: always
     command: ./bin/docker-entrypoint-worker.sh
     <<: *plane-app-env
@@ -67,6 +91,10 @@ services:
   beat-worker:
     image: makeplane/plane-backend@sha256:2da6972c81a0ac797c9d04db448aa5985e1257fc5d9724b165e9c07791e8cc64
     container_name: plane-beat-worker
+    mem_limit: "${PLANE_BEAT_WORKER_MEM_LIMIT:-512m}"
+    mem_reservation: "${PLANE_BEAT_WORKER_MEM_RESERVATION:-256m}"
+    cpus: "${PLANE_BEAT_WORKER_CPUS:-0.75}"
+    pids_limit: "${PLANE_BEAT_WORKER_PIDS_LIMIT:-256}"
     restart: always
     command: ./bin/docker-entrypoint-beat.sh
     <<: *plane-app-env
@@ -76,6 +104,10 @@ services:
   migrator:
     image: makeplane/plane-backend@sha256:2da6972c81a0ac797c9d04db448aa5985e1257fc5d9724b165e9c07791e8cc64
     container_name: plane-migrator
+    mem_limit: "${PLANE_MIGRATOR_MEM_LIMIT:-512m}"
+    mem_reservation: "${PLANE_MIGRATOR_MEM_RESERVATION:-256m}"
+    cpus: "${PLANE_MIGRATOR_CPUS:-0.75}"
+    pids_limit: "${PLANE_MIGRATOR_PIDS_LIMIT:-256}"
     restart: "no"
     command: ./bin/docker-entrypoint-migrator.sh
     <<: *plane-app-env
@@ -87,6 +119,10 @@ services:
   plane-db:
     image: postgres:16-alpine
     container_name: plane-db
+    mem_limit: "${PLANE_DB_MEM_LIMIT:-1g}"
+    mem_reservation: "${PLANE_DB_MEM_RESERVATION:-512m}"
+    cpus: "${PLANE_DB_CPUS:-1.0}"
+    pids_limit: "${PLANE_DB_PIDS_LIMIT:-512}"
     restart: always
     env_file: .env
     environment:
@@ -100,6 +136,10 @@ services:
   plane-redis:
     image: redis:7-alpine
     container_name: plane-redis
+    mem_limit: "${PLANE_REDIS_MEM_LIMIT:-256m}"
+    mem_reservation: "${PLANE_REDIS_MEM_RESERVATION:-128m}"
+    cpus: "${PLANE_REDIS_CPUS:-0.5}"
+    pids_limit: "${PLANE_REDIS_PIDS_LIMIT:-128}"
     restart: always
     volumes:
       - redisdata:/data
@@ -107,6 +147,10 @@ services:
   plane-mq:
     image: rabbitmq:3-management-alpine
     container_name: plane-mq
+    mem_limit: "${PLANE_MQ_MEM_LIMIT:-512m}"
+    mem_reservation: "${PLANE_MQ_MEM_RESERVATION:-256m}"
+    cpus: "${PLANE_MQ_CPUS:-0.75}"
+    pids_limit: "${PLANE_MQ_PIDS_LIMIT:-256}"
     restart: always
     env_file: .env
     environment:
@@ -119,6 +163,10 @@ services:
   plane-minio:
     image: minio/minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
     container_name: plane-minio
+    mem_limit: "${PLANE_MINIO_MEM_LIMIT:-512m}"
+    mem_reservation: "${PLANE_MINIO_MEM_RESERVATION:-256m}"
+    cpus: "${PLANE_MINIO_CPUS:-0.75}"
+    pids_limit: "${PLANE_MINIO_PIDS_LIMIT:-256}"
     restart: always
     command: server /export --console-address ":9090"
     env_file: .env
@@ -131,6 +179,10 @@ services:
   proxy:
     image: makeplane/plane-proxy@sha256:6657012b40903af11e88f7041168a3e2f11334ffc4110a245b7925545906e19f
     container_name: plane-proxy
+    mem_limit: "${PLANE_PROXY_MEM_LIMIT:-256m}"
+    mem_reservation: "${PLANE_PROXY_MEM_RESERVATION:-128m}"
+    cpus: "${PLANE_PROXY_CPUS:-0.5}"
+    pids_limit: "${PLANE_PROXY_PIDS_LIMIT:-128}"
     restart: always
     ports:
       - "127.0.0.1:8090:80"
