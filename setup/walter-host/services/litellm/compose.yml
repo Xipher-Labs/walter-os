@@ -13,7 +13,14 @@ services:
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
-      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASS}@litellm-db:5432/litellm
+      # Bound the Prisma/quaint pool + fail fast. Without these the pool defaults
+      # to ~num_cpus*2+1 PER worker (16 vCPU box × --num_workers 2 ≈ 40+ backends,
+      # confirmed 43/100 live on 2026-06-06), so a reconnect storm during a
+      # crash-loop exhausts litellm-db's max_connections=100 → "too many clients"
+      # → undetected 4-day outage (ADR-0027, Incident 1). connection_limit=10 caps
+      # client demand to ~20 backends; pool_timeout/connect_timeout turn a
+      # saturated pool into a fast visible error instead of a silent hang.
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASS}@litellm-db:5432/litellm?connection_limit=10&pool_timeout=10&connect_timeout=10
       STORE_MODEL_IN_DB: "True"
       UI_USERNAME: "${WALTER_INITIAL_USER:-admin}"
       UI_PASSWORD: ${LITELLM_UI_PASS}
@@ -36,6 +43,17 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    # Functional liveliness probe — flips the container (unhealthy) the moment
+    # LiteLLM stops serving, instead of the misleading "Up 4 days" during a
+    # crash-loop (ADR-0027, Incident 1). start_period=120s: confirmed cold-start
+    # to /health/readiness is ~95s (Prisma migrate + 2 workers) on 2026-06-06,
+    # so the probe must not mark it unhealthy before then.
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4000/health/liveliness',timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
 
   litellm-db:
     image: postgres:16-alpine
