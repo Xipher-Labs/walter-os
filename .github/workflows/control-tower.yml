@@ -9,6 +9,9 @@ on:
     paths:
       - "apps/control-tower/**"
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     name: Build + Lint + Typecheck + Unit Tests

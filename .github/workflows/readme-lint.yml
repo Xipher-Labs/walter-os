@@ -38,6 +38,9 @@ on:
       - "docs/specs/**"
       - ".github/workflows/readme-lint.yml"
 
+permissions:
+  contents: read
+
 jobs:
   readme-structure:
     name: README structure + depersonalization

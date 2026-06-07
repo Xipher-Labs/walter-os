@@ -24,10 +24,10 @@ on:
     types: [opened, closed, synchronize]
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+  contents: read
+  issues: write          # contributor-assistant comments on CLA signatures
+  pull-requests: write   # contributor-assistant labels / updates PR state
+  statuses: write        # contributor-assistant publishes CLA commit status
 
 jobs:
   cla-assistant:

@@ -34,14 +34,15 @@ on:
         type: string
 
 permissions:
-  contents: write   # create release + upload assets
-  id-token: write   # cosign OIDC keyless signing
+  contents: read
   packages: read
 
 jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # gh release create reads repo metadata and writes releases
     outputs:
       tag: ${{ steps.refs.outputs.tag }}
       version: ${{ steps.refs.outputs.version }}
@@ -126,6 +127,10 @@ jobs:
     name: SBOM + checksums + cosign signing
     needs: release
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # gh release download/upload/delete-asset
+      id-token: write   # cosign OIDC keyless signing
+      packages: read
     outputs:
       slsa-subjects: ${{ steps.slsa-subjects.outputs.hashes }}
     env:
@@ -337,9 +342,9 @@ jobs:
     name: SLSA provenance
     needs: [release, security]
     permissions:
-      actions: read
-      id-token: write
-      contents: write
+      actions: read    # SLSA reusable workflow reads workflow run metadata
+      id-token: write  # SLSA reusable workflow signs provenance with OIDC
+      contents: write  # SLSA reusable workflow uploads provenance to release
     # The SLSA generic reusable workflow must use a full semver tag, not a
     # commit SHA; upstream rejects SHA refs for verifier compatibility.
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
