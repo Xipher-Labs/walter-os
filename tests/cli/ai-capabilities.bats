@@ -119,3 +119,188 @@ teardown() {
   echo "$output" | grep -q "infra_security_backend.*ollama"
   echo "$output" | grep -q "compliance_local_only.*ollama"
 }
+
+@test "walter ai validate accepts generated capability config" {
+  bash "$WALTER_BIN" ai configure --profile mixed --set research=claude,gemini >/dev/null
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+  echo "$output" | grep -q "${WALTER_CONFIG}/ai-capabilities.yaml"
+}
+
+@test "walter ai validate rejects invalid route providers" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: banana
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "invalid route_image_generation"
+}
+
+@test "walter ai validate accepts the example template" {
+  run bash "$WALTER_BIN" ai validate "${REPO_ROOT}/contexts/_examples/ai-capabilities.yaml.example"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}
+
+@test "walter ai validate accepts inline comments and CRLF files" {
+  config="${WALTER_CONFIG}/ai-capabilities.yaml"
+  printf '%s\r\n' \
+    'profile: mixed' \
+    'provider_claude: enabled  # planning and UX' \
+    'provider_codex: enabled' \
+    'provider_copilot: enabled' \
+    'provider_gemini: enabled' \
+    'provider_ollama: enabled' \
+    'route_code_review: copilot,codex  # preferred review order' \
+    'route_infra_security_backend: codex' \
+    'route_planning: claude' \
+    'route_ux_ui: claude' \
+    'route_image_generation: gemini' \
+    'route_research: gemini' \
+    'route_compliance_local_only: ollama' >"$config"
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}
+
+@test "walter ai validate accepts spaces in comma-separated routes" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot, codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}
+
+@test "walter ai validate does not echo invalid line contents" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+not yaml OPENAI_API_KEY=secret-value
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "invalid YAML at line 3"
+  ! echo "$output" | grep -q "secret-value"
+  ! echo "$output" | grep -q "OPENAI_API_KEY"
+}
+
+@test "walter ai validate does not echo invalid values" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: OPENAI_API_KEY=secret-profile
+provider_claude: enabled
+provider_codex: secret-provider-token
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: sk-secret-route
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "invalid profile"
+  echo "$output" | grep -q "invalid provider_codex"
+  echo "$output" | grep -q "invalid route_image_generation"
+  ! echo "$output" | grep -q "secret-profile"
+  ! echo "$output" | grep -q "secret-provider-token"
+  ! echo "$output" | grep -q "sk-secret-route"
+  ! echo "$output" | grep -q "OPENAI_API_KEY"
+}
+
+@test "walter ai validate rejects unknown and duplicate keys without echoing contents" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_codex: disabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama
+openai_api_key: secret-value
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "duplicate key at line 4"
+  echo "$output" | grep -q "unknown key at line 15"
+  ! echo "$output" | grep -q "openai_api_key"
+  ! echo "$output" | grep -q "secret-value"
+  ! echo "$output" | grep -q "provider_codex"
+}
+
+@test "walter ai validate accepts indented keys and whitespace-only lines" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+  profile: mixed
+    
+  provider_claude: enabled
+  provider_codex: enabled
+  provider_copilot: enabled
+  provider_gemini: enabled
+  provider_ollama: enabled
+  route_code_review: copilot,codex
+  route_infra_security_backend: codex
+  route_planning: claude
+  route_ux_ui: claude
+  route_image_generation: gemini
+  route_research: gemini
+  route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}

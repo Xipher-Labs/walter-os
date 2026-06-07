@@ -25,6 +25,7 @@
 #   walter explain nanobanana
 #   walter pivot
 #   walter ai status
+#   walter ai validate
 #   walter status
 #   walter deploy grafana
 #   walter alert test
@@ -72,6 +73,7 @@ Commands:
   pivot                            Reconfigure an existing project (requires AGENTS.md in cwd).
                                      Uses project-pivot skill (W-3) or interactive fallback.
   ai status                        Show detected/configured AI providers and routes.
+  ai validate [path]               Validate ai-capabilities.yaml schema/enums.
   ai configure --profile <profile> Configure Claude/Codex/Gemini/Ollama capability routing.
   providers configure              Interactive provider choice wizard. Choose LLM,
                                      git, secrets, analytics, search, embeddings
@@ -95,6 +97,7 @@ Examples:
   walter explain nanobanana
   walter pivot
   walter ai configure --profile mixed
+  walter ai validate
   walter ai status
   walter providers configure
   walter status
