@@ -73,19 +73,18 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Added
 
+- **MCP tool-definition drift detection (#122/#331).** Adds a
+  `tools/list` JSON-RPC probe for stdio, HTTP, and SSE MCPs from Claude settings,
+  persists approved tool baselines via `walter-os baseline-mcp-tools`, and
+  emits critical `mcp-tool-shadowing` findings when tool names,
+  descriptions, or schemas change. Probes are gated against the approved
+  server-registry baseline before any MCP command or remote request runs, and
+  disabled or manual/high-risk entries are not executed by the audit.
 - **Audit-chain Loki verification (#122/#332).** Extends
   `walter-os audit verify-chain --from-loki` from fixture-only checks to
   live Loki `query_range` calls via `--loki-url` or
   `WALTER_AUDIT_LOKI_URL`, while preserving the same local hash-chain
   verifier for Loki-shipped rows.
-- **MCP stdio tool-definition drift detection (#122).** Adds a
-  `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
-  persists approved tool baselines via `walter-os baseline-mcp-tools`, and
-  emits critical `mcp-tool-shadowing` findings when tool names,
-  descriptions, or schemas change. Probes are gated against the approved
-  server-registry baseline before any MCP command is spawned, and disabled or
-  manual/high-risk entries are not executed by the audit. HTTP/SSE transports
-  remain out of scope for this first runtime slice.
 - **Audit-chain Loki fixture verification (#122).** Adds
   `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
   operators can verify Loki-shipped audit-chain rows with the same local
@@ -96,9 +95,17 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 - **Semantic gates first slice (#229).** Adds `walter-os semantic-gates` to
   check spec completeness, AC testability, architecture-review evidence, and
   test relevance before autonomous delivery work proceeds.
+- **Control Tower team readiness first slice (#308).** Adds a read-only
+  operator readiness panel for solo, second-device, teammate, service-health,
+  post-merge, and model/tool paths, with links to existing docs and safe CLI
+  commands.
 - **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
   `walter-repo-config.yaml` policy axis, reports the effective mode during
   validation, and keeps the hard-limit floor non-overridable in every mode.
+- **Risk-based verification planner (#233).** Adds `walter-os repo-config
+  verification-plan` so operators can derive prototype/risk-based/production
+  check depth from repo policy, explicit risk, and changed paths while forcing
+  production verification for hard-floor files.
 - **Signed Forgejo PR webhook adapter (#302).** Adds
   `plane-pr-sync-webhook.sh` for HMAC-verified Forgejo/Gitea merge webhooks,
   resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and

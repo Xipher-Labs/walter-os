@@ -24,7 +24,7 @@
 #   ack <id> [--reason]         Acknowledge a finding so it stops blocking
 #   baseline <config>           Update baseline for a config file
 #   baseline-hooks              Refresh hook checksums after intentional change
-#   baseline-mcp-tools          Refresh MCP server + stdio tool baselines
+#   baseline-mcp-tools          Refresh MCP server + tool baselines
 #   baseline-external-hooks     Refresh external/**/hooks/scripts/*.sh checksums
 #                               after an intentional submodule SHA bump (audit P1-07)
 #   enable-hook <name>          Enable a hook in ~/.claude/settings.json
@@ -81,8 +81,8 @@
 #                               Manage .walter/features/<id>/state.yaml ledgers
 #   release doctor --target vX.Y.Z|X.Y.Z [--json]
 #                               Check release readiness without mutating state
-#   repo-config {validate|defaults [balanced|hackathon]}
-#                               Validate walter-repo-config.yaml per-repo policy
+#   repo-config {validate|defaults [balanced|hackathon]|verification-plan}
+#                               Validate walter-repo-config.yaml policy + verification depth
 #   overlay                     Open ~/.config/walter-os/overlay with configured opener
 #   egress {add|remove|list|test|import}
 #                               Manage network egress allowlist (#122 A-2)
@@ -652,7 +652,7 @@ cmd_baseline_hooks() {
 # Re-snapshot mcp/servers.json after an intentional MCP server change
 # (added / removed / version bump / trust-level change). Operators run
 # this only after reviewing the change. Closes #117 Phase 1.
-# Phase 2 (per-tool schema query via stdio JSON-RPC) is a follow-up.
+# Runtime tool-definition probes cover stdio plus approved HTTP/SSE MCPs.
 cmd_baseline_mcp_tools() {
   require_jq
   local registry="${WALTER_OS_HOME:-${HOME}/walter-os}/mcp/servers.json"
@@ -713,7 +713,7 @@ cmd_baseline_mcp_tools() {
     rm -f "$tool_tmp"
     local tool_n
     tool_n="$(jq '.servers | length' "$tool_baseline")"
-    echo "✓ MCP tool snapshot refreshed ($tool_n stdio servers): $tool_baseline"
+    echo "✓ MCP tool snapshot refreshed ($tool_n MCP servers): $tool_baseline"
   else
     rm -f "$tool_tmp" "${tool_tmp}.sorted"
     echo "warning: MCP tool-definition snapshot failed; server-registry baseline was still refreshed" >&2
@@ -1501,7 +1501,7 @@ cmd_version() {
   #      specific GitHub org (see PR #73 / W-5 depersonalization
   #      audit) so the binary doesn't ship operator-org references.
   local update_repo="${WALTER_OS_UPDATE_REPO:-}"
-  if [[ -z "$update_repo" && -d "${WALTER_OS_HOME}/.git" ]]; then
+  if [[ -z "$update_repo" ]] && git -C "$WALTER_OS_HOME" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     local origin_url
     origin_url="$(git -C "$WALTER_OS_HOME" remote get-url origin 2>/dev/null || true)"
     # Match both git@github.com:owner/repo(.git) and https://github.com/owner/repo(.git)
