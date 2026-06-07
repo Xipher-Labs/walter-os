@@ -365,6 +365,7 @@ providers_configure() {
 
   echo
   log_ok "Provider configuration complete."
+  log_info "Next: run 'walter ai configure --profile mixed' or 'walter ai status' to declare which AI tools are actually available."
 }
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@
 #   walter ask "what agents are blocked"
 #   walter explain nanobanana
 #   walter pivot
+#   walter ai status
 #   walter status
 #   walter deploy grafana
 #   walter alert test
@@ -70,6 +71,8 @@ Commands:
                                      Falls back to raw SKILL.md if AI not configured.
   pivot                            Reconfigure an existing project (requires AGENTS.md in cwd).
                                      Uses project-pivot skill (W-3) or interactive fallback.
+  ai status                        Show detected/configured AI providers and routes.
+  ai configure --profile <profile> Configure Claude/Codex/Gemini/Ollama capability routing.
   providers configure              Interactive provider choice wizard. Choose LLM,
                                      git, secrets, analytics, search, embeddings
                                      providers and write to providers.yaml + .env.local.
@@ -91,6 +94,8 @@ Examples:
   walter ask "what agents are blocked right now"
   walter explain nanobanana
   walter pivot
+  walter ai configure --profile mixed
+  walter ai status
   walter providers configure
   walter status
   walter deploy grafana
@@ -106,7 +111,7 @@ shift || true
 # `--help` handler (the ones that need it) get the args passed through.
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
-    new|status|deploy|logs|alert|doctor|secrets|vm|providers|overlay)
+    new|status|deploy|logs|alert|doctor|secrets|vm|providers|overlay|ai)
       ;; # subcommand handles its own help
     *)
       usage; exit 0 ;;
@@ -155,6 +160,7 @@ NEW_USAGE
   explain)    exec bash "$WALTER_LIB/subcommands/explain.sh" "$@" ;;
   pivot)      exec bash "$WALTER_LIB/subcommands/pivot.sh" "$@" ;;
 
+  ai)         exec bash "$WALTER_LIB/subcommands/ai.sh" "$@" ;;
   providers) exec bash "$WALTER_LIB/subcommands/providers.sh" "$@" ;;
   overlay)   exec bash "$WALTER_LIB/subcommands/overlay.sh" "$@" ;;
 

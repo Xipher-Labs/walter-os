@@ -653,3 +653,12 @@ ENVEOF
   grep -q "^#.*LITELLM_BASE_URL=" "$E2E_ENV_LOCAL"
   grep -q "^#.*PLANE_API_TOKEN=" "$E2E_ENV_LOCAL"
 }
+
+@test "providers configure completion points to walter ai capabilities [#401]" {
+  _require_bash_4_or_skip
+  export PROVIDERS_YAML="${TEST_HOME}/.config/walter-os/providers.yaml"
+  run bash -c "printf '1\\n1\\n1\\n1\\n1\\n1\\n1\\n' | bash '${SUBCOMMANDS}/providers.sh' configure"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "walter ai configure"
+  echo "$output" | grep -q "walter ai status"
+}

@@ -8,6 +8,7 @@ audit: audit-shell audit-secrets audit-deps  ## Run all local audit tools (CI-on
 audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must match exactly)
 	shellcheck -e SC2155,SC1091,SC1083,SC2317,SC2329 \
 		install.sh \
+		bin/walter \
 		bin/walter-os \
 		scripts/sync.sh \
 		scripts/sync-repos.sh \
@@ -42,7 +43,9 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		setup/walter-host/recovery/hetzner-break-glass-ssh.sh \
 		setup/walter-host/services/openclaw/deploy.sh \
 		skills/daily-supply-chain-audit/scripts/audit.sh \
+		scripts/walter/subcommands/ai.sh \
 		scripts/walter/subcommands/bridge.sh \
+		scripts/walter/subcommands/providers.sh \
 		scripts/walter/subcommands/post-merge-check.sh \
 		scripts/walter/subcommands/feature-state.sh \
 		scripts/walter/subcommands/release.sh

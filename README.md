@@ -177,14 +177,23 @@ After Mode 2, choose the LLM provider you actually have:
 
 ```bash
 walter providers configure --category llm
+walter ai configure --profile mixed
+walter ai status
 ```
 
-The wizard writes `~/.config/walter-os/providers.yaml` and activates the
-matching env vars in your private overlay or `.env.local`. Current LLM slugs:
-`litellm`, `anthropic`, `openai`, `gemini`, and `ollama`. Use LiteLLM when you
-want one self-hosted gateway, direct Anthropic/OpenAI/Gemini when you only have
-one vendor account, and Ollama/local when compliance or security requires local
-inference.
+The provider wizard writes `~/.config/walter-os/providers.yaml` and activates
+the matching env vars in your private overlay or `.env.local`. Current LLM
+slugs: `litellm`, `anthropic`, `openai`, `gemini`, and `ollama`. Use LiteLLM
+when you want one self-hosted gateway, direct Anthropic/OpenAI/Gemini when you
+only have one vendor account, and Ollama/local when compliance or security
+requires local inference.
+
+The AI capability profile writes private metadata to
+`~/.config/walter-os/ai-capabilities.yaml` so Walter knows which AI tools are
+actually available for review, backend/security work, planning, UX/UI, image
+generation, research, and local-only compliance. Built-in profiles are
+`claude-only`, `codex-only`, `gemini-only`, `local-only`, and `mixed`. See
+[`ai-capability-profiles.md`](docs/operational/ai-capability-profiles.md).
 
 ### Mode 3 — Self-hosted stack (1–2h, optional)
 
@@ -225,6 +234,7 @@ walter-os audit
 walter-os profile default        # read-mostly, default
 walter-os profile high-risk      # opt-in, money-spending + provisioning
 walter providers configure --category llm
+walter ai status
 ```
 
 A skill triggers when you describe the work it covers. For example, asking your agent to "spin up a new hackathon project" triggers [`hackathon-spinup`](skills/hackathon-spinup/SKILL.md); "review my UI" triggers [`web-design-guidelines`](skills/web-design-guidelines/SKILL.md). Full catalog: [`skills/INDEX.md`](skills/INDEX.md).
