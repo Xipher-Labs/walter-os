@@ -63,7 +63,7 @@ _check_workflow_pins() {
   run grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+' "$workflow"
   [ "$status" -eq 0 ]
 
-  run grep -Eq 'npm install -g markdownlint-cli([^@]|$)' "$workflow"
+  run grep -Eq 'npm install -g markdownlint-cli([[:space:]]|$)' "$workflow"
   [ "$status" -eq 1 ]
 }
 
