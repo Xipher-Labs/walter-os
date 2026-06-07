@@ -28,6 +28,156 @@ write_preview_artifacts() {
   printf 'fake png bytes\n' > "$shot_file"
 }
 
+write_preview_config() {
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  cat > "$config_file" <<'YAML'
+autonomy_mode: guided
+profile: balanced
+capability_tier_ceiling: 1
+auto_merge:
+  enabled: false
+  allowed_branches: []
+  forbidden_branches:
+    - main
+  require_green_ci: true
+  min_walter_score: 90
+  max_risk: low
+verification: risk_based
+preview_deploy: true
+human_approval_required_for:
+  - auth
+  - payments
+  - secrets
+  - prod_infra
+  - db_migrations
+  - destructive_ops
+YAML
+}
+
+@test "preview plan writes dry-run plan when preview_deploy is enabled" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.kind == "preview-plan"'
+  echo "$output" | jq -e '.provider == "vercel"'
+  echo "$output" | jq -e '.app == "control-tower"'
+  echo "$output" | jq -e '.branch == "feature/preview-plan"'
+  echo "$output" | jq -e '.actions | index("deploy_ephemeral_preview")'
+  echo "$output" | jq -e '.safety.dry_run == true'
+  echo "$output" | jq -e '.safety.credentials == "not minted"'
+  echo "$output" | jq -e '.safety.deploy == "not performed"'
+  [[ -f "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
+}
+
+@test "preview plan requires explicit dry-run" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"preview plan requires --dry-run"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
+}
+
+@test "preview plan accepts YAML boolean case variants" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  printf 'preview_deploy: True\n' > "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.safety.preview_deploy == true'
+}
+
+@test "preview plan fails closed unless preview_deploy is enabled" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  printf 'preview_deploy: false\n' > "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"preview_deploy is not enabled"* ]]
+  [[ "$output" == *"$config_file"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
+}
+
+@test "preview plan rejects config paths that are not readable files" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/config-dir"
+  mkdir -p "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"config is not a readable file"* ]]
+  [[ "$output" == *"$config_file"* ]]
+}
+
+@test "preview plan rejects unsupported providers" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider prod-shell \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"unsupported preview provider: prod-shell"* ]]
+}
+
 @test "preview bundle copies seed and screenshots into a report bundle" {
   write_preview_artifacts
 
@@ -161,4 +311,5 @@ write_preview_artifacts() {
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"preview bundle"* ]]
+  [[ "$output" == *"preview plan"* ]]
 }
