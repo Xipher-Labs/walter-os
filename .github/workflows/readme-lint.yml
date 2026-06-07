@@ -13,6 +13,7 @@ on:
       - "NOTICE"
       - "COMMERCIAL.md"
       - "SECURITY.md"
+      - ".github/SECURITY.md"
       - "CODE_OF_CONDUCT.md"
       - "CONTRIBUTING.md"
       - "contexts/**"
@@ -31,6 +32,7 @@ on:
       - "NOTICE"
       - "COMMERCIAL.md"
       - "SECURITY.md"
+      - ".github/SECURITY.md"
       - "CODE_OF_CONDUCT.md"
       - "CONTRIBUTING.md"
       - "contexts/**"
@@ -85,6 +87,9 @@ jobs:
 
       - name: Run secrets runtime docs bats suite [issue #33]
         run: bats tests/oss/secrets-runtime-docs.bats
+
+      - name: Run Scorecard hygiene bats suite [issue #396]
+        run: bats tests/oss/scorecard-hygiene.bats
 
   readme-markdown-lint:
     name: Markdown lint [AC-12]

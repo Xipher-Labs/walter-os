@@ -18,6 +18,7 @@ commands, expected outputs, and troubleshooting. The audience is a technical ope
 | [`postiz-analytics-export.md`](postiz-analytics-export.md) | How to export Postiz analytics for manual ingestion into the DevRel analytics Postgres (Phase V workaround while Twitter API approval is pending) |
 | [`known-issues.md`](known-issues.md) | Active known issues on Walter-VM: claude-code-router daemon bind issue, headscale-admin `/admin/` path quirk, subscription proxy status |
 | [`v0.6.1-release-notes.md`](v0.6.1-release-notes.md) | Patch-release notes for provider selection, audit-chain hardening, upgrade commands, and remaining security follow-ups |
+| [`scorecard-hygiene.md`](scorecard-hygiene.md) | OpenSSF Scorecard alert disposition for project hygiene, including code-visible fixes and manual GitHub settings |
 | [`anthropic-skills-delta-audit.md`](anthropic-skills-delta-audit.md) | Delta audit for upstream `anthropics/skills` versus plugin-exposed Anthropic skills |
 | [`hosting-providers-comparison.md`](hosting-providers-comparison.md) | VPS/cloud provider comparison for Walter-OS v0.2.0 adopters: specs, pricing, gotchas, and portability notes. Hetzner is default reference; 10 alternatives documented. |
 | [`knowledge-profile.md`](knowledge-profile.md) | Decision guide for Outline + Linkwarden versus Obsidian in personal, startup, and small-team installs |
