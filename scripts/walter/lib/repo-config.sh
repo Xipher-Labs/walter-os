@@ -5,6 +5,45 @@
 # This file is intentionally policy-only: it validates the committed per-repo
 # policy surface, but it does not relax approval-gate hard limits.
 
+_WALTER_REPO_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${_WALTER_REPO_CONFIG_LIB_DIR}/protected-paths.sh"
+if [[ ! -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" && -n "${WALTER_OS_HOME:-}" ]]; then
+  _WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB="${WALTER_OS_HOME}/scripts/walter/lib/protected-paths.sh"
+fi
+if [[ -f "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$_WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB"
+elif ! declare -p WALTER_PROTECTED_PATH_PATTERNS >/dev/null 2>&1; then
+  declare -a WALTER_PROTECTED_PATH_PATTERNS=(
+    'hooks/*.sh'
+    '.claude/settings.json'
+    '.github/workflows/*'
+    'install.sh'
+    'bin/walter-os'
+    'AGENTS.md'
+    'CLAUDE.md'
+    'mcp/servers.json'
+    'scripts/walter/lib/capability-token.sh'
+    'scripts/walter/lib/skill-cap-loader.sh'
+    'scripts/walter/lib/session-state.sh'
+    'scripts/walter/lib/protected-paths.sh'
+    'scripts/walter/subcommands/cap.sh'
+    'agents/*.md'
+    'skills/*/SKILL.md'
+    'auth/*'
+    'crypto/*'
+    'personal/health/*'
+    '*.key'
+    '*.pem'
+    '*.crt'
+    '.ssh/*'
+    '*/.ssh/*'
+    '*.env'
+    '*.env.*'
+  )
+fi
+unset _WALTER_REPO_CONFIG_LIB_DIR _WALTER_REPO_CONFIG_PROTECTED_PATHS_LIB
+
 walter_repo_config_defaults() {
   local profile="${1:-balanced}"
 
@@ -106,6 +145,222 @@ walter_repo_config_print_mode_contract() {
   printf 'repo-config: autonomy scope: policy axis, not install tier\n'
   printf 'repo-config: mode semantics: %s\n' "$summary"
   printf 'repo-config: hard-limit floor: non-overridable in every mode\n'
+}
+
+_walter_repo_config_risk_rank() {
+  case "${1:-low}" in
+    low) printf '1\n' ;;
+    medium) printf '2\n' ;;
+    high) printf '3\n' ;;
+    *) printf '0\n' ;;
+  esac
+}
+
+_walter_repo_config_max_risk() {
+  local left="${1:-low}"
+  local right="${2:-low}"
+  if (( $(_walter_repo_config_risk_rank "$right") > $(_walter_repo_config_risk_rank "$left") )); then
+    printf '%s\n' "$right"
+  else
+    printf '%s\n' "$left"
+  fi
+}
+
+_walter_repo_config_path_is_hard_floor() {
+  local path="$1"
+  local normalized="${path#./}"
+  local pattern
+  if declare -p WALTER_PROTECTED_PATH_PATTERNS >/dev/null 2>&1; then
+    for pattern in "${WALTER_PROTECTED_PATH_PATTERNS[@]}"; do
+      # shellcheck disable=SC2053 # Shared protected path policy uses globs.
+      if [[ "$normalized" == $pattern || "$normalized" == */$pattern || \
+            "$normalized" == $pattern/* || "$normalized" == */$pattern/* ]]; then
+        return 0
+      fi
+    done
+  fi
+
+  case "$normalized" in
+    migrations/*|*/migrations/*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+_walter_repo_config_path_is_medium_risk() {
+  local path="$1"
+  local normalized="${path#./}"
+  case "$normalized" in
+    bin/*|*/bin/*|scripts/*|*/scripts/*|setup/*|*/setup/*|compose.yml|*/compose.yml|\
+    docker-compose.yml|*/docker-compose.yml|apps/*/api/*|*/apps/*/api/*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+_walter_repo_config_path_is_ui() {
+  local path="$1"
+  local normalized="${path#./}"
+  case "$normalized" in
+    apps/control-tower/*|*/apps/control-tower/*|*.tsx|*.jsx|*.css|*.scss)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+_walter_repo_config_print_checks() {
+  local plan="$1"
+  local ui_change="$2"
+
+  printf 'required_checks:\n'
+  case "$plan" in
+    prototype)
+      printf '  - lint\n'
+      printf '  - typecheck\n'
+      printf '  - smoke_test\n'
+      printf '  - critical_path_test\n'
+      ;;
+    risk_based)
+      printf '  - lint\n'
+      printf '  - typecheck\n'
+      printf '  - targeted_tests\n'
+      printf '  - integration_tests\n'
+      printf '  - acceptance_criteria_check\n'
+      ;;
+    production)
+      printf '  - lint\n'
+      printf '  - typecheck\n'
+      printf '  - spec_up_to_date\n'
+      printf '  - red_green_refactor_tests\n'
+      printf '  - unit_tests\n'
+      printf '  - integration_tests\n'
+      printf '  - e2e_or_smoke\n'
+      printf '  - acceptance_criteria_coverage\n'
+      printf '  - security_review\n'
+      printf '  - rollback_plan\n'
+      ;;
+  esac
+  if [[ "$ui_change" == "yes" ]]; then
+    printf '  - screenshot_validation\n'
+  fi
+}
+
+walter_repo_config_verification_plan() {
+  local target="${1:-$(pwd)}"
+  shift || true
+  local input_risk="low"
+  local paths=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --risk)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --risk\n' >&2
+          return 2
+        fi
+        input_risk="${2:-}"
+        shift 2
+        ;;
+      --risk=*)
+        input_risk="${1#--risk=}"
+        shift
+        ;;
+      --path)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          printf 'repo-config: missing value for --path\n' >&2
+          return 2
+        fi
+        paths+=("${2:-}")
+        shift 2
+        ;;
+      --path=*)
+        paths+=("${1#--path=}")
+        shift
+        ;;
+      --)
+        shift
+        while [[ $# -gt 0 ]]; do
+          paths+=("$1")
+          shift
+        done
+        ;;
+      --*)
+        printf 'repo-config: unknown option: %s\n' "$1" >&2
+        return 2
+        ;;
+      *)
+        paths+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  case "$input_risk" in
+    low|medium|high) ;;
+    *)
+      printf 'repo-config: invalid risk: %s\n' "$input_risk" >&2
+      return 2
+      ;;
+  esac
+
+  local validation_output
+  if ! validation_output="$(walter_repo_config_validate "$target" 2>&1)"; then
+    printf '%s\n' "$validation_output"
+    return 1
+  fi
+
+  local config_path verification policy_status path path_risk="low" effective_risk hard_floor="no" ui_change="no"
+  config_path="$(walter_repo_config_path "$target")"
+  verification="risk_based"
+  policy_status="defaulted_missing"
+  if [[ -f "$config_path" ]]; then
+    verification="$(yq e '.verification // "risk_based"' "$config_path" 2>/dev/null || printf 'risk_based')"
+    policy_status="configured"
+  fi
+
+  for path in "${paths[@]}"; do
+    [[ -z "$path" ]] && continue
+    if _walter_repo_config_path_is_hard_floor "$path"; then
+      hard_floor="yes"
+      path_risk="$(_walter_repo_config_max_risk "$path_risk" high)"
+    elif _walter_repo_config_path_is_medium_risk "$path"; then
+      path_risk="$(_walter_repo_config_max_risk "$path_risk" medium)"
+    fi
+    if _walter_repo_config_path_is_ui "$path"; then
+      ui_change="yes"
+    fi
+  done
+
+  effective_risk="$(_walter_repo_config_max_risk "$input_risk" "$path_risk")"
+
+  local plan
+  if [[ "$hard_floor" == "yes" || "$verification" == "production" || "$effective_risk" == "high" ]]; then
+    plan="production"
+  elif [[ "$verification" == "prototype" || "$effective_risk" == "low" ]]; then
+    plan="prototype"
+  else
+    plan="risk_based"
+  fi
+
+  printf 'repo-config: verification plan\n'
+  printf 'policy: %s\n' "$config_path"
+  printf 'policy_status: %s\n' "$policy_status"
+  printf 'verification: %s\n' "$verification"
+  printf 'input_risk: %s\n' "$input_risk"
+  printf 'path_risk: %s\n' "$path_risk"
+  printf 'effective_risk: %s\n' "$effective_risk"
+  printf 'hard_floor: %s\n' "$hard_floor"
+  printf 'ui_change: %s\n' "$ui_change"
+  if [[ "$hard_floor" == "yes" || "$plan" == "production" ]]; then
+    printf 'human_gate: required\n'
+  else
+    printf 'human_gate: policy\n'
+  fi
+  printf 'plan: %s\n' "$plan"
+  _walter_repo_config_print_checks "$plan" "$ui_change"
 }
 
 _walter_repo_config_require_yq() {

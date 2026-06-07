@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Snapshot stdio MCP tool definitions from Claude Code settings.
+// Snapshot MCP tool definitions from Claude Code settings.
 // Uses only Node built-ins and never invokes a shell.
 
 import fs from "node:fs";
@@ -140,6 +140,27 @@ function materializeEnv(envConfig) {
   return env;
 }
 
+function normalizeHeaders(headersConfig) {
+  const headers = {};
+  for (const [key, value] of Object.entries(headersConfig || {})) {
+    headers[key] = expandSafeTemplateString(value);
+  }
+  return headers;
+}
+
+function materializeHeaders(headersConfig) {
+  const headers = {};
+  for (const [key, value] of Object.entries(headersConfig || {})) {
+    headers[key] = stringifyConfigValue(value).replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, name) => {
+      if (Object.prototype.hasOwnProperty.call(process.env, name)) {
+        return process.env[name];
+      }
+      return match;
+    });
+  }
+  return headers;
+}
+
 function spawnLaunchConfig(config) {
   return {
     command: stringifyConfigValue(config.command),
@@ -150,6 +171,27 @@ function spawnLaunchConfig(config) {
 
 function sameLaunchConfig(left, right) {
   return JSON.stringify(sortJson(left)) === JSON.stringify(sortJson(right));
+}
+
+function remoteType(config) {
+  const type = stringifyConfigValue(config.type || config.transport);
+  return type === "http" || type === "sse" ? type : "";
+}
+
+function remoteCompareConfig(config) {
+  return {
+    type: remoteType(config),
+    url: expandSafeTemplateString(config.url),
+    headers: normalizeHeaders(config.headers || {}),
+  };
+}
+
+function remoteRuntimeConfig(config) {
+  return {
+    type: remoteType(config),
+    url: expandSafeTemplateString(config.url),
+    headers: materializeHeaders(config.headers || {}),
+  };
 }
 
 function stdioServers(settings, approvedRegistry) {
@@ -193,6 +235,52 @@ function stdioServers(settings, approvedRegistry) {
   return { entries, denied };
 }
 
+function remoteServers(settings, approvedRegistry) {
+  const mcpServers = settings.mcpServers || {};
+  const entries = [];
+  const denied = {};
+
+  for (const [name, config] of Object.entries(mcpServers)) {
+    if (!config || config.disabled === true) continue;
+    const type = remoteType(config);
+    if (!type) continue;
+    if (typeof config.url !== "string" || config.url.length === 0) {
+      denied[name] = { message: `${type} MCP is missing url` };
+      continue;
+    }
+
+    const runtimeLaunch = remoteCompareConfig(config);
+    if (approvedRegistry) {
+      const approved = approvedRegistry[name];
+      if (!approved) {
+        denied[name] = { message: `${type} MCP is not present in approved server registry baseline` };
+        continue;
+      }
+      if (approved.disabled === true) {
+        denied[name] = { message: `approved server registry baseline marks this ${type} MCP disabled` };
+        continue;
+      }
+      if ((approved.load || "default") !== "default") {
+        denied[name] = {
+          message: `approved server registry baseline marks this ${type} MCP outside the default load profile`,
+        };
+        continue;
+      }
+      const approvedLaunch = remoteCompareConfig(approved);
+      if (!sameLaunchConfig(runtimeLaunch, approvedLaunch)) {
+        denied[name] = {
+          message: "runtime type, url, or headers do not match approved server registry baseline",
+        };
+        continue;
+      }
+    }
+
+    entries.push([name, remoteRuntimeConfig(config)]);
+  }
+
+  return { entries, denied };
+}
+
 function withTimeout(promise, timeoutMs, onTimeout) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -205,6 +293,362 @@ function withTimeout(promise, timeoutMs, onTimeout) {
     }, timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  if (typeof fetch !== "function") {
+    throw new Error("global fetch API unavailable; Node.js 18+ required for HTTP/SSE MCP probing");
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, redirect: "error", signal: controller.signal });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error(`timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readResponseText(response, timeoutMs, label) {
+  return withTimeout(response.text(), timeoutMs, () => {
+    response.body?.cancel().catch(() => {});
+  }).catch((error) => {
+    throw new Error(`${label}: ${error.message}`);
+  });
+}
+
+async function drainResponseBody(response, timeoutMs) {
+  if (!response.body) return;
+  try {
+    await withTimeout(response.arrayBuffer(), timeoutMs, () => {
+      response.body?.cancel().catch(() => {});
+    });
+  } catch {
+    await response.body.cancel().catch(() => {});
+  }
+}
+
+function parseJsonRpcResponseBody(text) {
+  return JSON.parse(text);
+}
+
+async function readJsonRpcResponse(response, timeoutMs, label) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("text/event-stream")) {
+    const client = createSseClient(response, label);
+    try {
+      const event = await client.waitFor(
+        (candidate) => candidate.event === "message" && Boolean(candidate.data),
+        timeoutMs,
+        `${label} message`,
+      );
+      return JSON.parse(event.data);
+    } finally {
+      await client.close();
+    }
+  }
+  return parseJsonRpcResponseBody(await readResponseText(response, timeoutMs, `${label} body`));
+}
+
+function validateJsonRpcResponse(message, expectedId, method) {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    throw new Error(`${method} response is not a JSON-RPC object`);
+  }
+  if (String(message.id) !== String(expectedId)) {
+    throw new Error(`${method} response id mismatch`);
+  }
+  return message;
+}
+
+function resolveSsePostUrl(endpoint, baseUrl, name) {
+  const approvedUrl = new URL(baseUrl);
+  const resolvedUrl = new URL(endpoint, approvedUrl);
+  if (resolvedUrl.origin !== approvedUrl.origin) {
+    throw new Error(`${name} SSE endpoint origin mismatch`);
+  }
+  return resolvedUrl.toString();
+}
+
+async function probeHttpServer(name, config, timeoutMs) {
+  let nextId = 1;
+  let sessionId = "";
+
+  async function sendRequest(method, params) {
+    const id = nextId;
+    nextId += 1;
+    const payload = { jsonrpc: "2.0", id, method };
+    if (params !== undefined) payload.params = params;
+    const headers = {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+      ...config.headers,
+    };
+    if (sessionId) headers["mcp-session-id"] = sessionId;
+    const response = await fetchWithTimeout(
+      config.url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      },
+      timeoutMs,
+    );
+    if (!response.ok) {
+      await drainResponseBody(response, timeoutMs);
+      throw new Error(`${name} ${method} failed with HTTP ${response.status}`);
+    }
+    const responseSession = response.headers.get("mcp-session-id");
+    if (responseSession) sessionId = responseSession;
+    const message = validateJsonRpcResponse(
+      await readJsonRpcResponse(response, timeoutMs, `${name} ${method} response`),
+      id,
+      method,
+    );
+    if (message.error) throw new Error(message.error.message || "JSON-RPC error");
+    return message.result ?? {};
+  }
+
+  async function sendNotification(method) {
+    const headers = {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+      ...config.headers,
+    };
+    if (sessionId) headers["mcp-session-id"] = sessionId;
+    const response = await fetchWithTimeout(
+      config.url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ jsonrpc: "2.0", method }),
+      },
+      timeoutMs,
+    );
+    if (!response.ok) {
+      await drainResponseBody(response, timeoutMs);
+      throw new Error(`${name} ${method} notification failed with HTTP ${response.status}`);
+    }
+    const responseSession = response.headers.get("mcp-session-id");
+    if (responseSession) sessionId = responseSession;
+    await drainResponseBody(response, timeoutMs);
+  }
+
+  await sendRequest("initialize", {
+    protocolVersion: PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: {
+      name: "walter-os-mcp-tool-snapshot",
+      version: "1.0.0",
+    },
+  });
+  await sendNotification("notifications/initialized");
+
+  const tools = [];
+  let cursor;
+  do {
+    const result = await sendRequest("tools/list", cursor ? { cursor } : undefined);
+    if (Array.isArray(result.tools)) tools.push(...result.tools);
+    cursor = result.nextCursor;
+  } while (cursor);
+
+  return { tools: normalizeTools(tools) };
+}
+
+function createSseClient(response, name) {
+  const decoder = new TextDecoder();
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error(`${name} SSE response has no readable body`);
+
+  let buffer = "";
+  let eventName = "message";
+  let data = [];
+  const events = [];
+  const waiters = [];
+
+  function resolveWaiters() {
+    for (let i = waiters.length - 1; i >= 0; i -= 1) {
+      const waiter = waiters[i];
+      const index = events.findIndex(waiter.predicate);
+      if (index !== -1) {
+        const [event] = events.splice(index, 1);
+        waiters.splice(i, 1);
+        clearTimeout(waiter.timer);
+        waiter.resolve(event);
+      }
+    }
+  }
+
+  function dispatchEvent() {
+    if (data.length === 0) return;
+    events.push({ event: eventName, data: data.join("\n") });
+    eventName = "message";
+    data = [];
+    resolveWaiters();
+  }
+
+  function consumeLine(line) {
+    const cleanLine = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (cleanLine === "") {
+      dispatchEvent();
+      return;
+    }
+    if (cleanLine.startsWith(":")) return;
+    if (cleanLine.startsWith("event:")) {
+      eventName = cleanLine.slice("event:".length).trim();
+    } else if (cleanLine.startsWith("data:")) {
+      data.push(cleanLine.slice("data:".length).trimStart());
+    }
+  }
+
+  function consumeChunk(chunk) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let newlineIndex;
+    while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      consumeLine(line);
+    }
+  }
+
+  (async () => {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        consumeChunk(value);
+      }
+      buffer += decoder.decode();
+      if (buffer.length > 0) consumeLine(buffer);
+      dispatchEvent();
+    } catch (error) {
+      for (const waiter of waiters.splice(0)) {
+        clearTimeout(waiter.timer);
+        waiter.reject(error);
+      }
+    }
+  })();
+
+  function waitFor(predicate, timeoutMs, label) {
+    const index = events.findIndex(predicate);
+    if (index !== -1) {
+      const [event] = events.splice(index, 1);
+      return Promise.resolve(event);
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const waiterIndex = waiters.findIndex((waiter) => waiter.timer === timer);
+        if (waiterIndex !== -1) waiters.splice(waiterIndex, 1);
+        reject(new Error(`timeout after ${timeoutMs}ms waiting for ${label}`));
+      }, timeoutMs);
+      waiters.push({ predicate, resolve, reject, timer });
+    });
+  }
+
+  return {
+    waitFor,
+    close: () => reader.cancel().catch(() => {}),
+  };
+}
+
+async function probeSseServer(name, config, timeoutMs) {
+  const response = await fetchWithTimeout(
+    config.url,
+    {
+      method: "GET",
+      headers: {
+        accept: "text/event-stream",
+        ...config.headers,
+      },
+    },
+    timeoutMs,
+  );
+  if (!response.ok) {
+    await drainResponseBody(response, timeoutMs);
+    throw new Error(`${name} SSE connect failed with HTTP ${response.status}`);
+  }
+  const client = createSseClient(response, name);
+  let nextId = 1;
+
+  try {
+    const endpointEvent = await client.waitFor(
+      (event) => event.event === "endpoint",
+      timeoutMs,
+      "SSE endpoint",
+    );
+    const postUrl = resolveSsePostUrl(endpointEvent.data, config.url, name);
+
+    async function postMessage(payload) {
+      const postResponse = await fetchWithTimeout(
+        postUrl,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            ...config.headers,
+          },
+          body: JSON.stringify(payload),
+        },
+        timeoutMs,
+      );
+      if (!postResponse.ok) {
+        await drainResponseBody(postResponse, timeoutMs);
+        throw new Error(`${name} SSE POST failed with HTTP ${postResponse.status}`);
+      }
+      await drainResponseBody(postResponse, timeoutMs);
+    }
+
+    async function sendRequest(method, params) {
+      const id = nextId;
+      nextId += 1;
+      const payload = { jsonrpc: "2.0", id, method };
+      if (params !== undefined) payload.params = params;
+      const responsePromise = client.waitFor((event) => {
+        if (event.event !== "message" || !event.data) return false;
+        try {
+          const message = JSON.parse(event.data);
+          return String(message.id) === String(id);
+        } catch {
+          return false;
+        }
+      }, timeoutMs, `${method} response`);
+      await postMessage(payload);
+      const event = await responsePromise;
+      const message = JSON.parse(event.data);
+      if (message.error) throw new Error(message.error.message || "JSON-RPC error");
+      return message.result || {};
+    }
+
+    function sendNotification(method) {
+      return postMessage({ jsonrpc: "2.0", method });
+    }
+
+    await sendRequest("initialize", {
+      protocolVersion: PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: {
+        name: "walter-os-mcp-tool-snapshot",
+        version: "1.0.0",
+      },
+    });
+    await sendNotification("notifications/initialized");
+
+    const tools = [];
+    let cursor;
+    do {
+      const result = await sendRequest("tools/list", cursor ? { cursor } : undefined);
+      if (Array.isArray(result.tools)) tools.push(...result.tools);
+      cursor = result.nextCursor;
+    } while (cursor);
+
+    return { tools: normalizeTools(tools) };
+  } finally {
+    await client.close();
+  }
 }
 
 async function probeServer(name, config, timeoutMs) {
@@ -326,24 +770,31 @@ async function main() {
   const result = {
     version: 1,
     source: args.settings,
-    transport: "stdio",
+    transport: "mixed",
     servers: {},
     errors: {},
     skipped: {},
   };
 
-  const { entries, denied } = stdioServers(settings, approvedRegistry);
-  result.errors = denied;
-  const configured = settings.mcpServers || {};
-  for (const [name, config] of Object.entries(configured)) {
-    if (config && (config.type === "http" || config.type === "sse")) {
-      result.skipped[name] = { reason: `remote ${config.type}` };
+  const stdio = stdioServers(settings, approvedRegistry);
+  const remote = remoteServers(settings, approvedRegistry);
+  result.errors = { ...stdio.denied, ...remote.denied };
+
+  for (const [name, config] of stdio.entries) {
+    try {
+      const snapshot = await probeServer(name, config, args.timeoutMs);
+      result.servers[name] = { tools: snapshot.tools };
+    } catch (error) {
+      result.errors[name] = { message: error.message };
     }
   }
 
-  for (const [name, config] of entries) {
+  for (const [name, config] of remote.entries) {
     try {
-      const snapshot = await probeServer(name, config, args.timeoutMs);
+      const snapshot =
+        config.type === "sse"
+          ? await probeSseServer(name, config, args.timeoutMs)
+          : await probeHttpServer(name, config, args.timeoutMs);
       result.servers[name] = { tools: snapshot.tools };
     } catch (error) {
       result.errors[name] = { message: error.message };

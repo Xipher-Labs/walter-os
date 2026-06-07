@@ -4,6 +4,7 @@
 # Usage:
 #   walter-os repo-config validate [repo-dir|config-file]
 #   walter-os repo-config defaults [balanced|hackathon]
+#   walter-os repo-config verification-plan [repo-dir|config-file] [--risk low|medium|high] [--path <path>]...
 #   walter-os repo-config help
 set -euo pipefail
 
@@ -34,6 +35,15 @@ case "$cmd" in
     ;;
   defaults|print-defaults)
     walter_repo_config_defaults "${1:-balanced}"
+    ;;
+  verification-plan|verify-plan)
+    target="${1:-$(pwd)}"
+    if [[ "${1:-}" == --* ]]; then
+      target="$(pwd)"
+    else
+      shift || true
+    fi
+    walter_repo_config_verification_plan "$target" "$@"
     ;;
   -h|--help|help)
     print_help
