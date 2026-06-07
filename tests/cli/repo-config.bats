@@ -264,6 +264,57 @@ YAML
   [[ "$output" == *"repo-config: valid"* ]]
 }
 
+@test "repo-config library loads protected paths from sibling when WALTER_OS_HOME is wrong" {
+  run bash -c '
+    export WALTER_OS_HOME="$1/missing"
+    # shellcheck source=/dev/null
+    source "$2"
+    _walter_repo_config_path_is_hard_floor "bin/walter-os"
+  ' bash "$TMP_DIR" "$REPO_ROOT/scripts/walter/lib/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "repo-config library falls back to minimal protected paths when policy file is missing" {
+  cp "$REPO_ROOT/scripts/walter/lib/repo-config.sh" "$TMP_DIR/repo-config.sh"
+
+  run bash -c '
+    export WALTER_OS_HOME="$1/missing"
+    # shellcheck source=/dev/null
+    source "$2"
+    _walter_repo_config_path_is_hard_floor "install.sh"
+  ' bash "$TMP_DIR" "$TMP_DIR/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "repo-config fallback policy preserves high-sensitivity hard-floor paths" {
+  cp "$REPO_ROOT/scripts/walter/lib/repo-config.sh" "$TMP_DIR/repo-config.sh"
+
+  run bash -c '
+    export WALTER_OS_HOME="$1/missing"
+    # shellcheck source=/dev/null
+    source "$2"
+    _walter_repo_config_path_is_hard_floor ".ssh/id_ed25519" &&
+      _walter_repo_config_path_is_hard_floor "nested/.ssh/id_ed25519" &&
+      _walter_repo_config_path_is_hard_floor ".claude/settings.json"
+  ' bash "$TMP_DIR" "$TMP_DIR/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "repo-config hard-floor matcher treats directory patterns as recursive" {
+  run bash -c '
+    # shellcheck source=/dev/null
+    source "$1"
+    WALTER_PROTECTED_PATH_PATTERNS=("sensitive")
+    _walter_repo_config_path_is_hard_floor "sensitive/token.txt" &&
+      _walter_repo_config_path_is_hard_floor "nested/sensitive/token.txt"
+  ' bash "$REPO_ROOT/scripts/walter/lib/repo-config.sh"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "doctor --repo-config validates git root policy from subdirectories" {
   write_valid_config
   sed -i.bak 's/autonomy_mode: guided/autonomy_mode: sleepy/' \
@@ -285,4 +336,200 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"Walter-OS doctor — repo config"* ]]
   [[ "$output" == *"repo-config: valid"* ]]
+}
+
+@test "verification-plan uses prototype checks for low-risk risk_based changes" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/operational/repo-config.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: risk_based"* ]]
+  [[ "$output" == *"effective_risk: low"* ]]
+  [[ "$output" == *"plan: prototype"* ]]
+  [[ "$output" == *"  - lint"* ]]
+  [[ "$output" == *"  - smoke_test"* ]]
+}
+
+@test "verification-plan applies risk_based defaults when config is absent" {
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/README.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"policy_status: defaulted_missing"* ]]
+  [[ "$output" == *"verification: risk_based"* ]]
+  [[ "$output" == *"plan: prototype"* ]]
+}
+
+@test "verification-plan raises script changes to medium risk checks" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path scripts/walter/lib/repo-config.sh
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: medium"* ]]
+  [[ "$output" == *"effective_risk: medium"* ]]
+  [[ "$output" == *"plan: risk_based"* ]]
+  [[ "$output" == *"  - targeted_tests"* ]]
+}
+
+@test "verification-plan normalizes dot-slash script paths for medium risk" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path ./scripts/walter/lib/repo-config.sh
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: medium"* ]]
+  [[ "$output" == *"effective_risk: medium"* ]]
+}
+
+@test "verification-plan escalates hard-floor paths even in prototype profile" {
+  "$WALTER_OS_BIN" repo-config defaults hackathon > "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path install.sh
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: prototype"* ]]
+  [[ "$output" == *"hard_floor: yes"* ]]
+  [[ "$output" == *"effective_risk: high"* ]]
+  [[ "$output" == *"plan: production"* ]]
+  [[ "$output" == *"human_gate: required"* ]]
+  [[ "$output" == *"  - security_review"* ]]
+}
+
+@test "verification-plan uses shared protected-path policy for hard-floor paths" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path bin/walter-os
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hard_floor: yes"* ]]
+  [[ "$output" == *"plan: production"* ]]
+}
+
+@test "verification-plan does not hard-floor non-migration paths containing migration" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/operational/data-migration-safety.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: low"* ]]
+  [[ "$output" == *"hard_floor: no"* ]]
+  [[ "$output" == *"plan: prototype"* ]]
+}
+
+@test "verification-plan prints validation diagnostics for invalid policy" {
+  write_valid_config
+  sed -i.bak 's/verification: risk_based/verification: vibes/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk low
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid verification: vibes"* ]]
+}
+
+@test "verification-plan production mode requires full verification for low risk" {
+  write_valid_config
+  sed -i.bak 's/verification: risk_based/verification: production/' \
+    "$TMP_DIR/repo/walter-repo-config.yaml"
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path docs/operational/repo-config.md
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verification: production"* ]]
+  [[ "$output" == *"plan: production"* ]]
+  [[ "$output" == *"  - lint"* ]]
+  [[ "$output" == *"  - typecheck"* ]]
+  [[ "$output" == *"  - rollback_plan"* ]]
+}
+
+@test "verification-plan adds screenshot validation for UI paths" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path apps/control-tower/app/page.tsx
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"plan: prototype"* ]]
+  [[ "$output" == *"  - screenshot_validation"* ]]
+}
+
+@test "verification-plan normalizes dot-slash Control Tower UI paths" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" \
+    --risk low \
+    --path ./apps/control-tower/app/page.ts
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"  - screenshot_validation"* ]]
+}
+
+@test "verification-plan rejects invalid risk values" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk spicy
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid risk: spicy"* ]]
+}
+
+@test "verification-plan rejects missing risk values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --risk"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "verification-plan rejects missing path values without shell noise" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --risk low --path
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+  [[ "$output" != *"shift count out of range"* ]]
+}
+
+@test "verification-plan rejects option-looking missing path values" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --path --risk low
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing value for --path"* ]]
+}
+
+@test "verification-plan rejects unknown options unless forced positional" {
+  write_valid_config
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" --unknown
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option: --unknown"* ]]
+
+  run "$WALTER_OS_BIN" repo-config verification-plan "$TMP_DIR/repo" -- --unknown
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"path_risk: low"* ]]
 }

@@ -95,6 +95,10 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 - **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
   `walter-repo-config.yaml` policy axis, reports the effective mode during
   validation, and keeps the hard-limit floor non-overridable in every mode.
+- **Risk-based verification planner (#233).** Adds `walter-os repo-config
+  verification-plan` so operators can derive prototype/risk-based/production
+  check depth from repo policy, explicit risk, and changed paths while forcing
+  production verification for hard-floor files.
 - **Signed Forgejo PR webhook adapter (#302).** Adds
   `plane-pr-sync-webhook.sh` for HMAC-verified Forgejo/Gitea merge webhooks,
   resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and
