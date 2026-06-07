@@ -50,6 +50,69 @@ write_fixture() {
     }' > "$path"
 }
 
+write_preview_report() {
+  local path="$1"
+  jq -nc \
+    '{
+      schema_version: 1,
+      pr: 236,
+      url: "https://preview.example/pr-236",
+      seed_manifest: {
+        source: "seed.json",
+        path: ".walter/previews/preview-pr-236/seed/seed.json",
+        sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        bytes: 128
+      },
+      screenshots: [
+        {
+          source: "home.png",
+          path: ".walter/previews/preview-pr-236/screenshots/home.png",
+          sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          bytes: 256
+        }
+      ],
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }' > "$path"
+}
+
+write_preview_plan() {
+  local path="$1"
+  jq -nc \
+    '{
+      schema_version: 1,
+      kind: "preview-plan",
+      pr: 236,
+      provider: "vercel",
+      app: "control-tower",
+      branch: "feature/preview",
+      seed_manifest: {
+        source: "seed.json",
+        path: "seed.json",
+        sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        bytes: 128
+      },
+      actions: [
+        "deploy_ephemeral_preview",
+        "apply_seed_fixture",
+        "capture_screenshots",
+        "write_preview_bundle"
+      ],
+      safety: {
+        dry_run: true,
+        preview_deploy: true,
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }' > "$path"
+}
+
 @test "AC1: clean low-risk PR is policy-auto-merge eligible" {
   local fixture="$TMP_DIR/clean.json"
   write_fixture \
@@ -149,12 +212,12 @@ write_fixture() {
     '[{"name":"bats","status":"COMPLETED","conclusion":"SUCCESS"}]' \
     '[{"path":"bin/walter-os"},{"path":"tests/cli/pr-score.bats"}]'
 
-  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture"
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --json
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Decision: human-review"* ]]
-  [[ "$output" == *"sensitive path"* ]]
-  [[ "$output" == *"bin/walter-os"* ]]
+  echo "$output" | jq -e '.decision == "human-review"'
+  echo "$output" | jq -e '.components.risk.points == 0'
+  echo "$output" | jq -e '.findings | map(select(contains("sensitive path") and contains("bin/walter-os"))) | length == 1'
 }
 
 @test "AC3: conflicting PRs are blocked" {
@@ -245,6 +308,173 @@ write_fixture() {
   echo "$output" | jq -e '.score >= 90 and .decision == "policy-auto-merge"'
   echo "$output" | jq -e '.components.checks.points == 30'
   echo "$output" | jq -e '.findings | type == "array"'
+}
+
+@test "AC4: valid preview report contributes preview evidence" {
+  local fixture="$TMP_DIR/clean-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.components.preview.points == 10'
+  echo "$output" | jq -e '.preview.report.valid == true'
+  echo "$output" | jq -e '.findings | index("invalid preview report") | not'
+}
+
+@test "AC4: preview plan without report is human-review evidence" {
+  local fixture="$TMP_DIR/clean-plan.json"
+  local plan="$TMP_DIR/preview-plan.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_plan "$plan"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-plan "$plan" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "human-review"'
+  echo "$output" | jq -e '.components.preview.points == 5'
+  echo "$output" | jq -e '.preview.plan.valid == true'
+  echo "$output" | jq -e '.findings | index("preview report missing for preview plan")'
+}
+
+@test "AC4: invalid preview report blocks explicit preview evidence" {
+  local fixture="$TMP_DIR/invalid-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq -nc '{schema_version: 1, safety: {production_secrets: "copied"}}' > "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.components.preview.points == 0'
+  echo "$output" | jq -e '.preview.report.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview report")'
+}
+
+@test "AC4: preview report for another PR is invalid evidence" {
+  local fixture="$TMP_DIR/mismatched-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+  jq '.pr = 999' "$report" > "$TMP_DIR/mismatched-report.json"
+  mv "$TMP_DIR/mismatched-report.json" "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.report.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview report")'
+}
+
+@test "AC4: preview plan for another PR is invalid evidence" {
+  local fixture="$TMP_DIR/mismatched-plan.json"
+  local plan="$TMP_DIR/preview-plan.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_plan "$plan"
+  jq '.pr = 999' "$plan" > "$TMP_DIR/mismatched-plan-updated.json"
+  mv "$TMP_DIR/mismatched-plan-updated.json" "$plan"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-plan "$plan" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.plan.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview plan")'
+}
+
+@test "AC4: malformed preview report types block without crashing" {
+  local fixture="$TMP_DIR/malformed-report.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq -nc '{
+    schema_version: 1,
+    pr: 236,
+    url: "https://preview.example/pr-236",
+    seed_manifest: "not-an-object",
+    screenshots: ["not-an-object"],
+    safety: {production_secrets: "rejected", credentials: "not minted", deploy: "not performed", hard_limit_floor: "preserved"}
+  }' > "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.report.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview report")'
+}
+
+@test "AC4: malformed preview plan types block without crashing" {
+  local fixture="$TMP_DIR/malformed-plan.json"
+  local plan="$TMP_DIR/preview-plan.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  jq -nc '{
+    schema_version: 1,
+    kind: "preview-plan",
+    pr: 236,
+    provider: "vercel",
+    app: "control-tower",
+    branch: "feature/preview",
+    seed_manifest: "not-an-object",
+    actions: "not-an-array",
+    safety: {dry_run: true, preview_deploy: true, production_secrets: "rejected", credentials: "not minted", deploy: "not performed", hard_limit_floor: "preserved"}
+  }' > "$plan"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-plan "$plan" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.plan.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview plan")'
+}
+
+@test "AC4: preview evidence paths reject symlinks" {
+  local fixture="$TMP_DIR/symlink-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  local report_link="$TMP_DIR/preview-report-link.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+  ln -s "$report" "$report_link"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report_link" --json
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"preview report is a symlink"* ]]
 }
 
 @test "AC4: issue references may use a colon after keyword" {

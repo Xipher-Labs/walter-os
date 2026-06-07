@@ -28,10 +28,10 @@ fi
 
 usage() {
   cat <<'EOF'
-Usage: walter-os pr-score [PR] [--json] [--fixture <path>]
+Usage: walter-os pr-score [PR] [--json] [--fixture <path>] [--preview-plan <path>] [--preview-report <path>]
 
 Scores a pull request from checks, reviews, title format, issue linkage,
-verification notes, and sensitive path risk.
+verification notes, sensitive path risk, and optional preview evidence.
 
 Decisions:
   block              Failing checks, invalid title, or low score.
@@ -41,6 +41,10 @@ Decisions:
 Options:
   --json             Print machine-readable JSON.
   --fixture <path>   Read PR evidence JSON from a file for tests/local audits.
+  --preview-plan <path>
+                     Read preview-plan.json evidence.
+  --preview-report <path>
+                     Read preview-report.json evidence.
 EOF
 }
 
@@ -87,6 +91,8 @@ title_is_valid() {
 json_output=0
 fixture=""
 pr_ref=""
+preview_plan_path=""
+preview_report_path=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -98,6 +104,22 @@ while [[ $# -gt 0 ]]; do
       fixture="${2:-}"
       if [[ -z "$fixture" ]]; then
         echo "walter-os pr-score: --fixture requires a path" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --preview-plan)
+      preview_plan_path="${2:-}"
+      if [[ -z "$preview_plan_path" ]]; then
+        echo "walter-os pr-score: --preview-plan requires a path" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --preview-report)
+      preview_report_path="${2:-}"
+      if [[ -z "$preview_report_path" ]]; then
+        echo "walter-os pr-score: --preview-report requires a path" >&2
         exit 2
       fi
       shift 2
@@ -194,6 +216,79 @@ add_finding() {
   findings_json="$(jq -c --arg msg "$1" '. + [$msg]' <<<"$findings_json")"
 }
 
+read_json_evidence() {
+  local label="$1" path="$2"
+  if [[ -L "$path" ]]; then
+    echo "walter-os pr-score: ${label} is a symlink: $path" >&2
+    exit 2
+  fi
+  if [[ ! -f "$path" || ! -r "$path" ]]; then
+    echo "walter-os pr-score: ${label} is not readable: $path" >&2
+    exit 2
+  fi
+  if ! jq -c '.' < "$path"; then
+    echo "walter-os pr-score: ${label} is not valid JSON: $path" >&2
+    exit 2
+  fi
+}
+
+preview_report_status() {
+  local payload="$1" expected_pr="$2"
+  jq -nc --argjson report "$payload" --argjson expected_pr "$expected_pr" '
+    def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
+    ($report | if type == "object" then . else {} end) as $r |
+    ($r.seed_manifest | if type == "object" then . else {} end) as $seed |
+    ($r.screenshots | if type == "array" then . else [] end) as $screenshots |
+    ($r.safety | if type == "object" then . else {} end) as $safety |
+    {
+      provided: true,
+      valid: (
+        ($r.schema_version == 1) and
+        ($r.pr == $expected_pr) and
+        (($r.url // "") | type == "string" and test("^https?://")) and
+        (($seed.sha256 // "") | sha256_ok) and
+        ($screenshots | length > 0) and
+        ([$screenshots[] | select(((if type == "object" then (.sha256 // "") else "" end) | sha256_ok) | not)] | length == 0) and
+        ($safety.production_secrets == "rejected") and
+        ($safety.credentials == "not minted") and
+        ($safety.deploy == "not performed") and
+        ($safety.hard_limit_floor == "preserved")
+      )
+    }'
+}
+
+preview_plan_status() {
+  local payload="$1" expected_pr="$2"
+  jq -nc --argjson plan "$payload" --argjson expected_pr "$expected_pr" '
+    def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
+    ($plan | if type == "object" then . else {} end) as $p |
+    ($p.seed_manifest | if type == "object" then . else {} end) as $seed |
+    ($p.actions | if type == "array" then . else [] end) as $actions |
+    ($p.safety | if type == "object" then . else {} end) as $safety |
+    {
+      provided: true,
+      valid: (
+        ($p.schema_version == 1) and
+        ($p.kind == "preview-plan") and
+        ($p.pr == $expected_pr) and
+        (($p.provider // "") | type == "string" and length > 0) and
+        (($p.app // "") | type == "string" and length > 0) and
+        (($p.branch // "") | type == "string" and length > 0) and
+        (($seed.sha256 // "") | sha256_ok) and
+        ($actions | index("deploy_ephemeral_preview") != null) and
+        ($actions | index("apply_seed_fixture") != null) and
+        ($actions | index("capture_screenshots") != null) and
+        ($actions | index("write_preview_bundle") != null) and
+        ($safety.dry_run == true) and
+        ($safety.preview_deploy == true) and
+        ($safety.production_secrets == "rejected") and
+        ($safety.credentials == "not minted") and
+        ($safety.deploy == "not performed") and
+        ($safety.hard_limit_floor == "preserved")
+      )
+    }'
+}
+
 title="$(jq -r '.title // ""' <<<"$pr_json")"
 body="$(jq -r '.body // ""' <<<"$pr_json")"
 mergeable="$(jq -r '.mergeable // "UNKNOWN"' <<<"$pr_json")"
@@ -278,20 +373,58 @@ while IFS= read -r path; do
   fi
 done <<<"$file_paths"
 
-risk_points=20
+risk_points=10
 if [[ "$sensitive_count" -gt 0 ]]; then
-  risk_points=10
+  risk_points=0
   add_finding "sensitive path changes require human review: $sensitive_paths"
 fi
 
+preview_points=0
+preview_invalid=0
+preview_incomplete=0
+preview_plan_status_json='{"provided":false,"valid":null}'
+preview_report_status_json='{"provided":false,"valid":null}'
+
+if [[ -n "$preview_plan_path" ]]; then
+  preview_plan_json="$(read_json_evidence "preview plan" "$preview_plan_path")"
+  preview_plan_status_json="$(preview_plan_status "$preview_plan_json" "$(jq -r '.number // 0' <<<"$pr_json")")"
+  if [[ "$(jq -r '.valid' <<<"$preview_plan_status_json")" != "true" ]]; then
+    preview_invalid=1
+    add_finding "invalid preview plan"
+  fi
+fi
+
+if [[ -n "$preview_report_path" ]]; then
+  preview_report_json="$(read_json_evidence "preview report" "$preview_report_path")"
+  preview_report_status_json="$(preview_report_status "$preview_report_json" "$(jq -r '.number // 0' <<<"$pr_json")")"
+  if [[ "$(jq -r '.valid' <<<"$preview_report_status_json")" != "true" ]]; then
+    preview_invalid=1
+    add_finding "invalid preview report"
+  fi
+fi
+
+if [[ "$(jq -r '.valid' <<<"$preview_report_status_json")" == "true" ]]; then
+  preview_points=10
+elif [[ "$(jq -r '.valid' <<<"$preview_plan_status_json")" == "true" ]]; then
+  preview_points=5
+  preview_incomplete=1
+  add_finding "preview report missing for preview plan"
+fi
+
+preview_json="$(jq -nc \
+  --argjson plan "$preview_plan_status_json" \
+  --argjson report "$preview_report_status_json" \
+  '{plan: $plan, report: $report}')"
+
 score=$((checks_points + review_points + title_points + link_points + verification_points + risk_points))
+score=$((score + preview_points))
 
 decision="human-review"
 exit_code=0
-if [[ "$checks_failed" -gt 0 || "$title_ok" -eq 0 || "$mergeable" == "CONFLICTING" || "$score" -lt 70 ]]; then
+if [[ "$preview_invalid" -eq 1 || "$checks_failed" -gt 0 || "$title_ok" -eq 0 || "$mergeable" == "CONFLICTING" || "$score" -lt 70 ]]; then
   decision="block"
   exit_code=1
-elif [[ "$checks_pending" -eq 0 && "$unresolved_threads" -eq 0 && "$review_requests" -eq 0 && "$review_threads_total" -le "$review_threads_fetched" && "$mergeable" == "MERGEABLE" && "$sensitive_count" -eq 0 && "$score" -ge 90 ]]; then
+elif [[ "$preview_incomplete" -eq 0 && "$checks_pending" -eq 0 && "$unresolved_threads" -eq 0 && "$review_requests" -eq 0 && "$review_threads_total" -le "$review_threads_fetched" && "$mergeable" == "MERGEABLE" && "$sensitive_count" -eq 0 && "$score" -ge 90 ]]; then
   decision="policy-auto-merge"
 fi
 
@@ -302,13 +435,15 @@ components_json="$(jq -nc \
   --argjson links "$link_points" \
   --argjson verification "$verification_points" \
   --argjson risk "$risk_points" \
+  --argjson preview "$preview_points" \
   '{
     checks: {points: $checks, max: 30},
     reviews: {points: $reviews, max: 20},
     title: {points: $title, max: 10},
     issue_links: {points: $links, max: 10},
     verification: {points: $verification, max: 10},
-    risk: {points: $risk, max: 20}
+    risk: {points: $risk, max: 10},
+    preview: {points: $preview, max: 10}
   }')"
 
 if [[ "$json_output" -eq 1 ]]; then
@@ -317,8 +452,9 @@ if [[ "$json_output" -eq 1 ]]; then
     --arg decision "$decision" \
     --arg title "$title" \
     --argjson components "$components_json" \
+    --argjson preview "$preview_json" \
     --argjson findings "$findings_json" \
-    '{score: $score, decision: $decision, title: $title, components: $components, findings: $findings}'
+    '{score: $score, decision: $decision, title: $title, components: $components, preview: $preview, findings: $findings}'
   exit "$exit_code"
 fi
 
