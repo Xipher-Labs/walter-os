@@ -57,6 +57,12 @@ _check_workflow_pins() {
   _check_workflow_pins ".github/workflows/release.yml" required
 }
 
+@test "readme-lint uses a pinned markdownlint package invocation" {
+  local workflow="$REPO_ROOT/.github/workflows/readme-lint.yml"
+  grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+' "$workflow"
+  ! grep -Eq 'npm install -g markdownlint-cli([^@]|$)' "$workflow"
+}
+
 @test "SLSA generator allowlist rejects suffixed release tags" {
   cat > "$BATS_TEST_TMPDIR/slsa-suffix.yml" <<'YAML'
 jobs:
