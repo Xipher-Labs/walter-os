@@ -53,6 +53,8 @@ export default defineConfig({
           WALTER_COUNCIL_DATA_DIR: "/tmp/test-council-data",
           WALTER_COUNCIL_LOG_DIR: "/tmp/test-council-logs",
           WALTER_CONFIG_DIR: "/tmp/test-walter-config",
+          WALTER_VERSION: "0.0.0-test",
+          WALTER_UPDATE_AVAILABLE: "0.0.1-test",
         },
       },
 
