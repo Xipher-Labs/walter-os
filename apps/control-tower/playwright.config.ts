@@ -5,6 +5,21 @@ const controlTowerE2EToken =
 const webServerPort = process.env.PORT ?? "3000";
 const baseURL = process.env.BASE_URL ?? `http://localhost:${webServerPort}`;
 
+export function parseLitellmMockPort(
+  rawPort = process.env.LITELLM_MOCK_PORT ?? "4010"
+): string {
+  const port = rawPort.trim();
+  const portNumber = Number.parseInt(port, 10);
+  if (!/^[1-9][0-9]*$/.test(port) || portNumber > 65_535) {
+    throw new Error(
+      "LITELLM_MOCK_PORT must be a positive integer from 1 to 65535"
+    );
+  }
+  return port;
+}
+
+const litellmMockPort = parseLitellmMockPort();
+
 /**
  * Playwright config for Control Tower E2E smoke tests.
  * Tests run against a locally started Next.js server.
@@ -36,6 +51,9 @@ export default defineConfig({
     ? undefined
     : {
         command:
+          "node tests/e2e/mock-litellm.mjs & " +
+          "mock_litellm_pid=$!; " +
+          "trap 'kill $mock_litellm_pid 2>/dev/null || true' EXIT; " +
           "rm -rf .next/standalone/apps/control-tower/.next/static .next/standalone/apps/control-tower/public && " +
           "mkdir -p .next/standalone/apps/control-tower/.next && " +
           "cp -R .next/static .next/standalone/apps/control-tower/.next/static && " +
@@ -53,6 +71,11 @@ export default defineConfig({
           WALTER_COUNCIL_DATA_DIR: "/tmp/test-council-data",
           WALTER_COUNCIL_LOG_DIR: "/tmp/test-council-logs",
           WALTER_CONFIG_DIR: "/tmp/test-walter-config",
+          LITELLM_MOCK_PORT: litellmMockPort,
+          LITELLM_BASE_URL: `http://127.0.0.1:${litellmMockPort}`,
+          LITELLM_API_KEY: "control-tower-e2e-key",
+          WALTER_VERSION: "0.0.0-test",
+          WALTER_UPDATE_AVAILABLE: "0.0.1-test",
         },
       },
 

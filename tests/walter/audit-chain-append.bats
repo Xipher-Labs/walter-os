@@ -111,6 +111,32 @@ _verify_chain() {
   [[ "$output" != *"active session id required"* ]]
 }
 
+@test "B-2: audit lib tolerates session-state source failure under errexit" {
+  lib_dir="$TMP_HOME/failing-lib"
+  mkdir -p "$lib_dir"
+  cp "$AUDIT_LIB" "$lib_dir/audit-chain.sh"
+  cat > "$lib_dir/session-state.sh" <<'SH'
+return 42
+SH
+
+  run bash -c "set -e; source '$lib_dir/audit-chain.sh'; walter_audit_config_dir"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unable to load session-state helpers: $lib_dir/session-state.sh"* ]]
+  [[ "$output" == *"$WALTER_CONFIG"* ]]
+}
+
+@test "B-2: base64 encoding errors use stable audit-chain diagnostics" {
+  missing_file="$TMP_HOME/missing-sig.bin"
+
+  run bash -c "source '$AUDIT_LIB'; _walter_audit_b64_encode_file '$missing_file'"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"walter-audit-chain: cannot base64-encode file: $missing_file"* ]]
+  [[ "$output" != *"Traceback"* ]]
+  [[ "$output" != *"FileNotFoundError"* ]]
+}
+
 @test "B-1: flock lock file is private when flock is available" {
   command -v flock >/dev/null 2>&1 || skip "flock not installed"
 

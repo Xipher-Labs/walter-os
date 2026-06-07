@@ -914,7 +914,7 @@ EOF
   # returns false while the yq-missing decision can still be audited.
   local stub_dir
   stub_dir="$(mktemp -d)"
-  for bin in bash jq grep sed cat rm mkdir printf echo env mktemp ls awk tr chmod date tail od stat shasum sha256sum ps sleep perl cut dirname mv; do
+  for bin in bash jq python3 openssl grep sed cat rm rmdir mkdir printf echo env mktemp ls awk tr chmod date tail od stat shasum sha256sum ps sleep perl cut dirname mv; do
     if [ -x "$(command -v "$bin" 2>/dev/null)" ]; then
       ln -sf "$(command -v "$bin")" "$stub_dir/$bin"
     fi

@@ -123,16 +123,16 @@ groups:
           summary: Container "{{ $labels.name }}" restart loop
           description: "{{ $labels.name }} restarted {{ $values.A }} times in last 10 min"
 
-      # Load 1m > vCPU count (16)
+      # Load 1m > runtime vCPU count
       - uid: walter_load_high
-        title: Load avg 1m > 16
+        title: Load avg 1m > vCPU count
         condition: B
         data:
           - refId: A
             relativeTimeRange: { from: 600, to: 0 }
             datasourceUid: prometheus
             model:
-              expr: node_load1
+              expr: (node_load1 > on(instance, job) count by (instance, job) (node_cpu_seconds_total{mode="idle"})) or on(instance, job) (0 * node_load1)
               instant: true
               refId: A
               type: query
@@ -143,10 +143,10 @@ groups:
               refId: B
               expression: A
               conditions:
-                - evaluator: { type: gt, params: [16] }
+                - evaluator: { type: gt, params: [0] }
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: Walter-VM load1m > 16 (= vCPU count)
+          summary: Walter-VM load1m > runtime vCPU count
           description: "load1m={{ $values.A | printf \"%.2f\" }} sustained 10min → CPU saturated"

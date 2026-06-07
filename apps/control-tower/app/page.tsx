@@ -5,6 +5,8 @@ import CostDashboard from "@/app/components/CostDashboard";
 import HAStatus from "@/app/components/HAStatus";
 import AlertFeed from "@/app/components/AlertFeed";
 import ModeIndicator from "@/app/components/ModeIndicator";
+import PreviewEvidencePanel from "@/app/components/PreviewEvidencePanel";
+import OperatorReadiness from "@/app/components/OperatorReadiness";
 import TopNav from "@/app/components/ui/TopNav";
 
 /**
@@ -53,12 +55,22 @@ export default function DashboardPage() {
             <AgentStatusBoard />
           </div>
 
+          {/* Read-only operating paths and verification commands. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <OperatorReadiness />
+          </div>
+
           {/* Operational pair: service health + spend. */}
           <div className="md:col-span-1 xl:col-span-5">
             <HAStatus />
           </div>
           <div className="md:col-span-1 xl:col-span-7">
             <CostDashboard />
+          </div>
+
+          {/* Review readiness: per-PR preview plans, captures, and bundles. */}
+          <div className="md:col-span-2 xl:col-span-12">
+            <PreviewEvidencePanel />
           </div>
 
           {/* Tall feed: decision timeline. */}

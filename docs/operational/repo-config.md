@@ -73,6 +73,104 @@ threshold while still requiring green CI and restricting auto-merge eligibility
 to `hackathon/*` source branches. It keeps the same hard-floor human approval
 categories as the balanced default.
 
+## Autonomy Modes
+
+`autonomy_mode` is a policy axis, not an install tier. A repo can run a small
+client-only install or a full self-hosted stack with any autonomy mode.
+
+| Mode | Contract |
+|---|---|
+| `lite` | Plan, report, and request approval. No autonomous code, PR, deploy, or merge progression. |
+| `guided` | Default human-in-the-loop delivery. Agents may prepare work and PRs; humans approve intent, architecture, merge, and production deploy. |
+| `full` | Policy-bounded autonomy for eligible non-protected paths. Protected actions, secrets, money, PHI, auth, destructive operations, and production deploys still require humans. |
+
+`walter-os repo-config validate` prints the effective mode and reminds callers
+that the hard-limit floor is non-overridable in every mode.
+
+## Capability Plan
+
+Use `capability-plan` to compute the effective capability tier from the repo
+ceiling and objective evidence signals:
+
+```bash
+walter-os repo-config capability-plan . --evidence ci --evidence tests
+walter-os repo-config capability-plan . \
+  --risk low \
+  --evidence ci \
+  --evidence tests \
+  --evidence sandbox \
+  --evidence egress \
+  --evidence rollback \
+  --evidence branch_protection \
+  --evidence history
+walter-os repo-config capability-plan . --path install.sh --evidence ci --evidence tests
+```
+
+The command is advisory and read-only. It validates the policy file first,
+then reports:
+
+- `repo_ceiling` from `capability_tier_ceiling`
+- `evidence_tier` computed from explicit signals
+- `risk_cap` from input/path risk
+- `effective_tier = min(repo_ceiling, evidence_tier, risk_cap)`
+- hard-floor status and the resulting human gate
+
+Tier names follow [`ADR-0023`](../decisions/0023-capability-tiers.md):
+`0 read_only`, `1 assisted`, `2 supervised_autonomy`, and
+`3 bounded_autonomy`. A repo with no policy file defaults to
+`capability_tier_ceiling: 1`, but no submitted evidence still computes
+`evidence_tier: 0 read_only`.
+
+Evidence is explicit so the planner does not infer safety from vibes. Accepted
+signals are `ci`, `tests`, `coverage`, `sandbox`, `egress`, `rollback`,
+`branch_protection`, and `history`. CI + tests are enough for `assisted`;
+sandbox + egress + rollback can raise to `supervised_autonomy`; branch
+protection + history can raise to `bounded_autonomy` only for low-risk,
+non-hard-floor changes.
+
+`coverage` is accepted as an input signal for operators and future scoring,
+but it is not displayed separately or used as a promotion rule by itself in this planner. Submitting only
+`--evidence coverage` does not raise the computed `evidence_tier`.
+
+Hard-floor paths still cap effective capability at `assisted` and require a
+human gate even when all evidence is present. Production deploys, secrets,
+protected branch merges, schema migrations, destructive operations, auth,
+crypto, money, and PHI remain outside discretionary capability tiers.
+
+## Verification Plan
+
+Use `verification-plan` to turn the repo policy plus changed paths into an
+advisory checklist:
+
+```bash
+walter-os repo-config verification-plan . --risk low --path docs/operational/repo-config.md
+walter-os repo-config verification-plan . --risk medium --path scripts/walter/lib/repo-config.sh
+walter-os repo-config verification-plan . --risk low --path install.sh
+```
+
+The command is read-only. It validates the policy file first, then reports:
+
+- configured `verification` mode (`prototype`, `risk_based`, or `production`)
+- input risk from `--risk low|medium|high`
+- path-derived risk from changed paths
+- effective risk after taking the maximum
+- whether a hard-floor path was touched
+- the required verification checks
+
+`prototype` keeps the short demo/MVP check set: `lint`, `typecheck`,
+`smoke_test`, and `critical_path_test`. `risk_based` uses prototype checks for
+low-risk work, `targeted_tests`, `integration_tests`, and
+`acceptance_criteria_check` for medium-risk work, and production checks for
+high-risk work. `production` always requires the full verification set.
+For UI paths, the command appends `screenshot_validation` to whichever plan is
+selected. Any `plan: production` output also emits `human_gate: required`;
+hard-floor paths are one non-overridable way to force that production plan.
+
+The hard-limit floor still wins in every mode. Paths such as `install.sh`,
+`AGENTS.md`, `hooks/*`, `mcp/servers.json`, auth/crypto/env/key files,
+workflow files, and migrations force `plan: production` and
+`human_gate: required` even when the repo uses the hackathon prototype preset.
+
 ## Validation Rules
 
 The validator fails closed for malformed YAML, invalid enum values, wrong
