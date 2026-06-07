@@ -9,24 +9,23 @@
  * Reviewer round 1 finding: history JSONL unbounded + race condition.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from "fs";
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import * as path from "path";
 import * as os from "os";
 
 // We test the internal pruning function directly
 import { pruneIfNeeded, atomicAppend } from "@/server/council/history-io";
 
-const TEST_DIR = path.join(os.tmpdir(), `walter-history-test-${Date.now()}`);
-const TEST_FILE = path.join(TEST_DIR, "test-history.jsonl");
+let testDir: string;
+let testFile: string;
 
 beforeEach(() => {
-  mkdirSync(TEST_DIR, { recursive: true });
-  // Start with a clean file
-  if (existsSync(TEST_FILE)) rmSync(TEST_FILE);
+  testDir = mkdtempSync(path.join(os.tmpdir(), "walter-history-test-"));
+  testFile = path.join(testDir, "test-history.jsonl");
 });
 
 afterEach(() => {
-  rmSync(TEST_DIR, { recursive: true, force: true });
+  rmSync(testDir, { recursive: true, force: true });
 });
 
 function makeLines(n: number): string {
@@ -37,16 +36,16 @@ function makeLines(n: number): string {
 
 describe("pruneIfNeeded [history bounds]", () => {
   it("does nothing when file has <= 500 lines", () => {
-    writeFileSync(TEST_FILE, makeLines(400));
-    pruneIfNeeded(TEST_FILE, 500, 400);
-    const lines = readFileSync(TEST_FILE, "utf-8").split("\n").filter(Boolean);
+    writeFileSync(testFile, makeLines(400));
+    pruneIfNeeded(testFile, 500, 400);
+    const lines = readFileSync(testFile, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(400);
   });
 
   it("truncates to 400 lines when file exceeds 500 lines", () => {
-    writeFileSync(TEST_FILE, makeLines(600));
-    pruneIfNeeded(TEST_FILE, 500, 400);
-    const lines = readFileSync(TEST_FILE, "utf-8").split("\n").filter(Boolean);
+    writeFileSync(testFile, makeLines(600));
+    pruneIfNeeded(testFile, 500, 400);
+    const lines = readFileSync(testFile, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(400);
   });
 
@@ -54,9 +53,9 @@ describe("pruneIfNeeded [history bounds]", () => {
     const allLines = Array.from({ length: 600 }, (_, i) =>
       JSON.stringify({ session_id: `sess-${i}`, i })
     );
-    writeFileSync(TEST_FILE, allLines.join("\n") + "\n");
-    pruneIfNeeded(TEST_FILE, 500, 400);
-    const remaining = readFileSync(TEST_FILE, "utf-8").split("\n").filter(Boolean);
+    writeFileSync(testFile, allLines.join("\n") + "\n");
+    pruneIfNeeded(testFile, 500, 400);
+    const remaining = readFileSync(testFile, "utf-8").split("\n").filter(Boolean);
     // First remaining entry should be from index 200 (600 - 400)
     const first = JSON.parse(remaining[0]) as { i: number };
     expect(first.i).toBe(200);
@@ -68,8 +67,8 @@ describe("pruneIfNeeded [history bounds]", () => {
 
 describe("atomicAppend [history concurrency]", () => {
   it("writes a single line correctly", () => {
-    atomicAppend(TEST_FILE, '{"session_id":"s1","ts":"2026-01-01"}');
-    const content = readFileSync(TEST_FILE, "utf-8");
+    atomicAppend(testFile, '{"session_id":"s1","ts":"2026-01-01"}');
+    const content = readFileSync(testFile, "utf-8");
     expect(content).toContain('"session_id":"s1"');
     expect(content.endsWith("\n")).toBe(true);
   });
@@ -80,7 +79,7 @@ describe("atomicAppend [history concurrency]", () => {
       new Promise<void>((resolve) => {
         // Use setTimeout to interleave writes
         setTimeout(() => {
-          atomicAppend(TEST_FILE, JSON.stringify({ session_id: `sess-${i}`, i }));
+          atomicAppend(testFile, JSON.stringify({ session_id: `sess-${i}`, i }));
           resolve();
         }, Math.random() * 10);
       })
@@ -89,7 +88,7 @@ describe("atomicAppend [history concurrency]", () => {
     await Promise.all(writes);
 
     // All lines should be valid JSON
-    const lines = readFileSync(TEST_FILE, "utf-8").split("\n").filter(Boolean);
+    const lines = readFileSync(testFile, "utf-8").split("\n").filter(Boolean);
     expect(lines.length).toBe(CONCURRENCY);
     for (const line of lines) {
       expect(() => JSON.parse(line)).not.toThrow();
