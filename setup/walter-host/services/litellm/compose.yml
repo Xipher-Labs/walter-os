@@ -2,8 +2,26 @@
 # Gemini, Ollama (local later), with virtual keys for per-client attribution
 # and Postgres for usage tracking.
 
+x-walter-limits:
+  litellm: &limits-litellm
+    mem_limit: "${LITELLM_MEM_LIMIT:-1024m}"
+    mem_reservation: "${LITELLM_MEM_RESERVATION:-512m}"
+    cpus: "${LITELLM_CPUS:-2.0}"
+    pids_limit: 512
+  litellm-db: &limits-litellm-db
+    mem_limit: "${LITELLM_DB_MEM_LIMIT:-1024m}"
+    mem_reservation: "${LITELLM_DB_MEM_RESERVATION:-512m}"
+    cpus: "${LITELLM_DB_CPUS:-1.0}"
+    pids_limit: 256
+  litellm-pgbouncer: &limits-litellm-pgbouncer
+    mem_limit: "${LITELLM_PGBOUNCER_MEM_LIMIT:-128m}"
+    mem_reservation: "${LITELLM_PGBOUNCER_MEM_RESERVATION:-64m}"
+    cpus: "${LITELLM_PGBOUNCER_CPUS:-0.25}"
+    pids_limit: 128
+
 services:
   litellm:
+    <<: *limits-litellm
     image: ghcr.io/berriai/litellm:v1.83.14-stable
     container_name: litellm
     restart: unless-stopped
@@ -57,6 +75,7 @@ services:
       start_period: 120s
 
   litellm-db:
+    <<: *limits-litellm-db
     image: postgres:16-alpine
     container_name: litellm-db
     restart: unless-stopped
@@ -86,6 +105,7 @@ services:
       retries: 5
 
   litellm-pgbouncer:
+    <<: *limits-litellm-pgbouncer
     image: edoburu/pgbouncer:v1.24.1-p1
     container_name: litellm-pgbouncer
     restart: unless-stopped
