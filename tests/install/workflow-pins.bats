@@ -59,8 +59,12 @@ _check_workflow_pins() {
 
 @test "readme-lint uses a pinned markdownlint package invocation" {
   local workflow="$REPO_ROOT/.github/workflows/readme-lint.yml"
-  grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+' "$workflow"
-  ! grep -Eq 'npm install -g markdownlint-cli([^@]|$)' "$workflow"
+
+  run grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+' "$workflow"
+  [ "$status" -eq 0 ]
+
+  run grep -Eq 'npm install -g markdownlint-cli([^@]|$)' "$workflow"
+  [ "$status" -eq 1 ]
 }
 
 @test "SLSA generator allowlist rejects suffixed release tags" {
