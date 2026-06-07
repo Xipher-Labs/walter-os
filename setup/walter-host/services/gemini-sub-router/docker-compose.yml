@@ -8,7 +8,7 @@ services:
     mem_limit: "${GEMINI_SUB_ROUTER_MEM_LIMIT:-512m}"
     mem_reservation: "${GEMINI_SUB_ROUTER_MEM_RESERVATION:-256m}"
     cpus: "${GEMINI_SUB_ROUTER_CPUS:-1.0}"
-    pids_limit: 256
+    pids_limit: "${GEMINI_SUB_ROUTER_PIDS_LIMIT:-256}"
     build: .
     container_name: gemini-sub-router
     restart: unless-stopped
