@@ -73,6 +73,14 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Added
 
+- **MCP stdio tool-definition drift detection (#122).** Adds a
+  `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
+  persists approved tool baselines via `walter-os baseline-mcp-tools`, and
+  emits critical `mcp-tool-shadowing` findings when tool names,
+  descriptions, or schemas change. Probes are gated against the approved
+  server-registry baseline before any MCP command is spawned, and disabled or
+  manual/high-risk entries are not executed by the audit. HTTP/SSE transports
+  remain out of scope for this first runtime slice.
 - **Audit-chain Loki fixture verification (#122).** Adds
   `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
   operators can verify Loki-shipped audit-chain rows with the same local
