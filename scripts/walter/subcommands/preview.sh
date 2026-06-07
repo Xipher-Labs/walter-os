@@ -11,13 +11,15 @@ usage() {
   cat <<'EOF'
 Usage: walter-os preview bundle --pr <number> --url <url> --seed <path> --screenshot <path> [--screenshot <path>...] [--out <dir>] [--json]
        walter-os preview plan --dry-run --pr <number> --provider <provider> --app <name> --branch <branch> --seed <path> [--config <path>] [--out <dir>] [--json]
+       walter-os preview capture --pr <number> --url <url> --name <slug> [--out <dir>] [--wait-ms <ms>] [--json]
 
-Creates a local preview evidence bundle from an existing preview URL, seed
-manifest, and screenshots, or a dry-run preview deployment plan. The commands
-do not deploy, mint credentials, or touch production secrets.
+Creates a local preview evidence bundle from an existing preview URL, captures
+screenshots, or writes a dry-run preview deployment plan. The commands do not
+deploy, mint credentials, or touch production secrets.
 
 Subcommands:
   bundle    Build .walter/previews/preview-pr-<number>/ evidence bundle.
+  capture   Capture a screenshot artifact from an existing preview URL.
   plan      Write a dry-run preview deployment plan.
 
 Options for bundle:
@@ -27,6 +29,14 @@ Options for bundle:
   --screenshot <path>    Screenshot artifact. Repeat for multiple screenshots.
   --out <dir>            Output root. Defaults to .walter/previews.
   --json                 Print preview-report JSON instead of a short summary.
+
+Options for capture:
+  --pr <number>          Pull request number.
+  --url <url>            Preview URL. Must start with http:// or https://.
+  --name <slug>          Screenshot basename without extension.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --wait-ms <ms>         Playwright wait timeout before capture. Defaults to 1000.
+  --json                 Print screenshot artifact JSON.
 
 Options for plan:
   --dry-run              Required. Plan only; never deploy.
@@ -58,6 +68,21 @@ require_jq() {
   if ! command -v jq >/dev/null 2>&1; then
     die_runtime "jq is required"
   fi
+}
+
+resolve_npx() {
+  if [[ -n "${WALTER_PREVIEW_NPX:-}" ]]; then
+    if [[ -e "$WALTER_PREVIEW_NPX" && ! -d "$WALTER_PREVIEW_NPX" && -x "$WALTER_PREVIEW_NPX" ]]; then
+      printf '%s\n' "$WALTER_PREVIEW_NPX"
+      return 0
+    fi
+    die_runtime "npx is required for preview capture"
+  fi
+  if command -v npx >/dev/null 2>&1; then
+    command -v npx
+    return 0
+  fi
+  die_runtime "npx is required for preview capture"
 }
 
 sha256_file() {
@@ -137,6 +162,12 @@ validate_branch_ref() {
   esac
 }
 
+validate_wait_ms() {
+  local wait_ms="$1"
+  [[ "$wait_ms" =~ ^[0-9]+$ ]] || die_usage "--wait-ms must be a non-negative integer"
+  (( 10#$wait_ms <= 30000 )) || die_usage "--wait-ms must be <= 30000"
+}
+
 repo_config_path() {
   local configured="$1"
   if [[ -n "$configured" ]]; then
@@ -195,6 +226,123 @@ copy_artifact() {
   fi
   cp -p -- "$source" "$dest"
   printf '%s\n' "$dest"
+}
+
+cmd_capture() {
+  require_jq
+
+  local pr="" url="" name="" out_root=".walter/previews" wait_ms=1000 json_output=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --url)
+        url="${2:-}"
+        [[ -n "$url" ]] || die_usage "--url requires a value"
+        shift 2
+        ;;
+      --name)
+        name="${2:-}"
+        [[ -n "$name" ]] || die_usage "--name requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --wait-ms)
+        wait_ms="${2:-}"
+        [[ -n "$wait_ms" ]] || die_usage "--wait-ms requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  validate_positive_pr "$pr"
+  [[ "$url" =~ ^https?:// ]] || die_usage "preview URL must start with http:// or https://"
+  [[ -n "$name" ]] || die_usage "--name is required"
+  validate_slug "--name" "$name"
+  validate_wait_ms "$wait_ms"
+
+  local npx_path bundle_dir screenshot_dir screenshot_path screenshot_tmp generated_at capture_json ln_output
+  npx_path="$(resolve_npx)"
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  screenshot_dir="${bundle_dir}/screenshots"
+  screenshot_path="${screenshot_dir}/${name}.png"
+  reject_secret_like_artifact "$screenshot_path"
+  mkdir -p -- "$screenshot_dir"
+
+  if [[ -e "$screenshot_path" ]]; then
+    die_usage "screenshot already exists: $screenshot_path"
+  fi
+
+  screenshot_tmp="$(mktemp "${screenshot_dir}/.${name}.tmp.XXXXXX")" \
+    || die_runtime "could not create temporary screenshot path"
+  if ! "$npx_path" --no-install playwright screenshot --wait-for-timeout "$wait_ms" "$url" "$screenshot_tmp"; then
+    rm -f -- "$screenshot_tmp"
+    die_runtime "preview screenshot capture failed"
+  fi
+  validate_artifact "$screenshot_tmp"
+  if ! ln_output="$(ln -- "$screenshot_tmp" "$screenshot_path" 2>&1)"; then
+    rm -f -- "$screenshot_tmp"
+    if [[ -e "$screenshot_path" ]]; then
+      die_usage "screenshot already exists: $screenshot_path"
+    fi
+    if [[ -n "$ln_output" ]]; then
+      printf '%s\n' "$ln_output" >&2
+    fi
+    die_runtime "could not publish screenshot: $screenshot_path"
+  fi
+  rm -f -- "$screenshot_tmp"
+  validate_artifact "$screenshot_path"
+
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  capture_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg url "$url" \
+    --arg generated_at "$generated_at" \
+    --arg bundle_dir "$bundle_dir" \
+    --argjson screenshot "$(artifact_json "$screenshot_path" "$screenshot_path")" \
+    '{
+      schema_version: 1,
+      kind: "preview-screenshot",
+      pr: $pr,
+      url: $url,
+      generated_at: $generated_at,
+      bundle_dir: $bundle_dir,
+      screenshot: $screenshot,
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }')"
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$capture_json" | jq .
+  else
+    printf 'preview: screenshot written %s\n' "$screenshot_path"
+  fi
 }
 
 cmd_plan() {
@@ -455,6 +603,9 @@ cmd="${1:-help}"
 shift || true
 
 case "$cmd" in
+  capture)
+    cmd_capture "$@"
+    ;;
   plan)
     cmd_plan "$@"
     ;;
