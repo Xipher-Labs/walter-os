@@ -89,12 +89,13 @@ Closing all 8 (via the implementation PRs that follow this spec) lifts Walter-OS
   configured).
 
 ### AC-6 — P2-07 tool-definition drift detection
-- [ ] `skills/daily-supply-chain-audit/scripts/audit.sh` `check_tool_definitions()` implemented:
+- [x] `skills/daily-supply-chain-audit/scripts/audit.sh` `check_tool_definitions()` implemented for stdio MCPs:
   - For each MCP in `~/.claude/settings.json` `mcpServers`, query its tool list (`tools/list` JSON-RPC method via a direct stdio probe — the current audit script only wraps Snyk's `mcp-scan`, NOT `mcp-scanner`; integrating `mcp-scanner` would be a separate optional task and is not a prerequisite for this AC).
-  - Hash the tool-name set + tool-description set → store to `~/.config/walter-os/mcp-snapshots/<server>-<date>.json`.
-  - Diff vs yesterday's snapshot. CRITICAL finding `mcp-tool-shadowing` on any change.
-- [ ] `walter-os baseline-mcp-tools` CLI subcommand for re-snapshotting after an intentional MCP version bump (same pattern as `baseline-external-hooks`).
-- [ ] `tests/audit/mcp-tool-drift.bats` (new) — mock an MCP, snapshot, modify the tool list, assert CRITICAL finding.
+  - Normalize tool names, descriptions, schemas, and other tool-definition fields → store to `~/.config/walter-os/mcp-tool-snapshots.json`.
+  - Diff vs the operator-approved baseline. CRITICAL finding `mcp-tool-shadowing` on any change.
+- [x] `walter-os baseline-mcp-tools` CLI subcommand for re-snapshotting after an intentional MCP version bump (same pattern as `baseline-external-hooks`).
+- [x] `tests/audit/mcp-tool-drift.bats` (new) — mock an MCP, snapshot, modify the tool list, assert CRITICAL finding.
+- [ ] Follow-up: add HTTP/SSE tool probes once Walter-OS has a safe remote MCP inspection path.
 
 ### AC-7 — P2-08 SQL pattern variants
 **Audit before extending**: `hooks/approval-gate.sh`'s current `DELETE FROM` regex IS already case-insensitive (`[Dd][Ee]...`) and already uses `[[:space:]]+` between tokens. The implementer should re-read the current regex before assuming the "lowercase" and "any whitespace" variants are gaps; they may already be covered. The genuine gap is the **comment-separator** case (`DELETE/*…*/FROM`) — that's what this AC adds.
