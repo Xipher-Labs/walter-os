@@ -110,9 +110,51 @@ jobs:
         working-directory: ansible
         run: ansible-playbook --syntax-check walter-vm.yml -i inventory.yml
 
-  bats:
-    name: bats hooks tests
+  bats-suite:
+    name: bats suite (${{ matrix.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: hooks
+            paths: |
+              tests/hooks/
+              tests/cloudflare/
+          - name: agents-and-skills
+            paths: |
+              tests/agents/
+              tests/skills/
+          - name: wiki-and-observability
+            paths: |
+              tests/wiki/
+              tests/litellm/
+              tests/walter-bridge/
+          - name: cli-and-walter
+            paths: |
+              tests/cli/
+              tests/walter/
+          - name: oss-audit-and-github
+            paths: |
+              tests/oss/
+              tests/audit/
+              tests/github-actions/
+          - name: compose-and-services
+            paths: |
+              tests/compose/
+              tests/walter-host/
+              tests/services/
+          - name: install-contracts
+            paths: |
+              tests/scripts/secrets-identity-init.bats
+              tests/install/hook-chain-content.bats
+              tests/install/makefile-ci-shellcheck-parity.bats
+              tests/install/escape-helpers.bats
+              tests/install/no-eval-in-helpers.bats
+              tests/install/workflow-pins.bats
+              tests/install/reproducible-builds.bats
+              tests/install/yq-flavor-and-arch.bats
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -128,32 +170,25 @@ jobs:
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "ci"
-      - name: Run hook + agent + wiki + litellm + walter-bridge + cli + walter + oss + audit tests
+      - name: Run Bats suite
+        env:
+          BATS_PATHS: ${{ matrix.paths }}
         run: |
-          bats \
-            tests/hooks/ \
-            tests/agents/ \
-            tests/wiki/ \
-            tests/litellm/ \
-            tests/walter-bridge/ \
-            tests/cli/ \
-            tests/walter/ \
-            tests/oss/ \
-            tests/audit/ \
-            tests/skills/ \
-            tests/cloudflare/ \
-            tests/github-actions/ \
-            tests/compose/ \
-            tests/walter-host/ \
-            tests/services/ \
-            tests/scripts/secrets-identity-init.bats \
-            tests/install/hook-chain-content.bats \
-            tests/install/makefile-ci-shellcheck-parity.bats \
-            tests/install/escape-helpers.bats \
-            tests/install/no-eval-in-helpers.bats \
-            tests/install/workflow-pins.bats \
-            tests/install/reproducible-builds.bats \
-            tests/install/yq-flavor-and-arch.bats
+          printf '%s\n' "$BATS_PATHS" | xargs bats
+
+  bats:
+    name: bats hooks tests
+    runs-on: ubuntu-latest
+    needs: bats-suite
+    if: always()
+    steps:
+      - name: Check split Bats suites
+        run: |
+          if [ "${{ needs.bats-suite.result }}" != "success" ]; then
+            echo "One or more split Bats suites failed."
+            exit 1
+          fi
+          echo "All split Bats suites passed."
 
   install-dry-run:
     name: install.sh --dry-run
