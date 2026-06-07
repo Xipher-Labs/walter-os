@@ -9,6 +9,12 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   POSTHOG_COMPOSE="$REPO_ROOT/setup/walter-host/services/posthog/compose.yml"
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 is not installed"
+  fi
+  if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+    skip "PyYAML is not installed"
+  fi
 }
 
 assert_posthog_limits() {
@@ -60,6 +66,8 @@ with open(compose_path, "r", encoding="utf-8") as handle:
 services = compose["services"]
 missing_services = sorted(set(expected) - set(services))
 assert not missing_services, f"missing services in compose: {missing_services}"
+extra_services = sorted(set(services) - set(expected))
+assert not extra_services, f"services missing expected resource-limit mapping: {extra_services}"
 
 for service_name, prefix in expected.items():
     service = services[service_name]
