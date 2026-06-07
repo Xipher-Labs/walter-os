@@ -179,6 +179,53 @@ YAML
   echo "$output" | grep -q "AI capability config valid:"
 }
 
+@test "walter ai validate accepts spaces in comma-separated routes" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot, codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "AI capability config valid:"
+}
+
+@test "walter ai validate does not echo invalid line contents" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+not yaml OPENAI_API_KEY=secret-value
+provider_codex: enabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "invalid YAML at line 3"
+  ! echo "$output" | grep -q "secret-value"
+  ! echo "$output" | grep -q "OPENAI_API_KEY"
+}
+
 @test "walter ai validate accepts indented keys and whitespace-only lines" {
   cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
   profile: mixed

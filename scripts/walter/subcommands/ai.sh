@@ -228,6 +228,12 @@ ai_yaml_value() {
   ' "$file"
 }
 
+normalize_provider_route() {
+  local route="$1"
+  route="${route//[[:space:]]/}"
+  printf '%s\n' "$route"
+}
+
 detected_provider() {
   local provider="$1"
   case "$provider" in
@@ -347,7 +353,7 @@ cmd_configure() {
 }
 
 validate_capabilities_file() {
-  local file="$1" key value invalid=0
+  local file="$1" key value invalid=0 line_no=0
   local -a required_keys=(
     profile
     provider_claude
@@ -374,10 +380,11 @@ validate_capabilities_file() {
   fi
 
   while IFS= read -r line || [[ -n "$line" ]]; do
+    line_no=$((line_no + 1))
     line="${line%$'\r'}"
     [[ "$line" =~ ^[[:space:]]*$ || "$line" =~ ^[[:space:]]*# ]] && continue
     if [[ ! "$line" =~ ^[[:space:]]*[a-z_]+[[:space:]]*:[[:space:]]*[^[:space:]].*$ ]]; then
-      echo "walter ai validate: invalid YAML line: $line" >&2
+      echo "walter ai validate: invalid YAML at line $line_no" >&2
       invalid=1
     fi
   done <"$file"
@@ -408,7 +415,7 @@ validate_capabilities_file() {
   done
 
   for key in route_code_review route_infra_security_backend route_planning route_ux_ui route_image_generation route_research route_compliance_local_only; do
-    value="$(ai_yaml_value "$file" "$key")"
+    value="$(normalize_provider_route "$(ai_yaml_value "$file" "$key")")"
     if [[ -n "$value" ]] && ! valid_provider_route "$value"; then
       echo "walter ai validate: invalid $key: $value" >&2
       invalid=1
