@@ -132,9 +132,9 @@ sys.exit(0)
     [ $i -lt 60 ] || break
   done
 
-  # Verify pg_isready
+  # Verify the same saturation-aware readiness contract used by the compose healthcheck.
   run docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" \
-    exec -T postgres pg_isready -U walter
+    exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT CASE WHEN count(*) < (current_setting('\''max_connections'\'')::int - current_setting('\''superuser_reserved_connections'\'')::int) THEN 1 ELSE 0 END FROM pg_stat_activity" | grep -qx 1'
   [ "$status" -eq 0 ]
 }
 

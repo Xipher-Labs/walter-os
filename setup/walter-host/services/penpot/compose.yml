@@ -9,6 +9,10 @@ services:
   penpot-frontend:
     image: penpotapp/frontend@sha256:490202201f78f899ae8d570a2121f8bf7fd15464c9cabab11e7ec4d9e4cd29b1
     container_name: penpot-frontend
+    mem_limit: "${PENPOT_FRONTEND_MEM_LIMIT:-256m}"
+    mem_reservation: "${PENPOT_FRONTEND_MEM_RESERVATION:-128m}"
+    cpus: "${PENPOT_FRONTEND_CPUS:-0.5}"
+    pids_limit: "${PENPOT_FRONTEND_PIDS_LIMIT:-128}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:9001:8080"
@@ -32,6 +36,10 @@ services:
   penpot-backend:
     image: penpotapp/backend@sha256:8381a9e4573cf415ee2fa27f1c367d481bb9bd66e50b335d8b6a0bf8c6527349
     container_name: penpot-backend
+    mem_limit: "${PENPOT_BACKEND_MEM_LIMIT:-768m}"
+    mem_reservation: "${PENPOT_BACKEND_MEM_RESERVATION:-384m}"
+    cpus: "${PENPOT_BACKEND_CPUS:-1.0}"
+    pids_limit: "${PENPOT_BACKEND_PIDS_LIMIT:-512}"
     restart: unless-stopped
     volumes:
       - penpot_assets:/opt/data/assets
@@ -56,6 +64,10 @@ services:
   penpot-exporter:
     image: penpotapp/exporter@sha256:f87bbdcb689f4f8e68759b3933320fc37670bdb0b2305c43180f984db66d182d
     container_name: penpot-exporter
+    mem_limit: "${PENPOT_EXPORTER_MEM_LIMIT:-512m}"
+    mem_reservation: "${PENPOT_EXPORTER_MEM_RESERVATION:-256m}"
+    cpus: "${PENPOT_EXPORTER_CPUS:-0.75}"
+    pids_limit: "${PENPOT_EXPORTER_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       PENPOT_PUBLIC_URI: http://penpot-frontend:8080
@@ -68,6 +80,10 @@ services:
   penpot-postgres:
     image: postgres:16-alpine
     container_name: penpot-postgres
+    mem_limit: "${PENPOT_POSTGRES_MEM_LIMIT:-512m}"
+    mem_reservation: "${PENPOT_POSTGRES_MEM_RESERVATION:-256m}"
+    cpus: "${PENPOT_POSTGRES_CPUS:-0.75}"
+    pids_limit: "${PENPOT_POSTGRES_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       POSTGRES_DB: penpot
@@ -76,7 +92,7 @@ services:
     volumes:
       - penpot_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U penpot -d penpot"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -85,6 +101,10 @@ services:
   penpot-redis:
     image: redis:7-alpine
     container_name: penpot-redis
+    mem_limit: "${PENPOT_REDIS_MEM_LIMIT:-256m}"
+    mem_reservation: "${PENPOT_REDIS_MEM_RESERVATION:-128m}"
+    cpus: "${PENPOT_REDIS_CPUS:-0.5}"
+    pids_limit: "${PENPOT_REDIS_PIDS_LIMIT:-128}"
     restart: unless-stopped
     networks: [penpot_net]
 
