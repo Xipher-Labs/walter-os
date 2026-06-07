@@ -165,3 +165,18 @@ YAML
   [[ "$output" == *"WARN"* ]]
   [[ "$output" == *"provider_codex is disabled"* ]]
 }
+
+@test "model-router: unreadable ai-capabilities file is ignored quietly" {
+  local tmpdir capabilities
+  tmpdir="$(mktemp -d)"
+  capabilities="$tmpdir/ai-capabilities.yaml"
+  touch "$capabilities"
+  chmod 000 "$capabilities"
+
+  run env WALTER_AI_CAPABILITIES_FILE="$capabilities" WALTER_MODEL_BACKEND_REVIEW=codex bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  chmod 600 "$capabilities"
+  rm -rf "$tmpdir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "codex" ]
+}

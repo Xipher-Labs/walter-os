@@ -174,6 +174,7 @@ _walter_model_warn_disabled_providers() {
 
   file="$(_walter_model_capabilities_file)"
   [[ -f "$file" ]] || return 0
+  [[ -r "$file" ]] || return 0
 
   IFS=',' read -ra routes <<<"$value"
   for route in "${routes[@]}"; do
