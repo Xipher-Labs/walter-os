@@ -4,11 +4,10 @@ Sizing guidance for the self-hosted stack (Mode 3 in the
 [README](../../README.md)). Mode 1 / Mode 2 installs don't need a VM at
 all — they run on the operator's workstation.
 
-**Minimum specs**: 4 vCPUs, 16 GB RAM, 80 GB SSD for core-only. Full stack
-(all profiles) requires 8 vCPUs, 32 GB RAM, 240 GB SSD.
+**Minimum specs**: 4 vCPUs, 8 GB RAM, 80 GB SSD for floor/core-only. Full profile requires 16 vCPUs, 32 GB RAM, 320 GB SSD.
 
-Before provisioning, run `./setup/walter-host/preflight-check.sh` to verify
-minimum requirements on an existing VM.
+Before provisioning, run `./setup/walter-host/preflight-check.sh full` (or
+`floor` / `medium`) to verify the selected profile on an existing VM.
 
 ## Hetzner Cloud sizing
 
@@ -39,15 +38,15 @@ cloudflared.
 
 | Service | Typical RSS | Notes |
 |---|---|---|
-| PostHog (full) | ~6 GB | ClickHouse ~2 GB; ingestion + UI ~1 GB; shared Postgres ~512 MB |
+| PostHog (full) | ~8 GB | ClickHouse, Kafka, Temporal, ingestion, UI, and Rust services |
 | Langfuse | ~3 GB | Optional tracing/evals stack; ClickHouse is the main driver |
 | Metabase | ~1 GB | JVM-based; heap settable via `JAVA_OPTS` |
-| Plane | ~512 MB | Includes Plane API + worker + beat + frontend |
+| Plane | ~1.5 GB | Includes API, workers, frontend, proxy, DB, Redis, RabbitMQ, and MinIO |
 | Infisical | ~512 MB | Backend + frontend |
 | Authentik | ~512 MB | Optional SSO stack; server + worker plus DB/cache |
 | n8n | ~512 MB | Node.js runtime |
 | Listmonk | ~256 MB | Optional newsletter/devrel stack |
-| Penpot | ~512 MB | Penpot app + Penpot exporter |
+| Penpot | ~1 GB | Penpot app + exporter + DB/cache |
 | RocketChat | ~512 MB | Node.js, can spike to 1 GB |
 | Postiz | ~512 MB | Social scheduler app; Redis and Postgres are separate |
 | Control Tower | ~512 MB | Next.js app server |
@@ -93,7 +92,7 @@ kernel, Docker, Caddy, cloudflared, and OS overhead (~2 GB baseline).
 | Forgejo repos | 5–50 GB | Operator-dependent |
 | Restic backups (local) | 20–80 GB | Rotated; offsite copy to B2/S3 recommended |
 | Container images | 10–20 GB | `docker system prune` monthly |
-| Total recommended | **240 GB** | For comfortable full-stack runway |
+| Total recommended | **320 GB** | For comfortable full-stack runway |
 
 Cloudflared egress is free under Cloudflare's free tier; Hetzner egress is
 20 TB/month included on CX-class VMs.
