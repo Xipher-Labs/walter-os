@@ -1,0 +1,9 @@
+[
+  {
+    "direction": "in",
+    "protocol": "tcp",
+    "port": "22",
+    "source_ips": ["<OPERATOR_PUBLIC_IP_OR_CIDR>"],
+    "description": "Walter-OS break-glass SSH recovery"
+  }
+]
