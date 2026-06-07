@@ -353,7 +353,7 @@ cmd_configure() {
 }
 
 validate_capabilities_file() {
-  local file="$1" key value invalid=0 line_no=0
+  local file="$1" key line value invalid=0 line_no=0
   local -a required_keys=(
     profile
     provider_claude
@@ -399,7 +399,7 @@ validate_capabilities_file() {
 
   value="$(ai_yaml_value "$file" profile)"
   if [[ -n "$value" ]] && ! valid_profile "$value"; then
-    echo "walter ai validate: invalid profile; expected claude-only, codex-only, local-only, or mixed" >&2
+    echo "walter ai validate: invalid profile; expected claude-only, codex-only, gemini-only, local-only, or mixed" >&2
     invalid=1
   fi
 
@@ -417,7 +417,7 @@ validate_capabilities_file() {
   for key in route_code_review route_infra_security_backend route_planning route_ux_ui route_image_generation route_research route_compliance_local_only; do
     value="$(normalize_provider_route "$(ai_yaml_value "$file" "$key")")"
     if [[ -n "$value" ]] && ! valid_provider_route "$value"; then
-      echo "walter ai validate: invalid $key; expected comma-separated providers from claude, codex, copilot, gemini, or ollama" >&2
+      echo "walter ai validate: invalid $key; expected comma-separated providers from claude, codex, copilot, gemini, ollama, or none" >&2
       invalid=1
     fi
   done
