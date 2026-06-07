@@ -2,6 +2,10 @@ services:
   forgejo:
     image: codeberg.org/forgejo/forgejo:15
     container_name: forgejo
+    mem_limit: "${FORGEJO_MEM_LIMIT:-1g}"
+    mem_reservation: "${FORGEJO_MEM_RESERVATION:-512m}"
+    cpus: "${FORGEJO_CPUS:-1.0}"
+    pids_limit: "${FORGEJO_PIDS_LIMIT:-512}"
     restart: unless-stopped
     environment:
       USER_UID: "1000"
@@ -27,6 +31,10 @@ services:
   forgejo-db:
     image: postgres:16-alpine
     container_name: forgejo-db
+    mem_limit: "${FORGEJO_DB_MEM_LIMIT:-512m}"
+    mem_reservation: "${FORGEJO_DB_MEM_RESERVATION:-256m}"
+    cpus: "${FORGEJO_DB_CPUS:-0.75}"
+    pids_limit: "${FORGEJO_DB_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       POSTGRES_USER: forgejo
