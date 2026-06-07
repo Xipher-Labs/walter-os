@@ -23,22 +23,25 @@ with open(compose_path, "r", encoding="utf-8") as fh:
 
 service = compose["services"][service_name]
 expected = {
-    "mem_limit": f"${{{prefix}_MEM_LIMIT:-",
-    "mem_reservation": f"${{{prefix}_MEM_RESERVATION:-",
-    "cpus": f"${{{prefix}_CPUS:-",
-    "pids_limit": f"${{{prefix}_PIDS_LIMIT:-",
+    "mem_limit": "${" + prefix + "_MEM_LIMIT:-",
+    "mem_reservation": "${" + prefix + "_MEM_RESERVATION:-",
+    "cpus": "${" + prefix + "_CPUS:-",
+    "pids_limit": "${" + prefix + "_PIDS_LIMIT:-",
 }
 for key, marker in expected.items():
     value = service.get(key)
     assert value, f"{service_name} missing {key}"
-    assert str(value).startswith(marker), f"{service_name} {key} is not overrideable by {prefix}: {value!r}"
+    assert str(value).startswith(marker), f"{service_name} {key} is not overridable by {prefix}: {value!r}"
+    assert str(value).endswith("}"), f"{service_name} {key} interpolation is malformed: {value!r}"
+    default = str(value)[len(marker):-1]
+    assert default.strip(), f"{service_name} {key} has an empty default"
 PY
 }
 
 assert_compose_renders() {
   local service_dir="$1"
-  local compose="$SERVICE_ROOT/$service_dir/compose.yml"
-  local tmpdir="$BATS_TEST_TMPDIR/$service_dir"
+  local service_path="$SERVICE_ROOT/$service_dir"
+  local compose="$service_path/compose.yml"
 
   if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
     skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
@@ -50,15 +53,12 @@ assert_compose_renders() {
     skip "docker compose is not available"
   fi
 
-  mkdir -p "$tmpdir"
-  cp "$compose" "$tmpdir/compose.yml"
-
   run env \
     WALTER_DOMAIN=example.com \
     WALTER_TELEGRAM_BOT_HANDLE=test \
     WALTER_OPENCLAW_BOT_HANDLE=test \
     WG_PASSWORD_HASH=test \
-    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
+    docker compose --project-directory "$service_path" -f "$compose" config --quiet
   [ "$status" -eq 0 ]
 }
 
