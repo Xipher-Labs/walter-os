@@ -18,6 +18,7 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | [`delivery-orchestrator.md`](delivery-orchestrator.md) | AD-1 coordinator contract for role routing, feature-state ownership, and fail-closed delivery gates. |
 | [`feature-state-ledger.md`](feature-state-ledger.md) | Persistent `.walter/features/<id>/state.yaml` runtime ledger for autonomous delivery state. |
 | [`post-merge-feedback-loop.md`](post-merge-feedback-loop.md) | Read-only AD-13 post-merge health classification before fix-PR/rollback automation. |
+| [`control-tower-team-readiness.md`](control-tower-team-readiness.md) | Read-only Control Tower operator/team readiness panel for solo, second-device, teammate, service-health, post-merge, and model/tool paths. |
 | [`autonomy-modes.md`](autonomy-modes.md) | AD-6 Lite/Guided/Full autonomy-mode contract for `walter-repo-config.yaml`. |
 | [`preview-environment-bundle.md`](preview-environment-bundle.md) | First AD-10 preview evidence bundle primitive for seed data, screenshots, and report JSON. |
 | [`release-operations-automation.md`](release-operations-automation.md) | Read-only release doctor for version, changelog, tag, review, check, issue-link, and stacked-PR hygiene. |

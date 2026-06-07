@@ -92,6 +92,10 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Changed
 
+- **Control Tower team readiness first slice (#308).** Adds a read-only
+  operator readiness panel for solo, second-device, teammate, service-health,
+  post-merge, and model/tool paths, with links to existing docs and safe CLI
+  commands.
 - **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
   `walter-repo-config.yaml` policy axis, reports the effective mode during
   validation, and keeps the hard-limit floor non-overridable in every mode.
