@@ -66,11 +66,18 @@ setup() {
 }
 @test "SECURITY.md supported versions match current release line" {
   version="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
-  major_minor="${version%.*}"
-  previous_minor="$(awk -F. -v major="${version%%.*}" -v minor="${major_minor#*.}" 'BEGIN { print major "." (minor - 1) }')"
+  major="${version%%.*}"
+  rest="${version#*.}"
+  minor="${rest%%.*}"
+  major_minor="${major}.${minor}"
 
   grep -q "currently ${major_minor}\\.x" "$REPO_ROOT/SECURITY.md"
-  grep -q "currently ${previous_minor}\\.x" "$REPO_ROOT/SECURITY.md"
+  if (( minor > 0 )); then
+    previous_minor="${major}.$((minor - 1))"
+    grep -q "currently ${previous_minor}\\.x" "$REPO_ROOT/SECURITY.md"
+  else
+    ! grep -q "currently ${major}\\.-1\\.x" "$REPO_ROOT/SECURITY.md"
+  fi
 }
 @test "SECURITY.md links private GitHub advisory reporting" {
   grep -q "https://github.com/Xipher-Labs/walter-os/security/advisories/new" "$REPO_ROOT/SECURITY.md"
