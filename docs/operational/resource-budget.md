@@ -39,7 +39,7 @@ cloudflared.
 
 | Service | Typical RSS | Notes |
 |---|---|---|
-| PostHog (full) | ~6 GB | ClickHouse ~2 GB; ingestion + UI ~1 GB; shared Postgres ~512 MB |
+| PostHog (full) | ~8 GB | ClickHouse, Kafka, Temporal, ingestion, UI, and Rust services |
 | Langfuse | ~3 GB | Optional tracing/evals stack; ClickHouse is the main driver |
 | Metabase | ~1 GB | JVM-based; heap settable via `JAVA_OPTS` |
 | Plane | ~512 MB | Includes Plane API + worker + beat + frontend |
