@@ -88,4 +88,4 @@ in release notes.
 ## Cross-reference
 
 For commercial licensing enquiries (separate from security), see
-[COMMERCIAL.md](https://github.com/Xipher-Labs/walter-os/blob/HEAD/COMMERCIAL.md).
+`COMMERCIAL.md`.

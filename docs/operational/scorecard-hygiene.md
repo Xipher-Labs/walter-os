@@ -19,9 +19,10 @@ that must be changed in GitHub by an operator.
 These commands inspect settings without changing them:
 
 ```bash
-gh api repos/Xipher-Labs/walter-os/branches/main/protection
-gh api repos/Xipher-Labs/walter-os/community/profile
-gh api repos/Xipher-Labs/walter-os/code-scanning/alerts -f state=open
+repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+gh api "repos/${repo}/branches/main/protection"
+gh api "repos/${repo}/community/profile"
+gh api "repos/${repo}/code-scanning/alerts" -f state=open
 ```
 
 If the branch-protection command returns `404` to a maintainer token, either
