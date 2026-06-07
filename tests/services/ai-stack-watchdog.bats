@@ -120,9 +120,13 @@ setup() {
 }
 
 @test "cloudflared metrics readiness is authoritative when reachable" {
-  grep -q "ready_payload=" "$WATCHDOG"
-  grep -q 'printf .*ready_payload.*readyConnections' "$WATCHDOG"
-  grep -q "return 1" "$WATCHDOG"
+  grep -Fq "ready_code=" "$WATCHDOG"
+  grep -Fq '%{http_code}' "$WATCHDOG"
+  grep -Fq "200) return 0" "$WATCHDOG"
+  grep -Fq "000) :" "$WATCHDOG"
+  grep -Fq "*)   return 1" "$WATCHDOG"
+  run grep -q "ready_payload=" "$WATCHDOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "model probe detects missing LiteLLM master key without router restarts" {
