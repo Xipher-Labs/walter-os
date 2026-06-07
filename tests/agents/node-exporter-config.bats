@@ -8,7 +8,7 @@ setup() {
 }
 
 @test "node-exporter command includes textfile collector directory" {
-  grep -A 10 "node-exporter:" "$COMPOSE" | grep -q "textfile"
+  grep -A 30 "node-exporter:" "$COMPOSE" | grep -q "textfile"
 }
 
 @test "node-exporter has volume mount for /var/lib/walter-council" {

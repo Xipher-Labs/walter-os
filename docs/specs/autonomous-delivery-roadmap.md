@@ -72,7 +72,7 @@ these — reference them:
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
 | AD-1 | **Delivery Orchestrator agent + role model** — pipeline coordinator above the existing Council agents; maps the 6 lanes to the Product/Architect/Builder/Tester/Security/Reviewer/Release role model | v0.6.0 | 3–5d | ADR-0025 |
-| AD-2 | **Persistent feature-state ledger** — `.walter/features/<id>/state.yaml` (idea, brief, spec, ACs, tasks, decisions, risks, PRs, post-merge); unifies today's scattered state (heartbeat / Plane / pause-flag) | v0.6.0 | 2–3d | New primitive |
+| AD-2 | **Persistent feature-state ledger** — `.walter/features/<id>/state.yaml` (idea, brief, spec, ACs, tasks, decisions, risks, PRs, post-merge); unifies today's scattered state (heartbeat / Plane / pause-flag) | v0.6.0 | 2–3d | See `feature-state-ledger.md` |
 | AD-3 | **`/full-cycle <idea>` command** — orchestrator entry point; drives brief → spec → ACs → tasks → impl → tests → PR, with human gates per autonomy mode | v0.6.0 | 2–3d | Depends AD-1, AD-2 |
 | AD-4 | **Semantic gates** — spec-completeness, AC-testability, architecture-review, test-relevance (beyond the syntactic PreToolUse hooks + DoD validator) | v0.6.0 | 3–4d | Composes with severity-gate |
 

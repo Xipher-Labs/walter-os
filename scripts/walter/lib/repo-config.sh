@@ -82,6 +82,32 @@ walter_repo_config_path() {
   fi
 }
 
+walter_repo_config_print_mode_contract() {
+  local mode="${1:-guided}"
+  local summary
+
+  case "$mode" in
+    lite)
+      summary="lite = plan, report, and request approval; no autonomous code/PR/deploy progression"
+      ;;
+    guided)
+      summary="guided = default human-in-the-loop delivery; agents may prepare work, humans approve intent/architecture/merge"
+      ;;
+    full)
+      summary="full = policy-bounded autonomy for eligible non-protected paths; protected actions still require humans"
+      ;;
+    *)
+      mode="guided"
+      summary="unknown mode requested; safest guided semantics apply until validation succeeds"
+      ;;
+  esac
+
+  printf 'repo-config: effective autonomy_mode: %s\n' "$mode"
+  printf 'repo-config: autonomy scope: policy axis, not install tier\n'
+  printf 'repo-config: mode semantics: %s\n' "$summary"
+  printf 'repo-config: hard-limit floor: non-overridable in every mode\n'
+}
+
 _walter_repo_config_require_yq() {
   if ! command -v yq >/dev/null 2>&1; then
     printf 'repo-config: invalid: yq missing; install mikefarah/yq to validate walter-repo-config.yaml\n'
@@ -220,7 +246,10 @@ _walter_repo_config_validate_auto_merge_keys() {
 
 _walter_repo_config_validate_human_approvals() {
   local path="$1"
-  _walter_repo_config_has "$path" "human_approval_required_for" || return 0
+  if ! _walter_repo_config_has "$path" "human_approval_required_for"; then
+    _walter_repo_config_fail "missing hard-floor approval list: human_approval_required_for"
+    return 0
+  fi
   _walter_repo_config_validate_string_array "$path" ".human_approval_required_for" "human_approval_required_for"
 
   local approvals required item
@@ -341,6 +370,7 @@ walter_repo_config_validate() {
 
   if [[ ! -f "$path" ]]; then
     printf 'repo-config: absent at %s; safest defaults apply\n' "$path"
+    walter_repo_config_print_mode_contract guided
     return 0
   fi
 
@@ -376,6 +406,9 @@ walter_repo_config_validate() {
     return 1
   fi
 
+  local autonomy_mode
+  autonomy_mode="$(yq e '.autonomy_mode // "guided"' "$path" 2>/dev/null || printf 'guided')"
   printf 'repo-config: valid: %s\n' "$path"
+  walter_repo_config_print_mode_contract "$autonomy_mode"
   return 0
 }

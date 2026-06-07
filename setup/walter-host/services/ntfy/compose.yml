@@ -6,6 +6,10 @@ services:
   ntfy:
     image: binwiederhier/ntfy:v2.23.0
     container_name: ntfy
+    mem_limit: "${NTFY_MEM_LIMIT:-256m}"
+    mem_reservation: "${NTFY_MEM_RESERVATION:-128m}"
+    cpus: "${NTFY_CPUS:-0.5}"
+    pids_limit: "${NTFY_PIDS_LIMIT:-128}"
     restart: unless-stopped
     profiles: [ntfy, notifications]
     command:

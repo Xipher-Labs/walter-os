@@ -1,0 +1,20 @@
+---
+# Example operator-owned service placement manifest.
+#
+# Copy this to a private overlay/config-personal repo and point Ansible at it:
+#   WALTER_SERVICE_PLACEMENT_FILE=/path/to/service-placement.yml \
+#     ansible-playbook walter-vm.yml
+#
+# The `vms` values are Ansible inventory group names for the host(s) that
+# should receive each service. Services omitted from this file are skipped when
+# a placement manifest is loaded. When no placement file is configured,
+# walter-vm.yml preserves the current single-host behavior and deploys every
+# listed service.
+
+services:
+  litellm:
+    vms: [walter_vm]
+  observability:
+    vms: [walter_vm]
+  posthog:
+    vms: [vm_aux]

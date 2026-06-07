@@ -80,13 +80,33 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
   descriptions, or schemas change. Probes are gated against the approved
   server-registry baseline before any MCP command or remote request runs, and
   disabled or manual/high-risk entries are not executed by the audit.
+- **Audit-chain Loki verification (#122/#332).** Extends
+  `walter-os audit verify-chain --from-loki` from fixture-only checks to
+  live Loki `query_range` calls via `--loki-url` or
+  `WALTER_AUDIT_LOKI_URL`, while preserving the same local hash-chain
+  verifier for Loki-shipped rows.
+- **Audit-chain Loki fixture verification (#122).** Adds
+  `walter-os audit verify-chain --from-loki --mock-loki <fixture>` so
+  operators can verify Loki-shipped audit-chain rows with the same local
+  hash-chain verifier before live Loki querying lands.
 
 ### Changed
 
+- **Autonomy modes contract (#231).** Formalizes Lite/Guided/Full as a
+  `walter-repo-config.yaml` policy axis, reports the effective mode during
+  validation, and keeps the hard-limit floor non-overridable in every mode.
+- **Signed Forgejo PR webhook adapter (#302).** Adds
+  `plane-pr-sync-webhook.sh` for HMAC-verified Forgejo/Gitea merge webhooks,
+  resolves exactly one `walter-plane-issue:<id>` marker from PR comments, and
+  fails closed before Plane/Forgejo mutation on invalid signatures or ambiguous
+  markers.
 - **Post-merge feedback loop first slice (#238).** Adds a read-only
   `walter-os post-merge-check` classifier for post-merge run/alert evidence,
   including rollback recommendations for high-impact failures and a
   max-fix-attempts escalation cap.
+- **Release operations doctor (#307).** Adds a read-only
+  `walter-os release doctor` check for release version, changelog, tag,
+  PR-review, status-check, issue-link, and stacked-PR hygiene.
 - **Plane ↔ Forgejo PR sync wiring (#237).** Adds a safe
   `plane-pr-sync-trigger.sh` adapter for Forgejo/Gitea `pull_request` payloads,
   records stable `walter-plane-issue:<id>` markers in PR comments, documents
@@ -205,6 +225,13 @@ rows, audit telemetry wiring, and release provenance/reproducibility gates.
   doctor status, and prints a rollback hint after local upgrades. The version
   update notice now points operators to `walter-os upgrade --dry-run` and a
   targeted `--target <tag>` command.
+
+### Fixed
+
+- **Control Tower `/api/spend` local-dev fallback (#312).** Network and
+  fetch failures now return the same safe zero-agent fallback payload as
+  non-2xx LiteLLM responses, so local development no longer accepts a
+  500 response when LiteLLM is unavailable.
 
 ---
 
