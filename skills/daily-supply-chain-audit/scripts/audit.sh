@@ -1118,7 +1118,7 @@ check_egress_allowlist() {
 _audit_file_mode() {
   local file="$1" mode=""
   _AUDIT_FILE_MODE_RESULT=""
-  mode="$(stat -f '%Lp' "$file" 2>/dev/null || stat -c '%a' "$file" 2>/dev/null || true)"
+  mode="$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null || true)"
   [[ -n "$mode" ]] || return 1
   _AUDIT_FILE_MODE_RESULT="$(printf '%s\n' "$mode" | awk '{printf "%03d", $1 + 0}')"
   [[ -n "$_AUDIT_FILE_MODE_RESULT" ]]
