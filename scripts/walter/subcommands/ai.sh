@@ -353,7 +353,7 @@ cmd_configure() {
 }
 
 validate_capabilities_file() {
-  local file="$1" key line value invalid=0 line_no=0
+  local file="$1" key line line_key value invalid=0 line_no=0 seen_keys=" "
   local -a required_keys=(
     profile
     provider_claude
@@ -386,6 +386,24 @@ validate_capabilities_file() {
     if [[ ! "$line" =~ ^[[:space:]]*[a-z_]+[[:space:]]*:[[:space:]]*[^[:space:]].*$ ]]; then
       echo "walter ai validate: invalid YAML at line $line_no" >&2
       invalid=1
+      continue
+    fi
+    if [[ "$line" =~ ^[[:space:]]*([a-z_]+)[[:space:]]*: ]]; then
+      line_key="${BASH_REMATCH[1]}"
+      case " ${required_keys[*]} " in
+        *" $line_key "*) ;;
+        *)
+          echo "walter ai validate: unknown key at line $line_no" >&2
+          invalid=1
+          ;;
+      esac
+      case "$seen_keys" in
+        *" $line_key "*)
+          echo "walter ai validate: duplicate key at line $line_no" >&2
+          invalid=1
+          ;;
+        *) seen_keys="${seen_keys}${line_key} " ;;
+      esac
     fi
   done <"$file"
 

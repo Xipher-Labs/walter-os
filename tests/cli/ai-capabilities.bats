@@ -254,6 +254,34 @@ YAML
   ! echo "$output" | grep -q "OPENAI_API_KEY"
 }
 
+@test "walter ai validate rejects unknown and duplicate keys without echoing contents" {
+  cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
+profile: mixed
+provider_claude: enabled
+provider_codex: enabled
+provider_codex: disabled
+provider_copilot: enabled
+provider_gemini: enabled
+provider_ollama: enabled
+route_code_review: copilot,codex
+route_infra_security_backend: codex
+route_planning: claude
+route_ux_ui: claude
+route_image_generation: gemini
+route_research: gemini
+route_compliance_local_only: ollama
+openai_api_key: secret-value
+YAML
+
+  run bash "$WALTER_BIN" ai validate
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "duplicate key at line 4"
+  echo "$output" | grep -q "unknown key at line 15"
+  ! echo "$output" | grep -q "openai_api_key"
+  ! echo "$output" | grep -q "secret-value"
+  ! echo "$output" | grep -q "provider_codex"
+}
+
 @test "walter ai validate accepts indented keys and whitespace-only lines" {
   cat >"${WALTER_CONFIG}/ai-capabilities.yaml" <<'YAML'
   profile: mixed
