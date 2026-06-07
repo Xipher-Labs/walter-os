@@ -27,23 +27,27 @@ export function isValidCouncilSessionId(sessionId: unknown): sessionId is string
 
 function safeAgentId(agent: unknown): string {
   if (typeof agent !== "string") return "unknown-agent";
-  const safe = sanitizeForPrompt(agent, MAX_AGENT_CHARS).trim();
+  const safe = sanitizeForPrompt(agent, MAX_AGENT_CHARS * 2)
+    .trim()
+    .slice(0, MAX_AGENT_CHARS);
   return /^[a-z0-9_-]{1,64}$/i.test(safe) ? safe : "unknown-agent";
 }
 
-function safeResponse(response: R1Response | R2Response): LLMSessionResponse {
+function safeResponse(response: unknown): LLMSessionResponse {
+  const item =
+    response && typeof response === "object"
+      ? (response as Partial<R1Response & R2Response>)
+      : {};
   return {
-    agent: safeAgentId(response.agent),
+    agent: safeAgentId(item.agent),
     content: sanitizeForPrompt(
-      typeof response.content === "string" ? response.content : "",
+      typeof item.content === "string" ? item.content : "",
       MAX_RESPONSE_CHARS
     ),
   };
 }
 
-function safeResponses(
-  responses: (R1Response | R2Response)[] | undefined
-): LLMSessionResponse[] {
+function safeResponses(responses: unknown): LLMSessionResponse[] {
   if (!Array.isArray(responses)) return [];
   return responses.slice(0, MAX_RESPONSES_PER_ROUND).map(safeResponse);
 }
