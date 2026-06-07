@@ -55,6 +55,7 @@ cloudflared.
 | Postgres (shared) | ~256 MB | Shared by Plane, Infisical, n8n, Metabase |
 | LLM proxies | ~256 MB | Three router containers |
 | OpenClaw | ~128 MB | Node.js |
+| Hermes Agent | ~1 GB | Optional agent runtime with local STT/browser tooling |
 | Homepage | ~128 MB | Go binary |
 | Uptime Kuma | ~128 MB | Node.js |
 | Syncthing | ~128 MB | Go binary; scales with number of folders |
