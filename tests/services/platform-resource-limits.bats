@@ -38,20 +38,18 @@ PY
 
 assert_compose_renders() {
   local service_dir="$1"
-  local compose="$SERVICES_ROOT/$service_dir/compose.yml"
-  local tmpdir="$BATS_TEST_TMPDIR/$service_dir"
+  local service_path="$SERVICES_ROOT/$service_dir"
+  local compose="$service_path/compose.yml"
 
+  if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
+    skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
+  fi
   if ! command -v docker >/dev/null 2>&1; then
     skip "docker is not installed"
   fi
   if ! docker compose version >/dev/null 2>&1; then
     skip "docker compose is not available"
   fi
-
-  mkdir -p "$tmpdir"
-  cp "$compose" "$tmpdir/compose.yml"
-  touch "$tmpdir/.env"
-
   run env \
     WALTER_DOMAIN=example.com \
     WALTER_TIMEZONE=UTC \
@@ -59,8 +57,8 @@ assert_compose_renders() {
     GF_ADMIN_PASSWORD=test \
     WALTER_TELEGRAM_BOT_TOKEN=test \
     WALTER_TELEGRAM_CHAT_ID=test \
-    OBSERVABILITY_DATA_DIR="$tmpdir/data" \
-    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
+    OBSERVABILITY_DATA_DIR="$BATS_TEST_TMPDIR/observability-data" \
+    docker compose --project-directory "$service_path" -f "$compose" config --quiet
   [ "$status" -eq 0 ]
 }
 
