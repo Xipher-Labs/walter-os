@@ -5,6 +5,10 @@
 
 services:
   chatgpt-codex-router:
+    mem_limit: "${CHATGPT_CODEX_ROUTER_MEM_LIMIT:-512m}"
+    mem_reservation: "${CHATGPT_CODEX_ROUTER_MEM_RESERVATION:-256m}"
+    cpus: "${CHATGPT_CODEX_ROUTER_CPUS:-1.0}"
+    pids_limit: 256
     build: .
     container_name: chatgpt-codex-router
     restart: unless-stopped
