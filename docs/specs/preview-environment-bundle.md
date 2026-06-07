@@ -1,0 +1,83 @@
+# Preview Environment Bundle
+
+## Problem
+
+AD-10 requires preview environments to give the operator a review surface:
+ephemeral per-PR deploy, seed data, screenshots, and a report bundle. Walter-OS
+already has PR scoring and post-merge health checks, but it has no standard
+artifact format for preview evidence.
+
+## Goals
+
+- Add `walter-os preview bundle` as the first AD-10 primitive.
+- Add `walter-os preview plan --dry-run` as the provider-neutral deployment
+  contract before live provider adapters exist.
+- Package an existing preview URL, seed manifest, and screenshots into a
+  local report bundle with deterministic layout and artifact hashes.
+- Fail closed unless `walter-repo-config.yaml` explicitly enables
+  `preview_deploy: true`.
+- Reject secret-like artifacts so production secrets are not copied into preview
+  evidence.
+- Emit JSON for future Control Tower, PR Score, and release automation.
+
+## Non-Goals
+
+- Do not deploy preview environments in this slice.
+- Do not mint credentials, call cloud providers, or touch production secrets.
+- Do not merge PRs or relax the hard-limit floor.
+
+## Contract
+
+`walter-os preview bundle` writes:
+
+```text
+.walter/previews/preview-pr-<number>/
+  README.md
+  preview-report.json
+  seed/<seed basename>
+  screenshots/<screenshot basenames>
+```
+
+The command accepts only `http://` or `https://` preview URLs, requires a seed
+manifest and at least one screenshot, and rejects secret-like artifact names
+such as `.env`, `.pem`, `.key`, `secret*`, or `token*`.
+
+`walter-os preview plan --dry-run` writes:
+
+```text
+.walter/previews/preview-pr-<number>/
+  preview-plan.json
+```
+
+The plan command requires `--dry-run`, a supported provider (`local`, `vercel`,
+`cloudflare-pages`, `netlify`, `railway`, or `forgejo-actions`), an app slug, a
+safe branch/ref, and a seed manifest. It does not deploy; it records the future
+provider steps (`deploy_ephemeral_preview`, `apply_seed_fixture`,
+`capture_screenshots`, `write_preview_bundle`) with `credentials: not minted`
+and `deploy: not performed`.
+
+If `walter-repo-config.yaml` is absent or does not declare top-level
+`preview_deploy: true`, the plan command exits with a usage error before
+writing a plan. This preserves the AD-10 invariant that preview deploys are
+opt-in per repo.
+
+## Acceptance Criteria
+
+- AC1: The command copies the seed manifest and screenshots into the preview
+  bundle and writes `preview-report.json`.
+- AC2: `--json` emits `pr`, `url`, `bundle_dir`, `seed_manifest`,
+  `screenshots`, and `safety`.
+- AC3: The default output path is `.walter/previews/preview-pr-<number>` under
+  the current repository/directory.
+- AC4: Secret-like artifacts and non-HTTP(S) URLs fail closed.
+- AC5: `walter-os help` documents the preview bundle command.
+- AC6: `walter-os preview plan --dry-run` writes `preview-plan.json` only when
+  `preview_deploy: true` is configured.
+- AC7: The plan command refuses to run without `--dry-run`, with unsupported
+  providers, or with secret-like seed artifacts.
+
+## Related
+
+- Issue: #235
+- Roadmap: `docs/specs/autonomous-delivery-roadmap.md` AD-10
+- Prior primitive: `docs/specs/pr-score.md` AD-11

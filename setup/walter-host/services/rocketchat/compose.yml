@@ -7,6 +7,10 @@ services:
   rocketchat:
     image: rocket.chat:7.10.4
     container_name: rocketchat
+    mem_limit: "${ROCKETCHAT_MEM_LIMIT:-1g}"
+    mem_reservation: "${ROCKETCHAT_MEM_RESERVATION:-512m}"
+    cpus: "${ROCKETCHAT_CPUS:-1.0}"
+    pids_limit: "${ROCKETCHAT_PIDS_LIMIT:-512}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:3002:3000"   # 3001 to avoid conflict with Forgejo
@@ -35,6 +39,10 @@ services:
   rocketchat-mongo:
     image: mongo:7-jammy
     container_name: rocketchat-mongo
+    mem_limit: "${ROCKETCHAT_MONGO_MEM_LIMIT:-1g}"
+    mem_reservation: "${ROCKETCHAT_MONGO_MEM_RESERVATION:-512m}"
+    cpus: "${ROCKETCHAT_MONGO_CPUS:-1.0}"
+    pids_limit: "${ROCKETCHAT_MONGO_PIDS_LIMIT:-512}"
     restart: unless-stopped
     command: ["--replSet", "rs0", "--oplogSize", "128"]
     volumes:
