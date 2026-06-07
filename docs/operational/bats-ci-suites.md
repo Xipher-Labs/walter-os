@@ -21,7 +21,7 @@ suite because the workflow wiring itself changed.
 | `cli-and-walter` | `tests/cli/`, `tests/walter/` |
 | `oss-audit-and-github` | `tests/oss/`, `tests/audit/`, `tests/github-actions/` |
 | `compose-and-services` | `tests/compose/`, `tests/walter-host/`, `tests/services/` |
-| `install-contracts` | Individual install and script contract `.bats` files |
+| `install-contracts` | Curated install/script contract `.bats` files |
 
 ## Rules For New Tests
 
@@ -33,3 +33,8 @@ suite because the workflow wiring itself changed.
   directory that should trigger an existing suite.
 - Prefer adding a new suite over growing an unrelated suite when ownership is
   unclear.
+
+The `install-contracts` suite intentionally gates only the install and script
+contract files listed in `.github/workflows/ci.yml`. Other `tests/install/*.bats`
+files are not treated as part of this fast contract suite until they are added to
+that matrix entry.

@@ -163,7 +163,7 @@ jobs:
           set_bool cli_and_walter '^(bin/walter|bin/walter-os|scripts/walter/|tests/cli/|tests/walter/)'
           set_bool oss_audit_and_github '^(tests/oss/|tests/audit/|tests/github-actions/|\.github/workflows/(gitleaks|scorecard|osv-scanner|codeql|release)\.yml$)'
           set_bool compose_and_services '^(compose\.yml|setup/walter-host/|tests/compose/|tests/walter-host/|tests/services/)'
-          set_bool install_contracts '^(install\.sh|Makefile|setup/personal-overlay-init\.sh|scripts/secrets-identity-init\.sh|tests/scripts/secrets-identity-init\.bats|tests/install/)'
+          set_bool install_contracts '^(install\.sh|Makefile|setup/personal-overlay-init\.sh|scripts/secrets-identity-init\.sh|tests/scripts/secrets-identity-init\.bats|tests/install/(hook-chain-content|makefile-ci-shellcheck-parity|escape-helpers|no-eval-in-helpers|workflow-pins|reproducible-builds|yq-flavor-and-arch)\.bats$)'
 
   bats-suite:
     name: bats suite (${{ matrix.name }})
