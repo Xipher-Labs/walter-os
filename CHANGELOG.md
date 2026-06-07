@@ -73,6 +73,11 @@ Target release: **v0.6.1+** — post-v0.6 hardening follow-ups: sandbox runtime 
 
 ### Added
 
+- **Audit-chain Loki verification (#122/#332).** Extends
+  `walter-os audit verify-chain --from-loki` from fixture-only checks to
+  live Loki `query_range` calls via `--loki-url` or
+  `WALTER_AUDIT_LOKI_URL`, while preserving the same local hash-chain
+  verifier for Loki-shipped rows.
 - **MCP stdio tool-definition drift detection (#122).** Adds a
   `tools/list` JSON-RPC probe for stdio MCPs from Claude settings,
   persists approved tool baselines via `walter-os baseline-mcp-tools`, and
