@@ -340,10 +340,10 @@ async function runStartupModelProbes() {
     try {
       await postStartupModelProbe(alias);
     } catch (err) {
-      const message = `Startup model probe failed for advertised model slug "${alias}" mapped to "${targetModel}": ${err.message}`;
+      const message = `Startup model probe failed for advertised model slug "${alias}" mapped to "${targetModel}"`;
       startupModelProbeStatus = 'failed';
       startupModelProbeFailure = message;
-      console.error(message);
+      console.error(`${message}: ${err.message}`);
       process.stdout.write(
         JSON.stringify({
           ts: new Date().toISOString(),
@@ -497,7 +497,7 @@ app.listen(PORT, '0.0.0.0', () => {
       );
     } catch (err) {
       startupModelProbeStatus = 'failed';
-      startupModelProbeFailure = startupModelProbeFailure || err.message;
+      startupModelProbeFailure = startupModelProbeFailure || 'Startup model probe failed';
       process.stdout.write(
         JSON.stringify({
           ts: new Date().toISOString(),
