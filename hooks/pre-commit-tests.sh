@@ -61,6 +61,10 @@ if [[ -z "$INPUT" ]] || ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
   emit_precommit_block "pre-commit-tests: invalid hook JSON, failing closed" "$INPUT"
 fi
 
+if declare -F walter_audit_set_repo_from_hook_input >/dev/null 2>&1; then
+  walter_audit_set_repo_from_hook_input "$INPUT"
+fi
+
 CMD="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input.command | type) == "string" and (.tool_input.command | length) > 0 then .tool_input.command else empty end')"
 if [[ -z "$CMD" ]]; then
   emit_precommit_block "pre-commit-tests: missing or non-string tool_input.command, failing closed" "$INPUT"

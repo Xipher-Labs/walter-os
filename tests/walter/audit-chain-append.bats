@@ -6,14 +6,21 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AUDIT_LIB="$REPO_ROOT/scripts/walter/lib/audit-chain.sh"
+  SESSION_LIB="$REPO_ROOT/scripts/walter/lib/session-state.sh"
   TMP_HOME="$(mktemp -d "$REPO_ROOT/.tmp-audit-chain.XXXXXX")"
   export HOME="$TMP_HOME/home"
   export WALTER_CONFIG="$TMP_HOME/home/.config/walter-os"
   export WALTER_AUDIT_DATE="2026-05-31"
   export WALTER_AUDIT_NOW="2026-05-31T12:00:00Z"
-  export WALTER_SESSION_ID="session-test"
+  export WALTER_SESSION_TEST_CLOCK=1
+  export WALTER_SESSION_NOW_EPOCH=1767225600
   export WALTER_OS_HOME="$REPO_ROOT"
   mkdir -p "$WALTER_CONFIG"
+  bash -c "source '$SESSION_LIB'; _walter_session_openssl" >/dev/null \
+    || skip "ED25519-capable openssl required"
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_ROOT'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_ROOT'")"
+  export WALTER_SESSION_ID="$(jq -r '.session_id' "$state_file")"
 }
 
 teardown() {
@@ -29,6 +36,14 @@ _chain_path() {
 
 _root_path() {
   printf '%s/audit/root-2026-05-31.txt\n' "$WALTER_CONFIG"
+}
+
+_state_file() {
+  bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_ROOT'"
+}
+
+_physical_path() {
+  (cd "$1" && pwd -P)
 }
 
 _mode_of() {
@@ -74,7 +89,52 @@ _verify_chain() {
   [ "$(cat "$(_root_path)")" = "$(_sha256 "$(sed -n '1p' "$(_chain_path)")")" ]
   jq -e '.prev_hash == "null"' "$(_chain_path)"
   jq -e '.row_hash | test("^[0-9a-f]{64}$")' "$(_chain_path)"
+  jq -e '.sig | test("^[A-Za-z0-9+/]{86}==$")' "$(_chain_path)"
   jq -e '.tool == "Bash" and .decision == "allow" and .decision_source == "approval-gate"' "$(_chain_path)"
+}
+
+@test "B-2: append reports invalid session state explicitly" {
+  printf '{bad-json\n' > "$(_state_file)"
+
+  run bash -c "unset WALTER_SESSION_ID; source '$AUDIT_LIB'; WALTER_AUDIT_SESSION_STATE='$(_state_file)' walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid session state: $(_state_file)"* ]]
+  [[ "$output" != *"active session id required"* ]]
+}
+
+@test "B-2: append reports invalid WALTER_SESSION_ID explicitly" {
+  run bash -c "source '$AUDIT_LIB'; WALTER_SESSION_ID='bad/session' walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid session id for signed audit row"* ]]
+  [[ "$output" != *"active session id required"* ]]
+}
+
+@test "B-2: audit lib tolerates session-state source failure under errexit" {
+  lib_dir="$TMP_HOME/failing-lib"
+  mkdir -p "$lib_dir"
+  cp "$AUDIT_LIB" "$lib_dir/audit-chain.sh"
+  cat > "$lib_dir/session-state.sh" <<'SH'
+return 42
+SH
+
+  run bash -c "set -e; source '$lib_dir/audit-chain.sh'; walter_audit_config_dir"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unable to load session-state helpers: $lib_dir/session-state.sh"* ]]
+  [[ "$output" == *"$WALTER_CONFIG"* ]]
+}
+
+@test "B-2: base64 encoding errors use stable audit-chain diagnostics" {
+  missing_file="$TMP_HOME/missing-sig.bin"
+
+  run bash -c "source '$AUDIT_LIB'; _walter_audit_b64_encode_file '$missing_file'"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"walter-audit-chain: cannot base64-encode file: $missing_file"* ]]
+  [[ "$output" != *"Traceback"* ]]
+  [[ "$output" != *"FileNotFoundError"* ]]
 }
 
 @test "B-1: flock lock file is private when flock is available" {
@@ -125,7 +185,7 @@ _verify_chain() {
     source '$AUDIT_LIB'
     pids=()
     for i in \$(seq 1 12); do
-      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=30 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
+      WALTER_AUDIT_NOW=\"2026-05-31T12:00:\${i}Z\" WALTER_AUDIT_LOCK_WAIT_SECONDS=90 walter_audit_append Bash \"cmd-\${i}\" allow approval-gate ok >/dev/null &
       pids+=(\"\$!\")
     done
     status=0
@@ -285,6 +345,64 @@ SH
   bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
 }
 
+@test "B-2: jq-free first row resolves session id from state file" {
+  expected_session_id="$WALTER_SESSION_ID"
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq"
+
+  run bash -c "source '$AUDIT_LIB'; unset WALTER_SESSION_ID; WALTER_AUDIT_REPO='$REPO_ROOT' PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 0 ]
+  jq -e --arg session_id "$expected_session_id" '.session_id == $session_id' "$(_chain_path)"
+  bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
+}
+
+@test "B-2: jq-free session fallback reports missing python3" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/jq" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  cat > "$TMP_HOME/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$TMP_HOME/mock-bin/jq" "$TMP_HOME/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; unset WALTER_SESSION_ID; WALTER_AUDIT_REPO='$REPO_ROOT' PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'jq missing input' block approval-gate 'jq missing'"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
+  [ ! -s "$(_chain_path)" ]
+  [ ! -f "$(_root_path)" ]
+}
+
+@test "B-2: append signs with the resolved row session id" {
+  expected_session_id="$WALTER_SESSION_ID"
+
+  run bash -c "
+    source '$AUDIT_LIB'
+    session_resolution_count=0
+    _walter_audit_current_session_id() {
+      session_resolution_count=\$((session_resolution_count + 1))
+      if [[ \"\$session_resolution_count\" -eq 1 ]]; then
+        printf '%s' '$expected_session_id'
+      else
+        printf '%s' rotated-session
+      fi
+    }
+    walter_audit_append Bash 'session race' allow approval-gate ok
+  "
+
+  [ "$status" -eq 0 ]
+  jq -e --arg session_id "$expected_session_id" '.session_id == $session_id' "$(_chain_path)"
+  bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
+}
+
 @test "B-1: dependency failure rows escape JSON controls without jq" {
   mkdir -p "$TMP_HOME/mock-bin"
   cat > "$TMP_HOME/mock-bin/jq" <<'SH'
@@ -299,6 +417,53 @@ SH
   [ -f "$(_chain_path)" ]
   jq -e '.decision == "block" and .decision_reason == ("bad" + "\u001b" + "\u0007" + "\b" + " reason")' "$(_chain_path)"
   bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31 >/dev/null"
+}
+
+@test "B-2: signing fails closed when temp directory creation fails" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/mktemp" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+  chmod +x "$TMP_HOME/mock-bin/mktemp"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"temporary directory unavailable"* ]]
+  if [[ -f "$(_chain_path)" ]]; then
+    [ ! -s "$(_chain_path)" ]
+  fi
+}
+
+@test "B-2: signing reports missing python3 as dependency failure" {
+  mkdir -p "$TMP_HOME/mock-bin"
+  cat > "$TMP_HOME/mock-bin/python3" <<'SH'
+#!/usr/bin/env bash
+exit 127
+SH
+  chmod +x "$TMP_HOME/mock-bin/python3"
+
+  run bash -c "source '$AUDIT_LIB'; PATH='$TMP_HOME/mock-bin':\$PATH walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"required tool missing: python3"* ]]
+  if [[ -f "$(_chain_path)" ]]; then
+    [ ! -s "$(_chain_path)" ]
+  fi
+}
+
+@test "B-2: signing failure reports an actionable error" {
+  private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+  printf '%s' 'not-a-private-key' > "$private_key"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'cat README.md' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to sign audit row"* ]]
+  if [[ -f "$(_chain_path)" ]]; then
+    [ ! -s "$(_chain_path)" ]
+  fi
 }
 
 @test "B-1: dependency failure rows without jq cannot extend existing chains" {
@@ -338,6 +503,32 @@ SH
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
 }
 
+@test "B-1: append rejects empty chain when root already exists" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' allow approval-gate ok >/dev/null"
+  original_root="$(cat "$(_root_path)")"
+  : > "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after truncation' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"empty chain with existing root"* ]]
+  [ ! -s "$(_chain_path)" ]
+  [ "$(cat "$(_root_path)")" = "$original_root" ]
+}
+
+@test "B-1: append rejects missing chain when root already exists" {
+  bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'first row' allow approval-gate ok >/dev/null"
+  original_root="$(cat "$(_root_path)")"
+  rm "$(_chain_path)"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after chain deletion' allow approval-gate ok"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"chain missing with existing root"* ]]
+  [ ! -e "$(_chain_path)" ]
+  [ "$(cat "$(_root_path)")" = "$original_root" ]
+}
+
 @test "B-1: chain path date follows captured row timestamp" {
   run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_DATE='2026-05-30' WALTER_AUDIT_NOW='2026-05-31T00:00:01Z' walter_audit_append Bash midnight allow approval-gate ok"
 
@@ -363,4 +554,24 @@ SH
   [ "$status" -eq 0 ]
   [ -f "$marker" ]
   [ "$(cat "$marker")" = "ran" ]
+}
+
+@test "B-2: hook cwd is existing directory normalized before export" {
+  mkdir -p "$TMP_HOME/repo/child"
+  physical="$(_physical_path "$TMP_HOME/repo")"
+  hook_input="$(jq -n --arg cwd "$TMP_HOME/repo/child/.." '{"cwd":$cwd}')"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_set_repo_from_hook_input '$hook_input'; printf '%s' \"\${WALTER_AUDIT_REPO:-}\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$physical" ]
+}
+
+@test "B-2: hook cwd ignores nonexistent directories" {
+  hook_input="$(jq -n --arg cwd "$TMP_HOME/missing" '{"cwd":$cwd}')"
+
+  run bash -c "source '$AUDIT_LIB'; walter_audit_set_repo_from_hook_input '$hook_input'; printf '%s' \"\${WALTER_AUDIT_REPO:-unset}\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
 }

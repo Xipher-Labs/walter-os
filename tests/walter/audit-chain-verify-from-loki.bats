@@ -8,15 +8,22 @@ setup() {
 
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AUDIT_LIB="$REPO_ROOT/scripts/walter/lib/audit-chain.sh"
+  SESSION_LIB="$REPO_ROOT/scripts/walter/lib/session-state.sh"
   WALTER_OS_BIN="$REPO_ROOT/bin/walter-os"
   TMP_HOME="$(mktemp -d "$REPO_ROOT/.tmp-audit-loki.XXXXXX")"
   export HOME="$TMP_HOME/home"
   export WALTER_CONFIG="$TMP_HOME/home/.config/walter-os"
   export WALTER_AUDIT_DATE="2026-06-04"
   export WALTER_AUDIT_NOW="2026-06-04T12:00:00Z"
-  export WALTER_SESSION_ID="session-loki"
+  export WALTER_SESSION_TEST_CLOCK=1
+  export WALTER_SESSION_NOW_EPOCH=1767225600
   export WALTER_OS_HOME="$REPO_ROOT"
   mkdir -p "$WALTER_CONFIG"
+  bash -c "source '$SESSION_LIB'; _walter_session_openssl" >/dev/null \
+    || skip "ED25519-capable openssl required"
+  bash -c "source '$SESSION_LIB'; walter_session_touch '$REPO_ROOT'" >/dev/null
+  state_file="$(bash -c "source '$SESSION_LIB'; walter_session_state_file '$REPO_ROOT'")"
+  export WALTER_SESSION_ID="$(jq -r '.session_id' "$state_file")"
 }
 
 teardown() {
@@ -188,25 +195,18 @@ SH
   grep -q 'Authorization: Bearer super-secret-token' "$(_curl_args_path)"
 }
 
-@test "verify-chain --from-loki computes live range without python3" {
-  _make_chain
-  _make_loki_fixture
-  _write_mock_curl
+@test "verify-chain --from-loki computes live range bounds without python3" {
+  mkdir -p "$TMP_HOME/bin"
   cat > "$TMP_HOME/bin/python3" <<'SH'
 #!/usr/bin/env bash
 exit 127
 SH
   chmod +x "$TMP_HOME/bin/python3"
 
-  run env \
-    PATH="$TMP_HOME/bin:$PATH" \
-    WALTER_TEST_CURL_ARGS="$(_curl_args_path)" \
-    WALTER_TEST_LOKI_FIXTURE="$(_fixture_path)" \
-    WALTER_AUDIT_LOKI_URL="http://loki.example:3100" \
-    bash "$WALTER_OS_BIN" audit verify-chain --from-loki 2026-06-04
+  run env PATH="$TMP_HOME/bin:$PATH" "$BASH" -c "source '$AUDIT_LIB'; _walter_audit_loki_range_ns 2026-06-04"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"from live Loki"* ]]
+  [ "$output" = $'1780531200000000000\n1780617599999999999' ]
 }
 
 @test "verify-chain --from-loki accepts an explicit Loki URL" {

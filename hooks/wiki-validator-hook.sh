@@ -107,6 +107,10 @@ if ! printf '%s' "$input" | jq -e . >/dev/null 2>&1; then
   emit_block "wiki-validator-hook: invalid hook JSON, failing closed"
 fi
 
+if declare -F walter_audit_set_repo_from_hook_input >/dev/null 2>&1; then
+  walter_audit_set_repo_from_hook_input "$input"
+fi
+
 tool_name="$(printf '%s' "$input" | jq -r '.tool_name // "unknown"')"
 file_path="$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""')"
 

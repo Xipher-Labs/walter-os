@@ -42,14 +42,15 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 
 | # | Decision | Why |
 |---|---|---|
-| D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. The `sig` field carries the raw 64-byte Ed25519 signature, **base64-encoded per RFC 4648 §4 (standard base64, NOT base64url): the alphabet is `A-Z a-z 0-9 + /`, padding `=` is REQUIRED so a 64-byte signature always serializes to exactly 88 characters, and the output MUST NOT contain line breaks**. Computed over the canonical JSON serialization of the row with the `sig` field removed (RFC 8785 JCS — JSON Canonicalization Scheme: keys sorted, no whitespace, UTF-8). NOTE: "detached signature" is NOT a term defined by the PASETO v4 spec; we use raw Ed25519 directly so the wire format is unambiguous across language implementations. PASETO v4 is referenced only as the design inspiration for the per-session-key model. | Reuses the cap-token signing key. No new key infrastructure. RFC 8785 JCS makes the signed bytes deterministic across implementations; RFC 4648 §4 + required padding makes the wire encoding round-trip-stable across Python (`base64.b64encode`), Node (`Buffer.from(..., 'base64')`), Bash (`base64`), and Go (`base64.StdEncoding`). |
+| D-6 | **Each row is signed** with the per-session Ed25519 key from A-2. The `sig` field carries the raw 64-byte Ed25519 signature, **base64-encoded per RFC 4648 §4 (standard base64, NOT base64url): the alphabet is `A-Z a-z 0-9 + /`, padding `=` is REQUIRED so a 64-byte signature always serializes to exactly 88 characters, and the output MUST NOT contain line breaks**. Computed over the repository's current canonical JSON serialization of the row with the `sig` field removed: `jq -cS` output (keys sorted, compact form, UTF-8 bytes). This is deterministic for Walter-OS' Bash/jq verifier but is **not** RFC 8785 JCS; adopting true JCS would be a future wire-format change. NOTE: "detached signature" is NOT a term defined by the PASETO v4 spec; we use raw Ed25519 directly so the wire format is unambiguous for this implementation. PASETO v4 is referenced only as the design inspiration for the per-session-key model. | Reuses the cap-token signing key. No new key infrastructure. The implemented `jq -cS` canonical form matches the local writer/verifier; RFC 4648 §4 + required padding makes the signature encoding round-trip-stable across Python (`base64.b64encode`), Node (`Buffer.from(..., 'base64')`), Bash (`base64`), and Go (`base64.StdEncoding`). |
 | D-7 | **Verifier resolves the per-row signer**: `(session_id, sig)` → look up `~/.config/walter-os/state/session-<session_id>.pub` (the public half of the session key, persisted at session start). | Public key persists; private key dies at session end. After session end, you can still VERIFY past rows; you cannot mint new ones. |
-| D-8 | **Public key rotation**: when a new session starts, the previous session's public key is moved to `~/.config/walter-os/state/keys-archive/session-<uuid>.pub`. Verifier checks both `state/` and `state/keys-archive/`. | Never delete public keys (you'd lose ability to verify old rows). Keys archive is bounded by `WALTER_AUDIT_KEYS_ARCHIVE_DAYS` (default 365). |
+| D-8 | **Archived public-key lookup**: verifier checks both `~/.config/walter-os/state/session-<uuid>.pub` and `~/.config/walter-os/state/keys-archive/session-<uuid>.pub` when resolving the per-row signer. Automatic archive rotation and TTL bounding are not implemented in this slice. | Public keys must remain available to verify old rows. Supporting archive lookup lets a future session lifecycle move public keys without breaking historical verification. |
 | D-9 | **Sigstore Rekor (opt-in)**: when `WALTER_AUDIT_REKOR_UPLOAD=1`, the daily root hash (NOT row content) + timestamp + operator-id are uploaded to Sigstore Rekor at session end. Public attestation that THIS operator was running THIS chain at THIS time. | Operator-opt-in public timestamping. Per OSS Trust roadmap D-3 decision. |
 
 ## Acceptance criteria
 
 ### AC-1 — Row schema + writer
+
 - [ ] Row schema documented in `docs/operational/audit-chain-format.md`:
   ```json
   {
@@ -63,7 +64,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
     "decision_source": "approval-gate" | "bash-denylist" | "branch-flow-guard" | "capability-check" | "network-gate" | "operator-confirm" | "pre-commit-tests" | "wiki-validator-hook",
     "decision_reason": "<gate-emitted reason or empty>",
     "prev_hash": "<hex sha256 of prev row, or 'null' for first>",
-    "sig": "<base64 raw Ed25519 signature over JCS(row minus sig field)>"
+    "sig": "<base64 raw Ed25519 signature over jq -cS(row minus sig field)>"
   }
   ```
 - [ ] `scripts/walter/lib/audit-chain.sh` (new) — exposes `walter_audit_append <tool> <input> <decision> <source> <reason>` and `walter_audit_normalize_row`.
@@ -75,30 +76,34 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
   - Rotation race (background mv of the JSONL during append) lands in the post-rotation file
 
 ### AC-2 — Hook integration
+
 - [ ] Every existing PreToolUse hook (`approval-gate.sh`, `bash-denylist.sh`, `network-gate.sh`, `branch-flow-guard.sh`, `pre-commit-tests.sh`, `wiki-validator-hook.sh`, `capability-check.sh` when present) appends one row per decision to the chain (allow OR block).
   - Dependency-failure block paths before JSON tooling is available are explicitly scoped: if `jq` itself is missing, hooks fail closed and attempt a best-effort audit row. The jq-free writer may create the first dependency-failure row in an empty chain, but it must not extend an existing chain it cannot verify without `jq`. Dependency failures after `jq` is available use the normal strict append path.
 - [ ] Existing `~/.config/walter-os/audit-YYYY-MM-DD.md` summary doc is now a DERIVED view from the chain — regenerated by a new `walter-os audit summarize-day` subcommand.
 - [ ] bats coverage in `tests/hooks/audit-chain-hook-integration.bats`: representative allow/block decisions for each integrated hook append exactly one row per hook decision, not zero, not multiple.
 
 ### AC-3 — Signing
-- [ ] Each row's `sig` field is a raw Ed25519 signature (base64-encoded; 64 bytes raw before encoding) over the RFC 8785 JCS canonicalization of the row with the `sig` field removed. The signing key is the per-session Ed25519 private key from A-2. "PASETO v4" is referenced as the design inspiration only — we do NOT emit PASETO tokens because "detached signature" isn't a defined term in the PASETO spec and would lead to incompatible implementations across languages.
-- [ ] Verifier in `walter-os audit verify-chain`:
+
+- [x] Each row's `sig` field is a raw Ed25519 signature (base64-encoded; 64 bytes raw before encoding) over the local `jq -cS` canonical form of the row with the `sig` field removed. The signing key is the per-session Ed25519 private key from A-2. "PASETO v4" is referenced as the design inspiration only — we do NOT emit PASETO tokens because "detached signature" isn't a defined term in the PASETO spec and would lead to incompatible implementations across languages.
+- [x] Verifier in `walter-os audit verify-chain`:
   - Loads the session's public key (from `state/` or `state/keys-archive/`)
   - Recomputes `prev_hash` per row; mismatch → integrity error
   - Verifies `sig` per row; mismatch → signature error
   - Exits 0 if all rows pass; non-zero with row-number if not
-- [ ] bats coverage in `tests/walter/audit-chain-verify.bats`:
+- [x] bats coverage in `tests/walter/audit-chain-verify.bats`:
   - Clean chain → exit 0
   - Tampered single row → exit 1 with row number
   - Tampered prev_hash → exit 1
   - Missing public key → exit 2 with "cannot verify session-<uuid>"
 
 ### AC-4 — Daily root + cross-day chaining
+
 - [ ] `walter-os audit close-day [<date>]` (or auto-run via cron from `walter-os audit verify-chain`) writes `root-YYYY-MM-DD.txt` = `sha256(last_row)` of the day's chain.
 - [ ] Day N's first row includes `prev_chain_root = <contents of root-YYYY-MM-(DD-1).txt, verbatim hex string>` (NOT `sha256(...)` of the file — re-hashing introduces file-encoding sensitivity that D-2 explicitly rules out). Missing `prev_chain_root` only valid on day 0 of the deployment.
 - [ ] `walter-os audit verify-chain --since <date>` walks multiple days' chains in order.
 
 ### AC-5 — Sigstore Rekor opt-in
+
 - [ ] When `WALTER_AUDIT_REKOR_UPLOAD=1`, `walter-os audit close-day` uploads:
   ```json
   {
@@ -113,6 +118,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 - [ ] If `WALTER_AUDIT_REKOR_UPLOAD=0` (default), no network call.
 
 ### AC-6 — Operator-facing docs + CHANGELOG
+
 - [ ] `docs/operational/audit-chain.md` (new):
   - Row schema + normalization rules
   - How to verify (`walter-os audit verify-chain`)
@@ -121,6 +127,7 @@ A security-conscious adopter cannot trust the audit trail to faithfully record w
 - [ ] CHANGELOG entry under `[Unreleased] → Added (audit integrity)`.
 
 ### AC-7 — Migration / coexistence
+
 - [ ] Pre-v0.5.x `audit-YYYY-MM-DD.md` files left untouched (not migrated).
 - [ ] New `audit/chain-YYYY-MM-DD.jsonl` files start fresh on first session under v0.5.x.
 - [ ] `walter-os audit summarize-day <date>` works for both pre-chain markdown days (passes through) AND chain days (regenerates from JSONL).
@@ -157,7 +164,7 @@ Each ≤300 LOC. 3-round review.
 ## Open questions for the operator
 
 1. **`prev_hash` for day-0 row**: literal string `"null"` (proposal) or empty string `""`? Proposal: `"null"` — visually distinct in `cat chain.jsonl`.
-2. **Public-key archive TTL**: 365 days (proposal — covers a year-back verify), unlimited, or operator-configurable? Proposal: 365d default, operator-overridable via `WALTER_AUDIT_KEYS_ARCHIVE_DAYS`.
+2. **Public-key archive lifecycle**: should session end/start automatically move public keys into `state/keys-archive/`, and should retention be unlimited or operator-configurable via something like `WALTER_AUDIT_KEYS_ARCHIVE_DAYS`?
 3. **Rekor upload identity scope**: hash-of-user-id (proposal — pseudonymous), plaintext operator (visible in Rekor), or static "walter-os-operator" string (no operator distinction)? Proposal: hashed.
 4. **`audit-chain.jsonl` vs `chain.jsonl`** naming inside the `audit/` directory: redundant prefix or clear? Proposal: drop prefix (`audit/chain-YYYY-MM-DD.jsonl`).
 
@@ -167,6 +174,6 @@ Each ≤300 LOC. 3-round review.
 - Sibling: `docs/specs/capability-tokens.md` (A-2 — signing key source)
 - Sibling: `docs/specs/time-bounded-sessions.md` (A-4 — session lifecycle defines key rotation)
 - PASETO v4 (design inspiration only; we emit raw Ed25519, not PASETO tokens): <https://github.com/paseto-standard/paseto-spec>
-- RFC 8785 JCS (canonicalization scheme for the signed bytes): <https://datatracker.ietf.org/doc/html/rfc8785>
+- RFC 8785 JCS (not implemented in this slice; future cross-language canonicalization option): <https://datatracker.ietf.org/doc/html/rfc8785>
 - Sigstore Rekor: <https://docs.sigstore.dev/rekor/overview/>
 - Issue #3 P2-2 (rotation-race finding — AC-1 addresses)
