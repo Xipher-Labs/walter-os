@@ -15,7 +15,8 @@ services:
       TERM: dumb
       # GSR_APIKEY: required when exposing to LiteLLM network.
       # Generate: openssl rand -hex 32
-      GSR_APIKEY: ${GSR_APIKEY:?GSR_APIKEY must be set — generate with: openssl rand -hex 32}
+      GSR_APIKEY: "${GSR_APIKEY:?GSR_APIKEY must be set — generate with: openssl rand -hex 32}"
+      MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
     volumes:
       - ${HOME}/.gemini:/home/appuser/.gemini:rw
       - /tmp/gemini-sub-router:/tmp:rw

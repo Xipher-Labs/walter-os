@@ -14,7 +14,8 @@ services:
       HOME: /home/appuser
       # CSR_APIKEY: required when exposing to LiteLLM network.
       # Generate: openssl rand -hex 32
-      CSR_APIKEY: ${CSR_APIKEY:?CSR_APIKEY must be set — generate with: openssl rand -hex 32}
+      CSR_APIKEY: "${CSR_APIKEY:?CSR_APIKEY must be set — generate with: openssl rand -hex 32}"
+      MODEL_MAP_JSON: "${MODEL_MAP_JSON:-}"
     volumes:
       # Bind-mount host's claude auth dir. The CLI refreshes OAuth tokens
       # on demand. Read-write so token refresh persists across restarts.
