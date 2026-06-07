@@ -59,7 +59,7 @@ assert_compose_renders() {
     FORGEJO_INSTANCE_URL=https://git.example.com \
     RENOVATE_TOKEN=test \
     CONTROL_TOWER_ADMIN_TOKEN=test \
-    docker compose -f "$tmpdir/compose.yml" config --quiet
+    docker compose --project-directory "$tmpdir" -f "$tmpdir/compose.yml" config --quiet
   [ "$status" -eq 0 ]
 }
 
