@@ -15,6 +15,10 @@ services:
   openclaw:
     image: node:24-slim
     container_name: openclaw
+    mem_limit: "${OPENCLAW_MEM_LIMIT:-512m}"
+    mem_reservation: "${OPENCLAW_MEM_RESERVATION:-256m}"
+    cpus: "${OPENCLAW_CPUS:-0.75}"
+    pids_limit: "${OPENCLAW_PIDS_LIMIT:-256}"
     restart: unless-stopped
     working_dir: /workspace
     environment:
