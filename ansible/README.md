@@ -42,6 +42,46 @@ ansible-playbook walter-vm.yml --check --diff
 ansible-playbook walter-vm.yml -vv
 ```
 
+## Optional Service Placement Overlay
+
+By default, `walter-vm.yml` preserves the current behavior for the play's target
+hosts: every service listed in the playbook is deployed to hosts in the
+`walter_vm` inventory group.
+
+Operators with a private multi-host topology can provide an overlay placement
+manifest without committing their host names, VM roles, sizing, or service map
+to this public repo:
+
+```bash
+WALTER_SERVICE_PLACEMENT_FILE=/path/to/service-placement.yml \
+  ansible-playbook walter-vm.yml
+```
+
+The path must be absolute. The same value can also be passed as an Ansible
+extra var:
+
+```bash
+ansible-playbook walter-vm.yml \
+  -e walter_service_placement_file=/path/to/service-placement.yml
+```
+
+The placement file maps service names to Ansible inventory group names:
+
+```yaml
+services:
+  litellm:
+    vms: [walter_vm]
+  posthog:
+    vms: [vm_aux]
+```
+
+When a placement file is loaded, the generic `service` role deploys a service
+only if one of its `vms` entries matches the current host's inventory groups.
+Hosts assigned to auxiliary groups must also be included in the play target
+(for example, as members of `walter_vm`) or handled by a separate play.
+Services omitted from the placement file are skipped. See
+`ansible/examples/service-placement.example.yml` for a generic template.
+
 ## Layout
 
 ```
@@ -49,6 +89,8 @@ ansible/
 ├── inventory.yml          # walter-vm host (via cloudflared SSH tunnel)
 ├── ansible.cfg            # defaults
 ├── walter-vm.yml          # master playbook
+├── examples/
+│   └── service-placement.example.yml
 ├── group_vars/
 │   └── all.yml            # vars across all hosts
 ├── roles/
