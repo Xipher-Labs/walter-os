@@ -41,10 +41,10 @@ cloudflared.
 |---|---|---|
 | PostHog (full) | ~6 GB | ClickHouse ~2 GB; ingestion + UI ~1 GB; shared Postgres ~512 MB |
 | Metabase | ~1 GB | JVM-based; heap settable via `JAVA_OPTS` |
-| Plane | ~512 MB | Includes Plane API + worker + beat + frontend |
+| Plane | ~1.5 GB | Includes Plane API + worker + beat + frontend + DB/cache |
 | Infisical | ~512 MB | Backend + frontend |
 | n8n | ~512 MB | Node.js runtime |
-| Penpot | ~512 MB | Penpot app + Penpot exporter |
+| Penpot | ~1 GB | Penpot app + exporter + DB/cache |
 | RocketChat | ~512 MB | Node.js, can spike to 1 GB |
 | Control Tower | ~512 MB | Next.js app server |
 | LiteLLM | ~256 MB | Python; spikes to 512 MB under parallel requests |
