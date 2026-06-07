@@ -1147,31 +1147,34 @@ check_cap_state() {
   while IFS= read -r state_file; do
     [[ -n "$state_file" ]] || continue
 
-    local session_id private_key caps_dir expected_private expected_caps
+    local session_id private_key public_key caps_dir expected_private expected_public expected_caps
     if ! jq -e '
       (.session_id | type == "string" and length > 0) and
       (.capability_private_key_path | type == "string" and length > 0) and
+      (.capability_public_key_path | type == "string" and length > 0) and
       (.capability_tokens_dir | type == "string" and length > 0)
     ' "$state_file" >/dev/null 2>&1; then
       finding high "cap-state-malformed" \
         "Capability session state is missing required fields or is not valid JSON: $state_file" \
-        "End the stale session or regenerate capability state with walter-os session start"
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
       continue
     fi
 
     session_id="$(jq -r '.session_id' "$state_file")"
     private_key="$(jq -r '.capability_private_key_path' "$state_file")"
+    public_key="$(jq -r '.capability_public_key_path' "$state_file")"
     caps_dir="$(jq -r '.capability_tokens_dir' "$state_file")"
     if [[ ! "$session_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
       finding high "cap-state-malformed" \
         "Capability session state has an unsafe session_id in $state_file" \
-        "End the stale session or regenerate capability state with walter-os session start"
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
       continue
     fi
 
     expected_private="${state_dir}/session-${session_id}.key"
+    expected_public="${state_dir}/session-${session_id}.pub"
     expected_caps="${state_dir}/caps-${session_id}"
-    if [[ "$private_key" != "$expected_private" || "$caps_dir" != "$expected_caps" ]]; then
+    if [[ "$private_key" != "$expected_private" || "$public_key" != "$expected_public" || "$caps_dir" != "$expected_caps" ]]; then
       finding high "cap-state-malformed" \
         "Capability session state paths do not match session_id in $state_file" \
         "Inspect $state_file; if stale, end the session and remove leftover capability material"
@@ -1183,7 +1186,7 @@ check_cap_state() {
     if [[ ! -f "$private_key" ]]; then
       finding high "cap-state-missing" \
         "Capability session state references missing private key: $private_key" \
-        "End the stale session or regenerate capability state with walter-os session start"
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
     elif _audit_file_mode "$private_key" && [[ "$_AUDIT_FILE_MODE_RESULT" != "600" ]]; then
       finding crit "cap-key-perms" \
         "Capability signing key is mode ${_AUDIT_FILE_MODE_RESULT}, expected 600: $private_key" \
@@ -1193,7 +1196,7 @@ check_cap_state() {
     if [[ ! -d "$caps_dir" ]]; then
       finding high "cap-state-missing" \
         "Capability session state references missing token directory: $caps_dir" \
-        "End the stale session or regenerate capability state with walter-os session start"
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
       continue
     fi
 

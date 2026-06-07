@@ -67,6 +67,31 @@ teardown() {
   [ "$output" -ge 1 ]
 }
 
+@test "capability session state missing public key path is malformed" {
+  mkdir -p "$WALTER_CONFIG/state/caps-active-session"
+  jq -n \
+    --arg session_id "active-session" \
+    --arg private_key "$WALTER_CONFIG/state/session-active-session.key" \
+    --arg caps_dir "$WALTER_CONFIG/state/caps-active-session" \
+    '{
+      session_id: $session_id,
+      started_at: "2026-01-01T00:00:00Z",
+      last_activity_at: "2026-01-01T00:00:00Z",
+      capability_private_key_path: $private_key,
+      capability_tokens_dir: $caps_dir,
+      max_hours_at_start: 8,
+      max_idle_min_at_start: 60
+    }' > "$WALTER_CONFIG/state/session-active-session.json"
+
+  run bash "$AUDIT_RUNNER"
+
+  [ "$status" -eq 0 ]
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "cap-state-malformed")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
 @test "capability token files not mode 0600 report high finding" {
   mkdir -p "$WALTER_CONFIG/state/caps-active-session"
   printf 'v4.public.fake-token\n' > "$WALTER_CONFIG/state/caps-active-session/cap-wide.paseto"
