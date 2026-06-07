@@ -1131,12 +1131,17 @@ check_cap_state() {
   if ! command -v jq >/dev/null 2>&1; then
     finding high "no-jq-cap-state" \
       "jq not installed; cannot verify capability-token state" \
-      "brew install jq"
+      "Install jq with the OS package manager, then rerun the audit"
     return 0
   fi
 
   local active_caps_tmp
-  active_caps_tmp="$(mktemp)"
+  if ! active_caps_tmp="$(mktemp)"; then
+    finding high "cap-state-tempfile-failed" \
+      "Could not create temporary file for capability-token state audit" \
+      "Check available disk space and temp directory permissions, then rerun the audit"
+    return 0
+  fi
 
   local state_file
   while IFS= read -r state_file; do
