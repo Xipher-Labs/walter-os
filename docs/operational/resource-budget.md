@@ -57,8 +57,13 @@ cloudflared.
 | Renovate | ~512 MB | Node.js; dependency graph scans can spike higher |
 | Synapse | ~256 MB | Python; scales with rooms and users |
 | Prometheus | ~256 MB | Scales with metric count and retention |
+| Loki | ~256 MB | Scales with log volume and retention |
+| Promtail | ~64 MB | Docker log shipper |
+| cAdvisor | ~256 MB | Container metrics collector |
+| Node exporter | ~64 MB | Host metrics exporter |
 | Grafana | ~256 MB | Go binary |
 | Postgres (shared) | ~256 MB | Shared by Plane, Infisical, n8n, Metabase |
+| Postgres analytics | ~512 MB | DevRel analytics DB with pg_partman + pg_cron |
 | LLM proxies | ~256 MB | Three router containers |
 | OpenClaw | ~128 MB | Node.js |
 | Hermes Agent | ~1 GB | Optional agent runtime with local STT/browser tooling |
