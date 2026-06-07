@@ -9,7 +9,14 @@
  * Reviewer round 1 finding: history JSONL unbounded + race condition.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import * as path from "path";
 import * as os from "os";
 
@@ -63,6 +70,15 @@ describe("pruneIfNeeded [history bounds]", () => {
     const last = JSON.parse(remaining[remaining.length - 1]) as { i: number };
     expect(last.i).toBe(599);
   });
+
+  it("preserves private file permissions when pruning", () => {
+    writeFileSync(testFile, makeLines(600), { mode: 0o600 });
+    chmodSync(testFile, 0o600);
+
+    pruneIfNeeded(testFile, 500, 400);
+
+    expect(statSync(testFile).mode & 0o777).toBe(0o600);
+  });
 });
 
 describe("atomicAppend [history concurrency]", () => {
@@ -71,6 +87,12 @@ describe("atomicAppend [history concurrency]", () => {
     const content = readFileSync(testFile, "utf-8");
     expect(content).toContain('"session_id":"s1"');
     expect(content.endsWith("\n")).toBe(true);
+  });
+
+  it("creates a new history file with private permissions", () => {
+    atomicAppend(testFile, '{"session_id":"s-private","ts":"2026-01-01"}');
+
+    expect(statSync(testFile).mode & 0o777).toBe(0o600);
   });
 
   it("handles concurrent writes without corruption", async () => {

@@ -11,21 +11,50 @@
  */
 
 import {
-  existsSync,
+  chmodSync,
   readFileSync,
   writeFileSync,
   renameSync,
   mkdirSync,
+  mkdtempSync,
+  rmSync,
 } from "fs";
 import * as path from "path";
+
+function readExistingFile(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function atomicWritePrivate(filePath: string, content: string): void {
+  const dir = path.dirname(filePath);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+
+  const tmpDir = mkdtempSync(path.join(dir, ".history-write-"));
+  const tmpPath = path.join(tmpDir, "payload");
+  try {
+    writeFileSync(tmpPath, content, {
+      encoding: "utf-8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    renameSync(tmpPath, filePath);
+    chmodSync(filePath, 0o600);
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
 
 /**
  * Append a single JSONL line to the file.
  *
- * Uses a write-to-tmp-then-rename pattern for atomicity: the final rename
- * is atomic on POSIX filesystems (same mount), preventing interleaved writes
- * from corrupting the file. On Windows (non-production target) falls back
- * to direct append.
+ * Uses an exclusive temp directory + write-to-temp + rename pattern for
+ * crash safety. The final rename is atomic on POSIX filesystems when source
+ * and destination are on the same mount.
  *
  * Note: this approach is not safe for very high-frequency concurrent writes
  * (last-writer-wins on concurrent renames). For the council-chat use case
@@ -33,38 +62,16 @@ import * as path from "path";
  * would require a lock file or an async queue.
  */
 export function atomicAppend(filePath: string, jsonLine: string): void {
-  const dir = path.dirname(filePath);
-  mkdirSync(dir, { recursive: true });
-
-  // Read existing content (may not exist yet)
-  const existing = existsSync(filePath)
-    ? readFileSync(filePath, "utf-8")
-    : "";
+  const existing = readExistingFile(filePath) ?? "";
 
   const newContent = existing.endsWith("\n") || existing === ""
     ? existing + jsonLine + "\n"
     : existing + "\n" + jsonLine + "\n";
 
-  // Write to a temp file in the same directory, then rename
-  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   try {
-    writeFileSync(tmpPath, newContent, "utf-8");
-    renameSync(tmpPath, filePath);
+    atomicWritePrivate(filePath, newContent);
   } catch {
-    // If rename fails (e.g., cross-device on some setups), fall back to direct write
-    try {
-      writeFileSync(filePath, newContent, "utf-8");
-    } catch {
-      // Non-fatal — same policy as history.ts
-    }
-    // Clean up tmp if it still exists
-    try {
-      if (existsSync(tmpPath)) {
-        renameSync(tmpPath, filePath);
-      }
-    } catch {
-      // ignore
-    }
+    // Non-fatal — same policy as history.ts
   }
 }
 
@@ -77,12 +84,13 @@ export function pruneIfNeeded(
   maxLines = 500,
   keepLines = 400
 ): void {
-  if (!existsSync(filePath)) return;
   try {
-    const lines = readFileSync(filePath, "utf-8").split("\n").filter(Boolean);
+    const existing = readExistingFile(filePath);
+    if (existing === null) return;
+    const lines = existing.split("\n").filter(Boolean);
     if (lines.length <= maxLines) return;
     const pruned = lines.slice(lines.length - keepLines);
-    writeFileSync(filePath, pruned.join("\n") + "\n", "utf-8");
+    atomicWritePrivate(filePath, pruned.join("\n") + "\n");
   } catch {
     // Non-fatal
   }
