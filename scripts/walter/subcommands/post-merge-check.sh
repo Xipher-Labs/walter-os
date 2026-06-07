@@ -6,10 +6,13 @@ set -euo pipefail
 
 RUNTIME_ERROR_EXIT=4
 USAGE_ERROR_EXIT=64
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 usage() {
   cat <<'EOF'
 Usage: walter-os post-merge-check [--commit <sha>] [--json] [--fixture <path>]
+       [--record-feature-state <id>] [--repo <dir>]
 
 Classifies post-merge evidence into one of:
   healthy               All runs green and no high/critical alerts.
@@ -17,13 +20,19 @@ Classifies post-merge evidence into one of:
   rollback-recommended  High-impact failure or high/critical telemetry alert.
   human-escalation      Fix-attempt cap reached; stop automated looping.
 
-This command is read-only. It never opens PRs, reverts commits, or mutates
-feature-state ledgers.
+This command is read-only by default. It never opens PRs or reverts commits.
+With --record-feature-state, it records the classification in the local
+.walter/features/<id>/state.yaml ledger.
 
 Options:
-  --commit <sha>      Merge commit to inspect with gh run list.
-  --json              Print machine-readable JSON.
-  --fixture <path>    Read post-merge evidence JSON from a file for tests.
+  --commit <sha>                Merge commit to inspect with gh run list.
+  --json                        Print machine-readable JSON.
+  --fixture <path>              Read post-merge evidence JSON from a file for tests.
+  --record-feature-state <id>   Append the decision to a feature-state ledger.
+  --repo <dir>                  Repository containing .walter/features/.
+                                --repo requires --record-feature-state; recording
+                                defaults to the current git repository root,
+                                falling back to the current working directory.
 EOF
 }
 
@@ -47,6 +56,8 @@ require_gh() {
 json_output=0
 fixture=""
 commit_ref=""
+record_feature_id=""
+record_repo=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -70,6 +81,22 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --record-feature-state)
+      record_feature_id="${2:-}"
+      if [[ -z "$record_feature_id" ]]; then
+        echo "walter-os post-merge-check: --record-feature-state requires a feature id" >&2
+        exit "$USAGE_ERROR_EXIT"
+      fi
+      shift 2
+      ;;
+    --repo)
+      record_repo="${2:-}"
+      if [[ -z "$record_repo" ]]; then
+        echo "walter-os post-merge-check: --repo requires a directory" >&2
+        exit "$USAGE_ERROR_EXIT"
+      fi
+      shift 2
+      ;;
     -h|--help|help)
       usage
       exit 0
@@ -86,6 +113,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$record_repo" && -z "$record_feature_id" ]]; then
+  echo "walter-os post-merge-check: --repo requires --record-feature-state" >&2
+  exit "$USAGE_ERROR_EXIT"
+fi
 
 require_jq
 
@@ -135,6 +167,8 @@ fi
 if ! jq -e . >/dev/null 2>&1 <<<"$evidence_json"; then
   runtime_error "evidence is not valid JSON"
 fi
+
+merge_sha="$(jq -r '.pr.merge_sha // empty' <<<"$evidence_json")"
 
 findings_json='[]'
 add_finding() {
@@ -243,6 +277,53 @@ signals_json="$(jq -nc \
     high_impact_failed_runs: $high_impact_failed_runs,
     critical_alerts: $critical_alerts
   }')"
+
+record_feature_state_if_requested() {
+  if [[ -z "$record_feature_id" ]]; then
+    return 0
+  fi
+
+  if [[ -z "$merge_sha" ]]; then
+    runtime_error "unable to record feature state: evidence is missing pr.merge_sha"
+  fi
+
+  if [[ ! -f "${WALTER_OS_HOME}/scripts/walter/lib/feature-state.sh" ]]; then
+    runtime_error "unable to record feature state: feature-state library not found under WALTER_OS_HOME=${WALTER_OS_HOME}"
+  fi
+
+  # shellcheck source=/dev/null
+  source "${WALTER_OS_HOME}/scripts/walter/lib/feature-state.sh"
+  walter_feature_state_validate_id "$record_feature_id"
+
+  local repo output status
+  repo="$(walter_feature_state_repo_root "$record_repo")"
+  if output="$(walter_feature_state_record_post_merge "$repo" "$record_feature_id" "$decision" "$next_action" "$merge_sha" "post-merge-check" 2>&1)"; then
+    if [[ "$json_output" -eq 0 && -n "$output" ]]; then
+      printf '%s\n' "$output"
+    fi
+    return 0
+  else
+    status=$?
+  fi
+
+  {
+    printf 'walter-os post-merge-check: unable to record feature state'
+    printf ' (feature-state exit %s)\n' "$status"
+    if [[ -n "$output" ]]; then
+      while IFS= read -r line; do
+        printf '  %s\n' "$line"
+      done <<<"$output"
+    fi
+  } >&2
+
+  if [[ "$status" -eq "$USAGE_ERROR_EXIT" ]]; then
+    exit "$USAGE_ERROR_EXIT"
+  fi
+
+  exit "$RUNTIME_ERROR_EXIT"
+}
+
+record_feature_state_if_requested
 
 if [[ "$json_output" -eq 1 ]]; then
   jq -nc \

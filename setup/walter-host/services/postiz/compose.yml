@@ -40,6 +40,10 @@ services:
     # UPGRADE.md to align AC-17. Copilot R1 #199.
     image: ghcr.io/gitroomhq/postiz-app:v2.20.2
     container_name: postiz
+    mem_limit: "${POSTIZ_MEM_LIMIT:-1g}"
+    mem_reservation: "${POSTIZ_MEM_RESERVATION:-512m}"
+    cpus: "${POSTIZ_CPUS:-1.0}"
+    pids_limit: "${POSTIZ_PIDS_LIMIT:-512}"
     restart: unless-stopped
     environment:
       # ---- Server ----
@@ -92,6 +96,10 @@ services:
   postiz-pg:
     image: postgres:16-alpine
     container_name: postiz-pg
+    mem_limit: "${POSTIZ_PG_MEM_LIMIT:-512m}"
+    mem_reservation: "${POSTIZ_PG_MEM_RESERVATION:-256m}"
+    cpus: "${POSTIZ_PG_CPUS:-0.75}"
+    pids_limit: "${POSTIZ_PG_PIDS_LIMIT:-256}"
     restart: unless-stopped
     environment:
       POSTGRES_DB: postiz
@@ -101,7 +109,7 @@ services:
       - postiz_pg:/var/lib/postgresql/data
     networks: [postiz_net]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postiz -d postiz"]
+      test: ["CMD-SHELL", "psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc \"SELECT CASE WHEN count(*) < (current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) THEN 1 ELSE 0 END FROM pg_stat_activity\" | grep -qx 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -109,6 +117,10 @@ services:
   postiz-redis:
     image: redis:7-alpine
     container_name: postiz-redis
+    mem_limit: "${POSTIZ_REDIS_MEM_LIMIT:-256m}"
+    mem_reservation: "${POSTIZ_REDIS_MEM_RESERVATION:-128m}"
+    cpus: "${POSTIZ_REDIS_CPUS:-0.5}"
+    pids_limit: "${POSTIZ_REDIS_PIDS_LIMIT:-128}"
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
