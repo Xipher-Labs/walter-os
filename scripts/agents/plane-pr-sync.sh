@@ -200,6 +200,22 @@ forgejo_trusted_authors_json() {
   '
 }
 
+forgejo_author_allowlist_was_set() {
+  [[ -n "${WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS+x}" ]]
+}
+
+forgejo_require_nonempty_explicit_author_allowlist() {
+  local trusted_authors_json="$1" trusted_author_count
+  if ! forgejo_author_allowlist_was_set; then
+    return 0
+  fi
+  trusted_author_count="$(jq -r 'length' <<<"$trusted_authors_json")"
+  if [[ "$trusted_author_count" -eq 0 ]]; then
+    echo "plane-pr-sync: empty WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS allowlist; aborting before Plane state change" >&2
+    exit 3
+  fi
+}
+
 forgejo_comments_have_marker() {
   local comments_json="$1" marker="$2" trusted_authors_json="$3"
   jq -e --arg marker "$marker" --argjson trusted_authors "$trusted_authors_json" '
@@ -282,6 +298,9 @@ forgejo_comment_once() {
   fi
   if existing="$(tea issues view "$pr_number" --repo "$repo" --comments --output json 2>/dev/null)"; then
     trusted_authors_json="$(forgejo_trusted_authors_json)"
+    if [[ "$mode" == "required" ]]; then
+      forgejo_require_nonempty_explicit_author_allowlist "$trusted_authors_json"
+    fi
     if [[ "$mode" == "required" && "$marker" == \[walter-plane-issue:* ]]; then
       if forgejo_comments_have_conflicting_plane_marker "$existing" "$marker" "$trusted_authors_json"; then
         echo "plane-pr-sync: conflicting walter-plane-issue marker already exists; aborting before Plane state change" >&2
