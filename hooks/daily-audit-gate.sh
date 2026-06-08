@@ -35,7 +35,7 @@ if [[ -f "$_walter_env_loader_lib" ]]; then
   # shellcheck source=/dev/null
   source "$_walter_env_loader_lib"
   WALTER_ENV_ALLOWLIST_ROOT="$TRUSTED_WALTER_CONFIG" \
-  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME" \
+  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME TRUSTED_WALTER_CONFIG TRUSTED_WALTER_OS_HOME" \
     walter_env_load_allowlist "${TRUSTED_WALTER_CONFIG}/env"
 fi
 unset _walter_env_loader_lib

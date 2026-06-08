@@ -117,9 +117,10 @@ _env_loader="${TRUSTED_WALTER_OS_HOME}/scripts/walter/lib/env-loader.sh"
 if [[ -f "$_env_loader" ]]; then
   # shellcheck source=/dev/null
   source "$_env_loader"
-  walter_env_load_allowlist "${HOME}/.config/walter-os/overlay/personal.env"
+  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME TRUSTED_WALTER_CONFIG TRUSTED_WALTER_OS_HOME" \
+    walter_env_load_allowlist "${HOME}/.config/walter-os/overlay/personal.env"
   WALTER_ENV_ALLOWLIST_ROOT="$TRUSTED_WALTER_CONFIG" \
-  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME" \
+  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME TRUSTED_WALTER_CONFIG TRUSTED_WALTER_OS_HOME" \
     walter_env_load_allowlist "${TRUSTED_WALTER_CONFIG}/env"
 fi
 unset _env_loader
