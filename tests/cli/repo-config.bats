@@ -117,7 +117,7 @@ YAML
 }
 
 @test "mode contract helper matches documented autonomy semantics" {
-  run bash -c "source '$REPO_ROOT/scripts/walter/lib/repo-config.sh'; walter_repo_config_print_mode_contract lite; walter_repo_config_print_mode_contract guided; walter_repo_config_print_mode_contract full"
+  run bash -e -c "source '$REPO_ROOT/scripts/walter/lib/repo-config.sh'; walter_repo_config_print_mode_contract lite; walter_repo_config_print_mode_contract guided; walter_repo_config_print_mode_contract full"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"lite = plan, report, and request approval; no autonomous code, PR, deploy, or merge progression"* ]]
