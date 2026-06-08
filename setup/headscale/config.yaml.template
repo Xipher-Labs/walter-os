@@ -1,16 +1,14 @@
-# Headscale config placeholder for the root all-in-one compose stack.
+# Headscale config
+# Reference: https://github.com/juanfont/headscale/blob/main/config-example.yaml
 #
-# Regenerate with:
-#   WALTER_DOMAIN=your-domain.example scripts/bootstrap.sh --force
-#
-# Headscale does not expand ${...} itself. scripts/bootstrap.sh renders
-# setup/headscale/config.yaml.template into this file before restarting the
-# container when it is already running.
+# Rendered by scripts/bootstrap.sh into setup/headscale/config.yaml for the
+# root all-in-one compose stack. Headscale does not expand ${...} itself.
 
 server_url: https://headscale.${WALTER_DOMAIN}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 
+# Auto-assigned IPs in this range (Tailscale's CGNAT block)
 prefixes:
   v4: 100.64.0.0/10
   v6: fd7a:115c:a1e0::/48
@@ -23,16 +21,20 @@ derp:
   auto_update_enabled: true
   update_frequency: 24h
 
+# DB: SQLite is fine for personal use and small teams (sub-100 nodes)
 database:
   type: sqlite
   sqlite:
     path: /var/lib/headscale/db.sqlite
 
+# Logs
 log:
   level: info
 
+# Don't use built-in OIDC for now — operator pre-creates users via CLI
 disable_check_updates: true
 
+# DNS for the mesh
 dns:
   override_local_dns: false
   magic_dns: true
@@ -42,5 +44,8 @@ dns:
       - 1.1.1.1
       - 1.0.0.1
 
+# Pre-auth keys generated via:  headscale preauthkeys create -u operator --reusable --expiration 90d
+
+# Required since headscale 0.23+
 noise:
   private_key_path: /var/lib/headscale/noise_private.key

@@ -274,8 +274,8 @@ Layer 7 — meta:
 | Network | `walter_net` |
 | Admin UI | `goodieshq/headscale-admin:0.25.6` on port 8086 |
 | Bootstrap | Create namespace via headscale CLI (`docker exec headscale headscale namespaces create default`) |
-| Config file | `setup/headscale/config.yaml` — must exist before compose up (contains server_url referencing WALTER_DOMAIN) |
-| Note | Headscale config embeds `server_url` — needs to be template-rendered. |
+| Config file | `setup/headscale/config.yaml` — rendered from `setup/headscale/config.yaml.template` before root compose starts |
+| Note | Headscale config embeds `server_url`; rerun `./install.sh --step 6` or `scripts/bootstrap.sh --force` after changing `WALTER_DOMAIN`. |
 
 ### syncthing (file sync hub)
 
@@ -546,7 +546,7 @@ These files must exist on disk before `docker compose up` will work correctly:
 | `setup/loki/loki.yml` | loki | Shipped in repo |
 | `setup/promtail/promtail.yml` | promtail | Shipped in repo |
 | `setup/grafana/provisioning/` | grafana | Datasource + dashboard provisioning YAML |
-| `setup/headscale/config.yaml` | headscale | Must contain correct `server_url` — rendered from template |
+| `setup/headscale/config.yaml` | headscale | Generated from `setup/headscale/config.yaml.template` via `envsubst` |
 | `setup/synapse/data/homeserver.yaml` | synapse | **Must be generated via `docker run ... generate`** |
 | `setup/synapse/element/config.json` | element-web | Shipped in repo |
 | `setup/homepage/config/` | homepage | services.yaml, widgets.yaml, settings.yaml |

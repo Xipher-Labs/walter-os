@@ -2146,11 +2146,29 @@ step_6() {
     return 0
   fi
 
+  local headscale_template="${REPO_ROOT}/setup/headscale/config.yaml.template"
+  local headscale_config="${REPO_ROOT}/setup/headscale/config.yaml"
+
   if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would render: envsubst '\$WALTER_DOMAIN' < setup/headscale/config.yaml.template > setup/headscale/config.yaml"
     dry "would run: docker compose -f $compose_file up -d"
     dry "would wait for health checks (max 3 min, 10s intervals)"
     dry "would run: ${REPO_ROOT}/scripts/bootstrap.sh"
     return 0
+  fi
+
+  if [[ -f "$headscale_template" ]]; then
+    if ! command -v envsubst >/dev/null 2>&1; then
+      err "'envsubst' not found. Install gettext (macOS: brew install gettext; Linux: apt install gettext)."
+      return 1
+    fi
+    if [[ -z "${WALTER_DOMAIN:-}" ]]; then
+      err "WALTER_DOMAIN is required to render Headscale config."
+      err "Set WALTER_DOMAIN in .env.local or the personal overlay, then re-run ./install.sh --step 6."
+      return 1
+    fi
+    WALTER_DOMAIN="$WALTER_DOMAIN" envsubst "\$WALTER_DOMAIN" < "$headscale_template" > "$headscale_config"
+    ok "Rendered Headscale config for domain: $WALTER_DOMAIN"
   fi
 
   say "Starting services via docker compose..."
