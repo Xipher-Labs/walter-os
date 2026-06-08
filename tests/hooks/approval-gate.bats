@@ -992,6 +992,13 @@ EOF
 @test "P1-06: WALTER_STANDING_APPROVALS_OVERRIDE rejects option-like paths" {
   command -v yq >/dev/null 2>&1 || skip "yq required"
 
+  cat > "$WALTER_CONFIG/agent-approvals.yml" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
   local override_file="$WALTER_CONFIG/-override-approvals.yml"
   cat > "$override_file" <<EOF
 auto_approved:
@@ -1007,4 +1014,46 @@ EOF
   run bash -c "cd '$WALTER_CONFIG' && '$HOOK' check 'auth/index.ts' --tool Edit"
   [[ "$status" -eq 7 ]]
   [[ "$output" =~ invalid[[:space:]]standing-approvals[[:space:]]override[[:space:]]path ]]
+}
+
+@test "P1-06: invalid standing-approvals override is terminal" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  cat > "$WALTER_CONFIG/agent-approvals.yml" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  export WALTER_STANDING_APPROVALS_OVERRIDE="-missing-approvals.yml"
+  export WALTER_AGENT_NAME=test-agent
+
+  run bash -c "cd '$WALTER_CONFIG' && '$HOOK' check 'auth/index.ts' --tool Edit"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ invalid[[:space:]]standing-approvals[[:space:]]override[[:space:]]path ]]
+  [[ "$output" != *"standing approval matched"* ]]
+}
+
+@test "P1-06: WALTER_STANDING_APPROVALS_OVERRIDE rejects symlinks" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  local real_file="$WALTER_CONFIG/real-override-approvals.yml"
+  local linked_file="$WALTER_CONFIG/linked-override-approvals.yml"
+  cat > "$real_file" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+  ln -s "$real_file" "$linked_file"
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  export WALTER_STANDING_APPROVALS_OVERRIDE="$linked_file"
+  export WALTER_AGENT_NAME=test-agent
+
+  run "$HOOK" check "auth/index.ts" --tool Edit
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ symlinks[[:space:]]are[[:space:]]not[[:space:]]allowed ]]
 }

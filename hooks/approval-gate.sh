@@ -92,8 +92,12 @@ validate_standing_approvals_override_path() {
     STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: option-like paths are not allowed"
     return 1
   fi
+  if [[ -L "$override_path" ]]; then
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: symlinks are not allowed"
+    return 1
+  fi
   if [[ ! -f "$override_path" ]]; then
-    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: file does not exist or is not regular"
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: file does not exist or is not a regular non-symlink file"
     return 1
   fi
   return 0
@@ -482,6 +486,7 @@ _trust_tier_allows() {
 reason=""
 decision="allow"
 PANIC_LOCKED=0
+TERMINAL_BLOCK=0
 
 # Helper: regex match (returns 0 if matches)
 matches_any_regex() {
@@ -574,6 +579,11 @@ block() {
   decision="block"
 }
 
+terminal_block() {
+  block "$1"
+  TERMINAL_BLOCK=1
+}
+
 # Helper: check trust tier for the current operation.
 # If the operation is categorizable and the agent's tier disallows it,
 # sets decision=block. If the decision is already block and the tier
@@ -597,7 +607,7 @@ apply_trust_tier() {
       fi
       block "trust tier '${agent_tier}' does not permit category '$category' (agent: $agent)"
     fi
-  elif [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+  elif [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
     if [[ "$category" == "capability-token-mint" ]]; then
       return 0
     fi
@@ -782,7 +792,7 @@ if [[ $# -gt 0 ]]; then
       check_panic_lock || true
 
       if [[ -n "$STANDING_APPROVALS_INVALID_REASON" && "$PANIC_LOCKED" -eq 0 ]]; then
-        block "$STANDING_APPROVALS_INVALID_REASON"
+        terminal_block "$STANDING_APPROVALS_INVALID_REASON"
       fi
 
       if [[ "$decision" == "allow" ]]; then
@@ -791,11 +801,11 @@ if [[ $# -gt 0 ]]; then
 
       # Trust tier check: applied after analyze() but before standing approvals.
       # PANIC_LOCKED check is inside apply_trust_tier (via decision check).
-      if [[ "$PANIC_LOCKED" -eq 0 ]]; then
+      if [[ "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
         apply_trust_tier "$cli_tool" "$cli_command"
       fi
 
-      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]] && \
          ! is_capability_terminal_block "$cli_tool" "$cli_command"; then
         # Standing-approval check (CLI-mode hint: WALTER_AGENT_NAME env)
         # Guard: skip entirely when PANIC_LOCKED — panic lock is terminal, no override allowed.
@@ -813,7 +823,7 @@ if [[ $# -gt 0 ]]; then
       # check if this category is consensus-eligible → exit 8 (awaiting-consensus).
       # Exit 8 means: "don't execute, trigger council vote instead of operator escalation."
       # PANIC_LOCKED: panic lock always wins — never exit 8 when panic locked.
-      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
         if consensus_mode_is_on; then
           # Use explicit --category if given, else try to classify the command
           effective_category="$cli_category"
@@ -940,7 +950,7 @@ esac
 check_panic_lock || true
 
 if [[ -n "$STANDING_APPROVALS_INVALID_REASON" && "$PANIC_LOCKED" -eq 0 ]]; then
-  block "$STANDING_APPROVALS_INVALID_REASON"
+  terminal_block "$STANDING_APPROVALS_INVALID_REASON"
 fi
 
 if [[ "$decision" == "allow" ]]; then
@@ -948,11 +958,11 @@ if [[ "$decision" == "allow" ]]; then
 fi
 
 # Trust tier check: applied after analyze(), before standing approvals.
-if [[ "$PANIC_LOCKED" -eq 0 ]]; then
+if [[ "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
   apply_trust_tier "$tool" "$payload"
 fi
 
-if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]] && \
    ! is_capability_terminal_block "$tool" "$payload"; then
   # Guard: skip when PANIC_LOCKED — panic lock is terminal, no override allowed.
   agent="${WALTER_AGENT_NAME:-unknown}"
