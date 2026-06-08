@@ -24,7 +24,7 @@
 | Grafana | ✅ | ✅ | ⚠️ alerts ✅, dashboards empty | 5 alerts provisioned. Community dashboards (cAdvisor, node-exporter, docker) can be imported — see below |
 | Uptime-Kuma | ✅ | ✅ | ✅ | 14 monitors live |
 | Headscale | ✅ | ✅ | 📋 0 nodes paired | Operator runs `tailscale up --auth-key=... --login-server=...` per device |
-| Headscale UI | ✅ | ✅ | ✅ | hs.${WALTER_DOMAIN} |
+| Headscale UI | ✅ | ✅ | ✅ | headscale-admin.${WALTER_DOMAIN} |
 | Wireguard | ✅ | ✅ | 📋 0 peers | Operator adds peers via wg-easy UI |
 | Syncthing | ✅ | ✅ | ✅ | 9 folders registered, 1 device paired (<your-device>) |
 | Homepage | ✅ | ✅ | ✅ | Dashboard live |

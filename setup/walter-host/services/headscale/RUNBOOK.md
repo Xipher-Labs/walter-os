@@ -14,7 +14,7 @@ allow-list rule after normal access is healthy again.
 Observed failure:
 
 ```text
-tailscaled: register request: POST https://headscale.example.com/machine/register
+tailscaled: register request: POST https://headscale.${WALTER_DOMAIN}/machine/register
   -> unexpected HTTP response: 500 Internal Server Error
 ```
 
@@ -52,7 +52,7 @@ Run this on the client trying to join:
 
 ```bash
 tailscale version
-tailscale up --login-server=https://headscale.example.com
+tailscale up --login-server=https://headscale.${WALTER_DOMAIN}
 ```
 
 If `/key` is reachable but `/machine/register` fails, the path is likely not a
