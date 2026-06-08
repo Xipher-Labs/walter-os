@@ -135,7 +135,11 @@ cf_healthy() {
   # metrics endpoint itself is unreachable (000), never declare down on that.
   if [[ -n "${CLOUDFLARED_METRICS:-}" ]]; then
     local ready_code
-    ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null || echo 000)
+    if ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null); then
+      :
+    else
+      ready_code=000
+    fi
     case "$ready_code" in
       200) return 0 ;;   # ready
       000) : ;;          # metrics unreachable → fall through to log-scan fallback
