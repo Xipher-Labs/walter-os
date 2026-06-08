@@ -23,6 +23,28 @@ random_hex() {
   openssl rand -hex "$bytes"
 }
 
+trim_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
+}
+
+env_or_default() {
+  local name="$1" default="$2" value trimmed
+  if [[ -z "${!name+x}" ]]; then
+    printf '%s\n' "$default"
+    return 0
+  fi
+  value="${!name}"
+  trimmed="$(trim_whitespace "$value")"
+  if [[ -z "$trimmed" ]]; then
+    printf '%s\n' "$default"
+    return 0
+  fi
+  printf '%s\n' "$value"
+}
+
 env_value_present() {
   local key="$1"
   awk -v key="$key" '
@@ -83,11 +105,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
 else
   echo "→ $ENV_FILE exists, completing any missing required keys"
 fi
+chmod 600 "$ENV_FILE"
 
-ensure_env_key "N8N_PG_PASS" "${N8N_PG_PASS:-hex:24}"
-ensure_env_key "N8N_ENCRYPTION_KEY" "${N8N_ENCRYPTION_KEY:-hex:32}"
-ensure_env_key "N8N_BASIC_AUTH_USER" "${N8N_BASIC_AUTH_USER:-walter-admin}"
-ensure_env_key "N8N_BASIC_AUTH_PASSWORD" "${N8N_BASIC_AUTH_PASSWORD:-hex:24}"
+ensure_env_key "N8N_PG_PASS" "$(env_or_default "N8N_PG_PASS" "hex:24")"
+ensure_env_key "N8N_ENCRYPTION_KEY" "$(env_or_default "N8N_ENCRYPTION_KEY" "hex:32")"
+ensure_env_key "N8N_BASIC_AUTH_USER" "$(env_or_default "N8N_BASIC_AUTH_USER" "walter-admin")"
+ensure_env_key "N8N_BASIC_AUTH_PASSWORD" "$(env_or_default "N8N_BASIC_AUTH_PASSWORD" "hex:24")"
 
 echo "  ✓ .env ready (0600). Back up N8N_ENCRYPTION_KEY and n8n basic-auth credentials to your secrets manager."
 

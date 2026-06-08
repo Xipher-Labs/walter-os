@@ -27,6 +27,10 @@ teardown() {
   fi
 }
 
+file_mode() {
+  stat -c "%a" "$1" 2>/dev/null || stat -f "%Lp" "$1"
+}
+
 @test "n8n compose has N8N_BASIC_AUTH_ACTIVE set to \"true\" (P1-03)" {
   [ -f "$COMPOSE" ]
   # Must literally be `"true"` (string). false / unset / true (no quotes)
@@ -91,6 +95,20 @@ teardown() {
   grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
 }
 
+@test "n8n deploy.sh treats whitespace-only env overrides as missing (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" \
+    N8N_BASIC_AUTH_USER='   ' \
+    N8N_BASIC_AUTH_PASSWORD='   ' \
+    bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  grep -q '^N8N_BASIC_AUTH_USER=walter-admin$' "$TMP_SVC/.env"
+  grep -qE '^N8N_BASIC_AUTH_PASSWORD=[0-9a-f]{48}$' "$TMP_SVC/.env"
+}
+
 @test "n8n deploy.sh rejects multiline basic-auth values before writing .env (P1-03)" {
   TMP_SVC="$(mktemp -d)"
   cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
@@ -118,11 +136,29 @@ ENV
   chmod 600 "$TMP_SVC/.env"
   mkdir "$TMP_SVC/bin"
   ln -s "$(command -v awk)" "$TMP_SVC/bin/awk"
+  ln -s "$(command -v chmod)" "$TMP_SVC/bin/chmod"
 
   run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" PATH="$TMP_SVC/bin" /bin/bash "$DEPLOY"
 
   [ "$status" -eq 0 ]
   [[ "$output" != *"openssl is required"* ]]
+}
+
+@test "n8n deploy.sh reapplies 0600 mode to existing .env (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+  cat > "$TMP_SVC/.env" <<'ENV'
+N8N_PG_PASS=pg
+N8N_ENCRYPTION_KEY=encryption
+N8N_BASIC_AUTH_USER=operator
+N8N_BASIC_AUTH_PASSWORD=provided-secret
+ENV
+  chmod 0644 "$TMP_SVC/.env"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  [ "$(file_mode "$TMP_SVC/.env")" = "600" ]
 }
 
 @test "n8n deploy.sh treats blank quoted/whitespace auth values as missing (P1-03)" {
