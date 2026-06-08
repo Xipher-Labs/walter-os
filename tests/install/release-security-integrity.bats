@@ -98,7 +98,8 @@ setup() {
 
 @test "release workflow sorts checksums with stable locale" {
   # Checksum manifests must not vary with runner locale.
-  grep -E 'LC_ALL=C[[:space:]]+sort[[:space:]]*>[[:space:]]*"\$\{CHECKSUMS_FILE\}"' "$WORKFLOW" >/dev/null
+  grep -E 'LC_ALL=C[[:space:]]+sort[[:space:]]*>[[:space:]]*"\$\{checksums_tmp\}"' "$WORKFLOW" >/dev/null
+  grep -E 'mv[[:space:]]+"\$\{checksums_tmp\}"[[:space:]]+"\$\{CHECKSUMS_FILE\}"' "$WORKFLOW" >/dev/null
 }
 
 @test "release workflow excludes stale provenance from checksum payload" {
@@ -111,7 +112,9 @@ setup() {
 @test "workflow dispatch provenance is bound to the requested tag ref" {
   grep -E 'workflow_dispatch' "$WORKFLOW" >/dev/null
   grep -E 'GITHUB_REF.*refs/tags/\$\{tag\}' "$WORKFLOW" >/dev/null
-  grep -E 'workflow_dispatch re-signs must run with --ref \$\{tag\}' "$WORKFLOW" >/dev/null
+  grep -E 'workflow_dispatch re-signs must run on refs/tags/\$\{tag\}' "$WORKFLOW" >/dev/null
+  grep -E 'gh workflow run release\.yml --ref \$\{tag\}' "$WORKFLOW" >/dev/null
+  grep -E 'GitHub UI.*Run workflow.*refs/tags/\$\{tag\}' "$WORKFLOW" >/dev/null
 }
 
 @test "release workflow does not delete existing provenance before replacement" {

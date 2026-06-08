@@ -55,7 +55,10 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             tag="${{ inputs.tag }}"
             if [[ "${GITHUB_REF}" != "refs/tags/${tag}" ]]; then
-              echo "ERROR: workflow_dispatch re-signs must run with --ref ${tag} so provenance binds to the tag commit." >&2
+              echo "ERROR: workflow_dispatch re-signs must run on refs/tags/${tag} so provenance binds to the tag commit." >&2
+              echo "Input tag is the bare tag name: ${tag}" >&2
+              echo "CLI: gh workflow run release.yml --ref ${tag}" >&2
+              echo "GitHub UI: choose Run workflow from tag refs/tags/${tag}." >&2
               exit 1
             fi
           else
