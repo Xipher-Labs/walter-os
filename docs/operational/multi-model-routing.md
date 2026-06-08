@@ -32,8 +32,14 @@ Use it from shell code with:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-model="$(walter_model_for backend_review)"
+model=""
+walter_model_resolve backend_review model
 ```
+
+`walter_model_resolve` assigns the primary route and preserves
+`WALTER_MODEL_DOMAIN` for the next `llm_invoke` call. Use `walter_model_for`
+when a caller intentionally needs the full comma-separated route for its own
+parallel fan-out logic.
 
 ## Domains
 
@@ -100,4 +106,4 @@ token counters by model from `walter_council_tokens_total`.
 - Invalid values are ignored and the resolver falls back to the domain default.
 - PHI routing is fail-closed to `local-ollama` when misconfigured.
 - The LLM helper emits `metadata.domain` so LiteLLM usage can be attributed by
-  task domain once callers set `WALTER_MODEL_DOMAIN` through the resolver.
+  task domain when callers use `walter_model_resolve <domain> <out-var>`.
