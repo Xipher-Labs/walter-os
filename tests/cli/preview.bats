@@ -2,6 +2,8 @@
 # tests/cli/preview.bats
 #
 # Covers: docs/specs/preview-environment-bundle.md
+#
+# shellcheck disable=SC2030,SC2031
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -441,6 +443,21 @@ SH
   cd "$TMP_DIR"
   printf '{"users":[{"id":"dash-demo"}]}\n' > ./-seed.json
   printf 'fake png bytes\n' > ./-screen.png
+  fake_bin="$TMP_DIR/fake-cp-bin"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/cp" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == "--" ]]; then
+    echo "BSD cp does not support --" >&2
+    exit 64
+  fi
+done
+exec /bin/cp "$@"
+SH
+  chmod +x "$fake_bin/cp"
+  export PATH="$fake_bin:$PATH"
 
   run bash "$WALTER_OS_BIN" preview bundle \
     --pr 235 \

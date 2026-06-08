@@ -105,6 +105,18 @@ path_base() {
   printf '%s\n' "${path##*/}"
 }
 
+cp_operand() {
+  local path="$1"
+  case "$path" in
+    -*)
+      printf './%s\n' "$path"
+      ;;
+    *)
+      printf '%s\n' "$path"
+      ;;
+  esac
+}
+
 reject_secret_like_artifact() {
   local path="$1" base lower
   base="$(path_base "$path")"
@@ -219,12 +231,14 @@ artifact_json() {
 }
 
 copy_artifact() {
-  local source="$1" dest_dir="$2" dest
+  local source="$1" dest_dir="$2" dest source_operand dest_operand
   dest="${dest_dir}/$(path_base "$source")"
   if [[ -e "$dest" ]]; then
     die_usage "duplicate artifact basename: $(path_base "$source")"
   fi
-  cp -p -- "$source" "$dest"
+  source_operand="$(cp_operand "$source")"
+  dest_operand="$(cp_operand "$dest")"
+  cp -p "$source_operand" "$dest_operand"
   printf '%s\n' "$dest"
 }
 
