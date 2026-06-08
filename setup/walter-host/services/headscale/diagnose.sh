@@ -111,8 +111,8 @@ detect_headscale_version() {
     local output
     if output="$(docker exec "$CONTAINER" headscale version 2>/dev/null)"; then
       printf '%s\n' "$output"
+      return
     fi
-    return
   fi
 
   if [[ -r "$COMPOSE_FILE" ]]; then

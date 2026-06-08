@@ -50,6 +50,39 @@ setup() {
   echo "$output" | grep -Fq "mock log is not readable"
 }
 
+@test "headscale diagnose help is location agnostic" {
+  [[ -x "$DIAGNOSE" ]]
+
+  run "$DIAGNOSE" --help
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -Fq "Usage: diagnose.sh [options]"
+  ! echo "$output" | grep -Fq "setup/walter-host/services/headscale/diagnose.sh"
+}
+
+@test "headscale diagnose falls back to compose image when docker exec fails" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "INFO registration request completed"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -Fq "Headscale: Headscale 0.26.0"
+  echo "$output" | grep -Fq "no known capability-version drift signature"
+}
+
 @test "headscale diagnose fails inconclusive when docker logs cannot be inspected" {
   [[ -x "$DIAGNOSE" ]]
 
