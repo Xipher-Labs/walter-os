@@ -95,6 +95,14 @@ describe("atomicAppend [history concurrency]", () => {
     expect(statSync(testFile).mode & 0o777).toBe(0o600);
   });
 
+  it("tightens an existing parent directory to owner-only permissions", () => {
+    chmodSync(testDir, 0o777);
+
+    atomicAppend(testFile, '{"session_id":"s1","ts":"2026-01-01"}');
+
+    expect(statSync(testDir).mode & 0o777).toBe(0o700);
+  });
+
   it("handles concurrent writes without corruption", async () => {
     const CONCURRENCY = 5;
     const writes = Array.from({ length: CONCURRENCY }, (_, i) =>
