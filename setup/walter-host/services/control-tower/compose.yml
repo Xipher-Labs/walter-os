@@ -55,6 +55,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
     volumes:
       # Walter-council data (metrics, heartbeats) — read-only
       - /var/lib/walter-council:/var/lib/walter-council:ro

@@ -144,12 +144,24 @@ setup() {
   awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
     "$ROOT_COMPOSE" \
     | grep -qE '^[[:space:]]+-[[:space:]]+ALL$'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE 'cap_add:'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '^[[:space:]]+-[[:space:]]+CHOWN$'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '^[[:space:]]+-[[:space:]]+FOWNER$'
 }
 
 @test "AC-3 (#176): standalone compose.yml hardens Control Tower privileges" {
   grep -qE 'no-new-privileges:true' "$STANDALONE_COMPOSE"
   grep -qE 'cap_drop:' "$STANDALONE_COMPOSE"
   grep -qE '^[[:space:]]+-[[:space:]]+ALL$' "$STANDALONE_COMPOSE"
+  grep -qE 'cap_add:' "$STANDALONE_COMPOSE"
+  grep -qE '^[[:space:]]+-[[:space:]]+CHOWN$' "$STANDALONE_COMPOSE"
+  grep -qE '^[[:space:]]+-[[:space:]]+FOWNER$' "$STANDALONE_COMPOSE"
 }
 
 # ---------------------------------------------------------------------------
