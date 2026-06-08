@@ -178,7 +178,7 @@ doctor_check_claude_hooks() {
 
   if [[ "$present" -gt 0 ]]; then
     log_warn "Claude Code PreToolUse hooks partially active ($present/${#required_hooks[@]})"
-    return 0
+    return 3
   fi
 
   return 1
@@ -238,8 +238,10 @@ doctor_check_wrapper_path() {
 
 run_enforcement_doctor() {
   local hooks_ok=0
+  local hooks_any=0
   local wrappers_ok=0
   local mode="policy-only"
+  local hook_status=0
 
   log_step "Walter-OS enforcement doctor"
   echo "Scope: host hooks + PATH wrappers. Sandboxing, token scope, and network"
@@ -247,8 +249,19 @@ run_enforcement_doctor() {
   echo
 
   if doctor_check_claude_hooks; then
-    hooks_ok=1
+    hook_status=0
+  else
+    hook_status=$?
   fi
+  case "$hook_status" in
+    0)
+      hooks_ok=1
+      hooks_any=1
+      ;;
+    3)
+      hooks_any=1
+      ;;
+  esac
 
   if doctor_check_wrapper_path; then
     wrappers_ok=1
@@ -262,10 +275,10 @@ run_enforcement_doctor() {
     return 0
   fi
 
-  if [[ "$hooks_ok" -eq 1 || "$wrappers_ok" -eq 1 ]]; then
+  if [[ "$hooks_any" -eq 1 || "$wrappers_ok" -eq 1 ]]; then
     mode="partial"
     log_warn "Enforcement mode: $mode"
-    if [[ "$hooks_ok" -eq 1 ]]; then
+    if [[ "$hooks_any" -eq 1 ]]; then
       echo "Claude Code hooks are active, but direct binary bypasses may remain."
       echo "Remediation: install/enable Walter wrappers or run high-risk work in a sandbox."
     else
