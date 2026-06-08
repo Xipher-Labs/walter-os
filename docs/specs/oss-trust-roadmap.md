@@ -130,7 +130,7 @@ This issue closes when **all 16 items above** have shipped or been explicitly de
 Per-item ACs live in each item's own spec, filed when picked up. Recommended order:
 
 1. **v0.4.1 must-haves**: A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (network egress + capability tokens + session timeout + pre-commit framework + Security Advisories + Passing Badge + the two carryover follow-ups). These are the "ship in v0.4.1 or this roadmap is too slow" items.
-2. **v0.5.x flow**: A-3 (sandbox), A-5 (RO mounts), B-1 (Merkle log), B-2 (signed receipts).
+2. **v0.5.x flow**: A-3 (sandbox), A-5 (RO mounts), B-1 (linear hash-chain log), B-2 (signed receipts).
 3. **v0.6.0 polish**: B-3 (telemetry), E-2 (Silver Badge).
 4. **v1.0 capstone**: C-1 (SLSA L3), C-2 (reproducible builds).
 
@@ -208,7 +208,7 @@ Specs filed in this order (each its own follow-up PR):
 1. **v0.4.1 spec batch** — A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (8 specs, can be parallel)
 2. **v0.5.x batch** — A-3, A-5, B-1, B-2 (4 specs)
 3. **v0.6.0 batch** — B-3, E-2 (2 specs)
-4. **v1.0 batch** — C-1, C-2 (2 specs)
+4. **v1.0 batch** — C-1 (SLSA-oriented provenance), C-2 (reproducible release artifacts)
 
 Each per-item spec follows the template established by `docs/specs/p1-hardening-epic.md`: problem, non-goals, decisions, ACs, threat model, dependencies, refs.
 
