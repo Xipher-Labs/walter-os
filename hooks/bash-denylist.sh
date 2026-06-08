@@ -228,19 +228,6 @@ DENYLIST_PATTERNS[wget-pipe-shell]='wget[[:space:]]+.*\|[[:space:]]*(sudo[[:spac
 # Covers bash, sh, zsh, dash, ksh; also covers `source <(...)` and `. <(...)`.
 DENYLIST_PATTERNS[shell-process-sub-curl]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*curl'
 DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*wget'
-# bash -c / sh -c with command substitution in the actual -c payload.
-# Separators between the shell token and -c may be literal whitespace or the
-# `${IFS}` expansion trick. The payload match is intentionally limited to the
-# immediate -c argument, so `bash -c 'echo hi' && echo $(date)` is not blocked
-# merely because a later shell command uses substitution.
-_shell_c_prefix='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env([[:space:]]|(\$\{IFS\}))+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)([[:space:]]|(\$\{IFS\}))+-c([[:space:]]|(\$\{IFS\}))*'
-DENYLIST_PATTERNS[shell-c-variable]="${_shell_c_prefix}"'("[^"]*\$[{([]|'\''[^'\'']*\$[{([]|\$'\''[^'\'']*\$[{([]|[^[:space:];|&]*\$[{([])'
-# Sibling pattern: backtick command substitution in the immediate -c payload.
-# Backticks are literals in ERE; the quoting is only to prevent shell command
-# substitution while assigning the regex.
-# shellcheck disable=SC2016
-DENYLIST_PATTERNS[shell-c-backtick]="${_shell_c_prefix}"'("[^"]*`|'\''[^'\'']*`|\$'\''[^'\'']*`|[^[:space:];|&]*`)'
-unset _shell_c_prefix
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
 # without braces) OR a command-substitution `$(...)`. Deliberately does NOT
@@ -253,6 +240,96 @@ DENYLIST_PATTERNS[eval-variable]='eval[[:space:]]+"?\$[{(]?[A-Za-z_(]'
 DENYLIST_PATTERNS[python-c-variable]='python3?[[:space:]]+-c[[:space:]]+["'\'']?\$'
 # rm -rf / or rm -r / targeting root (exact root, not subdirs)
 DENYLIST_PATTERNS[rm-rf-root]='(^|[;&|][[:space:]]*)rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f?[a-zA-Z]*[[:space:]]+\/$|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*[[:space:]]+\/$'
+
+_walter_shell_word_after_c() {
+  local text="$1"
+  local i=0 len="${#text}" out="" c
+
+  while (( i < len )); do
+    c="${text:i:1}"
+    if [[ "$c" =~ [[:space:]\;\|\&] ]]; then
+      break
+    fi
+
+    if [[ "$c" == "'" ]]; then
+      out+="$c"
+      ((i++))
+      while (( i < len )); do
+        c="${text:i:1}"
+        out+="$c"
+        ((i++))
+        [[ "$c" == "'" ]] && break
+      done
+      continue
+    fi
+
+    if [[ "$c" == '"' ]]; then
+      out+="$c"
+      ((i++))
+      while (( i < len )); do
+        c="${text:i:1}"
+        out+="$c"
+        ((i++))
+        if [[ "$c" == "\\" && i -lt len ]]; then
+          out+="${text:i:1}"
+          ((i++))
+          continue
+        fi
+        [[ "$c" == '"' ]] && break
+      done
+      continue
+    fi
+
+    if [[ "$c" == '$' && "${text:i+1:1}" == "'" ]]; then
+      out+="$c${text:i+1:1}"
+      ((i += 2))
+      while (( i < len )); do
+        c="${text:i:1}"
+        out+="$c"
+        ((i++))
+        [[ "$c" == "'" ]] && break
+      done
+      continue
+    fi
+
+    out+="$c"
+    ((i++))
+  done
+
+  printf '%s\n' "$out"
+}
+
+_walter_shell_c_payload_has_command_substitution() {
+  local remaining="$1"
+  local shell_c_prefix='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env([[:space:]]|(\$\{IFS\}))+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)([[:space:]]|(\$\{IFS\}))+-c([[:space:]]|(\$\{IFS\}))*'
+  local matched after payload
+  local dollar_paren dollar_brace dollar_bracket backtick
+  printf -v dollar_paren '%b' '\044\050'
+  printf -v dollar_brace '%b' '\044\173'
+  printf -v dollar_bracket '%b' '\044\133'
+  printf -v backtick '%b' '\140'
+
+  while [[ "$remaining" =~ $shell_c_prefix ]]; do
+    matched="${BASH_REMATCH[0]}"
+    after="${remaining:${#matched}}"
+    payload="$(_walter_shell_word_after_c "$after")"
+    if [[ "$payload" == *"$dollar_paren"* || "$payload" == *"$dollar_brace"* || "$payload" == *"$dollar_bracket"* || "$payload" == *"$backtick"* ]]; then
+      return 0
+    fi
+    if [[ -z "$after" ]]; then
+      break
+    fi
+    remaining="${after:1}"
+  done
+
+  return 1
+}
+
+if _walter_shell_c_payload_has_command_substitution "$CMD"; then
+  truncated="${CMD:0:120}"
+  reason="bash-denylist: command matches blocked pattern 'shell-c-command-substitution': ${truncated}"
+  _emit_block "$reason"
+fi
 
 for pattern_name in "${!DENYLIST_PATTERNS[@]}"; do
   pattern="${DENYLIST_PATTERNS[$pattern_name]}"
