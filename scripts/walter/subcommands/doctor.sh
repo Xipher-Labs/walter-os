@@ -6,7 +6,8 @@
 #   walter doctor --client-only    local tools only, skip SSH/remote checks
 #   walter doctor --enforcement    report hook/wrapper enforcement mode
 #   walter doctor --hooks          alias for --enforcement
-#   walter doctor --hook-enforcement  alias for --enforcement
+#   walter doctor --hook-enforcement
+#                                  alias for --enforcement
 set -euo pipefail
 
 # Validate WALTER_OS_HOME before any use: must be an absolute path containing
@@ -281,7 +282,7 @@ run_enforcement_doctor() {
 
   log_step "Walter-OS enforcement doctor"
   echo "Scope: host hooks + PATH wrappers. Sandboxing, token scope, and network"
-  echo "controls are stronger isolation layers and are reported separately."
+  echo "controls are stronger isolation layers outside this command's scope."
   echo
 
   if doctor_check_claude_hooks; then
