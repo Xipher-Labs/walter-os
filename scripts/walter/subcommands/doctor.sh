@@ -384,12 +384,13 @@ run_enforcement_doctor() {
   if [[ "$hooks_any" -eq 1 || "$wrappers_any" -eq 1 ]]; then
     mode="partial"
     log_warn "Enforcement mode: $mode"
-    if [[ "$hooks_any" -eq 1 ]]; then
-      echo "Claude Code hooks are active, but direct binary bypasses may remain."
-      echo "Remediation: install/enable Walter wrappers or run high-risk work in a sandbox."
-    else
-      echo "High-risk wrappers are active, but supported host hooks were not confirmed."
+    if [[ "$hooks_ok" -ne 1 ]]; then
+      echo "Supported host hooks were not fully confirmed."
       echo "Remediation: run ./install.sh --upgrade, then re-run walter doctor --enforcement."
+    fi
+    if [[ "$wrappers_ok" -ne 1 ]]; then
+      echo "High-risk wrappers were not fully confirmed; direct binary bypasses may remain."
+      echo "Remediation: install/enable Walter wrappers or run high-risk work in a sandbox."
     fi
     return 0
   fi

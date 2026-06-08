@@ -629,7 +629,7 @@ stub_symlink_high_risk_wrapper() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"high-risk tool wrappers first in PATH"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
-  [[ "$output" == *"High-risk wrappers are active, but supported host hooks were not confirmed."* ]]
+  [[ "$output" == *"Supported host hooks were not fully confirmed."* ]]
 }
 
 @test "walter doctor --enforcement reports partial when wrappers are incomplete" {
