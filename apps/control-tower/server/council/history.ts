@@ -1,6 +1,6 @@
 /**
  * Council Chat history persistence.
- * Sessions are stored as JSONL in ~/.config/walter-os/council-chat-history.jsonl
+ * Sessions are stored as JSONL in Control Tower's configured state dir.
  *
  * Each line is a session JSON object with R1, R2, and synthesis results.
  */
@@ -9,7 +9,8 @@ import { existsSync, readFileSync } from "fs";
 import * as path from "path";
 import { atomicAppend, pruneIfNeeded } from "./history-io";
 
-const CONFIG_DIR = process.env.WALTER_CONFIG_DIR ?? "/root/.config/walter-os";
+const CONFIG_DIR =
+  process.env.WALTER_CONFIG_DIR ?? "/var/lib/walter-os/control-tower";
 const HISTORY_FILE = path.join(CONFIG_DIR, "council-chat-history.jsonl");
 
 export interface R1Response {

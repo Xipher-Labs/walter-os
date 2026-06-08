@@ -851,15 +851,18 @@ services:
       CONTROL_TOWER_PUBLIC_URL: "${CONTROL_TOWER_PUBLIC_URL:-}"
       TAILSCALE_ENFORCE: "${TAILSCALE_ENFORCE:-true}"
       TAILSCALE_CGNAT_CIDR: "${TAILSCALE_CGNAT_CIDR:-100.64.0.0/10}"
+      WALTER_CONFIG: /var/lib/walter-os/control-tower
+      WALTER_CONFIG_DIR: /var/lib/walter-os/control-tower
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - /var/lib/walter-council:/var/lib/walter-council:ro
       - /var/log/walter-council:/var/log/walter-council:ro
-      # Mounted RW so the Council toggle (#176) can write mode.json via
-      # `walter-os mode consensus on|off` invoked from /api/mode. The
-      # container runs as root specifically because /root/ is mode 700
-      # on the host — see apps/control-tower/Dockerfile for the threat-
-      # model trade-off.
-      - /root/.config/walter-os:/root/.config/walter-os:rw
+      # Dedicated RW mode state for the Council toggle (#176). Do not mount
+      # the operator's full ~/.config/walter-os into Control Tower.
+      - control_tower_config:/var/lib/walter-os/control-tower:rw
     depends_on:
       litellm:
         condition: service_healthy
@@ -1279,3 +1282,6 @@ volumes:
   # Rocketchat [profile: comms]
   rocketchat_mongo:
   rocketchat_mongo_config:
+
+  # Control Tower runtime state (mode.json)
+  control_tower_config:

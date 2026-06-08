@@ -49,17 +49,20 @@ services:
       # Tailscale access enforcement
       TAILSCALE_ENFORCE: "${TAILSCALE_ENFORCE:-true}"
       TAILSCALE_CGNAT_CIDR: "${TAILSCALE_CGNAT_CIDR:-100.64.0.0/10}"
+      WALTER_CONFIG: /var/lib/walter-os/control-tower
+      WALTER_CONFIG_DIR: /var/lib/walter-os/control-tower
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       # Walter-council data (metrics, heartbeats) — read-only
       - /var/lib/walter-council:/var/lib/walter-council:ro
       # Walter-council logs (events, consensus-votes, watchdog) — read-only
       - /var/log/walter-council:/var/log/walter-council:ro
-      # Operator config (mode.json, trust-tiers.yml) — RW so the Council
-      # toggle (#176) can write mode.json via `walter-os mode consensus`
-      # invoked from /api/mode. The container runs as root because
-      # /root/ is mode 700 on the host; the security trade-off is
-      # documented in apps/control-tower/Dockerfile.
-      - /root/.config/walter-os:/root/.config/walter-os:rw
+      # Dedicated RW mode state for the Council toggle (#176). Do not mount
+      # the operator's full ~/.config/walter-os into Control Tower.
+      - control_tower_config:/var/lib/walter-os/control-tower:rw
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -73,3 +76,6 @@ networks:
   walter-internal:
     external: true
     name: walter-internal
+
+volumes:
+  control_tower_config:

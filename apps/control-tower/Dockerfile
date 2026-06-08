@@ -52,31 +52,29 @@ COPY scripts/agents/lib/mode.sh /opt/walter-os/scripts/agents/lib/mode.sh
 COPY VERSION /opt/walter-os/VERSION
 RUN chmod +x /usr/local/bin/walter-os
 
-# CT runs as root (NOT the previous nextjs UID 1001) so it can write to
-# `/root/.config/walter-os/mode.json` via the host bind mount (#176).
-# The host directory is mode 700 root:root by default; non-root container
-# users cannot write to it without an operator-side chown deployment step,
-# and Walter-VM is a single-operator private VM behind Tailscale + CF
-# Access + admin-token gate — the security trade-off of running as root
-# inside this container is acceptable for the simplification.
-# Adopters running CT in a multi-tenant context should bake their own
-# Dockerfile with a non-root user + chowned host path.
+# Keep Control Tower's mutable Walter state separate from the operator's
+# private config directory. The Council toggle only needs mode.json, so the
+# container writes to a dedicated volume and can run as the unprivileged
+# node user instead of mounting /root/.config/walter-os.
+RUN mkdir -p /var/lib/walter-os/control-tower \
+  && chown -R node:node /var/lib/walter-os/control-tower
 
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 # WALTER_OS_HOME is where bin/walter-os looks for its libs (VERSION,
-# scripts/agents/lib/mode.sh). It is NOT the place mode.json is written —
-# that goes to $WALTER_CONFIG (default $HOME/.config/walter-os, which is
-# mounted RW from the host at /root/.config/walter-os, see compose.yml).
+# scripts/agents/lib/mode.sh). Mutable runtime state is intentionally
+# constrained to the Control Tower state volume.
 ENV WALTER_OS_HOME=/opt/walter-os
 # Both env vars must point at the same place — the route handler in
 # apps/control-tower/app/api/mode/route.ts reads `WALTER_CONFIG_DIR`
 # while bin/walter-os + scripts/agents/lib/mode.sh read `WALTER_CONFIG`.
 # Setting both pins them together so an operator override of one
 # doesn't silently desync the read/write paths (Copilot R1 #194).
-ENV WALTER_CONFIG=/root/.config/walter-os
-ENV WALTER_CONFIG_DIR=/root/.config/walter-os
+ENV WALTER_CONFIG=/var/lib/walter-os/control-tower
+ENV WALTER_CONFIG_DIR=/var/lib/walter-os/control-tower
+
+USER node
 
 CMD ["node", "apps/control-tower/server.js"]
