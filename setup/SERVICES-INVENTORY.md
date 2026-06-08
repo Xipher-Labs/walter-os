@@ -273,7 +273,7 @@ Layer 7 — meta:
 | Volumes | `./setup/headscale/config.yaml:/etc/headscale/config.yaml:ro`, `headscale_data:/var/lib/headscale` |
 | Network | `walter_net` |
 | Admin UI | `goodieshq/headscale-admin:0.25.6` on port 8086 |
-| Bootstrap | Create user via headscale CLI (`docker exec headscale headscale users create default`) |
+| Bootstrap | Create user via headscale CLI (`docker exec headscale headscale users create operator`) |
 | Config file | `setup/headscale/config.yaml` — rendered from `setup/headscale/config.yaml.template` before root compose starts |
 | Note | Headscale config embeds `server_url`; after changing `WALTER_DOMAIN`, re-render only this file with `WALTER_DOMAIN=example.com envsubst '$WALTER_DOMAIN' < setup/headscale/config.yaml.template > setup/headscale/config.yaml`, then restart `headscale` if it is running. |
 
