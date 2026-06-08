@@ -11,7 +11,7 @@ Walter-OS has solid AGENT-FACING discipline (approval-gate, hooks, audit, env-al
 
 1. **Hooks don't escape their script-level guards.** The `approval-gate.sh` + `bash-denylist.sh` chains cover known attack patterns but operate at the bash-script layer. A novel prompt-injection that produces an unrecognized command class still gets the operator's full POSIX permissions.
 2. **The audit log is operator-truthful.** `~/.config/walter-os/audit-YYYY-MM-DD.md` is a regular file. The operator (or anything running as them) can edit history retroactively. There's no tamper-evident chain.
-3. **Releases are reproducible.** `release.yml` ships SBOMs + cosign signatures, but the build itself isn't reproducible. Two runs of the same tag could produce different artifacts and we'd never know.
+3. **Releases are signed, but not yet reproducible.** `release.yml` ships SBOMs + cosign signatures, but the release pipeline does not yet prove byte-identical output across two runs of the same tag.
 
 This umbrella spec lists every gap and assigns a target release. Each item gets a per-spec when picked up. Closing this issue means v1.0 is shippable to security-conscious adopters with a straight face.
 
@@ -19,7 +19,11 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 
 - **Bundling our own sandbox primitives.** We wrap what's per-OS available (nsjail / firejail / macOS `sandbox-exec`), not invent.
 - **Becoming a CNA ourselves.** GitHub Security Advisories partnership is the practical floor; full CNA registration is post-v1.0 corporate-process work.
-- **Replacing GitHub Actions** for SLSA L3. Actions has GitHub-hosted runners with SLSA-L3 attestation baked in; we use that, not a self-built provenance stack.
+- **Replacing GitHub Actions** for provenance. We use GitHub's OIDC and
+  artifact-attestation primitives rather than building a custom provenance
+  service. Walter-OS still has to harden its own workflow triggers,
+  permissions, build isolation, and verification before claiming a specific
+  SLSA level.
 - **Solving for cross-OS reproducibility.** Linux + macOS + WSL are the targets; Windows-native is operator-overlay territory.
 
 ## Roadmap (5 layers, 16 items total)
@@ -38,7 +42,7 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
-| B-1 | **Append-only tamper-evident log** (Merkle hash-chain) of every tool invocation | v0.5.x | 2-3d | Each entry is a JSONL row including the prev-row hash; verifier at `walter-os audit verify-chain` |
+| B-1 | **Append-only tamper-evident log** (linear hash-chain) of every tool invocation | v0.5.x | 2-3d | Each entry is a JSONL row including the prev-row hash; verifier at `walter-os audit verify-chain` |
 | B-2 | **Signed receipts per tool invocation** — operator can verify any action after the fact | v0.5.x | 1-2d | Each row signed by the per-session ephemeral key (matches A-2's capability-token signing key) |
 | B-3 | **Dedicated telemetry → Grafana/Loki** (not stdout) | v0.6.0 | 1-2d | Promtail config + Grafana dashboard JSON; ships under `setup/walter-host/services/observability/` |
 
@@ -46,8 +50,8 @@ This umbrella spec lists every gap and assigns a target release. Each item gets 
 
 | # | Item | Release | Effort | Notes |
 |---|---|---|---|---|
-| C-1 | **SLSA Level 3 provenance** — extend `release.yml` to emit + sign provenance attestations | v1.0 | 4-6h | GitHub Actions hosted runner already meets SLSA-L3; we just need the `actions/attest-build-provenance` step |
-| C-2 | **Reproducible builds** for bash/JS/Python release artifacts | v1.0 | days, multi-language | Assess scope per-language; bash scripts are trivially reproducible, JS bundles need lockfile + tooling pinning. Combined with C-1 in PR #95's spec. |
+| C-1 | **SLSA-oriented provenance** — extend `release.yml` to emit + sign provenance attestations | v1.0 | 4-6h | `actions/attest-build-provenance` is necessary but not sufficient; the per-item spec must prove the workflow permissions, trigger controls, and builder isolation before any SLSA-level claim. |
+| C-2 | **Reproducible release artifacts** for bash/JS release outputs | v1.0 | days, multi-language | Scope v1.0 to artifacts emitted by `release.yml`; Python scripts are tracked as a later v1.x extension unless they become release-built artifacts. Combined with C-1 in PR #95's spec. |
 | C-3 | **Pre-commit framework integration** for gitleaks (alongside the raw git hook) | v0.4.1 | 2-4h | `.pre-commit-config.yaml` ships; operator chooses |
 
 ### Layer D — Community / governance (1 item)
@@ -105,7 +109,7 @@ The per-session ephemeral key (Ed25519) is generated at session start, stored at
 
 ### DEC-3 — Tamper-evident log: hybrid local + Rekor for public attestation
 
-- **Local Merkle hash-chain** over `~/.config/walter-os/audit/<date>.jsonl` files. Each row's last field is `prev_hash = sha256(prev_row_normalized)`. `walter-os audit verify-chain` walks the chain end-to-end.
+- **Local linear hash-chain** over `~/.config/walter-os/audit/<date>.jsonl` files. Each row's last field is `prev_hash = sha256(prev_row_normalized)`. `walter-os audit verify-chain` walks the chain end-to-end.
 - **Optional Sigstore Rekor upload** of daily-summary digests (NOT per-row content). Operator can opt in via `WALTER_AUDIT_REKOR_UPLOAD=1`. Walter-OS keeps the canonical `{date, root, operator, walter_os_version}` payload in the local receipt and submits its signed SHA-256 digest as a Rekor `hashedrekord`. No log content leaves the machine, and recovery still requires the local receipt or an external backup of that payload metadata.
 
 **Rejected**: full per-row Rekor upload. Privacy + cost; daily root hash is enough for tamper detection.
@@ -178,8 +182,8 @@ The roadmap mitigates each of the listed gaps:
 | Gap | Mitigation | Item |
 |---|---|---|
 | Prompt-injection → unrecognized command class → operator-full POSIX permissions | nsjail/sandbox-exec wrapper; egress allowlist; capability tokens | A-1, A-2, A-3 |
-| Compromised local process tampers with audit log | Merkle chain detects retroactive edits; Rekor opt-in attests to chain root publicly | B-1, B-2 |
-| Tampered release artifact (build-time MITM) | SLSA-L3 provenance from GH Actions runner; reproducible builds for our pipeline | C-1, C-2 |
+| Compromised local process tampers with audit log | Linear hash-chain detects retroactive edits; Rekor opt-in attests to chain root publicly | B-1, B-2 |
+| Tampered release artifact (build-time MITM) | Signed provenance from the release pipeline; reproducible builds for release artifacts | C-1, C-2 |
 | Bug-bounty researcher wants to report; no CVE channel | GH Security Advisories partner | D-1 |
 | Long-running session forgotten / left idle | Time-bounded sessions kill on idle | A-4 |
 
@@ -188,7 +192,7 @@ The roadmap mitigates each of the listed gaps:
 1. **Sandbox profile defaults**: should `nsjail` default to "deny everything except explicit allowlist" or "deny network + raw filesystem outside repo, allow everything else"? Proposal: latter (less footgun for first-time adopters); operators harden via override.
 2. **Rekor upload default**: opt-in (proposal — `WALTER_AUDIT_REKOR_UPLOAD=1` required) or opt-out? Default proposed: opt-in. Sigstore Rekor is public; not every operator wants their session timestamps published.
 3. **Per-session keypair lifetime**: 8 hours (proposal — fits a single workday), 24 hours, or operator-configurable via `WALTER_SESSION_KEY_TTL`? Default proposed: 8 hours with operator override.
-4. **Reproducible-builds language scope for C-2**: bash + JS only (proposal — covers `release.yml` + `apps/control-tower`)? Or include Python (`scripts/walter/lib/*.py`)? Default proposed: bash + JS for v1.0; Python in v1.x.
+4. **Reproducible-builds language scope for C-2**: bash + JS only (proposal — covers `release.yml` + `apps/control-tower`)? Or include Python helper scripts if they become release-built artifacts? Default proposed: bash + JS for v1.0; Python release artifacts in v1.x.
 
 ## Out of scope for this umbrella
 
