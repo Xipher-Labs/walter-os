@@ -233,9 +233,10 @@ fi
 #
 # The SHELL-FORMAT positional arg tells envsubst which $-references to
 # expand; any $-reference whose name is not in the list is left alone.
+# shellcheck disable=SC2016 # envsubst shell-format must stay literal.
 WALTER_DOMAIN="$WALTER_DOMAIN" \
 WALTER_ADMIN_EMAIL="${WALTER_ADMIN_EMAIL:-admin@example.com}" \
-  envsubst "\$WALTER_DOMAIN \$WALTER_ADMIN_EMAIL" < "$CADDY_TEMPLATE" > "$CADDY_FILE"
+  envsubst '$WALTER_DOMAIN $WALTER_ADMIN_EMAIL' < "$CADDY_TEMPLATE" > "$CADDY_FILE"
 
 ok "Caddyfile rendered to: $CADDY_FILE"
 
