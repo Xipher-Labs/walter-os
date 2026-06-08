@@ -9,7 +9,15 @@
  * Reviewer round 1 finding: history JSONL unbounded + race condition.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from "fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import * as path from "path";
 import * as os from "os";
 
@@ -72,6 +80,14 @@ describe("atomicAppend [history concurrency]", () => {
     const content = readFileSync(TEST_FILE, "utf-8");
     expect(content).toContain('"session_id":"s1"');
     expect(content.endsWith("\n")).toBe(true);
+  });
+
+  it("tightens an existing parent directory to owner-only permissions", () => {
+    chmodSync(TEST_DIR, 0o777);
+
+    atomicAppend(TEST_FILE, '{"session_id":"s1","ts":"2026-01-01"}');
+
+    expect(statSync(TEST_DIR).mode & 0o777).toBe(0o700);
   });
 
   it("handles concurrent writes without corruption", async () => {

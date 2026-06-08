@@ -3,7 +3,7 @@
  *
  * Extracted from history.ts to be unit-testable.
  * Provides:
- * - atomicAppend: uses write-to-tmp + rename for crash safety
+ * - atomicAppend: uses write-to-tmp + rename to avoid partial writes
  * - pruneIfNeeded: caps the file at maxLines, keeping the most recent entries
  *
  * Refs: docs/specs/walter-council-v2.md
@@ -11,6 +11,7 @@
  */
 
 import {
+  chmodSync,
   existsSync,
   readFileSync,
   writeFileSync,
@@ -22,10 +23,10 @@ import * as path from "path";
 /**
  * Append a single JSONL line to the file.
  *
- * Uses a write-to-tmp-then-rename pattern for atomicity: the final rename
- * is atomic on POSIX filesystems (same mount), preventing interleaved writes
- * from corrupting the file. On Windows (non-production target) falls back
- * to direct append.
+ * Uses a write-to-tmp-then-rename pattern so readers see either the previous
+ * file or the complete replacement file. The final rename is atomic on POSIX
+ * filesystems when the temp file is on the same mount. On Windows
+ * (non-production target) falls back to direct append.
  *
  * Note: this approach is not safe for very high-frequency concurrent writes
  * (last-writer-wins on concurrent renames). For the council-chat use case
@@ -35,6 +36,11 @@ import * as path from "path";
 export function atomicAppend(filePath: string, jsonLine: string): void {
   const dir = path.dirname(filePath);
   mkdirSync(dir, { recursive: true });
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // Best effort: directory creation/write behavior remains non-fatal below.
+  }
 
   // Read existing content (may not exist yet)
   const existing = existsSync(filePath)
