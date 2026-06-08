@@ -128,10 +128,15 @@ n8n basic auth catches every one of those.
    basic-auth variables are not exported, deploy generates
    `N8N_BASIC_AUTH_USER=walter-admin` and a random password.
 
+   If you store these values in Infisical:
+
    ```bash
    cd /opt/walter-vm/services/n8n
    infisical run --env=prod -- bash deploy.sh
    ```
+
+   If you store them in a password manager instead, paste/export them into
+   the current shell and run `bash deploy.sh` from the same directory.
 
    Note: `walter-os secrets-pull` is the DEPRECATED Bitwarden/
    Vaultwarden bridge (see `bin/walter-os`) and does NOT sync from
@@ -141,7 +146,7 @@ n8n basic auth catches every one of those.
    `--env-file .env` per `deploy.sh`):
 
    ```bash
-   cd setup/walter-host/services/n8n
+   cd /opt/walter-vm/services/n8n
    docker compose --env-file .env up -d
    ```
 

@@ -65,6 +65,8 @@ file_mode() {
   grep -q 'Cloudflare Access' "$README"
   grep -q 'N8N_BASIC_AUTH_PASSWORD' "$README"
   grep -q 'infisical run --env=prod -- bash deploy.sh' "$README"
+  grep -q 'password manager instead' "$README"
+  grep -q 'cd /opt/walter-vm/services/n8n' "$README"
   if grep -q 'infisical export .*>> .env' "$README"; then
     return 1
   fi
@@ -193,6 +195,29 @@ ENV
   [[ "$output" != *"encryption-secret"* ]]
   [[ "$output" != *"operator-user"* ]]
   [[ "$output" != *"provided-secret"* ]]
+}
+
+@test "n8n deploy.sh requires WALTER_DOMAIN before full deploy work (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+  cat > "$TMP_SVC/.env" <<'ENV'
+N8N_PG_PASS=pg
+N8N_ENCRYPTION_KEY=encryption
+N8N_BASIC_AUTH_USER=operator
+N8N_BASIC_AUTH_PASSWORD=provided-secret
+ENV
+  chmod 600 "$TMP_SVC/.env"
+
+  run env -u WALTER_DOMAIN SVC_DIR="$TMP_SVC" bash "$DEPLOY"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"WALTER_DOMAIN is required"* ]]
+  [[ "$output" != *"docker compose pull"* ]]
+}
+
+@test "n8n deploy.sh checks cloudflared route with fixed-string grep (P1-03)" {
+  [ -f "$DEPLOY" ]
+  grep -q 'grep -Fq "n8n.${WALTER_DOMAIN}"' "$DEPLOY"
 }
 
 @test "n8n deploy.sh treats blank quoted/whitespace auth values as missing (P1-03)" {

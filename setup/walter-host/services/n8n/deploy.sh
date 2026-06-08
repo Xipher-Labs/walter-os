@@ -123,9 +123,14 @@ if [[ "${N8N_DEPLOY_ENV_ONLY:-0}" == "1" ]]; then
   exit 0
 fi
 
+if [[ -z "${WALTER_DOMAIN:-}" ]]; then
+  echo "ERROR: WALTER_DOMAIN is required for full n8n deploy." >&2
+  exit 2
+fi
+
 # 2. Make sure cloudflared route exists for n8n.${WALTER_DOMAIN}
 if command -v cloudflared >/dev/null; then
-  if ! cloudflared tunnel route ip list 2>/dev/null | grep -q "n8n.${WALTER_DOMAIN}"; then
+  if ! cloudflared tunnel route ip list 2>/dev/null | grep -Fq "n8n.${WALTER_DOMAIN}"; then
     echo "→ cloudflared route for n8n.${WALTER_DOMAIN} not detected"
     echo "  Add manually to your cloudflared config.yml:"
     echo "    - hostname: n8n.${WALTER_DOMAIN}"
