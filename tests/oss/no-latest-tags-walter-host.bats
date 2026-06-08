@@ -22,8 +22,6 @@ SERVICES_DIR="$REPO_ROOT/setup/walter-host/services"
 # - leading whitespace + '#'  : commented-out compose / Dockerfile lines
 # - walter-control-tower:latest : LOCAL build image, not a registry pull;
 #                                 tracked separately, low supply-chain risk
-# - 'image: ghcr.io/xqdoo00o/chatgpt-to-api:latest' inside a comment block
-#   in llm-proxies/compose.yml: opt-in alternative documented but not used.
 #
 # Any new exception MUST be exact-match scoped here and justified in
 # the PR body that adds it. Do not add broad substring exclusions:
@@ -32,7 +30,6 @@ _filter_known_exceptions() {
   awk '
     /^[[:space:]]*#/ { next }
     /^[[:space:]]*image:[[:space:]]+walter-control-tower:latest([[:space:]]|$)/ { next }
-    /^[[:space:]]*image:[[:space:]]+ghcr[.]io\/xqdoo00o\/chatgpt-to-api:latest([[:space:]]|$)/ { next }
     { print }
   '
 }
@@ -121,16 +118,18 @@ _assert_no_unfiltered_matches() {
     "$SERVICES_DIR" --include='Dockerfile*'
 }
 
-@test "openclaw compose pins openclaw npm package to a version (P1-01)" {
+@test "openclaw compose pins openclaw npm package to a packed version (P1-01)" {
   local compose="$SERVICES_DIR/openclaw/compose.yml"
   [ -f "$compose" ]
+  uncommented="$(grep -Ev '^[[:space:]]*#' "$compose")"
 
-  # Must reference openclaw@<version>, never openclaw@latest, never bare openclaw
-  grep -q 'npm install -g openclaw@[0-9]' "$compose"
-  if grep -qE "npm install -g openclaw@latest${TAG_BOUNDARY}" "$compose"; then
+  # Must pack openclaw@${OC_VER} where OC_VER is an explicit version.
+  grep -qE 'OC_VER=[0-9]+[.][0-9]+[.][0-9]+' "$compose"
+  grep -qF "npm pack openclaw@\${OC_VER}" "$compose"
+  if printf '%s\n' "$uncommented" | grep -qE "openclaw@latest${TAG_BOUNDARY}"; then
     return 1
   fi
-  if grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN" "$compose"; then
+  if printf '%s\n' "$uncommented" | grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN"; then
     return 1
   fi
 }
