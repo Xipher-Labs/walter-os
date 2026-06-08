@@ -35,6 +35,9 @@ set -euo pipefail
 
 expr="${1:-}"
 file="${2:-}"
+if [[ "$file" == "--" ]]; then
+  file="${3:-}"
+fi
 
 case "$expr" in
   ".agents."*".tier // "*)
@@ -953,7 +956,7 @@ EOF
   export WALTER_AGENT_NAME=test-agent
   # Do NOT set WALTER_AGENT_ALLOW_OVERRIDE — the env var must be ignored.
 
-  run "$HOOK" check "rm -rf /var/lib" --tool Bash
+  run "$HOOK" check "auth/index.ts" --tool Edit
   # 7 = blocked. If the override leaked through, it would be 0 (allowed).
   [[ "$status" -eq 7 ]]
   echo "$output" | grep -qi 'WALTER_STANDING_APPROVALS env var is ignored' || echo "(warn message check is best-effort — stderr may be captured separately)"
@@ -978,6 +981,30 @@ EOF
   export WALTER_STANDING_APPROVALS_OVERRIDE="$override_file"
   export WALTER_AGENT_NAME=test-agent
 
-  run "$HOOK" check "git push origin main" --tool Bash
+  run "$HOOK" check "auth/index.ts" --tool Edit
   [[ "$status" -eq 7 ]]
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  run "$HOOK" check "auth/index.ts" --tool Edit
+  [[ "$status" -eq 0 ]]
+}
+
+@test "P1-06: WALTER_STANDING_APPROVALS_OVERRIDE rejects option-like paths" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  local override_file="$WALTER_CONFIG/-override-approvals.yml"
+  cat > "$override_file" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  export WALTER_STANDING_APPROVALS_OVERRIDE="-override-approvals.yml"
+  export WALTER_AGENT_NAME=test-agent
+
+  run bash -c "cd '$WALTER_CONFIG' && '$HOOK' check 'auth/index.ts' --tool Edit"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ invalid[[:space:]]standing-approvals[[:space:]]override[[:space:]]path ]]
 }

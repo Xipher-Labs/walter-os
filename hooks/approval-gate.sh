@@ -84,10 +84,34 @@ audit_dependency_failure_best_effort() {
 # same shell. It exists for testing the gate against synthetic
 # approvals files; using it logs a WARN to stderr every invocation.
 STANDING_APPROVALS="$WALTER_CONFIG/agent-approvals.yml"
+STANDING_APPROVALS_INVALID_REASON=""
+validate_standing_approvals_override_path() {
+  local override_path="$1"
+
+  if [[ "$override_path" == -* ]]; then
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: option-like paths are not allowed"
+    return 1
+  fi
+  if [[ ! -f "$override_path" ]]; then
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: file does not exist or is not regular"
+    return 1
+  fi
+  return 0
+}
+
+approval_gate_yq_read() {
+  local expr="$1" file="$2"
+  yq "$expr" -- "$file"
+}
+
 if [[ "${WALTER_AGENT_ALLOW_OVERRIDE:-0}" == "1" \
       && -n "${WALTER_STANDING_APPROVALS_OVERRIDE:-}" ]]; then
-  echo "approval-gate: WARN — using override standing-approvals path: $WALTER_STANDING_APPROVALS_OVERRIDE" >&2
-  STANDING_APPROVALS="$WALTER_STANDING_APPROVALS_OVERRIDE"
+  if validate_standing_approvals_override_path "$WALTER_STANDING_APPROVALS_OVERRIDE"; then
+    echo "approval-gate: WARN — using override standing-approvals path: $WALTER_STANDING_APPROVALS_OVERRIDE" >&2
+    STANDING_APPROVALS="$WALTER_STANDING_APPROVALS_OVERRIDE"
+  else
+    echo "approval-gate: WARN — $STANDING_APPROVALS_INVALID_REASON" >&2
+  fi
 elif [[ -n "${WALTER_STANDING_APPROVALS:-}" ]]; then
   # Operator set the old override env var without the allow flag.
   # Ignore it but tell them so they know it's not silently taking effect.
@@ -433,12 +457,12 @@ _trust_tier_allows() {
 
   # Read agent tier
   local tier
-  tier=$(yq ".agents.${agent}.tier // \"\"" "$TRUST_TIERS" 2>/dev/null)
+  tier=$(approval_gate_yq_read ".agents.${agent}.tier // \"\"" "$TRUST_TIERS" 2>/dev/null)
   [[ -z "$tier" || "$tier" == "null" ]] && return 1
 
   # Check per-agent override first
   local override
-  override=$(yq ".agents.${agent}.overrides[\"${category}\"] // \"\"" "$TRUST_TIERS" 2>/dev/null)
+  override=$(approval_gate_yq_read ".agents.${agent}.overrides[\"${category}\"] // \"\"" "$TRUST_TIERS" 2>/dev/null)
   if [[ "$override" == "allow" ]]; then
     return 0
   elif [[ "$override" == "block" ]]; then
@@ -516,7 +540,7 @@ matches_standing_approval() {
 
   # Fetch matching rules: where rules.<key>.agent == $agent
   local rules
-  rules=$(yq ".auto_approved // {} | to_entries[] | select(.value.agent == \"$agent\") | .key" "$STANDING_APPROVALS" 2>/dev/null)
+  rules=$(approval_gate_yq_read ".auto_approved // {} | to_entries[] | select(.value.agent == \"$agent\") | .key" "$STANDING_APPROVALS" 2>/dev/null)
   [[ -z "$rules" ]] && return 1
 
   # For each rule, check tool/target constraint heuristically.
@@ -567,7 +591,7 @@ apply_trust_tier() {
     if ! _trust_tier_allows "$agent" "$category"; then
       local agent_tier
       if [[ -f "$TRUST_TIERS" ]] && command -v yq >/dev/null 2>&1; then
-        agent_tier=$(yq ".agents.${agent}.tier // \"unknown\"" "$TRUST_TIERS" 2>/dev/null || echo "unknown")
+        agent_tier=$(approval_gate_yq_read ".agents.${agent}.tier // \"unknown\"" "$TRUST_TIERS" 2>/dev/null || echo "unknown")
       else
         agent_tier="unavailable"
       fi
@@ -757,6 +781,10 @@ if [[ $# -gt 0 ]]; then
       # Panic lock check — must run before any pattern matching.
       check_panic_lock || true
 
+      if [[ -n "$STANDING_APPROVALS_INVALID_REASON" && "$PANIC_LOCKED" -eq 0 ]]; then
+        block "$STANDING_APPROVALS_INVALID_REASON"
+      fi
+
       if [[ "$decision" == "allow" ]]; then
         analyze "$cli_tool" "$cli_command"
       fi
@@ -910,6 +938,10 @@ esac
 
 # Panic lock check — must run before any pattern matching.
 check_panic_lock || true
+
+if [[ -n "$STANDING_APPROVALS_INVALID_REASON" && "$PANIC_LOCKED" -eq 0 ]]; then
+  block "$STANDING_APPROVALS_INVALID_REASON"
+fi
 
 if [[ "$decision" == "allow" ]]; then
   analyze "$tool" "$payload"
