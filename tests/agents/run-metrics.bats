@@ -48,6 +48,19 @@ teardown() {
   grep -q "walter_agent_select_model" "$RUN_SH"
 }
 
+@test "run.sh fails closed before sourcing model-selection helper" {
+  local guard_line exit_line source_line
+  guard_line=$(grep -nF '[[ -r "$LIB_DIR/model-selection.sh" ]]' "$RUN_SH" | head -1 | cut -d: -f1)
+  source_line=$(grep -n 'source "$LIB_DIR/model-selection\.sh"' "$RUN_SH" | head -1 | cut -d: -f1)
+  exit_line=$(awk -v start="$guard_line" -v end="$source_line" 'NR >= start && NR < end && /exit 3/ { print NR; exit }' "$RUN_SH")
+
+  [[ -n "$guard_line" ]]
+  [[ -n "$exit_line" ]]
+  [[ -n "$source_line" ]]
+  [[ "$guard_line" -lt "$source_line" ]]
+  [[ "$exit_line" -lt "$source_line" ]]
+}
+
 @test "run.sh maps Council agents to model routing domains" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"

@@ -65,6 +65,10 @@ LIB_DIR="$SCRIPT_DIR/lib"
 source "$LIB_DIR/plane.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/llm.sh"
+[[ -r "$LIB_DIR/model-selection.sh" ]] || {
+  echo "agents/run.sh: model-selection.sh not found or unreadable at $LIB_DIR/model-selection.sh (run install.sh?)" >&2
+  exit 3
+}
 # shellcheck disable=SC1091
 source "$LIB_DIR/model-selection.sh"
 # shellcheck disable=SC1091
