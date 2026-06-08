@@ -39,8 +39,13 @@ for arg in "$@"; do
   esac
 done
 
+WALTER_LOG_SH="$WALTER_OS_HOME/scripts/walter/lib/log.sh"
+if [[ ! -f "$WALTER_LOG_SH" ]]; then
+  echo "doctor: invalid WALTER_OS_HOME value (missing scripts/walter/lib/log.sh)" >&2
+  exit 2
+fi
 # shellcheck source=/dev/null
-source "$WALTER_OS_HOME/scripts/walter/lib/log.sh"
+source "$WALTER_LOG_SH"
 
 ok=0; warn=0; fail=0
 
@@ -129,17 +134,27 @@ doctor_command_has_hook_token() {
   local command="$1"
   local hook_path="$2"
   local token
+  local glob_was_on=0
+  local found=1
 
+  case "$-" in
+    *f*) glob_was_on=1 ;;
+    *) set -f ;;
+  esac
   for token in $command; do
     token="${token#\"}"
     token="${token%\"}"
     token="${token#\'}"
     token="${token%\'}"
     if [[ "$token" == "$hook_path" ]]; then
-      return 0
+      found=0
+      break
     fi
   done
-  return 1
+  if [[ "$glob_was_on" -eq 0 ]]; then
+    set +f
+  fi
+  return "$found"
 }
 
 doctor_claude_hook_present() {

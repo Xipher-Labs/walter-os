@@ -304,6 +304,16 @@ SH
   [[ "$output" == *"absolute path"* ]]
 }
 
+@test "walter doctor rejects WALTER_OS_HOME without log library" {
+  local fake_root="$BATS_TEST_TMPDIR/fake-root-no-log"
+  mkdir -p "$fake_root/scripts/walter/lib"
+
+  run env WALTER_OS_HOME="$fake_root" "${REPO_ROOT}/scripts/walter/subcommands/doctor.sh" --client-only
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"missing scripts/walter/lib/log.sh"* ]]
+}
+
 @test "walter doctor --client-only: source-level CLIENT_ONLY gate exists for SSH" {
   # Verify the gating exists in the script source. Functional output assertion
   # was flaky (env-dependent: operator's local env may have walter-vm reachable
