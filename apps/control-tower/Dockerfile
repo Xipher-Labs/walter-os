@@ -34,8 +34,10 @@ ENV NODE_ENV=production
 
 # Council toggle (#176) needs bash + jq + the walter-os CLI to call
 # `walter-os mode consensus on|off` via execFile from /api/mode.
-# node:22-alpine is BusyBox-based; install bash + jq explicitly.
-RUN apk add --no-cache bash jq
+# node:22-alpine is BusyBox-based; install bash + jq explicitly. su-exec
+# lets the entrypoint prepare the mounted state volume as root, then drop
+# privileges before starting Next.js.
+RUN apk add --no-cache bash jq su-exec
 
 # Copy built output
 COPY --from=builder /app/apps/control-tower/.next/standalone ./
@@ -58,6 +60,8 @@ RUN chmod +x /usr/local/bin/walter-os
 # node user instead of mounting /root/.config/walter-os.
 RUN mkdir -p /var/lib/walter-os/control-tower \
   && chown -R node:node /var/lib/walter-os/control-tower
+COPY apps/control-tower/docker-entrypoint.sh /usr/local/bin/control-tower-entrypoint
+RUN chmod +x /usr/local/bin/control-tower-entrypoint
 
 EXPOSE 3000
 
@@ -75,6 +79,5 @@ ENV WALTER_OS_HOME=/opt/walter-os
 ENV WALTER_CONFIG=/var/lib/walter-os/control-tower
 ENV WALTER_CONFIG_DIR=/var/lib/walter-os/control-tower
 
-USER node
-
+ENTRYPOINT ["control-tower-entrypoint"]
 CMD ["node", "apps/control-tower/server.js"]

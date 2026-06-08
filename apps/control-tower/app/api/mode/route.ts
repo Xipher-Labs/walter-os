@@ -21,7 +21,9 @@ export const runtime = "nodejs";
 // execFile bypasses /bin/sh and passes args as an array, so metacharacters are inert.
 const execFileAsync = promisify(execFile);
 const CONFIG_DIR =
-  process.env.WALTER_CONFIG_DIR ?? "/var/lib/walter-os/control-tower";
+  process.env.WALTER_CONFIG_DIR ??
+  process.env.WALTER_CONFIG ??
+  "/var/lib/walter-os/control-tower";
 
 export interface ModeState {
   consensus: boolean;
@@ -69,6 +71,11 @@ export async function POST(request: Request): Promise<Response> {
     const walterBin = process.env.WALTER_OS_BIN ?? "/usr/local/bin/walter-os";
     await execFileAsync(walterBin, ["mode", "consensus", action], {
       timeout: 10000,
+      env: {
+        ...process.env,
+        WALTER_CONFIG: process.env.WALTER_CONFIG ?? CONFIG_DIR,
+        WALTER_CONFIG_DIR: CONFIG_DIR,
+      },
     });
     const newState = readModeJson();
     return Response.json(newState);

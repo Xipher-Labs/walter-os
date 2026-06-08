@@ -14,7 +14,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const CONFIG_DIR =
-  process.env.WALTER_CONFIG_DIR ?? "/var/lib/walter-os/control-tower";
+  process.env.WALTER_CONFIG_DIR ??
+  process.env.WALTER_CONFIG ??
+  "/var/lib/walter-os/control-tower";
 const LOG_DIR = process.env.WALTER_COUNCIL_LOG_DIR ?? "/var/log/walter-council";
 
 export interface ConsensusStatus {

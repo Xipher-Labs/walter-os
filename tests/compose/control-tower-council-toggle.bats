@@ -77,12 +77,31 @@ setup() {
   grep -qE "apk add .* jq" "$DOCKERFILE" || grep -qE "apk add .*jq" "$DOCKERFILE"
 }
 
+@test "AC-1 (#176): Dockerfile installs su-exec for privilege drop" {
+  grep -qE "apk add .* su-exec" "$DOCKERFILE" || grep -qE "apk add .*su-exec" "$DOCKERFILE"
+}
+
+@test "AC-1 (#176): Dockerfile uses entrypoint to prepare mode state volume" {
+  grep -qE "^COPY[[:space:]]+apps/control-tower/docker-entrypoint\\.sh[[:space:]]+/usr/local/bin/control-tower-entrypoint" "$DOCKERFILE"
+  grep -qE '^ENTRYPOINT[[:space:]]+\["control-tower-entrypoint"\]' "$DOCKERFILE"
+}
+
 # ---------------------------------------------------------------------------
-# AC-2: container runs as an unprivileged user
+# AC-2: container drops privileges after preparing the volume
 # ---------------------------------------------------------------------------
 
-@test "AC-2 (#176): Dockerfile runs Control Tower as node" {
-  grep -qE "^USER[[:space:]]+node" "$DOCKERFILE"
+@test "AC-2 (#176): entrypoint prepares volume then execs as node" {
+  local entrypoint="$REPO_ROOT/apps/control-tower/docker-entrypoint.sh"
+  [[ -f "$entrypoint" ]]
+  grep -Fq 'chown -R node:node "$WALTER_CONFIG_DIR"' "$entrypoint"
+  grep -Fq 'exec su-exec node "$@"' "$entrypoint"
+}
+
+@test "AC-2 (#176): entrypoint aligns WALTER_CONFIG and WALTER_CONFIG_DIR" {
+  local entrypoint="$REPO_ROOT/apps/control-tower/docker-entrypoint.sh"
+  [[ -f "$entrypoint" ]]
+  grep -Fq 'export WALTER_CONFIG="${WALTER_CONFIG:-$default_state_dir}"' "$entrypoint"
+  grep -Fq 'export WALTER_CONFIG_DIR="${WALTER_CONFIG_DIR:-$WALTER_CONFIG}"' "$entrypoint"
 }
 
 # ---------------------------------------------------------------------------
@@ -122,11 +141,15 @@ setup() {
   awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
     "$ROOT_COMPOSE" \
     | grep -qE 'cap_drop:'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '^[[:space:]]+-[[:space:]]+ALL$'
 }
 
 @test "AC-3 (#176): standalone compose.yml hardens Control Tower privileges" {
   grep -qE 'no-new-privileges:true' "$STANDALONE_COMPOSE"
   grep -qE 'cap_drop:' "$STANDALONE_COMPOSE"
+  grep -qE '^[[:space:]]+-[[:space:]]+ALL$' "$STANDALONE_COMPOSE"
 }
 
 # ---------------------------------------------------------------------------

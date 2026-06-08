@@ -10,7 +10,9 @@ import * as path from "path";
 import { atomicAppend, pruneIfNeeded } from "./history-io";
 
 const CONFIG_DIR =
-  process.env.WALTER_CONFIG_DIR ?? "/var/lib/walter-os/control-tower";
+  process.env.WALTER_CONFIG_DIR ??
+  process.env.WALTER_CONFIG ??
+  "/var/lib/walter-os/control-tower";
 const HISTORY_FILE = path.join(CONFIG_DIR, "council-chat-history.jsonl");
 
 export interface R1Response {
