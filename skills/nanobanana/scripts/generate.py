@@ -7,6 +7,7 @@ Usage:
 """
 import argparse
 import os
+import re
 import sys
 from io import BytesIO
 from pathlib import Path
@@ -19,16 +20,13 @@ MODELS = {
 
 
 def yaml_value(path, key):
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*:\s*(.*?)\s*(?:#.*)?$")
     try:
         with path.open("r", encoding="utf-8") as handle:
             for raw_line in handle:
-                line = raw_line.rstrip("\r\n").lstrip()
-                if not line.startswith(f"{key}:"):
-                    continue
-                value = line.split(":", 1)[1].strip()
-                if " #" in value:
-                    value = value.split(" #", 1)[0].rstrip()
-                return value
+                match = pattern.match(raw_line.rstrip("\r\n"))
+                if match:
+                    return match.group(1).strip()
     except OSError:
         return ""
     return ""
@@ -55,7 +53,8 @@ def validate_gemini_capability():
     if provider_gemini == "disabled":
         print(
             f"nanobanana: provider_gemini is disabled in {path}. "
-            "Run `walter ai configure --set image_generation=gemini` or choose another image workflow.",
+            "Run `walter ai configure --profile mixed --set image_generation=gemini` "
+            "or choose another image workflow.",
             file=sys.stderr,
         )
         sys.exit(3)
