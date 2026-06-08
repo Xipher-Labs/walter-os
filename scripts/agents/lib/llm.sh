@@ -51,12 +51,33 @@ _llm_pick_anthropic_key() {
 # Map our short model tags to actual model IDs.
 _llm_resolve_model() {
   case "$1" in
-    cheap)  echo "claude-haiku-4-5" ;;
+    claude) echo "claude-sonnet-4-5" ;;
     haiku)  echo "claude-haiku-4-5" ;;
     sonnet) echo "claude-sonnet-4-5" ;;
     opus)   echo "claude-opus-4-5" ;;
+    anthropic/claude-*) echo "${1#anthropic/}" ;;
     *)      echo "$1" ;;  # passthrough
   esac
+}
+
+_llm_model_supports_direct_anthropic() {
+  case "${1:-}" in
+    claude|haiku|sonnet|opus|claude-[0-9]*-*|claude-haiku-*|claude-sonnet-*|claude-opus-*|anthropic/claude-*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_llm_explain_direct_runtime_mismatch() {
+  local model_tag="${1:-}"
+  cat >&2 <<EOF
+llm.sh: model '${model_tag}' requires LiteLLM or a matching direct runtime.
+Set LITELLM_BASE_URL + LITELLM_API_KEY, or choose an Anthropic-compatible route
+for direct ANTHROPIC_API_KEY / ANTHROPIC_ENTERPRISE_KEY fallback.
+EOF
 }
 
 # llm_available — returns 0 if at least one LLM endpoint is configured, 1 otherwise.
@@ -155,6 +176,11 @@ llm_invoke() {
       ;;
 
     anthropic)
+      if ! _llm_model_supports_direct_anthropic "$model_tag"; then
+        _llm_explain_direct_runtime_mismatch "$model_tag"
+        return 4
+      fi
+
       local key
       key=$(_llm_pick_anthropic_key) || return 3
       local payload

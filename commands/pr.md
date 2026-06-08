@@ -80,7 +80,8 @@ review rounds:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-review_model="$(walter_model_for backend_review)"
+review_model=""
+walter_model_resolve backend_review review_model
 ```
 
 Default routing prefers Codex for backend/security/infrastructure review and

@@ -20,8 +20,15 @@ env_file_value() {
   [[ -n "$line" ]] || return 1
   value="${line#*=}"
   value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-  value="${value#\"}"; value="${value%\"}"
-  value="${value#\'}"; value="${value%\'}"
+  if [[ "$value" == \"* ]]; then
+    value="${value#\"}"
+    value="${value%%\"*}"
+  elif [[ "$value" == \'* ]]; then
+    value="${value#\'}"
+    value="${value%%\'*}"
+  else
+    value="$(printf '%s' "$value" | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//')"
+  fi
   printf '%s' "$value"
 }
 

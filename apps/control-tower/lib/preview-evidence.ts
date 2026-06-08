@@ -73,7 +73,15 @@ function normalizeArtifactPath(
     return null;
   }
 
-  const normalized = posix.normalize(path);
+  let normalized = posix.normalize(path);
+  const bundlePrefix = new RegExp(
+    `^(?:\\.walter/previews/)?preview-pr-[1-9][0-9]*/(${expectedDir}/.+)$`
+  );
+  const prefixedMatch = bundlePrefix.exec(normalized);
+  if (prefixedMatch !== null) {
+    normalized = prefixedMatch[1];
+  }
+
   if (
     normalized === "." ||
     normalized === ".." ||
@@ -401,7 +409,7 @@ async function readPreviewItem(
     url = result.url;
     generatedAt = result.generatedAt;
     if (result.seedPath !== null && !(await isExistingFile(join(bundlePath, result.seedPath)))) {
-      findings.push("preview report seed file missing on disk");
+      findings.push("preview report seed file missing or unreadable on disk");
       reportValid = false;
     }
     let missingScreenshots = false;
@@ -411,7 +419,7 @@ async function readPreviewItem(
       }
     }
     if (missingScreenshots || result.screenshots > screenshotsOnDisk.size) {
-      findings.push("preview report screenshot files missing on disk");
+      findings.push("preview report screenshot files missing or unreadable on disk");
       reportValid = false;
     }
   }

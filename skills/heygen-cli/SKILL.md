@@ -31,11 +31,12 @@ guardrails are layered instead:
   `heygen_generate_from_template`) MUST be preceded by explicit operator
   confirmation in chat per the multi-agent autonomy spec §7.1.
 - **Followup TODO**: a dedicated approval-gate category is tracked as
-  follow-up work (see `docs/specs/ai-spend-tripwire.md`) — it will land
+  follow-up work (see `skills/ai-spend-tripwire/SKILL.md`) — it will land
   in a separate PR after the skill itself is merged.
 
-Read-only endpoints (`list_avatars`, `get_video_status`,
-`list_templates`, `list_voices`) are free and need no confirmation.
+Read-only functions (`heygen_list_avatars`, `heygen_get_video_status`,
+`heygen_list_templates`, `heygen_list_voices`) are free and need no
+confirmation.
 
 ## Setup
 
@@ -46,14 +47,11 @@ Read-only endpoints (`list_avatars`, `get_video_status`,
 3. Store the secret in your secrets manager of choice (Infisical,
    Bitwarden/Vaultwarden, or macOS Keychain — depending on your
    operator overlay). Add `HEYGEN_API_KEY` to your shell environment
-   via the manager-specific flow. Examples:
+   via the manager-specific flow. Example:
 
 ```bash
 # Infisical
 infisical secrets set HEYGEN_API_KEY=hg_v2_... --project walter-shared
-
-# macOS Keychain (via Walter-OS helper)
-scripts/secrets-keychain-init.sh set HEYGEN_API_KEY hg_v2_...
 ```
 
 The current `walter-os secrets-pull` subcommand is the Bitwarden/

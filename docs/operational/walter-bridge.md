@@ -12,7 +12,7 @@ agent.
 
 ## Why a gateway
 
-- **Single endpoint** — write `base_url: https://bridge.your-domain/v1` in
+- **Single endpoint** — write `base_url: https://llm.your-domain/v1` in
   every tool config. Rotate provider API keys in ONE place.
 - **Model aliasing** — use semantic names (`cheap`, `sonnet`, `vision`) in
   your code and configs. Change the underlying model mapping in one file
@@ -69,7 +69,7 @@ All four agent CLIs can be pointed at Walter-Bridge.
 ```json
 {
   "model": "sonnet",
-  "apiBaseUrl": "https://bridge.your-domain/v1",
+  "apiBaseUrl": "https://llm.your-domain/v1",
   "apiKey": "<your-litellm-master-key>"
 }
 ```
@@ -81,7 +81,7 @@ All four agent CLIs can be pointed at Walter-Bridge.
 ```toml
 [provider]
 name = "openai-compatible"
-base_url = "https://bridge.your-domain/v1"
+base_url = "https://llm.your-domain/v1"
 api_key = "<your-litellm-master-key>"
 model = "gpt"
 ```
@@ -92,7 +92,7 @@ model = "gpt"
 
 ```yaml
 provider: openai-compatible
-base_url: https://bridge.your-domain/v1
+base_url: https://llm.your-domain/v1
 api_key: <your-litellm-master-key>
 model: gemini-sub
 ```
@@ -108,7 +108,7 @@ gateway pointer to their own Antigravity config:
 ```yaml
 provider:
   type: openai-compatible
-  base_url: https://bridge.your-domain/v1
+  base_url: https://llm.your-domain/v1
   api_key: <your-litellm-master-key>
 default_model: sonnet
 ```
@@ -116,7 +116,7 @@ default_model: sonnet
 ### Local access (port-forwarded)
 
 For local-only access without exposing through Cloudflared, replace
-`https://bridge.your-domain/v1` with `http://localhost:4000/v1` in
+`https://llm.your-domain/v1` with `http://localhost:4000/v1` in
 any of the configs above.
 
 ## Optional PgBouncer

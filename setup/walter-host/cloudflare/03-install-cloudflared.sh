@@ -76,7 +76,11 @@ CLOUDFLARED_METRICS_ADDR="${CLOUDFLARED_METRICS_ADDR}"
 if ! systemctl is-active --quiet cloudflared; then
   exit 0
 fi
-ready_code=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://\${CLOUDFLARED_METRICS_ADDR}/ready" 2>/dev/null || echo 000)
+if ready_code=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://\${CLOUDFLARED_METRICS_ADDR}/ready" 2>/dev/null); then
+  :
+else
+  ready_code=000
+fi
 case "\${ready_code}" in
   200) exit 0 ;;
   000)

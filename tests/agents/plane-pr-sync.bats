@@ -2,6 +2,8 @@
 # tests/agents/plane-pr-sync.bats
 #
 # Covers: docs/specs/plane-pr-sync.md
+#
+# shellcheck disable=SC2030,SC2031
 
 setup() {
   command -v jq >/dev/null 2>&1 || skip "jq is required"
@@ -227,6 +229,25 @@ combined_output() {
 
   [ "$status" -eq 0 ]
   grep -q 'tea issues comment 7 --repo acme/app' "$CALL_LOG"
+}
+
+@test "AC1: explicitly empty Forgejo author allowlist aborts before Plane review" {
+  export WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS=" , ,, "
+  export TEA_COMMENT_AUTHOR="contributor"
+  export TEA_EXISTING_COMMENTS="[walter-plane-issue:issue-uuid] spoofed"
+
+  run bash "$SCRIPT" link \
+    --issue "issue-uuid" \
+    --pr-url "https://git.example.test/acme/app/pulls/7" \
+    --pr-number "7" \
+    --repo "acme/app" \
+    --branch "feature/thing"
+
+  [ "$status" -eq 3 ]
+  [[ "$(combined_output)" == *"empty WALTER_FORGEJO_WEBHOOK_COMMENT_AUTHORS allowlist"* ]]
+  if grep -q 'state-review' "$CALL_LOG"; then
+    return 1
+  fi
 }
 
 @test "AC1: trusted existing Plane issue marker satisfies binding" {

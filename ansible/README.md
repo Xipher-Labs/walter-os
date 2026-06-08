@@ -128,6 +128,8 @@ Set `service_state` when including the role to reconcile a service lifecycle:
 | `stopped` | Run `docker compose stop`; containers remain defined |
 | `absent` | Run `docker compose down`; containers/networks are removed but the role never removes volumes |
 
+Placement filters only gate the default `present` deployment path. Explicit stopped/absent requests still reconcile an existing service directory, even if the current placement overlay no longer assigns that service to the host.
+
 ## Cloudflared role contract
 
 `roles/cloudflared/` installs the `cloudflared` package and can install the

@@ -46,6 +46,20 @@ teardown() {
   [ "$output" = "claude|brainstorm" ]
 }
 
+@test "model-router: resolve alias assigns without losing domain metadata" {
+  run env WALTER_MODEL_BACKEND_REVIEW=codex bash -c "source '$ROUTER'; model=''; walter_model_resolve backend_review model; printf '%s|%s\n' \"\$model\" \"\$WALTER_MODEL_DOMAIN\""
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "codex|backend_review" ]
+}
+
+@test "model-router: routing examples avoid command substitution when metadata matters" {
+  run bash -c "grep -RInE '=\\\"?\\$\\(walter_model_for (backend_review|frontend|longform|brainstorm)' docs/operational/multi-model-routing.md docs/specs/multi-model-preference-wizard.md skills/web-security-baseline/SKILL.md skills/pr-review/SKILL.md skills/frontend-quality/SKILL.md skills/content-writer/SKILL.md agents/architect.md commands/pr.md"
+
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+}
+
 @test "model-router: WALTER_MODEL_OVERRIDE wins for non-PHI domains" {
   run env WALTER_MODEL_OVERRIDE=gemini-pro WALTER_MODEL_BACKEND_REVIEW=claude bash -c "source '$ROUTER'; walter_model_for backend_review"
 

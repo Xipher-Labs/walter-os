@@ -31,6 +31,7 @@ audit-shell:  ## Run shellcheck on all files in ci.yml shellcheck job (must matc
 		scripts/agents/lib/metrics.sh \
 		scripts/agents/lib/spend.sh \
 		scripts/walter/lib/audit-chain.sh \
+		scripts/walter/lib/env-loader.sh \
 		scripts/walter/lib/feature-state.sh \
 		tests/lint-frontmatter.sh \
 		hooks/approval-gate.sh \

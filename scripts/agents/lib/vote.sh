@@ -53,7 +53,7 @@ _vote_select_model() {
   local router_sh
   router_sh="$(_vote_model_router_sh)"
 
-  if [[ -f "$router_sh" ]]; then
+  if [[ -n "${LITELLM_BASE_URL:-}" && -n "${LITELLM_API_KEY:-}" && -f "$router_sh" ]]; then
     # shellcheck disable=SC1090,SC1091
     source "$router_sh"
     walter_model_select_primary backend_review model || model="haiku"

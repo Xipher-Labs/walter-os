@@ -17,12 +17,15 @@ Planning and architecture work should resolve through the brainstorm route:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-architect_model="$(walter_model_for brainstorm)"
+architect_model=""
+walter_model_resolve brainstorm architect_model
 ```
 
-Default preference is Claude + Codex in parallel for non-trivial plans. The
-operator may add Gemini or other research models through the overlay
-`WALTER_MODEL_BRAINSTORM` value.
+Default brainstorm routing is `claude,codex`; the assignment-style resolver
+selects the primary route for a single `llm_invoke` call while preserving
+domain metadata. Workflows that intentionally run multiple planning models in
+parallel should read the full `walter_model_for brainstorm` route and fan out
+explicitly.
 
 ## Your inputs
 

@@ -16,7 +16,10 @@ setup() {
   ! grep -q 'pg_isready -U litellm' "$COMPOSE_FILE"
   grep -q 'psql -U litellm -d litellm' "$COMPOSE_FILE"
   grep -q 'pg_stat_activity' "$COMPOSE_FILE"
+  grep -q 'pid <> pg_backend_pid()' "$COMPOSE_FILE"
   grep -q "current_setting('max_connections')" "$COMPOSE_FILE"
   grep -q "current_setting('superuser_reserved_connections')" "$COMPOSE_FILE"
   grep -q 'grep -qx 1' "$COMPOSE_FILE"
+  run grep -q 'count(\*) FROM pg_stat_activity;' "$COMPOSE_FILE"
+  [ "$status" -ne 0 ]
 }

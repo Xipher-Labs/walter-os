@@ -53,14 +53,18 @@ this requirement. See the self-host and local-only entries below.
 | CX22 | 2 shared | 4 GB | 40 GB | ~€4.50/mo | Minimum — works, no headroom |
 | CX31 | 2 shared | 8 GB | 80 GB | ~€7.65/mo | Base stack only (no PostHog) |
 | CX41 | 4 shared | 16 GB | 160 GB | ~€15.90/mo | Comfortable with devrel profile |
-| CX52 | 8 shared | 32 GB | 240 GB | ~€35/mo | Headroom for heavy workloads |
-| CX53 | 16 shared | 32 GB | 360 GB | ~€49/mo | Overkill for solo; good for teams |
+| CX52 | 8 shared | 32 GB | 240 GB | ~€35/mo | Headroom for heavy workloads; below FULL profile |
+| CX53 | 16 shared | 32 GB | 360 GB | ~€49/mo | Recommended for walter-host FULL profile |
 | CCX13 | 2 dedicated | 8 GB | 80 GB | ~€14.40/mo | Best price/performance if latency matters |
-| CCX33 | 8 dedicated | 16 GB | 240 GB | ~€36/mo | Recommended for full stack + marketing |
+| CCX33 | 8 dedicated | 16 GB | 240 GB | ~€36/mo | CPU-heavy marketing; below FULL profile |
 
-**Recommended for full stack (marketing core enabled)**:
-**CX41** (4 vCPU, 16 GB RAM) is the minimum comfortable spec once PostHog and
-the full marketing layer are running. The full-stack RAM budget:
+**Recommended for walter-host FULL profile**:
+**CX53-class capacity** (16 vCPU / 32 GB RAM / at least 320 GB SSD) is the
+minimum Hetzner Cloud shape that satisfies the FULL profile preflight. Hetzner's
+CX53 currently provides 360 GB SSD, which clears that 320 GB threshold. CX41
+remains comfortable for the marketing core on smaller profile mixes, but it
+does not satisfy the FULL profile CPU, RAM, or disk thresholds. The full-stack
+RAM budget:
 
 | Service group | Approx RAM |
 |---|---|
@@ -78,10 +82,9 @@ the full marketing layer are running. The full-stack RAM budget:
 | OS + Docker overhead | 1–2 GB |
 | **Total** | **~14–16 GB** |
 
-CX41 (16 GB) fits the full stack with moderate headroom. CX53 (32 GB) is
-comfortable for teams with heavy PostHog event volume or multiple Metabase users.
-CX52 (8 GB) is **insufficient** once PostHog is running — the ClickHouse JVM
-alone needs 2–3 GB.
+CX53 (32 GB) fits the FULL profile with comfortable headroom for teams with
+heavy PostHog event volume or multiple Metabase users. CX52 has enough RAM for
+this budget, but it remains below the FULL profile vCPU and disk thresholds.
 
 **Recommended for lean personal setup (no PostHog / no marketing core)**:
 CX31 (€7.65/mo) is the starting point. Disable the PostHog include: stanza

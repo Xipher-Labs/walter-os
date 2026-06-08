@@ -42,8 +42,16 @@ describe("readPreviewEvidence", () => {
       url: "https://preview.example/pr-235",
       generated_at: "2026-06-04T12:00:00Z",
       bundle_dir: ".walter/previews/preview-pr-235",
-      seed_manifest: { path: "seed/seed.json", sha256: SHA256 },
-      screenshots: [{ path: "screenshots/home.png", sha256: SHA256 }],
+      seed_manifest: {
+        path: ".walter/previews/preview-pr-235/seed/seed.json",
+        sha256: SHA256,
+      },
+      screenshots: [
+        {
+          path: ".walter/previews/preview-pr-235/screenshots/home.png",
+          sha256: SHA256,
+        },
+      ],
       safety: {
         production_secrets: "rejected",
         credentials: "not minted",
@@ -116,7 +124,7 @@ describe("readPreviewEvidence", () => {
       safetyOk: false,
     });
     expect(evidence.previews[0].findings).toContain(
-      "preview report screenshot files missing on disk"
+      "preview report screenshot files missing or unreadable on disk"
     );
   });
 
@@ -187,7 +195,7 @@ describe("readPreviewEvidence", () => {
       safetyOk: false,
     });
     expect(evidence.previews[0].findings).toContain(
-      "preview report screenshot files missing on disk"
+      "preview report screenshot files missing or unreadable on disk"
     );
   });
 
@@ -221,7 +229,7 @@ describe("readPreviewEvidence", () => {
       safetyOk: false,
     });
     expect(evidence.previews[0].findings).toContain(
-      "preview report seed file missing on disk"
+      "preview report seed file missing or unreadable on disk"
     );
   });
 

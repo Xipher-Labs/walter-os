@@ -17,12 +17,11 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened]
 
-# Permissions: read repo content + write PR comments / requested
-# reviewers. The action does NOT need broader scopes.
+# Permissions: read repo content + request PR reviewers. The action does
+# NOT need broader scopes in v1.
 permissions:
   contents: read
-  pull-requests: write   # review-loop action comments / requests PR reviewers
-  issues: write          # review-loop action writes PR thread comments
+  pull-requests: write   # review-loop action requests PR reviewers
 
 jobs:
   review:
@@ -54,8 +53,10 @@ jobs:
             echo "::notice::CODEX_AUTH_JSON not set; Round 2 (Codex review) will skip."
             exit 0
           fi
+          umask 077
           mkdir -p /tmp/codex-minimal
           printf '%s' "$CODEX_AUTH_JSON" > /tmp/codex-minimal/auth.json
+          chmod 600 /tmp/codex-minimal/auth.json
           echo "Codex auth.json mounted at /tmp/codex-minimal/auth.json"
 
       - name: Run Walter-OS review loop

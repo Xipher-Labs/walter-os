@@ -1136,7 +1136,7 @@ check_cap_state() {
   fi
 
   local active_caps_tmp
-  if ! active_caps_tmp="$(mktemp)"; then
+  if ! active_caps_tmp="$(mktemp "${TMPDIR:-/tmp}/walter-cap-state.XXXXXX")"; then
     finding high "cap-state-tempfile-failed" \
       "Could not create temporary file for capability-token state audit" \
       "Check available disk space and temp directory permissions, then rerun the audit"
@@ -1193,6 +1193,12 @@ check_cap_state() {
         "Run: chmod 600 '$private_key'  OR end the session and regenerate capability state"
     fi
 
+    if [[ ! -f "$public_key" ]]; then
+      finding high "cap-state-missing" \
+        "Capability session state references missing public key: $public_key" \
+        "End the stale session or regenerate capability state with walter-os session restart [repo-path]"
+    fi
+
     if [[ ! -d "$caps_dir" ]]; then
       finding high "cap-state-missing" \
         "Capability session state references missing token directory: $caps_dir" \
@@ -1216,7 +1222,7 @@ check_cap_state() {
     [[ -n "$caps_dir" ]] || continue
     if ! grep -Fxq "$caps_dir" "$active_caps_tmp" 2>/dev/null; then
       finding info "cap-cleanup-stale" \
-        "Capability token directory has no matching active session state: $caps_dir" \
+        "Capability token directory has no matching valid active session state: $caps_dir" \
         "Remove stale capability material after confirming no session is active: rm -r '$caps_dir'"
     fi
   done < <(find "$state_dir" -maxdepth 1 -type d -name 'caps-*' -print 2>/dev/null)

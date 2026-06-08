@@ -7,6 +7,15 @@ setup() {
   README="$REPO_ROOT/ansible/README.md"
 }
 
+task_block() {
+  local task_name="$1"
+  awk -v task_name="$task_name" '
+    $0 ~ "^- name: " && index($0, task_name) { flag=1; print; next }
+    flag && $0 ~ "^- name: " { exit }
+    flag { print }
+  ' "$SERVICE_ROLE"
+}
+
 @test "service role declares present stopped absent lifecycle states" {
   [[ -f "$SERVICE_ROLE" ]]
 
@@ -33,12 +42,35 @@ setup() {
   ! grep -Fq "docker compose stop -v" "$SERVICE_ROLE"
 }
 
+@test "stopped state is not gated by service placement" {
+  [[ -f "$SERVICE_ROLE" ]]
+
+  run task_block "check if service dir exists for teardown"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"walter_service_state in ['stopped', 'absent']"* ]]
+  [[ "$output" != *"walter_service_should_deploy"* ]]
+
+  run task_block "docker compose stop"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"walter_service_state == 'stopped'"* ]]
+  [[ "$output" != *"walter_service_should_deploy"* ]]
+}
+
 @test "absent state removes containers without deleting volumes" {
   [[ -f "$SERVICE_ROLE" ]]
 
   grep -Fq "docker compose down" "$SERVICE_ROLE"
   grep -Fq "down_result.stderr | default('')" "$SERVICE_ROLE"
   ! grep -Fq "docker compose down -v" "$SERVICE_ROLE"
+}
+
+@test "absent state is not gated by service placement" {
+  [[ -f "$SERVICE_ROLE" ]]
+
+  run task_block "docker compose down"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"walter_service_state == 'absent'"* ]]
+  [[ "$output" != *"walter_service_should_deploy"* ]]
 }
 
 @test "README documents service_state lifecycle contract" {
@@ -50,4 +82,5 @@ setup() {
   grep -Fq "absent" "$README"
   grep -Fq 'default `present` state' "$README"
   grep -Fq "never removes volumes" "$README"
+  grep -Fq "Explicit stopped/absent requests still reconcile an existing service directory" "$README"
 }
