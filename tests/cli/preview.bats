@@ -169,6 +169,22 @@ SH
   [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
 }
 
+@test "preview capture rejects oversized wait-ms before arithmetic" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --wait-ms 999999999999999999999999999999999999
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"--wait-ms must be <= 30000"* ]]
+  [[ "$output" != *"value too great for base"* ]]
+  [[ ! -e "$FAKE_NPX_LOG" ]]
+}
+
 @test "preview capture rejects non-http preview URLs" {
   install_fake_npx
 
