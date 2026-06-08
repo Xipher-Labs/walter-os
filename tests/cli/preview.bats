@@ -444,6 +444,7 @@ SH
   printf '{"users":[{"id":"dash-demo"}]}\n' > ./-seed.json
   printf 'fake png bytes\n' > ./-screen.png
   fake_bin="$TMP_DIR/fake-cp-bin"
+  real_cp="$(command -v cp)"
   mkdir -p "$fake_bin"
   cat > "$fake_bin/cp" <<'SH'
 #!/usr/bin/env bash
@@ -454,9 +455,10 @@ for arg in "$@"; do
     exit 64
   fi
 done
-exec /bin/cp "$@"
+exec "${REAL_CP:?}" "$@"
 SH
   chmod +x "$fake_bin/cp"
+  export REAL_CP="$real_cp"
   export PATH="$fake_bin:$PATH"
 
   run bash "$WALTER_OS_BIN" preview bundle \
