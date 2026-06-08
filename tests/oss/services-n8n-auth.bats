@@ -109,6 +109,20 @@ file_mode() {
   grep -qE '^N8N_BASIC_AUTH_PASSWORD=[0-9a-f]{48}$' "$TMP_SVC/.env"
 }
 
+@test "n8n deploy.sh trims env override values before writing .env (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" \
+    N8N_BASIC_AUTH_USER=' operator ' \
+    N8N_BASIC_AUTH_PASSWORD=' provided-secret ' \
+    bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  grep -q '^N8N_BASIC_AUTH_USER=operator$' "$TMP_SVC/.env"
+  grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
+}
+
 @test "n8n deploy.sh rejects multiline basic-auth values before writing .env (P1-03)" {
   TMP_SVC="$(mktemp -d)"
   cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
@@ -159,6 +173,26 @@ ENV
 
   [ "$status" -eq 0 ]
   [ "$(file_mode "$TMP_SVC/.env")" = "600" ]
+}
+
+@test "n8n deploy.sh does not print secret values to stdout (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+  cat > "$TMP_SVC/.env" <<'ENV'
+N8N_PG_PASS=pg-secret
+N8N_ENCRYPTION_KEY=encryption-secret
+N8N_BASIC_AUTH_USER=operator-user
+N8N_BASIC_AUTH_PASSWORD=provided-secret
+ENV
+  chmod 600 "$TMP_SVC/.env"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"pg-secret"* ]]
+  [[ "$output" != *"encryption-secret"* ]]
+  [[ "$output" != *"operator-user"* ]]
+  [[ "$output" != *"provided-secret"* ]]
 }
 
 @test "n8n deploy.sh treats blank quoted/whitespace auth values as missing (P1-03)" {

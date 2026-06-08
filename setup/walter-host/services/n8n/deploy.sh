@@ -25,9 +25,13 @@ random_hex() {
 
 trim_whitespace() {
   local value="$1"
-  value="${value#"${value%%[![:space:]]*}"}"
-  value="${value%"${value##*[![:space:]]}"}"
-  printf '%s\n' "$value"
+  case "$value" in
+    *$'\n'*|*$'\r'*)
+      printf '%s\n' "$value"
+      return 0
+      ;;
+  esac
+  printf '%s\n' "$value" | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print }'
 }
 
 env_or_default() {
@@ -42,7 +46,7 @@ env_or_default() {
     printf '%s\n' "$default"
     return 0
   fi
-  printf '%s\n' "$value"
+  printf '%s\n' "$trimmed"
 }
 
 env_value_present() {
@@ -163,9 +167,7 @@ echo "  2. Skip telemetry / personalization"
 echo "  3. Add credentials for: Anthropic (via LiteLLM at llm.${WALTER_DOMAIN}),"
 echo "     GitHub (PAT), Plane (PAT), Telegram bot (token from BotFather)"
 echo
-echo "ENCRYPTION KEY backup — copy to Infisical workspace=walter-vm-internal env=prod:"
-grep N8N_ENCRYPTION_KEY "$ENV_FILE"
+echo "ENCRYPTION KEY backup — copy N8N_ENCRYPTION_KEY from $ENV_FILE to Infisical workspace=walter-vm-internal env=prod."
 echo
-echo "Basic-auth credentials were written to $ENV_FILE; copy them to your password manager / Infisical."
-grep N8N_BASIC_AUTH_USER "$ENV_FILE"
+echo "Basic-auth credentials were written to $ENV_FILE; copy N8N_BASIC_AUTH_USER and N8N_BASIC_AUTH_PASSWORD to your password manager / Infisical."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
