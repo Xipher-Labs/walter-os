@@ -36,6 +36,11 @@ model=""
 walter_model_resolve backend_review model
 ```
 
+`walter_model_resolve` assigns the primary route and preserves
+`WALTER_MODEL_DOMAIN` for the next `llm_invoke` call. Use `walter_model_for`
+when a caller intentionally needs the full comma-separated route for its own
+parallel fan-out logic.
+
 ## Domains
 
 | Domain | Env var | Default | Intended use |
