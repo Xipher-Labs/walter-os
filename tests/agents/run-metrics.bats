@@ -42,7 +42,7 @@ teardown() {
   grep -q "walter_council_tokens_total" "$RUN_SH"
 }
 
-@test "run.sh sources model-router.sh for Council model selection" {
+@test "run.sh wires Council model selection through model-selection helper" {
   grep -q "model-router\.sh" "$RUN_SH"
   grep -q "model-selection\.sh" "$RUN_SH"
   grep -q "walter_agent_select_model" "$RUN_SH"

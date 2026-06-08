@@ -80,5 +80,5 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "sonnet"
+  [ "${lines[-1]}" = "sonnet" ]
 }

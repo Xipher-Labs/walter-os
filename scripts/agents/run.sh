@@ -542,7 +542,7 @@ metric_set "walter_council_heartbeat_age_seconds" "agent=\"${AGENT}\"" 0 || true
 if [[ "$RESULT_LABEL" == "success" ]]; then
   _LESSON_EXTRACT_RUNNER="$(mktemp -t walter-lesson-runner.XXXXXX)"
   LESSON_MODEL=""
-  walter_agent_select_model default LESSON_MODEL sonnet || LESSON_MODEL="sonnet"
+  walter_agent_select_model default LESSON_MODEL sonnet
   # Note: _LESSON_EXTRACT_RUNNER is cleaned by the consolidated _run_cleanup trap above.
   # SECURITY: WALTER_LESSON_TITLE is exported so it reaches the runner via env.
   # TITLE must NOT be interpolated into the heredoc — it comes from Plane and is

@@ -75,6 +75,9 @@ walter_agent_select_model() {
     fi
   fi
 
-  [[ "$var_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 3
+  if [[ ! "$var_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "agents/model-selection.sh: invalid output variable name '${var_name}'." >&2
+    return 3
+  fi
   printf -v "$var_name" '%s' "$model"
 }
