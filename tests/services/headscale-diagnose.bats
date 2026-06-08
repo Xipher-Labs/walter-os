@@ -63,6 +63,13 @@ setup() {
 @test "headscale diagnose falls back to compose image when docker exec fails" {
   [[ -x "$DIAGNOSE" ]]
 
+  compose_file="$BATS_TEST_TMPDIR/compose.yml"
+  cat >"$compose_file" <<'EOF'
+services:
+  headscale:
+    image: headscale/headscale:9.9.9-test
+EOF
+
   cat >"$TEST_BIN/docker" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$1" == "exec" ]]; then
@@ -76,10 +83,10 @@ exit 1
 EOF
   chmod +x "$TEST_BIN/docker"
 
-  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE" --compose "$compose_file"
 
   [ "$status" -eq 0 ]
-  echo "$output" | grep -Fq "Headscale: Headscale 0.26.0"
+  echo "$output" | grep -Fq "Headscale: Headscale 9.9.9-test"
   echo "$output" | grep -Fq "no known capability-version drift signature"
 }
 

@@ -7,31 +7,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${WALTER_HEADSCALE_COMPOSE:-${SCRIPT_DIR}/compose.yml}"
 CONTAINER="${WALTER_HEADSCALE_CONTAINER:-headscale}"
 SINCE="${WALTER_HEADSCALE_LOG_SINCE:-10m}"
+RUNBOOK_PATH="${SCRIPT_DIR}/RUNBOOK.md"
 MOCK_LOG=""
 HEADSCALE_VERSION_OVERRIDE=""
 TAILSCALE_VERSION_OVERRIDE=""
 
 usage() {
-  cat <<'EOF'
-Usage: diagnose.sh [options]
-
-Read-only diagnostic for Headscale client registration failures.
-
-Options:
-  --compose <path>              Compose file to inspect (default: service compose.yml)
-  --container <name>            Headscale container name (default: headscale)
-  --since <duration>            docker logs window (default: 10m)
-  --mock-log <path>             Read log text from a file instead of docker logs
-  --headscale-version <text>    Test override for detected Headscale version
-  --tailscale-version <text>    Test override for detected Tailscale client version
-  -h, --help                    Show this help
-
-Exit codes:
-  0  No known registration drift signature found
-  1  Known Headscale/Tailscale capability-version drift signature found
-  2  Invalid arguments or unreadable mock log
-  3  Unable to inspect Headscale logs
-EOF
+  printf '%s\n' \
+    'Usage: diagnose.sh [options]' \
+    '' \
+    'Read-only diagnostic for Headscale client registration failures.' \
+    '' \
+    'Options:' \
+    '  --compose <path>              Compose file to inspect (default: service compose.yml)' \
+    '  --container <name>            Headscale container name (default: headscale)' \
+    '  --since <duration>            docker logs window (default: 10m)' \
+    '  --mock-log <path>             Read log text from a file instead of docker logs' \
+    '  --headscale-version <text>    Test override for detected Headscale version' \
+    '  --tailscale-version <text>    Test override for detected Tailscale client version' \
+    '  -h, --help                    Show this help' \
+    '' \
+    'Exit codes:' \
+    '  0  No known registration drift signature found' \
+    '  1  Known Headscale/Tailscale capability-version drift signature found' \
+    '  2  Invalid arguments or unreadable mock log' \
+    '  3  Unable to inspect Headscale logs'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -144,31 +144,29 @@ echo "Tailscale client: ${tailscale_version:-unknown}"
 echo "Log window: ${MOCK_LOG:-docker logs ${CONTAINER} --since ${SINCE}}"
 
 if grep -Fq "capability version must be set" <<<"$logs"; then
-  cat <<'EOF'
-
-RESULT: capability-version drift detected.
-
-Headscale is rejecting client registration before the node joins the tailnet.
-Do not keep retrying `tailscale up` as a break-glass path while this signature
-is present.
-
-Recommended recovery:
-1. Use the Hetzner Cloud Firewall SSH allow-list break-glass path.
-2. Decide whether to pin/downgrade Tailscale clients, upgrade Headscale after
-   confirming compatibility, or keep Headscale non-critical.
-3. Re-run this diagnostic and a live registration smoke test before treating
-   Headscale as healthy.
-
-Reference: setup/walter-host/services/headscale/RUNBOOK.md
-EOF
+  printf '%s\n' \
+    '' \
+    'RESULT: capability-version drift detected.' \
+    '' \
+    'Headscale is rejecting client registration before the node joins the tailnet.' \
+    'Do not keep retrying tailscale up as a break-glass path while this signature' \
+    'is present.' \
+    '' \
+    'Recommended recovery:' \
+    '1. Use the Hetzner Cloud Firewall SSH allow-list break-glass path.' \
+    '2. Decide whether to pin/downgrade Tailscale clients, upgrade Headscale after' \
+    '   confirming compatibility, or keep Headscale non-critical.' \
+    '3. Re-run this diagnostic and a live registration smoke test before treating' \
+    '   Headscale as healthy.' \
+    '' \
+    "Reference: ${RUNBOOK_PATH}"
   exit 1
 fi
 
-cat <<'EOF'
-
-RESULT: no known capability-version drift signature found in the inspected logs.
-
-This does not prove registration is healthy. Run a live client registration
-smoke test and confirm `docker exec headscale headscale nodes list` shows the
-joining device before relying on Headscale for private admin paths.
-EOF
+printf '%s\n' \
+  '' \
+  'RESULT: no known capability-version drift signature found in the inspected logs.' \
+  '' \
+  'This does not prove registration is healthy. Run a live client registration' \
+  'smoke test and confirm docker exec headscale headscale nodes list shows the' \
+  'joining device before relying on Headscale for private admin paths.'
