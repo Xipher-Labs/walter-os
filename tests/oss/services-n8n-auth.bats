@@ -91,6 +91,21 @@ teardown() {
   grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
 }
 
+@test "n8n deploy.sh rejects multiline basic-auth values before writing .env (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" \
+    N8N_BASIC_AUTH_USER=$'operator\nINJECTED_KEY=1' \
+    N8N_BASIC_AUTH_PASSWORD=provided-secret \
+    bash "$DEPLOY"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"N8N_BASIC_AUTH_USER must be a single-line value"* ]]
+  run grep -q '^INJECTED_KEY=1$' "$TMP_SVC/.env"
+  [ "$status" -ne 0 ]
+}
+
 @test "n8n deploy.sh does not require openssl when required keys already exist (P1-03)" {
   TMP_SVC="$(mktemp -d)"
   cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"

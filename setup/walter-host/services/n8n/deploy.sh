@@ -44,6 +44,12 @@ env_value_present() {
 
 upsert_env_key() {
   local key="$1" value="$2" tmp
+  case "$value" in
+    *$'\n'*|*$'\r'*)
+      echo "ERROR: $key must be a single-line value." >&2
+      return 1
+      ;;
+  esac
   tmp="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
   awk -v key="$key" -v value="$value" '
     BEGIN { written=0 }

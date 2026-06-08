@@ -115,11 +115,11 @@ n8n basic auth catches every one of those.
 
    ```bash
    infisical secrets set N8N_BASIC_AUTH_USER='walter-admin'
-   infisical secrets set N8N_BASIC_AUTH_PASSWORD="$(openssl rand -base64 24)"
+   infisical secrets set N8N_BASIC_AUTH_PASSWORD="$(openssl rand -hex 24)"
    ```
 
    `N8N_BASIC_AUTH_USER` can be anything memorable; the password should
-   be **24+ random characters** (the example above gives 32). Save both
+   be **24+ random characters** (the example above gives 48). Save both
    in your password manager.
 
 2. Run deploy with those variables exported. `deploy.sh` creates
