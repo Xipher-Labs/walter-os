@@ -17,6 +17,11 @@ model_list:
   # ===========================================================================
   # Tier 1 — Anthropic (requires ANTHROPIC_API_KEY)
   # ===========================================================================
+  - model_name: claude
+    litellm_params:
+      model: claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
   - model_name: sonnet
     litellm_params:
       model: claude-sonnet-4-5

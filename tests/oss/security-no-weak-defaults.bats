@@ -22,6 +22,12 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
   [ "$status" -ne 0 ]
 }
 
+@test "A-1: Walter-Host LiteLLM exposes claude shorthand alias" {
+  run grep -nE '^[[:space:]]*-[[:space:]]*model_name:[[:space:]]*claude[[:space:]]*$' \
+    "$REPO_ROOT/setup/walter-host/services/litellm/config.yaml"
+  [ "$status" -eq 0 ]
+}
+
 @test "A-1: CCR_APIKEY uses :? form in llm-proxies compose (fail-loud)" {
   # The CCR_APIKEY env assignment must use :? (fail-loud), not :- (soft-default)
   run grep -E 'CCR_APIKEY:[[:space:]]*\$\{CCR_APIKEY:-' \
