@@ -37,10 +37,11 @@ assert_router_limits() {
 assert_router_compose_renders() {
   local router="$1"
   local api_env="$2"
+  local service_path="$ROUTER_ROOT/$router"
   local compose="$ROUTER_ROOT/$router/docker-compose.yml"
 
-  if [[ "${WALTER_COMPOSE_TEST:-0}" != "1" ]]; then
-    skip "set WALTER_COMPOSE_TEST=1 to run docker compose config"
+  if [ "${WALTER_COMPOSE_TEST:-0}" != "1" ]; then
+    skip "set WALTER_COMPOSE_TEST=1 to run docker compose render checks"
   fi
   if ! command -v docker >/dev/null 2>&1; then
     skip "docker is not installed"
@@ -49,7 +50,7 @@ assert_router_compose_renders() {
     skip "docker compose is not available"
   fi
 
-  run env "$api_env=test" docker compose -f "$compose" config --quiet
+  run env "$api_env=test" docker compose --project-directory "$service_path" -f "$compose" config --quiet
   [ "$status" -eq 0 ]
 }
 
