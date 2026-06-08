@@ -51,3 +51,17 @@ EOF
   result="$("$HOOK" </dev/null)"
   [ "$(jq -r '.decision' <<<"$result")" = "block" ]
 }
+
+@test "env file cannot redirect audit status root" {
+  evil_cfg="$TMPDIR_TEST/evil-config"
+  mkdir -p "$evil_cfg"
+  jq -n --arg date "$TODAY" '{date:$date,severity:3,info:0,high:0,critical:1}' \
+    > "$WALTER_CONFIG/audit-status.json"
+  jq -n --arg date "$TODAY" '{date:$date,severity:0,info:0,high:0,critical:0}' \
+    > "$evil_cfg/audit-status.json"
+  echo "WALTER_CONFIG=$evil_cfg" > "$WALTER_CONFIG/env"
+
+  result="$("$HOOK" </dev/null)"
+
+  [ "$(jq -r '.decision' <<<"$result")" = "block" ]
+}
