@@ -83,7 +83,7 @@ setup() {
   [[ -f "$INSTALL" ]]
 
   local render_line compose_line
-  render_line="$(grep -n 'setup/headscale/config.yaml.template' "$INSTALL" | head -1 | cut -d: -f1)"
+  render_line="$(grep -n 'envsubst "\\$WALTER_DOMAIN" < "$headscale_template" > "$headscale_config"' "$INSTALL" | head -1 | cut -d: -f1)"
   compose_line="$(grep -n 'docker compose -f "$compose_file" up -d' "$INSTALL" | head -1 | cut -d: -f1)"
 
   [[ -n "$render_line" ]]
@@ -121,8 +121,8 @@ setup() {
   access_loop="$(sed -n '/for sub in /,/; do/p' "$CF_ACCESS")"
   grep -Fq 'headscale-admin' <<<"$access_loop"
   grep -Fq 'vpn' <<<"$access_loop"
-  ! grep -Eq '(^|[[:space:]])hs(ui)?([[:space:]]|\\|$)' <<<"$access_loop"
-  ! grep -Eq '(^|[[:space:]])wg([[:space:]]|\\|$)' <<<"$access_loop"
+  ! grep -Eq '(^|[[:space:]])hs(ui)?([[:space:]|]|$)' <<<"$access_loop"
+  ! grep -Eq '(^|[[:space:]])wg([[:space:]|]|$)' <<<"$access_loop"
 }
 
 @test "standalone Headscale compose documents admin and client hostnames" {
