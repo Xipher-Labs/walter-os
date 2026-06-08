@@ -23,7 +23,7 @@ import * as os from "os";
 // We test the internal pruning function directly
 import { pruneIfNeeded, atomicAppend } from "@/server/council/history-io";
 
-let testDir: string;
+let testDir: string | undefined;
 let testFile: string;
 
 beforeEach(() => {
@@ -32,7 +32,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
+  if (!testDir) return;
+  try {
+    rmSync(testDir, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup must not hide the test failure that triggered teardown.
+  } finally {
+    testDir = undefined;
+  }
 });
 
 function makeLines(n: number): string {

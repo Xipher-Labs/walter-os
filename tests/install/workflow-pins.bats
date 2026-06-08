@@ -63,8 +63,24 @@ _check_workflow_pins() {
   run grep -Eq 'npx --yes markdownlint-cli@[0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)' "$workflow"
   [ "$status" -eq 0 ]
 
-  run grep -Eq 'npm (install|i) -g markdownlint-cli([[:space:]]|$)' "$workflow"
+  run grep -Eq 'npm (install|i) -g markdownlint-cli(@latest)?([[:space:]]|$)' "$workflow"
   [ "$status" -eq 1 ]
+
+  run grep -Eq 'markdownlint-cli@(latest|next|canary|beta|alpha|rc)([[:space:]]|$)' "$workflow"
+  [ "$status" -eq 1 ]
+}
+
+@test "markdownlint pin guard rejects npm global install at latest" {
+  local workflow="$BATS_TEST_TMPDIR/readme-lint-latest.yml"
+  cat >"$workflow" <<'YAML'
+jobs:
+  readme:
+    steps:
+      - run: npm install -g markdownlint-cli@latest
+YAML
+
+  run grep -Eq 'npm (install|i) -g markdownlint-cli(@latest)?([[:space:]]|$)' "$workflow"
+  [ "$status" -eq 0 ]
 }
 
 @test "SLSA generator allowlist rejects suffixed release tags" {
