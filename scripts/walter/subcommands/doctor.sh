@@ -5,6 +5,8 @@
 #   walter doctor                  full check (local + remote)
 #   walter doctor --client-only    local tools only, skip SSH/remote checks
 #   walter doctor --enforcement    report hook/wrapper enforcement mode
+#   walter doctor --hooks          alias for --enforcement
+#   walter doctor --hook-enforcement
 set -euo pipefail
 
 # Validate WALTER_OS_HOME before any use: must be an absolute path containing
@@ -120,10 +122,14 @@ check_legacy_secret_key() {
 }
 
 doctor_claude_hook_present() {
-  local settings="$1" hook_path="$2"
+  local settings="$1" hook_path="$2" matcher="$3"
 
-  jq -e --arg hook "$hook_path" '
+  jq -e --arg hook "$hook_path" --arg matcher "$matcher" '
+    def matcher_applies($expected):
+      . == "*" or ((split("|") | index($expected)) != null);
+
     [(.hooks.PreToolUse // [])[]?
+      | select((.matcher // "*") | matcher_applies($matcher))
       | (.hooks // [])[]?
       | select(._walter_os == true)
       | (.command // "")
@@ -135,16 +141,18 @@ doctor_claude_hook_present() {
 doctor_check_claude_hooks() {
   local settings="${CLAUDE_HOME:-$HOME/.claude}/settings.json"
   local hook
+  local matcher
+  local hook_path
   local missing=0
   local present=0
   local -a required_hooks=(
-    "$WALTER_OS_HOME/hooks/bash-denylist.sh"
-    "$WALTER_OS_HOME/hooks/approval-gate.sh"
-    "$WALTER_OS_HOME/hooks/capability-check.sh"
-    "$WALTER_OS_HOME/hooks/network-gate.sh"
-    "$WALTER_OS_HOME/hooks/branch-flow-guard.sh"
-    "$WALTER_OS_HOME/hooks/pre-commit-tests.sh"
-    "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh"
+    "$WALTER_OS_HOME/hooks/bash-denylist.sh|Bash"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|Bash"
+    "$WALTER_OS_HOME/hooks/capability-check.sh|Bash"
+    "$WALTER_OS_HOME/hooks/network-gate.sh|Bash"
+    "$WALTER_OS_HOME/hooks/branch-flow-guard.sh|Bash"
+    "$WALTER_OS_HOME/hooks/pre-commit-tests.sh|Bash"
+    "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh|Write"
   )
 
   if [[ ! -f "$settings" ]]; then
@@ -167,10 +175,12 @@ doctor_check_claude_hooks() {
   fi
 
   for hook in "${required_hooks[@]}"; do
-    if doctor_claude_hook_present "$settings" "$hook"; then
+    hook_path="${hook%|*}"
+    matcher="${hook##*|}"
+    if doctor_claude_hook_present "$settings" "$hook_path" "$matcher"; then
       present=$((present + 1))
     else
-      log_warn "Claude Code hook missing: ${hook#"$WALTER_OS_HOME"/}"
+      log_warn "Claude Code hook missing: ${hook_path#"$WALTER_OS_HOME"/} for $matcher"
       missing=$((missing + 1))
     fi
   done
@@ -190,10 +200,12 @@ doctor_check_claude_hooks() {
 
 doctor_check_wrapper_path() {
   local wrapper_dir="${WALTER_WRAPPER_DIR:-}"
-  local first_path tool resolved
+  local first_path tool resolved path_entry
   local installed=0
   local wrapped=0
+  local wrapper_in_path=0
   local -a high_risk_tools=(gh curl hcloud cloudflared docker vercel railway stripe)
+  local -a path_entries=()
 
   if [[ -z "$wrapper_dir" ]]; then
     log_info "high-risk tool wrappers not configured (set WALTER_WRAPPER_DIR to enable this check)"
@@ -214,10 +226,21 @@ doctor_check_wrapper_path() {
     first_path="${first_path%/}"
   done
   if [[ "$first_path" != "$wrapper_dir" ]]; then
-    case ":$PATH:" in
-      *":$wrapper_dir:"*) log_warn "wrapper PATH not first ($wrapper_dir must be first in PATH)" ;;
-      *) log_warn "wrapper PATH not active ($wrapper_dir is not in PATH)" ;;
-    esac
+    IFS=':' read -r -a path_entries <<<"$PATH"
+    for path_entry in "${path_entries[@]}"; do
+      while [[ "$path_entry" != "/" && "$path_entry" == */ ]]; do
+        path_entry="${path_entry%/}"
+      done
+      if [[ "$path_entry" == "$wrapper_dir" ]]; then
+        wrapper_in_path=1
+        break
+      fi
+    done
+    if [[ "$wrapper_in_path" -eq 1 ]]; then
+      log_warn "wrapper PATH not first ($wrapper_dir must be first in PATH)"
+    else
+      log_warn "wrapper PATH not active ($wrapper_dir is not in PATH)"
+    fi
     return 1
   fi
 
