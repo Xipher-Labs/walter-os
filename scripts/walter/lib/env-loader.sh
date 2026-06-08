@@ -141,6 +141,11 @@ walter_env_load_allowlist() {
       continue
     fi
 
+    if _walter_env_key_dangerous "$key"; then
+      echo "walter-env-loader: WARN line $lineno: $key is a dangerous shell/runtime key and cannot be loaded from Walter env files, ignored." >&2
+      continue
+    fi
+
     if ! _walter_env_key_allowed "$key" "$override_file"; then
       echo "walter-env-loader: WARN line $lineno: $key is not in the env allowlist, ignored. Add it to ${override_file} if you really need it." >&2
       continue

@@ -23,7 +23,7 @@ setup() {
 }
 
 teardown() {
-  cd "$BATS_TEST_DIRNAME" || true
+  cd /tmp || cd / || true
   case "$TMP_HOME" in
     /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac
@@ -171,16 +171,16 @@ ENV
 @test "P1-09: env file cannot redirect override allowlist mid-parse" {
   evil_cfg="$TMP_HOME/evil-config"
   mkdir -p "$evil_cfg"
-  echo 'BASH_ENV' > "$evil_cfg/env-allowlist.txt"
+  echo 'MY_CUSTOM_VAR' > "$evil_cfg/env-allowlist.txt"
   cat > "$TMP_CFG/env" <<ENV
 WALTER_CONFIG=$evil_cfg
-BASH_ENV=$TMP_HOME/evil.sh
+MY_CUSTOM_VAR=hello
 ENV
 
-  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; echo \"BASH_ENV=\${BASH_ENV:-UNSET}\""
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; echo \"MY_CUSTOM_VAR=\${MY_CUSTOM_VAR:-UNSET}\""
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"BASH_ENV=UNSET"* ]]
+  [[ "$output" == *"MY_CUSTOM_VAR=UNSET"* ]]
   [[ "$output" == *"$TMP_CFG/env-allowlist.txt"* ]]
 }
 
@@ -194,6 +194,8 @@ ENV
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"BASH_ENV=UNSET"* ]]
+  [[ "$output" == *"BASH_ENV is a dangerous shell/runtime key"* ]]
+  [[ "$output" != *"Add it to"* ]]
 }
 
 @test "P1-09: protected keys are not overwritten when caller freezes roots" {
