@@ -43,6 +43,7 @@ _filter_known_exceptions() {
 # right after the tag. Tag chars are letters / digits / `_` / `.` / `-`.
 # Anything else (`"`, `'`, whitespace, end-of-line) is a real boundary.
 TAG_BOUNDARY='($|[^A-Za-z0-9_.-])'
+OPENCLAW_BARE_INSTALL_PATTERN='npm install -g openclaw($|[[:space:];#&|])'
 
 # Strip the `path:line:` prefix from grep -rn output so NOISE_PATTERN's
 # leading-`#` rule actually applies to the content of the matched line.
@@ -90,6 +91,13 @@ _assert_no_unfiltered_matches() {
   [[ -z "$filtered" ]]
 }
 
+@test "openclaw bare-install pattern catches end-of-line install" {
+  printf '%s\n' 'npm install -g openclaw' | grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN"
+  if printf '%s\n' 'npm install -g openclaw@2026.5.7' | grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN"; then
+    return 1
+  fi
+}
+
 @test "no compose service uses :latest tag (P1-02)" {
   _assert_no_unfiltered_matches \
     "unpinned :latest image tag(s) found" \
@@ -120,7 +128,7 @@ _assert_no_unfiltered_matches() {
   if grep -qE "npm install -g openclaw@latest${TAG_BOUNDARY}" "$compose"; then
     return 1
   fi
-  if grep -E 'npm install -g openclaw[^@]' "$compose"; then
+  if grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN" "$compose"; then
     return 1
   fi
 }
