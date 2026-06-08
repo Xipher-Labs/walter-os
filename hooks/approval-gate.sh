@@ -177,9 +177,9 @@ if (( BASH_VERSINFO[0] < 4 )); then
 fi
 
 # This script requires Bash 4+ for associative arrays (`declare -A`);
-# macOS /bin/bash 3.2 is not a supported runtime for this hook. Keep
-# `set +u` around the array literal as a defensive guard while parsing
-# dashed associative-array keys.
+# macOS /bin/bash 3.2 is not a supported runtime for this hook.
+# Keep the nounset relaxation narrowly scoped to this compatibility-
+# sensitive associative-array initialization.
 set +u
 declare -A CATEGORY_MIN_TIER=(
   [git-push-feature-branch]="medium"
