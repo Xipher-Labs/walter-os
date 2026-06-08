@@ -238,7 +238,7 @@ ssh "$WALTER_VM" "curl -fsS -X $method 'http://127.0.0.1:8384${path}' -H 'X-API-
 
 ### P1-05 — `approval-gate.sh` standing-approval path entirely skips the check when `yq` is missing
 
-**Status**: ✅ **Fixed in v0.4.0-inflight**. `hooks/approval-gate.sh` now hard-fails the hook with a `permissionDecision: "block"` when yq is missing, alongside the existing jq-missing block path (same pattern as P0-03). `install.sh` preflight adds `yq` to the required-tools list and the runtime check, so a degraded install is caught at install time, not at first hook fire. Regression test `tests/hooks/approval-gate.bats` cases "P1-05: hook mode fails CLOSED when yq is missing". As a side fix the `declare -A CATEGORY_MIN_TIER` array literal is now wrapped in `set +u` … `set -u` because bash 3.2 (macOS default) misparses `[token-with-dashes]=value` under `set -u`.
+**Status**: ✅ **Fixed in v0.4.0-inflight**. `hooks/approval-gate.sh` now hard-fails the hook with a `permissionDecision: "block"` when yq is missing, alongside the existing jq-missing block path (same pattern as P0-03). `install.sh` preflight adds `yq` to the required-tools list and the runtime check, so a degraded install is caught at install time, not at first hook fire. Regression test `tests/hooks/approval-gate.bats` cases "P1-05: hook mode fails CLOSED when yq is missing". As a side fix the `declare -A CATEGORY_MIN_TIER` array literal is now wrapped in `set +u` … `set -u` so nounset cannot turn dashed keys into parameter-expansion surprises on supported Bash runtimes. `approval-gate.sh` requires Bash 4+ for associative arrays; macOS `/bin/bash` 3.2 is not a supported runtime for that hook.
 
 **Category**: 3 (Authentication bypass)  
 **File**: `hooks/approval-gate.sh:141`

@@ -160,12 +160,10 @@ declare -a BLOCK_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 # medium-required: low tier is blocked unless the agent has an explicit override.
 # high-required: low and medium tier are blocked unless override.
 
-# Bash 3.2 (macOS default) misparses `[token-with-dashes]=value` inside
-# `declare -A` under `set -u` — it treats the dashed token as
-# `${token-with-dashes}` (default-substitution parameter expansion),
-# then errors on the inner unset variable. Bash 4+ (Linux, brew bash)
-# handles it correctly. Wrap the array literal in `set +u` so this
-# script loads cleanly on every bash we support.
+# This script requires Bash 4+ for associative arrays (`declare -A`);
+# macOS /bin/bash 3.2 is not a supported runtime for this hook. Keep the
+# array literal inside `set +u` so nounset cannot turn dashed keys into
+# parameter-expansion surprises on supported Bash runtimes.
 set +u
 declare -A CATEGORY_MIN_TIER=(
   [git-push-feature-branch]="medium"
