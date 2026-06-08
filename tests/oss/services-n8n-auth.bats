@@ -92,6 +92,25 @@ teardown() {
   grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
 }
 
+@test "n8n deploy.sh does not require openssl when required keys already exist (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+  cat > "$TMP_SVC/.env" <<'ENV'
+N8N_PG_PASS=pg
+N8N_ENCRYPTION_KEY=encryption
+N8N_BASIC_AUTH_USER=operator
+N8N_BASIC_AUTH_PASSWORD=provided-secret
+ENV
+  chmod 600 "$TMP_SVC/.env"
+  mkdir "$TMP_SVC/bin"
+  ln -s "$(command -v awk)" "$TMP_SVC/bin/awk"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" PATH="$TMP_SVC/bin" /bin/bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"openssl is required"* ]]
+}
+
 @test "n8n deploy.sh treats blank quoted/whitespace auth values as missing (P1-03)" {
   TMP_SVC="$(mktemp -d)"
   cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"

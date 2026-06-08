@@ -53,11 +53,15 @@ upsert_env_key() {
 }
 
 ensure_env_key() {
-  local key="$1" value="$2"
+  local key="$1" value_spec="$2" value
   if env_value_present "$key"; then
     echo "  ✓ $key already set"
     return 0
   fi
+  case "$value_spec" in
+    hex:*) value="$(random_hex "${value_spec#hex:}")" ;;
+    *) value="$value_spec" ;;
+  esac
   upsert_env_key "$key" "$value"
   echo "  ✓ $key generated"
 }
@@ -71,10 +75,10 @@ else
   echo "→ $ENV_FILE exists, completing any missing required keys"
 fi
 
-ensure_env_key "N8N_PG_PASS" "${N8N_PG_PASS:-$(random_hex 24)}"
-ensure_env_key "N8N_ENCRYPTION_KEY" "${N8N_ENCRYPTION_KEY:-$(random_hex 32)}"
+ensure_env_key "N8N_PG_PASS" "${N8N_PG_PASS:-hex:24}"
+ensure_env_key "N8N_ENCRYPTION_KEY" "${N8N_ENCRYPTION_KEY:-hex:32}"
 ensure_env_key "N8N_BASIC_AUTH_USER" "${N8N_BASIC_AUTH_USER:-walter-admin}"
-ensure_env_key "N8N_BASIC_AUTH_PASSWORD" "${N8N_BASIC_AUTH_PASSWORD:-$(random_hex 24)}"
+ensure_env_key "N8N_BASIC_AUTH_PASSWORD" "${N8N_BASIC_AUTH_PASSWORD:-hex:24}"
 
 echo "  ✓ .env ready (0600). Back up N8N_ENCRYPTION_KEY and n8n basic-auth credentials to your secrets manager."
 
