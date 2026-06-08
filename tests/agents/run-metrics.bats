@@ -53,6 +53,12 @@ teardown() {
   grep -q "frontmatter_domain" "$RUN_SH"
 }
 
+@test "run.sh normalizes CRLF before frontmatter delimiter checks" {
+  grep -q 'sub(/\\r$/, "", line)' "$RUN_SH"
+  grep -q 'NR == 1 && line == "---"' "$RUN_SH"
+  grep -q 'in_frontmatter && line == "---"' "$RUN_SH"
+}
+
 @test "run.sh keeps legacy Council agent domain fallback mapping" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
@@ -68,14 +74,14 @@ teardown() {
     allowed = %w[backend_review frontend longform quick_refactor phi brainstorm default]
     Dir["agents/*.md"].each do |path|
       text = File.read(path)
-      match = text.match(/\A---\n(.*?)\n---/m)
-      abort("#{path}: missing frontmatter") unless match
-      data = YAML.safe_load(match[1], permitted_classes: [Date], aliases: false)
+      parts = text.split(/^---\s*$/m, 3)
+      abort("#{path}: missing frontmatter") if parts.length < 3 || parts[1].strip.empty?
+      data = YAML.safe_load(parts[1], permitted_classes: [Date], aliases: false)
       domain = data["model_domain"]
       abort("#{path}: missing model_domain") unless domain.is_a?(String)
       abort("#{path}: invalid model_domain #{domain.inspect}") unless allowed.include?(domain)
-      raw = match[1].lines.grep(/\Amodel_domain: /).first
-      abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\Amodel_domain: (#{allowed.join("|")})\s*\z/)
+      raw = parts[1].lines.grep(/\A[[:space:]]*model_domain[[:space:]]*:/).first
+      abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{allowed.join("|")})([[:space:]]+#.*)?[[:space:]]*\z/)
     end
   '
 }

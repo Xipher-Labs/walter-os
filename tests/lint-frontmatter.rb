@@ -83,12 +83,13 @@ end
 def validate_agent_metadata(data, frontmatter)
   domain = data["model_domain"]
   raw_domain = frontmatter.each_line.grep(/\A[[:space:]]*model_domain[[:space:]]*:/).first
+  domain_pattern = VALID_MODEL_DOMAINS.join("|")
 
   return "'model_domain' must be a string" unless domain.is_a?(String)
   unless VALID_MODEL_DOMAINS.include?(domain)
     return "'model_domain' must be one of: #{VALID_MODEL_DOMAINS.join(', ')}"
   end
-  unless raw_domain&.match?(/\Amodel_domain: (#{VALID_MODEL_DOMAINS.join('|')})\s*\z/)
+  unless raw_domain&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{domain_pattern})([[:space:]]+#.*)?[[:space:]]*\z/)
     return "'model_domain' must be an unquoted scalar supported by scripts/agents/run.sh"
   end
 

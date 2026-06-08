@@ -141,11 +141,13 @@ _agent_frontmatter_scalar() {
 
   awk -v key="$key" '
     BEGIN { in_frontmatter = 0 }
-    NR == 1 && $0 == "---" { in_frontmatter = 1; next }
-    in_frontmatter && $0 == "---" { exit }
-    in_frontmatter {
+    {
       line = $0
       sub(/\r$/, "", line)
+    }
+    NR == 1 && line == "---" { in_frontmatter = 1; next }
+    in_frontmatter && line == "---" { exit }
+    in_frontmatter {
       if (line ~ "^[[:space:]]*" key "[[:space:]]*:") {
         sub(/^[^:]*:[[:space:]]*/, "", line)
         sub(/[[:space:]]+#.*$/, "", line)
