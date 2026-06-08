@@ -42,6 +42,28 @@ fi
 if [[ "$_walter_hook_sourced" == "1" && "${WALTER_HOOK_TEST_MODE:-0}" == "1" && -n "${WALTER_BASH_MAJOR_FOR_TESTS:-}" ]]; then
   _walter_bash_major="$WALTER_BASH_MAJOR_FOR_TESTS"
 fi
+
+_walter_bash_denylist_self_path() {
+  local self="$1"
+  local self_dir self_base resolved
+
+  case "$self" in
+    */*)
+      self_dir="$(cd "$(dirname "$self")" && pwd -P)" || return 1
+      self_base="$(basename "$self")"
+      printf '%s/%s\n' "$self_dir" "$self_base"
+      ;;
+    *)
+      resolved="$(command -v "$self" 2>/dev/null || true)"
+      if [[ -n "$resolved" ]]; then
+        printf '%s\n' "$resolved"
+      else
+        printf '%s\n' "$self"
+      fi
+      ;;
+  esac
+}
+
 if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   # One-shot guard: if we already attempted a re-exec and ended up back in
   # bash < 4, stop. Without this, a candidate path that itself resolves to
@@ -52,11 +74,12 @@ if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
     printf '%s\n' '{"decision":"block","reason":"bash-denylist: re-exec landed on bash < 4 again. Refusing to loop. Install GNU bash >= 4 at /opt/homebrew/bin/bash or /usr/local/bin/bash (the two paths this hook probes)."}'
     exit 0
   fi
-  # Use BASH_SOURCE[0] (the script's actual path) rather than $0, which can
-  # be just a bare filename when invoked via PATH lookup and would fail
-  # ENOENT under the re-exec. Codex review of #81.
-  _self="${BASH_SOURCE[0]}"
-  for _candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+  # Resolve BASH_SOURCE[0] to a usable script path. When the hook is invoked
+  # as a bare filename via PATH, BASH_SOURCE[0] may also be bare; passing that
+  # through exec would fail outside the original cwd.
+  _self="$(_walter_bash_denylist_self_path "${BASH_SOURCE[0]}")"
+  _reexec_candidates="${WALTER_BASH_DENYLIST_REEXEC_CANDIDATES_FOR_TESTS:-/opt/homebrew/bin/bash /usr/local/bin/bash}"
+  for _candidate in $_reexec_candidates; do
     if [[ -x "$_candidate" && -f "$_self" ]]; then
       WALTER_BASH_DENYLIST_REEXEC=1 exec "$_candidate" "$_self" "$@"
     fi
@@ -69,7 +92,7 @@ if [[ -n "$_walter_bash_major" && "$_walter_bash_major" -lt 4 ]]; then
   printf '%s\n' '{"decision":"block","reason":"bash-denylist: requires bash >= 4.0 (macOS /bin/bash 3.2 does not support declare -A). Install brew bash or upgrade /bin/bash."}'
   exit 0
 fi
-unset _walter_bash_major _walter_hook_sourced
+unset _walter_bash_major _walter_hook_sourced _reexec_candidates
 #
 # Bypass escape (two-factor): the hook allows a matched pattern only if BOTH
 #   1. the env var WALTER_DENYLIST_BYPASS=1 is set in the hook's environment, AND
@@ -205,46 +228,19 @@ DENYLIST_PATTERNS[wget-pipe-shell]='wget[[:space:]]+.*\|[[:space:]]*(sudo[[:spac
 # Covers bash, sh, zsh, dash, ksh; also covers `source <(...)` and `. <(...)`.
 DENYLIST_PATTERNS[shell-process-sub-curl]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*curl'
 DENYLIST_PATTERNS[shell-process-sub-wget]='(^|[[:space:]])(bash|sh|zsh|dash|ksh|source|\.)[[:space:]]+<\([[:space:]]*wget'
-# bash -c / sh -c with command substitution: `bash -c "$(curl ...)"`, etc.
-# This also catches `bash -c "$(cat /tmp/payload)"`. Mirror of python-c-variable.
-#
-# Match relaxations applied across R1, R2, R3 of #81:
-#   R1: whitespace-after-`-c` is OPTIONAL (covers `bash -c'...'`).
-#   R2: prefix allows sudo / env-wrapper / absolute-path variants
-#       (`sudo bash -c`, `/bin/bash -c`, `env bash -c`).
-#   R3 (this revision): middle segment uses `.*` (NOT `[^$]*`) so a
-#       harmless `$VAR` before the dangerous `$(`/`${`/`$[` no longer
-#       creates a bypass — e.g. `bash -c "echo $HOME; $(curl ...)"`.
-#       Greedy `.*` still terminates at the last `$[{([]` in input.
-#   R3: opening-quote class also includes `$` so ANSI-C quoted forms
-#       (`bash -c $'echo hi; $(curl ...)'`) are caught — the `$'` is
-#       the opening "quote" in that syntax.
-# Boundary: anchor at start-of-line or after a shell-statement-
-# separator character (whitespace, `;`, `|`, `&` — the literals
-# inside `[[:space:]|;&]` are valid pre-shell-token contexts; the
-# `|` and `;` and `&` are CHARACTERS-IN-CLASS, not regex alternation).
-# This ensures `mybash -c` is NOT matched.
-DENYLIST_PATTERNS[shell-c-variable]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\''$]?.*\$[{([]'
-# Sibling pattern: backtick command substitution `bash -c "`curl …`"`. Codex
-# R2 of PR #63 flagged this gap (issue #3 P2-1). Backticks are still common
-# in older shell snippets / man pages / one-liners.
-#
-# Match relaxation per Copilot review of #81: the backtick may appear after
-# the opening quote with arbitrary intermediate characters (whitespace,
-# escaped backticks `\``, leading text), since `bash -c "...`...`..."` is the
-# typical real-world form. We anchor on the `(bash|sh|zsh|dash|ksh) -c <quote> ... \?\``
-# shape: shell + `-c` + optional quote + any chars (incl. backslash-escape)
-# then a backtick.
+# bash -c / sh -c with command substitution in the actual -c payload.
+# Separators between the shell token and -c may be literal whitespace or the
+# `${IFS}` expansion trick. The payload match is intentionally limited to the
+# immediate -c argument, so `bash -c 'echo hi' && echo $(date)` is not blocked
+# merely because a later shell command uses substitution.
+_shell_c_prefix='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env([[:space:]]|(\$\{IFS\}))+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)([[:space:]]|(\$\{IFS\}))+-c([[:space:]]|(\$\{IFS\}))*'
+DENYLIST_PATTERNS[shell-c-variable]="${_shell_c_prefix}"'("[^"]*\$[{([]|'\''[^'\'']*\$[{([]|\$'\''[^'\'']*\$[{([]|[^[:space:];|&]*\$[{([])'
+# Sibling pattern: backtick command substitution in the immediate -c payload.
+# Backticks are literals in ERE; the quoting is only to prevent shell command
+# substitution while assigning the regex.
 # shellcheck disable=SC2016
-# (The backticks in this pattern are REGEX METACHARACTERS, not shell
-# command substitution. The whole string is intentionally single-quoted
-# so bash leaves it alone — that's the point. SC2016 is a false positive
-# here; shellcheck can't distinguish regex backticks from shell-expansion
-# backticks in a quoted literal.)
-#
-# R2 of #81: extended to match `sudo bash -c`, `/bin/bash -c`,
-# `env bash -c`, etc. — same prefix shape as shell-c-variable.
-DENYLIST_PATTERNS[shell-c-backtick]='(^|[[:space:]|;&])(sudo[[:space:]]+)?((/[A-Za-z0-9_/-]*/)?env[[:space:]]+)?(/[A-Za-z0-9_/-]*/)?(bash|zsh|ksh|dash|sh)[[:space:]]+-c[[:space:]]*["'\''$]?[^`]*`'
+DENYLIST_PATTERNS[shell-c-backtick]="${_shell_c_prefix}"'("[^"]*`|'\''[^'\'']*`|\$'\''[^'\'']*`|[^[:space:];|&]*`)'
+unset _shell_c_prefix
 # eval of a variable or command substitution.
 # Matches: the eval builtin followed by a shell-variable expansion (with or
 # without braces) OR a command-substitution `$(...)`. Deliberately does NOT
