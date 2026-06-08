@@ -24,7 +24,7 @@ describe("CouncilChat session ids", () => {
   });
 
   it("surfaces session id failures before starting Council rounds", () => {
-    expect(componentSource).toContain("try {\n      sid = createSessionId(sessionType);");
+    expect(componentSource).toMatch(/try\s*{\s*sid\s*=\s*createSessionId\(sessionType\);/);
     expect(componentSource).toContain("setError(err instanceof Error ? err.message : String(err));");
     expect(componentSource.indexOf("sid = createSessionId(sessionType)")).toBeLessThan(
       componentSource.indexOf('fetch("/api/council-chat/round1"')
