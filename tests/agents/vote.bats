@@ -9,6 +9,7 @@ setup() {
   export WALTER_CONFIG="$(mktemp -d -t walter-vote-XXXXXX)"
   export WALTER_ALERT_LOG="$WALTER_CONFIG/events.log"
   unset WALTER_MODEL_OVERRIDE WALTER_MODEL_BACKEND_REVIEW WALTER_MODEL_ROUTER_SH
+  unset LITELLM_BASE_URL LITELLM_API_KEY
 
   # Mock LLM: create a mock llm.sh that returns configurable yes/no
   MOCK_LIB_DIR="$(mktemp -d -t walter-mock-lib-XXXXXX)"
@@ -104,8 +105,6 @@ _vote_council_clean() {
   export MODEL_ARGS_FILE MOCK_LIB_DIR WALTER_CONFIG LIB
   export WALTER_MODEL_BACKEND_REVIEW="codex-routed"
   export WALTER_MODEL_ROUTER_SH="$BATS_TEST_DIRNAME/../../scripts/walter/lib/model-router.sh"
-  export LITELLM_BASE_URL="http://litellm.test"
-  export LITELLM_API_KEY="sk-test"
 
   cat > "$MOCK_LIB_DIR/llm.sh" <<'MOCK_LLM'
 #!/usr/bin/env bash
@@ -116,7 +115,7 @@ llm_invoke() {
 }
 MOCK_LLM
 
-  result=$(bash -c '
+  result=$(LITELLM_BASE_URL="http://litellm.test" LITELLM_API_KEY="sk-test" bash -c '
     export LLM_SH="$MOCK_LIB_DIR/llm.sh"
     export WALTER_CONSENSUS_VOTES_LOG="/dev/null"
     source "$LIB"
