@@ -116,7 +116,14 @@ detect_headscale_version() {
   fi
 
   if [[ -r "$COMPOSE_FILE" ]]; then
-    sed -nE 's/^[[:space:]]*image:[[:space:]]*headscale\/headscale:([^[:space:]]+).*/Headscale \1/p' "$COMPOSE_FILE" | head -1
+    awk '
+      /^[[:space:]]*image:[[:space:]]*headscale\/headscale:/ {
+        sub(/^[[:space:]]*image:[[:space:]]*headscale\/headscale:/, "")
+        sub(/[[:space:]].*$/, "")
+        print "Headscale " $0
+        exit
+      }
+    ' "$COMPOSE_FILE"
   fi
 }
 
@@ -129,7 +136,7 @@ detect_tailscale_version() {
   if command -v tailscale >/dev/null 2>&1; then
     local output
     if output="$(tailscale version 2>/dev/null)"; then
-      printf '%s\n' "$output" | head -1
+      printf '%s\n' "${output%%$'\n'*}"
     fi
   fi
 }
