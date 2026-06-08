@@ -154,12 +154,11 @@ runs:
         fi
 
         if CODEX_HOME="$CODEX_HOME_INPUT" codex review --base "$BASE_BRANCH" > /tmp/codex-review.txt 2>&1; then
+          echo "codex-ran=true" >> "$GITHUB_OUTPUT"
           if [[ -s /tmp/codex-review.txt ]]; then
-            echo "codex-ran=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Codex Round 2 complete. Output at /tmp/codex-review.txt ($(wc -l < /tmp/codex-review.txt) lines)."
           else
-            echo "codex-ran=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Codex produced no output. Skipping Round 2 results."
+            echo "::warning::Codex Round 2 completed but produced no output."
           fi
         else
           codex_status=$?

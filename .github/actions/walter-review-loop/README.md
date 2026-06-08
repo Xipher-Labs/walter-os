@@ -88,6 +88,7 @@ Recommended workflow:
       echo "::notice::CODEX_AUTH_JSON not set; Round 2 will skip."
       exit 0
     fi
+    umask 077
     mkdir -p /tmp/codex-minimal
     printf '%s' "$CODEX_AUTH_JSON" > /tmp/codex-minimal/auth.json
     chmod 600 /tmp/codex-minimal/auth.json

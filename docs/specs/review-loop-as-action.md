@@ -62,9 +62,9 @@ documents which rounds ran.
     means at least one automated round ran. Severity-based `clean` /
     `findings` / `escalate` is deferred until structured findings parsing
     lands.
-- [AC-3] The action handles Copilot unavailability gracefully: if the
-  `gh api` call to request Copilot review fails (any HTTP 4xx/5xx), it logs
-  the failure at INFO level and skips to Round 2. The action does not fail.
+- [AC-3] The action handles Copilot unavailability gracefully: if the direct
+  REST call to request Copilot review fails (any HTTP 4xx/5xx), it emits a
+  GitHub Actions warning and skips to Round 2. The action does not fail.
 - [AC-4] The action handles Codex CLI unavailability gracefully: if
   `command -v codex` returns non-zero, it logs at WARN level and skips Round 2.
 - [AC-5] `.github/workflows/pr-review.yml` in this repo uses the action:

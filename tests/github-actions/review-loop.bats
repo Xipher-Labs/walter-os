@@ -145,9 +145,20 @@ setup() {
   awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
     | grep -qE 'if[[:space:]]+CODEX_HOME="\$CODEX_HOME_INPUT"[[:space:]]+codex[[:space:]]+review'
   awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -q 'codex-ran=true'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
     | grep -q 'codex-ran=false'
   awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
     | grep -q 'Codex review failed'
+}
+
+@test "AC-4: Codex empty output still counts as a completed round" {
+  awk '/if CODEX_HOME=.*codex review/,/else/' "$ACTION_YML" \
+    | grep -q 'codex-ran=true'
+  if awk '/Codex produced no output/,/fi/' "$ACTION_YML" | grep -q 'codex-ran=false'; then
+    echo "empty successful Codex output should not mark codex-ran=false" >&2
+    return 1
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -177,6 +188,8 @@ setup() {
 }
 
 @test "AC-5: workflow writes Codex auth with restrictive permissions" {
+  awk '/Mount Codex auth/,/Run Walter-OS review loop/' "$WORKFLOW" \
+    | grep -qE "umask[[:space:]]+077"
   awk '/Mount Codex auth/,/Run Walter-OS review loop/' "$WORKFLOW" \
     | grep -qE "chmod[[:space:]]+600[[:space:]]+/tmp/codex-minimal/auth\\.json"
 }
@@ -208,6 +221,7 @@ setup() {
 
 @test "AC-7: action README documents the Codex auth setup" {
   grep -qE "CODEX_AUTH_JSON|auth\\.json" "$ACTION_README"
+  grep -qE "umask[[:space:]]+077" "$ACTION_README"
   grep -qE "chmod[[:space:]]+600[[:space:]]+/tmp/codex-minimal/auth\\.json" "$ACTION_README"
 }
 
