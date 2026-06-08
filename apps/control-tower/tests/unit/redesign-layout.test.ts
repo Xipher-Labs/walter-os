@@ -53,6 +53,11 @@ describe("redesign layout — AC-3 (responsive overview grid)", () => {
     const src = readFileSync(join(root, "app/page.tsx"), "utf8");
     expect(src).toContain("PreviewEvidencePanel");
   });
+
+  it("forces dynamic rendering for runtime operator env links", () => {
+    const src = readFileSync(join(root, "app/page.tsx"), "utf8");
+    expect(src).toContain('export const dynamic = "force-dynamic"');
+  });
 });
 
 describe("history page — server TopNav shell", () => {
