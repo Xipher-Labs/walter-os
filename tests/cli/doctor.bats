@@ -262,6 +262,14 @@ SH
   [ "$status" -ne 2 ]
 }
 
+@test "walter doctor rejects relative WALTER_OS_HOME" {
+  run env WALTER_OS_HOME="tmp/walter-os" "${REPO_ROOT}/scripts/walter/subcommands/doctor.sh" --client-only
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid WALTER_OS_HOME value"* ]]
+  [[ "$output" == *"absolute path"* ]]
+}
+
 @test "walter doctor --client-only: source-level CLIENT_ONLY gate exists for SSH" {
   # Verify the gating exists in the script source. Functional output assertion
   # was flaky (env-dependent: operator's local env may have walter-vm reachable
@@ -537,7 +545,7 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"high-risk tool wrappers first in PATH"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
-  [[ "$output" == *"High-risk wrappers are active, but supported host hooks were not detected."* ]]
+  [[ "$output" == *"High-risk wrappers are active, but supported host hooks were not confirmed."* ]]
 }
 
 @test "walter doctor --enforcement requires wrapper dir first in PATH" {

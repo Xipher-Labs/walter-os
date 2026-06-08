@@ -15,8 +15,8 @@ set -euo pipefail
 # This prevents injection via check() even if eval is used inside.
 # See: docs/operational/security-audit-2026-05-11.md P0-04
 WALTER_OS_HOME="${WALTER_OS_HOME:?WALTER_OS_HOME required — set in personal.env or export. Default: /opt/walter-os}"
-if [[ ! "$WALTER_OS_HOME" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
-  echo "doctor: invalid WALTER_OS_HOME value (contains unsafe characters)" >&2
+if [[ ! "$WALTER_OS_HOME" =~ ^/[A-Za-z0-9/_.-]*$ ]]; then
+  echo "doctor: invalid WALTER_OS_HOME value (must be an absolute path with safe characters)" >&2
   exit 2
 fi
 while [[ "$WALTER_OS_HOME" != "/" && "$WALTER_OS_HOME" == */ ]]; do
@@ -319,7 +319,7 @@ run_enforcement_doctor() {
       echo "Claude Code hooks are active, but direct binary bypasses may remain."
       echo "Remediation: install/enable Walter wrappers or run high-risk work in a sandbox."
     else
-      echo "High-risk wrappers are active, but supported host hooks were not detected."
+      echo "High-risk wrappers are active, but supported host hooks were not confirmed."
       echo "Remediation: run ./install.sh --upgrade, then re-run walter doctor --enforcement."
     fi
     return 0
