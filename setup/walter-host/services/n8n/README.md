@@ -111,7 +111,7 @@ n8n basic auth catches every one of those.
 
 ### Operator setup
 
-1. Add the two basic-auth secrets to Infisical:
+1. Add the two basic-auth secrets to Infisical or your password manager:
 
    ```bash
    infisical secrets set N8N_BASIC_AUTH_USER='walter-admin'
@@ -122,19 +122,15 @@ n8n basic auth catches every one of those.
    be **24+ random characters** (the example above gives 32). Save both
    in your password manager.
 
-2. Write them into the service's local `.env` file. The deploy flow
-   (`deploy.sh`) generates `/opt/walter-vm/services/n8n/.env` on first
-   run from `.env.template`; either edit the generated file directly
-   or pull-and-render via your secrets manager.
+2. Run deploy with those variables exported. `deploy.sh` creates
+   `/opt/walter-vm/services/n8n/.env` on first run and upserts missing
+   required keys without duplicating existing lines. If the two
+   basic-auth variables are not exported, deploy generates
+   `N8N_BASIC_AUTH_USER=walter-admin` and a random password.
 
    ```bash
-   # Option A — Infisical CLI writes the .env directly:
    cd /opt/walter-vm/services/n8n
-   infisical export --env=prod --format=dotenv >> .env
-
-   # Option B — append manually (use ONLY for testing):
-   echo "N8N_BASIC_AUTH_USER=walter-admin" >> .env
-   echo "N8N_BASIC_AUTH_PASSWORD=<paste-from-password-manager>" >> .env
+   infisical run --env=prod -- bash deploy.sh
    ```
 
    Note: `walter-os secrets-pull` is the DEPRECATED Bitwarden/
@@ -151,6 +147,16 @@ n8n basic auth catches every one of those.
 
 4. The first browser hit will prompt for basic-auth credentials AFTER
    CF Access succeeds.
+
+For workflow imports, pass the same basic-auth variables alongside the
+n8n API key when basic-auth is enabled:
+
+```bash
+N8N_API_KEY=<api-key> \
+N8N_BASIC_AUTH_USER=<user> \
+N8N_BASIC_AUTH_PASSWORD=<password> \
+  ./import-workflows.sh
+```
 
 If either env var is missing at boot, the compose **fails with a clear
 error** (`N8N_BASIC_AUTH_USER required …`) thanks to the `${VAR:?msg}`

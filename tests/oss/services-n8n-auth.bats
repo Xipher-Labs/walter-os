@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016
 # tests/oss/services-n8n-auth.bats
 #
 # Audit P1-03 regression coverage: n8n must run with its built-in basic
@@ -10,6 +11,21 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 COMPOSE="$REPO_ROOT/setup/walter-host/services/n8n/compose.yml"
 ROOT_COMPOSE="$REPO_ROOT/compose.yml"
 README="$REPO_ROOT/setup/walter-host/services/n8n/README.md"
+DEPLOY="$REPO_ROOT/setup/walter-host/services/n8n/deploy.sh"
+ENV_TEMPLATE="$REPO_ROOT/setup/walter-host/services/n8n/.env.template"
+IMPORT_SCRIPT="$REPO_ROOT/setup/walter-host/services/n8n/import-workflows.sh"
+
+setup() {
+  TMP_SVC=""
+}
+
+teardown() {
+  if [[ -n "${TMP_SVC:-}" ]]; then
+    case "$TMP_SVC" in
+      /tmp/*|/var/tmp/*|/var/folders/*) rm -rf "$TMP_SVC" ;;
+    esac
+  fi
+}
 
 @test "n8n compose has N8N_BASIC_AUTH_ACTIVE set to \"true\" (P1-03)" {
   [ -f "$COMPOSE" ]
@@ -20,7 +36,9 @@ README="$REPO_ROOT/setup/walter-host/services/n8n/README.md"
 
 @test "n8n compose does NOT set N8N_BASIC_AUTH_ACTIVE to \"false\" (P1-03)" {
   [ -f "$COMPOSE" ]
-  ! grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$COMPOSE"
+  if grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$COMPOSE"; then
+    return 1
+  fi
 }
 
 @test "n8n compose wires N8N_BASIC_AUTH_USER + N8N_BASIC_AUTH_PASSWORD env vars (P1-03)" {
@@ -43,6 +61,43 @@ README="$REPO_ROOT/setup/walter-host/services/n8n/README.md"
   grep -qi 'defense in depth\|defense-in-depth\|two-layer' "$README"
   grep -q 'Cloudflare Access' "$README"
   grep -q 'N8N_BASIC_AUTH_PASSWORD' "$README"
+  grep -q 'infisical run --env=prod -- bash deploy.sh' "$README"
+  if grep -q 'infisical export .*>> .env' "$README"; then
+    return 1
+  fi
+}
+
+@test "n8n deploy.sh generates missing basic-auth credentials (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  grep -q '^N8N_BASIC_AUTH_USER=walter-admin$' "$TMP_SVC/.env"
+  grep -qE '^N8N_BASIC_AUTH_PASSWORD=[0-9a-f]{48}$' "$TMP_SVC/.env"
+}
+
+@test "n8n deploy.sh honors provided basic-auth credentials (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" \
+    N8N_BASIC_AUTH_USER=operator \
+    N8N_BASIC_AUTH_PASSWORD=provided-secret \
+    bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  grep -q '^N8N_BASIC_AUTH_USER=operator$' "$TMP_SVC/.env"
+  grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
+}
+
+@test "n8n import-workflows supports optional basic-auth curl args (P1-03)" {
+  [ -f "$IMPORT_SCRIPT" ]
+  grep -q 'N8N_BASIC_AUTH_USER' "$IMPORT_SCRIPT"
+  grep -q 'N8N_BASIC_AUTH_PASSWORD' "$IMPORT_SCRIPT"
+  grep -q 'curl_auth_args=(-u "${N8N_BASIC_AUTH_USER}:${N8N_BASIC_AUTH_PASSWORD}")' "$IMPORT_SCRIPT"
+  grep -q 'set both N8N_BASIC_AUTH_USER and N8N_BASIC_AUTH_PASSWORD' "$IMPORT_SCRIPT"
 }
 
 # --- Copilot R1 of #67: ALSO cover the repo-root compose.yml ---
@@ -57,11 +112,19 @@ README="$REPO_ROOT/setup/walter-host/services/n8n/README.md"
 
 @test "root compose.yml: n8n service does NOT set N8N_BASIC_AUTH_ACTIVE \"false\" (P1-03)" {
   [ -f "$ROOT_COMPOSE" ]
-  ! grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$ROOT_COMPOSE"
+  if grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$ROOT_COMPOSE"; then
+    return 1
+  fi
 }
 
 @test "root compose.yml: n8n service wires both basic-auth env vars with :? guard (P1-03)" {
   [ -f "$ROOT_COMPOSE" ]
   grep -qE 'N8N_BASIC_AUTH_USER:\s+\$\{N8N_BASIC_AUTH_USER:\?' "$ROOT_COMPOSE"
   grep -qE 'N8N_BASIC_AUTH_PASSWORD:\s+\$\{N8N_BASIC_AUTH_PASSWORD:\?' "$ROOT_COMPOSE"
+}
+
+@test "root .env.example documents n8n basic-auth inputs (P1-03)" {
+  [ -f "$REPO_ROOT/.env.example" ]
+  grep -q '^# N8N_BASIC_AUTH_USER=walter-admin$' "$REPO_ROOT/.env.example"
+  grep -q '^# N8N_BASIC_AUTH_PASSWORD=$' "$REPO_ROOT/.env.example"
 }
