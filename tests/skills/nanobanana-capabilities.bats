@@ -85,6 +85,19 @@ YAML
   ! echo "$output" | grep -q "Missing deps"
 }
 
+@test "nanobanana parses image route key with whitespace before colon" {
+  write_capabilities <<'YAML'
+profile: local-only
+provider_gemini: enabled
+route_image_generation : none
+YAML
+
+  run python3 "$GENERATE_PY" --prompt "test" --out "$TEST_HOME/out.png"
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -q "route_image_generation must include gemini"
+  ! echo "$output" | grep -q "Missing deps"
+}
+
 @test "nanobanana accepts Gemini capability config before requiring API key" {
   write_capabilities <<'YAML'
 profile: mixed

@@ -10,10 +10,16 @@
 #
 # Usage:
 #   WALTER_DOMAIN=yourdomain.com ./deploy.sh
-#   WALTER_DOMAIN=yourdomain.com ./deploy.sh --down   # stop stack
+#   WALTER_DOMAIN=yourdomain.com ./deploy.sh --down      # stop stack
+#   ./deploy.sh --diagnose                              # inspect registration drift
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "${1:-}" == "--diagnose" ]]; then
+  shift
+  exec "${SCRIPT_DIR}/diagnose.sh" "$@"
+fi
 
 : "${WALTER_DOMAIN:?WALTER_DOMAIN required for Headscale deploy — set it in your environment or .env.local}"
 
@@ -27,3 +33,4 @@ if [[ "${1:-}" == "--down" ]]; then
 fi
 
 docker compose -f "${SCRIPT_DIR}/compose.yml" up -d
+echo "Headscale started. If client registration fails, run: ${SCRIPT_DIR}/deploy.sh --diagnose"

@@ -73,6 +73,10 @@ requires the one-minor-version notice cycle.
 
 - Added `walter doctor --enforcement` to report whether local tool execution is
   `enforced`, `partial`, or `policy-only`.
+- Headscale service diagnostics for `/machine/register` failures: operators can
+  run `setup/walter-host/services/headscale/deploy.sh --diagnose` to detect the
+  known Tailscale/Headscale capability-version drift signature and get the
+  safer break-glass recovery path.
 
 ### Fixed
 

@@ -48,6 +48,16 @@ docker exec headscale headscale version
 tailscale version
 ```
 
+Or run the read-only diagnostic helper:
+
+```bash
+cd /opt/walter-vm/services/headscale
+./deploy.sh --diagnose
+```
+
+If the helper prints `capability-version drift detected`, follow the recovery
+path below before treating Headscale as healthy.
+
 Run this on the client trying to join:
 
 ```bash
