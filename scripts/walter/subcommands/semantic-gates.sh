@@ -38,9 +38,12 @@ json_escape() {
   local value="$1"
   value="${value//\\/\\\\}"
   value="${value//\"/\\\"}"
+  value="${value//$'\b'/\\b}"
   value="${value//$'\t'/\\t}"
+  value="${value//$'\f'/\\f}"
   value="${value//$'\r'/\\r}"
   value="${value//$'\n'/\\n}"
+  value="${value//[$'\001'-$'\007'$'\013'$'\016'-$'\037'$'\177']/}"
   printf '%s' "$value"
 }
 
@@ -163,7 +166,7 @@ check_architecture_review() {
   fi
 
   review_body="$(matching_sections_body "(Architecture review|Architecture|Decisions|Cross-cutting decisions|Threat model|Risks)")"
-  if printf '%s\n' "$review_body" | grep -Eiq '(ADR-[0-9]+|DEC-[0-9]+|decision|rationale|risk|threat|review)'; then
+  if printf '%s\n' "$review_body" | grep -Eiq '(^|[^[:alnum:]_])(ADR-[0-9]+|DEC-[0-9]+|decision|decisions|rationale|risk|risks|threat|threats|review|reviewed|reviewable)([^[:alnum:]_]|$)'; then
     add_evidence "architecture-review" "reviewable decision/risk language present"
   else
     add_failure "architecture-review" "missing reviewable decision/risk language"
@@ -172,6 +175,7 @@ check_architecture_review() {
 
 check_test_relevance() {
   local tests_dir="$1" candidates_file find_error_file find_error_summary match_file rel_match
+  local grep_error_file grep_error_summary grep_status scan_failed=0
   if [[ ! -d "$tests_dir" ]]; then
     add_failure "test-relevance" "tests directory not found: $tests_dir"
     return
@@ -191,12 +195,30 @@ check_test_relevance() {
   fi
 
   match_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates.XXXXXX")"
+  grep_error_file="$(mktemp "${TMPDIR:-/tmp}/walter-semantic-gates-grep.XXXXXX")"
   while IFS= read -r file; do
-    if grep -qF -- "$spec_rel" "$file"; then
+    : > "$grep_error_file"
+    if grep -qF -- "$spec_rel" "$file" 2> "$grep_error_file"; then
       printf '%s\n' "$file" >> "$match_file"
+    else
+      grep_status=$?
+      if [[ "$grep_status" -gt 1 ]]; then
+        scan_failed=1
+        grep_error_summary="$(tr '\n' ' ' < "$grep_error_file" | sed 's/[[:space:]]*$//')"
+        if [[ -n "$grep_error_summary" ]]; then
+          add_failure "test-relevance" "unable to scan test file: $file ($grep_error_summary)"
+        else
+          add_failure "test-relevance" "unable to scan test file: $file"
+        fi
+      fi
     fi
   done < "$candidates_file"
-  rm -f "$candidates_file" "$find_error_file"
+  rm -f "$candidates_file" "$find_error_file" "$grep_error_file"
+
+  if [[ "$scan_failed" -ne 0 ]]; then
+    rm -f "$match_file"
+    return
+  fi
 
   if [[ ! -s "$match_file" ]]; then
     rm -f "$match_file"
