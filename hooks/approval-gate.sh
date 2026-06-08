@@ -219,6 +219,13 @@ _tier_rank() {
   esac
 }
 
+is_known_agent_name() {
+  case "$1" in
+    triage|researcher|coder|reviewer|janitor|liaison|test-agent|unknown) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 _shellish_normalize_payload() {
   local value="$1" backslash_newline
   backslash_newline=$'\\\n'
@@ -450,6 +457,8 @@ _trust_tier_allows() {
   local agent="$1" category="$2"
   local min_tier="${CATEGORY_MIN_TIER[$category]:-low}"
 
+  is_known_agent_name "$agent" || return 1
+
   if [[ ! -f "$TRUST_TIERS" ]]; then
     [[ "$min_tier" == "low" ]] && return 0
     return 1
@@ -538,10 +547,7 @@ matches_standing_approval() {
   # An attacker who controls WALTER_AGENT_NAME could inject yq syntax that
   # makes select() always true, bypassing the gate.
   # See: docs/operational/security-audit-2026-05-11.md P0-02
-  case "$agent" in
-    triage|researcher|coder|reviewer|janitor|liaison|test-agent|unknown) ;;
-    *) return 1 ;;
-  esac
+  is_known_agent_name "$agent" || return 1
 
   # Fetch matching rules: where rules.<key>.agent == $agent
   local rules
@@ -600,7 +606,7 @@ apply_trust_tier() {
     # Check if this tier-restricted category requires a higher tier.
     if ! _trust_tier_allows "$agent" "$category"; then
       local agent_tier
-      if [[ -f "$TRUST_TIERS" ]] && command -v yq >/dev/null 2>&1; then
+      if is_known_agent_name "$agent" && [[ -f "$TRUST_TIERS" ]] && command -v yq >/dev/null 2>&1; then
         agent_tier=$(approval_gate_yq_read ".agents.${agent}.tier // \"unknown\"" "$TRUST_TIERS" 2>/dev/null || echo "unknown")
       else
         agent_tier="unavailable"

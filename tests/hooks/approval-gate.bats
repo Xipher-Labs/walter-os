@@ -905,6 +905,16 @@ EOF
   [[ "$status" -eq 7 ]]
 }
 
+@test "P0-02: malicious WALTER_AGENT_NAME does not bypass trust tiers" {
+  command -v yq >/dev/null 2>&1 || skip "yq required for trust-tier injection test"
+
+  export WALTER_AGENT_NAME='test-agent") | "medium" #'
+
+  run "$HOOK" check "gh pr create --title test --body test" --tool Bash
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ trust[[:space:]]tier|BLOCK ]]
+}
+
 # ---------------------------------------------------------------------------
 # P1-05 — yq fail-closed at hook entry (audit hardening)
 # ---------------------------------------------------------------------------
