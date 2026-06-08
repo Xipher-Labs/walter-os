@@ -193,8 +193,8 @@ else
 fi
 
 # ---------- 2. litellm-db connection saturation ----------
-used=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' \n' || true)
-max=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT setting FROM pg_settings WHERE name='max_connections';" 2>/dev/null | tr -d ' \n' || true)
+used=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT count(*) FROM pg_stat_activity WHERE pid <> pg_backend_pid();" 2>/dev/null | tr -d ' \n' || true)
+max=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int;" 2>/dev/null | tr -d ' \n' || true)
 if [[ "${used:-}" =~ ^[0-9]+$ && "${max:-}" =~ ^[0-9]+$ && "$max" -gt 0 ]]; then
   pct=$(( used * 100 / max ))
   if [[ "$pct" -ge "$DB_SAT_PCT" ]]; then
