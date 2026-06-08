@@ -69,7 +69,11 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-No user-facing changes yet.
+### Changed
+
+- Council agent personas now declare `model_domain` frontmatter so
+  `scripts/agents/run.sh` routes through Walter's operator-configurable model
+  domains instead of treating the compatibility `model` field as authoritative.
 
 ## [0.6.1] — 2026-06-07
 

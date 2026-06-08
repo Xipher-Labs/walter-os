@@ -72,7 +72,9 @@ Each skill below now reads `walter_model_for <its-domain>` and dispatches accord
 - [ ] `skills/pr-review/SKILL.md` — routes by changed-file mix: mostly `*.tsx`/`*.jsx`/`*.css` → frontend pref; mostly `*.go`/`*.rs`/`hooks/*.sh`/`scripts/agents/*.sh` → backend pref; mixed → both in parallel.
 - [x] `skills/frontend-quality/SKILL.md` — reads `WALTER_MODEL_FRONTEND`.
 - [x] `skills/web-security-baseline/SKILL.md` — reads `WALTER_MODEL_BACKEND_REVIEW`.
-- [x] `agents/architect.md` — uses brainstorm routing for multi-model planning.
+- [x] `agents/*.md` — declare `model_domain` frontmatter so Council personas
+  route through Walter preferences; `model` remains only host-loader fallback
+  metadata.
 - [x] `skills/content-writer/SKILL.md` (if shipped — defer if not) — reads `WALTER_MODEL_LONGFORM`.
 
 ### AC-4 — Review-policy YAML for 3-round workflow

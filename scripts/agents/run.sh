@@ -117,6 +117,15 @@ case "$AGENT" in
 esac
 
 _agent_model_domain() {
+  # Prefer explicit persona metadata. Keep the case mapping as a compatibility
+  # fallback for legacy agent files and external aliases.
+  local frontmatter_domain
+  frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"
+  if [[ -n "$frontmatter_domain" ]]; then
+    printf '%s\n' "$frontmatter_domain"
+    return 0
+  fi
+
   case "${1:-}" in
     coder|reviewer|security-auditor) echo "backend_review" ;;
     researcher|triage|architect)     echo "brainstorm" ;;
@@ -124,6 +133,28 @@ _agent_model_domain() {
     janitor)                         echo "quick_refactor" ;;
     *)                               echo "default" ;;
   esac
+}
+
+_agent_frontmatter_scalar() {
+  local file="${1:-}" key="${2:-}"
+  [[ -n "$file" && -f "$file" && -n "$key" ]] || return 0
+
+  awk -v key="$key" '
+    BEGIN { in_frontmatter = 0 }
+    NR == 1 && $0 == "---" { in_frontmatter = 1; next }
+    in_frontmatter && $0 == "---" { exit }
+    in_frontmatter {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ "^[[:space:]]*" key "[[:space:]]*:") {
+        sub(/^[^:]*:[[:space:]]*/, "", line)
+        sub(/[[:space:]]+#.*$/, "", line)
+        sub(/[[:space:]]+$/, "", line)
+        print line
+        exit
+      }
+    }
+  ' "$file"
 }
 
 # ---------- pull issue + check lane/context ----------

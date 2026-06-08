@@ -3,6 +3,7 @@ name: devrel-writer
 description: Write external-facing DevRel content — Twitter/X threads, LinkedIn posts, YouTube video scripts, podcast outlines, conference talk abstracts, hackathon submission narratives, customer-facing announcements. Use this subagent when the user asks to "draft a thread", "write a script for the video", "outline the talk", "write the launch announcement", or any artifact destined for an external audience that needs a strong hook + retention + clear CTA. Distinct from tech-writer (docs/READMEs).
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write, Edit
 model: sonnet
+model_domain: longform
 memory: project
 ---
 

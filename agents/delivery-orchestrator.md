@@ -3,6 +3,7 @@ name: delivery-orchestrator
 description: coordinate autonomous delivery pipelines across existing Walter Council lanes while preserving human gates, feature-state, and hard-limit safety.
 tools: Read, Grep, Glob, Bash
 model: sonnet
+model_domain: brainstorm
 skills:
   - definition-of-done-validator
   - pr-review

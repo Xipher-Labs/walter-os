@@ -3,6 +3,7 @@ name: reviewer
 description: Independently review code changes for bugs, security issues, performance problems, edge cases, and Definition of Done coverage. Read-only — no write tools. Use this subagent after the implementer completes a plan, before opening any PR, after receiving Copilot review comments, or whenever the user asks "review this", "check the diff", "is this safe to merge". Always invoke fresh-context (no inheritance from implementer's session).
 tools: Read, Grep, Glob, Bash
 model: sonnet
+model_domain: backend_review
 skills:
   - pr-review
   - definition-of-done-validator

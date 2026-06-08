@@ -35,6 +35,12 @@ source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
 model="$(walter_model_for backend_review)"
 ```
 
+Walter Council persona files under `agents/*.md` declare a `model_domain`
+frontmatter field. That field is the authoritative Walter routing signal for
+`scripts/agents/run.sh`. The adjacent `model` field remains as host/tool-loader
+compatibility metadata for clients that still expect a concrete model name in
+agent frontmatter.
+
 ## Domains
 
 | Domain | Env var | Default | Intended use |

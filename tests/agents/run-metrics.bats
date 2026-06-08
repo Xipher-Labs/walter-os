@@ -47,7 +47,13 @@ teardown() {
   grep -q "walter_model_select_primary" "$RUN_SH"
 }
 
-@test "run.sh maps Council agents to model routing domains" {
+@test "run.sh reads Council model routing domain from frontmatter" {
+  grep -q "_agent_frontmatter_scalar" "$RUN_SH"
+  grep -q '"model_domain"' "$RUN_SH"
+  grep -q "frontmatter_domain" "$RUN_SH"
+}
+
+@test "run.sh keeps legacy Council agent domain fallback mapping" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
   grep -q "backend_review" "$RUN_SH"
@@ -55,6 +61,23 @@ teardown() {
   grep -q "brainstorm" "$RUN_SH"
   grep -q "liaison|tech-writer|devrel-writer" "$RUN_SH"
   grep -q "longform" "$RUN_SH"
+}
+
+@test "agent frontmatter declares Walter model routing domains" {
+  ruby -ryaml -rdate -e '
+    allowed = %w[backend_review frontend longform quick_refactor phi brainstorm default]
+    Dir["agents/*.md"].each do |path|
+      text = File.read(path)
+      match = text.match(/\A---\n(.*?)\n---/m)
+      abort("#{path}: missing frontmatter") unless match
+      data = YAML.safe_load(match[1], permitted_classes: [Date], aliases: false)
+      domain = data["model_domain"]
+      abort("#{path}: missing model_domain") unless domain.is_a?(String)
+      abort("#{path}: invalid model_domain #{domain.inspect}") unless allowed.include?(domain)
+      raw = match[1].lines.grep(/\Amodel_domain: /).first
+      abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\Amodel_domain: (#{allowed.join("|")})\s*\z/)
+    end
+  '
 }
 
 @test "run.sh does not hardcode primary Council models" {
