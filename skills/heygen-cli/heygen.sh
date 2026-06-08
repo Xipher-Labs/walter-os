@@ -50,6 +50,7 @@ _heygen_validate_json_object() {
     echo "heygen-cli: $label must be a JSON object" >&2
     return 2
   fi
+  return 0
 }
 
 # Internal — wrap curl with consistent headers + error handling.
