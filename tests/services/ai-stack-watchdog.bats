@@ -109,7 +109,11 @@ setup() {
 
 @test "db saturation psql probes are bounded" {
   grep -q 'timeout 10s docker exec litellm-db psql .*pg_stat_activity' "$WATCHDOG"
-  grep -q 'timeout 10s docker exec litellm-db psql .*max_connections' "$WATCHDOG"
+  grep -q 'pid <> pg_backend_pid()' "$WATCHDOG"
+  grep -q "current_setting('max_connections')" "$WATCHDOG"
+  grep -q "current_setting('superuser_reserved_connections')" "$WATCHDOG"
+  run grep -q 'SELECT count(\*) FROM pg_stat_activity;' "$WATCHDOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "cloudflared log fallback evaluates the last relevant event" {
