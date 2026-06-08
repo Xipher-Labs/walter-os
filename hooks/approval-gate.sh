@@ -161,19 +161,25 @@ declare -a BLOCK_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 # high-required: low and medium tier are blocked unless override.
 
 if (( BASH_VERSINFO[0] < 4 )); then
-  _bash_version_reason="approval-gate: requires Bash >= 4.0 for associative arrays; macOS /bin/bash 3.2 is not supported. Install GNU bash and re-run the hook."
+  _bash_version_reason="requires Bash >= 4.0 for associative arrays; macOS /bin/bash 3.2 is not supported. Install GNU bash and re-run the hook."
   if [[ $# -gt 0 ]]; then
     echo "approval-gate: BLOCK — $_bash_version_reason" >&2
     exit 7
   fi
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"%s"}}\n' "$_bash_version_reason"
+  _bash_version_reason="approval-gate: $_bash_version_reason"
+  _bash_version_reason_json="${_bash_version_reason//\\/\\\\}"
+  _bash_version_reason_json="${_bash_version_reason_json//\"/\\\"}"
+  _bash_version_reason_json="${_bash_version_reason_json//$'\n'/\\n}"
+  _bash_version_reason_json="${_bash_version_reason_json//$'\r'/\\r}"
+  _bash_version_reason_json="${_bash_version_reason_json//$'\t'/\\t}"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"%s"}}\n' "$_bash_version_reason_json"
   exit 0
 fi
 
 # This script requires Bash 4+ for associative arrays (`declare -A`);
-# macOS /bin/bash 3.2 is not a supported runtime for this hook. Keep the
-# array literal inside `set +u` so nounset cannot turn dashed keys into
-# parameter-expansion surprises on supported Bash runtimes.
+# macOS /bin/bash 3.2 is not a supported runtime for this hook. Keep
+# `set +u` around the array literal as a defensive guard while parsing
+# dashed associative-array keys.
 set +u
 declare -A CATEGORY_MIN_TIER=(
   [git-push-feature-branch]="medium"

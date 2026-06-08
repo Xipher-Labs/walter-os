@@ -83,7 +83,7 @@ teardown() {
 }
 
 @test "CLI: Bash version guard appears before associative arrays" {
-  guard_line="$(grep -n 'requires Bash >= 4.0' "$HOOK" | head -n 1 | cut -d: -f1)"
+  guard_line="$(grep -nF 'if (( BASH_VERSINFO[0] < 4 ))' "$HOOK" | head -n 1 | cut -d: -f1)"
   declare_line="$(grep -n 'declare -A CATEGORY_MIN_TIER' "$HOOK" | head -n 1 | cut -d: -f1)"
 
   [[ -n "$guard_line" ]]
