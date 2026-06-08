@@ -3,6 +3,7 @@ name: security-auditor
 description: Specialized security review subagent invoked automatically when changes touch authentication, cryptography, money flows, medical data (PHI), or network-exposed surfaces (RPC, gRPC, public APIs). Also use when the user asks "security review", "is this safe", "OWASP check", "audit this for vulnerabilities", or before any deploy that touches production. Goes deeper than reviewer on threat modeling and supply chain risk.
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
 model: sonnet
+model_domain: backend_review
 skills:
   - pr-review
   - daily-supply-chain-audit

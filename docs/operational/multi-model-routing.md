@@ -41,6 +41,12 @@ walter_model_resolve backend_review model
 when a caller intentionally needs the full comma-separated route for its own
 parallel fan-out logic.
 
+Walter Council persona files under `agents/*.md` declare a `model_domain`
+frontmatter field. That field is the authoritative Walter routing signal for
+`scripts/agents/run.sh`. The adjacent `model` field remains as host/tool-loader
+compatibility metadata for clients that still expect a concrete model name in
+agent frontmatter.
+
 ## Domains
 
 | Domain | Env var | Default | Intended use |

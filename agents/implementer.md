@@ -3,6 +3,7 @@ name: implementer
 description: Execute an approved implementation plan task by task using strict TDD. Use this subagent when there's an approved spec at docs/specs/<slug>.md and plan at docs/specs/<slug>.plan.md and the operator says "implement" / "execute the plan" / "build it". Refuses to start without an approved plan.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
+model_domain: backend_review
 skills:
   - test-driven-development
   - definition-of-done-validator
