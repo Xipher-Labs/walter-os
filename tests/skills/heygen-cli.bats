@@ -38,9 +38,9 @@ run_heygen() {
   run run_heygen bash -c "source '$HEYGEN_SH'; _heygen_request POST /v2/test '@/tmp/secret.json'"
 
   [ "$status" -eq 0 ]
-  grep -qx -- '--data-raw' "$CURL_ARGS"
-  grep -qx -- '@/tmp/secret.json' "$CURL_ARGS"
-  if grep -qx -- '-d' "$CURL_ARGS"; then
+  grep -Fxq -- '--data-raw' "$CURL_ARGS"
+  grep -Fxq -- '@/tmp/secret.json' "$CURL_ARGS"
+  if grep -Fxq -- '-d' "$CURL_ARGS"; then
     return 1
   fi
 }
@@ -60,14 +60,14 @@ run_heygen() {
   run run_heygen bash -c "source '$HEYGEN_SH'; heygen_get_video_status 'video id/with?chars'"
 
   [ "$status" -eq 0 ]
-  grep -q '/v1/video_status.get?video_id=video%20id%2Fwith%3Fchars$' "$CURL_ARGS"
+  grep -Fq '/v1/video_status.get?video_id=video%20id%2Fwith%3Fchars' "$CURL_ARGS"
 }
 
 @test "heygen_generate_from_template URL-encodes template id" {
   run run_heygen bash -c "source '$HEYGEN_SH'; heygen_generate_from_template 'template/id with spaces' --variables '{\"name\":\"Walter\"}'"
 
   [ "$status" -eq 0 ]
-  grep -q '/v2/template/template%2Fid%20with%20spaces/generate$' "$CURL_ARGS"
+  grep -Fq '/v2/template/template%2Fid%20with%20spaces/generate' "$CURL_ARGS"
 }
 
 @test "heygen_generate_from_template rejects invalid variables JSON before curl" {
