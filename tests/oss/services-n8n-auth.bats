@@ -36,9 +36,8 @@ teardown() {
 
 @test "n8n compose does NOT set N8N_BASIC_AUTH_ACTIVE to \"false\" (P1-03)" {
   [ -f "$COMPOSE" ]
-  if grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$COMPOSE"; then
-    return 1
-  fi
+  run grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$COMPOSE"
+  [ "$status" -ne 0 ]
 }
 
 @test "n8n compose wires N8N_BASIC_AUTH_USER + N8N_BASIC_AUTH_PASSWORD env vars (P1-03)" {
@@ -132,6 +131,29 @@ ENV
   grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
 }
 
+@test "n8n deploy.sh treats the last duplicate env assignment as authoritative (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+  {
+    printf '%s\n' 'N8N_PG_PASS=pg'
+    printf '%s\n' 'N8N_ENCRYPTION_KEY=encryption'
+    printf '%s\n' 'N8N_BASIC_AUTH_USER=operator'
+    printf '%s\n' 'N8N_BASIC_AUTH_USER=""'
+    printf '%s\n' 'N8N_BASIC_AUTH_PASSWORD=provided-secret'
+    printf 'N8N_BASIC_AUTH_PASSWORD=   \n'
+  } > "$TMP_SVC/.env"
+  chmod 600 "$TMP_SVC/.env"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" \
+    N8N_BASIC_AUTH_USER=operator \
+    N8N_BASIC_AUTH_PASSWORD=provided-secret \
+    bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^N8N_BASIC_AUTH_USER=operator$' "$TMP_SVC/.env")" -eq 2 ]
+  [ "$(grep -c '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env")" -eq 2 ]
+}
+
 @test "n8n import-workflows supports optional basic-auth curl args (P1-03)" {
   [ -f "$IMPORT_SCRIPT" ]
   grep -q 'N8N_BASIC_AUTH_USER' "$IMPORT_SCRIPT"
@@ -152,9 +174,8 @@ ENV
 
 @test "root compose.yml: n8n service does NOT set N8N_BASIC_AUTH_ACTIVE \"false\" (P1-03)" {
   [ -f "$ROOT_COMPOSE" ]
-  if grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$ROOT_COMPOSE"; then
-    return 1
-  fi
+  run grep -qE '^\s*N8N_BASIC_AUTH_ACTIVE:\s*"false"\s*$' "$ROOT_COMPOSE"
+  [ "$status" -ne 0 ]
 }
 
 @test "root compose.yml: n8n service wires both basic-auth env vars with :? guard (P1-03)" {

@@ -27,15 +27,18 @@ env_value_present() {
   local key="$1"
   awk -v key="$key" '
     index($0, "=") > 0 && substr($0, 1, index($0, "=") - 1) == key {
-      value = substr($0, index($0, "=") + 1)
+      last = substr($0, index($0, "=") + 1)
+    }
+    END {
+      if (last == "") exit 1
+      value = last
       if ((substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
           (substr(value, 1, 1) == "'"'"'" && substr(value, length(value), 1) == "'"'"'")) {
         value = substr(value, 2, length(value) - 2)
       }
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-      if (length(value) > 0) found=1
+      exit length(value) > 0 ? 0 : 1
     }
-    END { exit found ? 0 : 1 }
   ' "$ENV_FILE"
 }
 
