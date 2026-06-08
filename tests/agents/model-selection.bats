@@ -29,6 +29,20 @@ teardown() {
   echo "$output" | grep -q "model router not found"
 }
 
+@test "agent model selection fails closed when router source fails" {
+  local broken_router="$TEST_CONFIG/broken-router.sh"
+  printf 'return 7\n' >"$broken_router"
+
+  run bash -c '
+    source "$1"
+    export WALTER_MODEL_ROUTER_SH="$2"
+    walter_agent_select_model backend_review MODEL
+  ' _ "$LIB" "$broken_router"
+
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -q "failed to source model router"
+}
+
 @test "agent model selection rejects LiteLLM-only aliases for direct Anthropic" {
   run bash -c '
     source "$1"

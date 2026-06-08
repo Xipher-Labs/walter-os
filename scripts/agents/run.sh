@@ -85,8 +85,8 @@ source "$LIB_DIR/vote.sh"
 source "$LIB_DIR/mode.sh"
 
 MODEL_ROUTER="$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-[[ -f "$MODEL_ROUTER" ]] || {
-  echo "agents/run.sh: model router not found at $MODEL_ROUTER (run install.sh?)" >&2
+[[ -r "$MODEL_ROUTER" ]] || {
+  echo "agents/run.sh: model router not found or unreadable at $MODEL_ROUTER (run install.sh?)" >&2
   exit 3
 }
 export WALTER_MODEL_ROUTER_SH="$MODEL_ROUTER"

@@ -51,13 +51,16 @@ walter_agent_select_model() {
     router_sh="$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
   fi
 
-  if [[ -z "$router_sh" || ! -f "$router_sh" ]]; then
-    echo "agents/model-selection.sh: model router not found at ${router_sh:-<unset>}." >&2
+  if [[ -z "$router_sh" || ! -r "$router_sh" ]]; then
+    echo "agents/model-selection.sh: model router not found or unreadable at ${router_sh:-<unset>}." >&2
     return 3
   fi
 
   # shellcheck disable=SC1090,SC1091
-  source "$router_sh"
+  if ! source "$router_sh"; then
+    echo "agents/model-selection.sh: failed to source model router at $router_sh." >&2
+    return 3
+  fi
   walter_model_select_primary "$domain" model || {
     echo "agents/model-selection.sh: failed to select model for domain '${domain}'." >&2
     return 3

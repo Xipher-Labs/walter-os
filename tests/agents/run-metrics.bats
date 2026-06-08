@@ -61,6 +61,11 @@ teardown() {
   [[ "$exit_line" -lt "$source_line" ]]
 }
 
+@test "run.sh fails closed on unreadable model router" {
+  grep -qF '[[ -r "$MODEL_ROUTER" ]]' "$RUN_SH"
+  grep -q "model router not found or unreadable" "$RUN_SH"
+}
+
 @test "run.sh maps Council agents to model routing domains" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
