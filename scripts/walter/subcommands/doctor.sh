@@ -194,9 +194,21 @@ doctor_check_claude_hooks() {
     "$WALTER_OS_HOME/hooks/branch-flow-guard.sh|Bash"
     "$WALTER_OS_HOME/hooks/pre-commit-tests.sh|Bash"
     "$WALTER_OS_HOME/hooks/approval-gate.sh|Read"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|Grep"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|Glob"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|LS"
     "$WALTER_OS_HOME/hooks/approval-gate.sh|Write"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|Edit"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|MultiEdit"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|NotebookEdit"
     "$WALTER_OS_HOME/hooks/capability-check.sh|Write"
+    "$WALTER_OS_HOME/hooks/capability-check.sh|Edit"
+    "$WALTER_OS_HOME/hooks/capability-check.sh|MultiEdit"
+    "$WALTER_OS_HOME/hooks/capability-check.sh|NotebookEdit"
     "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh|Write"
+    "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh|Edit"
+    "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh|MultiEdit"
+    "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh|NotebookEdit"
   )
 
   if [[ ! -f "$settings" ]]; then

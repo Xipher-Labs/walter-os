@@ -12,6 +12,7 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 WALTER_BIN="${REPO_ROOT}/bin/walter"
 export WALTER_OS_HOME="${REPO_ROOT}"
 export WALTER_OS_SKIP_UPDATE_CHECK="1"
+unset CLAUDE_HOME
 
 stub_doctor_tools() {
   local fake_bin="$1"

@@ -34,7 +34,7 @@ are not detected. This is the expected state before all local guardrails are
 installed or before work is moved into a stronger sandbox.
 
 `enforced` means the checked host hooks and configured wrapper directory are both
-active. This still is not a complete sandbox. It proves that the inspected host
+active. This is still not a complete sandbox. It proves that the inspected host
 and wrapped tools route through Walter guardrails.
 
 ## Stronger isolation
