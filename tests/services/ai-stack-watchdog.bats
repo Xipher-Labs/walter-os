@@ -120,7 +120,11 @@ setup() {
 }
 
 @test "cloudflared metrics readiness is authoritative when reachable" {
-  grep -Fq "ready_code=" "$WATCHDOG"
+  grep -Fq 'if ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null); then' "$WATCHDOG"
+  grep -Fq "ready_code=000" "$WATCHDOG"
+  run awk '/^cf_healthy\\(\\) \\{/{flag=1} flag; /^if ! cf_healthy; then/{flag=0}' "$WATCHDOG"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'|| echo 000'* ]]
   grep -Fq '%{http_code}' "$WATCHDOG"
   grep -Fq "200) return 0" "$WATCHDOG"
   grep -Fq "000) :" "$WATCHDOG"
