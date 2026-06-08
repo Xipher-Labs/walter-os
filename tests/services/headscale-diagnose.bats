@@ -99,6 +99,7 @@ EOF
   grep -Fq -- "--diagnose" "$DEPLOY"
   grep -Fq "diagnose.sh" "$DEPLOY"
   grep -Fq "client registration fails" "$DEPLOY"
+  ! grep -Fq "WALTER_DOMAIN=yourdomain.com ./deploy.sh --diagnose" "$DEPLOY"
 }
 
 @test "headscale deploy diagnose forwards diagnostic args without WALTER_DOMAIN" {

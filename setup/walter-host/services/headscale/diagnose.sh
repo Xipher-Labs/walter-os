@@ -13,7 +13,7 @@ TAILSCALE_VERSION_OVERRIDE=""
 
 usage() {
   cat <<'EOF'
-Usage: setup/walter-host/services/headscale/diagnose.sh [options]
+Usage: diagnose.sh [options]
 
 Read-only diagnostic for Headscale client registration failures.
 
@@ -108,7 +108,10 @@ detect_headscale_version() {
   fi
 
   if command -v docker >/dev/null 2>&1; then
-    docker exec "$CONTAINER" headscale version 2>/dev/null || true
+    local output
+    if output="$(docker exec "$CONTAINER" headscale version 2>/dev/null)"; then
+      printf '%s\n' "$output"
+    fi
     return
   fi
 
@@ -124,7 +127,10 @@ detect_tailscale_version() {
   fi
 
   if command -v tailscale >/dev/null 2>&1; then
-    tailscale version 2>/dev/null | head -1 || true
+    local output
+    if output="$(tailscale version 2>/dev/null)"; then
+      printf '%s\n' "$output" | head -1
+    fi
   fi
 }
 

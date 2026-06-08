@@ -11,7 +11,7 @@
 # Usage:
 #   WALTER_DOMAIN=yourdomain.com ./deploy.sh
 #   WALTER_DOMAIN=yourdomain.com ./deploy.sh --down      # stop stack
-#   WALTER_DOMAIN=yourdomain.com ./deploy.sh --diagnose  # inspect registration drift
+#   ./deploy.sh --diagnose                              # inspect registration drift
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
