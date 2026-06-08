@@ -319,6 +319,26 @@ SH
   echo "$output" | jq -e '.safety.preview_deploy == true'
 }
 
+@test "preview plan rejects duplicate preview_deploy keys before boolean parsing" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  printf 'preview_deploy: true\npreview_deploy: yes\n' > "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"multiple preview_deploy keys"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
+}
+
 @test "preview plan fails closed unless preview_deploy is enabled" {
   write_preview_artifacts
   config_file="$TMP_DIR/walter-repo-config.yaml"

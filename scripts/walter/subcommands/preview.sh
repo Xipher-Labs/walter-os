@@ -187,17 +187,18 @@ preview_deploy_enabled() {
     return 0
   fi
 
-  local count=0 value="" parsed
-  while IFS= read -r parsed; do
-    count=$((count + 1))
-    value="$(printf '%s' "$parsed" | tr '[:upper:]' '[:lower:]')"
-  done < <(sed -nE 's/^preview_deploy:[[:space:]]*([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])[[:space:]]*(#.*)?$/\1/p' < "$config_path")
+  local key_count value="" parsed
+  key_count="$(grep -Ec '^preview_deploy[[:space:]]*:' < "$config_path" || true)"
 
-  if (( count > 1 )); then
+  if (( key_count > 1 )); then
     die_usage "multiple preview_deploy keys in config: $config_path"
   fi
-  if grep -Eq '^preview_deploy:' < "$config_path" && [[ -z "$value" ]]; then
-    die_usage "preview_deploy must be true or false in config: $config_path"
+  if (( key_count == 1 )); then
+    parsed="$(sed -nE 's/^preview_deploy[[:space:]]*:[[:space:]]*([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])[[:space:]]*(#.*)?$/\1/p' < "$config_path")"
+    if [[ -z "$parsed" ]]; then
+      die_usage "preview_deploy must be true or false in config: $config_path"
+    fi
+    value="$(printf '%s' "$parsed" | tr '[:upper:]' '[:lower:]')"
   fi
 
   printf '%s\n' "${value:-false}"
