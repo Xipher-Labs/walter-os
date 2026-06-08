@@ -273,6 +273,14 @@ doctor_check_wrapper_path() {
   return 1
 }
 
+doctor_check_walter_home() {
+  if [[ ! -d "$WALTER_OS_HOME" || ! -f "$WALTER_OS_HOME/AGENTS.md" || ! -d "$WALTER_OS_HOME/hooks" ]]; then
+    log_err "WALTER_OS_HOME is not a Walter-OS checkout ($WALTER_OS_HOME)"
+    return 1
+  fi
+  return 0
+}
+
 run_enforcement_doctor() {
   local hooks_ok=0
   local hooks_any=0
@@ -284,6 +292,11 @@ run_enforcement_doctor() {
   echo "Scope: host hooks + PATH wrappers. Sandboxing, token scope, and network"
   echo "controls are stronger isolation layers outside this command's scope."
   echo
+
+  if ! doctor_check_walter_home; then
+    echo "Remediation: set WALTER_OS_HOME to the Walter-OS checkout, then re-run walter doctor --enforcement."
+    return 1
+  fi
 
   if doctor_check_claude_hooks; then
     hook_status=0

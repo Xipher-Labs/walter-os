@@ -299,6 +299,22 @@ SH
   [[ "$output" == *"could not verify that tool execution is intercepted"* ]]
 }
 
+@test "walter doctor --enforcement rejects non-checkout WALTER_OS_HOME" {
+  local test_home="$BATS_TEST_TMPDIR/home-bad-root"
+  local fake_root="$BATS_TEST_TMPDIR/fake-walter-root"
+  mkdir -p "$test_home/.config/walter-os" "$fake_root/scripts/walter/lib"
+  : >"$test_home/.config/walter-os/env"
+  cp "$REPO_ROOT/scripts/walter/lib/log.sh" "$fake_root/scripts/walter/lib/log.sh"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="$fake_root" \
+    "${REPO_ROOT}/scripts/walter/subcommands/doctor.sh" --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"WALTER_OS_HOME is not a Walter-OS checkout"* ]]
+}
+
 @test "walter doctor --enforcement reports partial when Claude hooks are active without wrappers" {
   command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
 
