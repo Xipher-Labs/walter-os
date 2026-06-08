@@ -12,6 +12,7 @@ setup() {
 
 @test "headscale runbook documents capver registration failure" {
   [[ -f "$RUNBOOK" ]]
+  [[ -f "$COMPOSE" ]]
   local pinned_headscale
   pinned_headscale="$(sed -nE 's/^[[:space:]]*image: headscale\/headscale:([^[:space:]]+).*/\1/p' "$COMPOSE")"
   [[ -n "$pinned_headscale" ]]
