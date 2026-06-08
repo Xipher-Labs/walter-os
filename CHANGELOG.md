@@ -78,6 +78,12 @@ requires the one-minor-version notice cycle.
   known Tailscale/Headscale capability-version drift signature and get the
   safer break-glass recovery path.
 
+### Changed
+
+- Council agent personas now declare `model_domain` frontmatter so
+  `scripts/agents/run.sh` routes through Walter's operator-configurable model
+  domains instead of treating the compatibility `model` field as authoritative.
+
 ### Fixed
 
 - **AI runtime fallback (#428).** `scripts/agents/lib/llm.sh` now fails closed

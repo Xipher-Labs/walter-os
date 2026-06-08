@@ -3,6 +3,7 @@ name: architect
 description: Use this subagent before any non-trivial implementation work. The architect produces specs (docs/specs/<slug>.md), implementation plans (docs/specs/<slug>.plan.md), and Architecture Decision Records (docs/decisions/NNNN-<slug>.md). Use proactively when the user asks to "build", "design", "plan", "architect", or describes a new feature without an existing spec. Do NOT use for trivial changes (typo fix, single-line config).
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write
 model: sonnet
+model_domain: brainstorm
 memory: project
 ---
 

@@ -15,9 +15,19 @@ CODEX_SKILL_DESCRIPTION_MAX = Integer(ENV.fetch("CODEX_SKILL_DESCRIPTION_MAX", "
 
 REQUIRED_FIELDS = {
   "skill" => %w[name description],
-  "agent" => %w[name description tools model],
+  "agent" => %w[name description tools model model_domain],
   "command" => %w[description]
 }.freeze
+
+VALID_MODEL_DOMAINS = %w[
+  backend_review
+  frontend
+  longform
+  quick_refactor
+  phi
+  brainstorm
+  default
+].freeze
 
 def frontmatter_from(path)
   text = File.read(path)
@@ -70,6 +80,22 @@ def validate_skill_metadata(data)
   nil
 end
 
+def validate_agent_metadata(data, frontmatter)
+  domain = data["model_domain"]
+  raw_domain = frontmatter.each_line.grep(/\A[[:space:]]*model_domain[[:space:]]*:/).first
+  domain_pattern = VALID_MODEL_DOMAINS.join("|")
+
+  return "'model_domain' must be a string" unless domain.is_a?(String)
+  unless VALID_MODEL_DOMAINS.include?(domain)
+    return "'model_domain' must be one of: #{VALID_MODEL_DOMAINS.join(', ')}"
+  end
+  unless raw_domain&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{domain_pattern})([[:space:]]+#.*)?[[:space:]]*\z/)
+    return "'model_domain' must be an unquoted scalar supported by scripts/agents/run.sh"
+  end
+
+  nil
+end
+
 def validate(path, kind)
   frontmatter, error = frontmatter_from(path)
   return error if error
@@ -80,7 +106,10 @@ def validate(path, kind)
   error = validate_required_fields(data, kind)
   return error if error
 
-  validate_skill_metadata(data) if kind == "skill"
+  return validate_skill_metadata(data) if kind == "skill"
+  return validate_agent_metadata(data, frontmatter) if kind == "agent"
+
+  nil
 end
 
 def check_group(kind, heading, pattern)

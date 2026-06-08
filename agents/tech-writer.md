@@ -3,6 +3,7 @@ name: tech-writer
 description: Write or rewrite technical documentation, READMEs, changelogs, blog posts (technical), API references, runbooks, and architecture docs. Use this subagent when the user asks to "document this", "write a README", "draft a blog post about X", "write release notes", "explain this technically", or whenever the deliverable is a written technical artifact (not code). Fresh context keeps the prose grounded in reader perspective rather than implementer minutiae.
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write, Edit
 model: sonnet
+model_domain: longform
 memory: project
 ---
 

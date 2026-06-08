@@ -66,7 +66,27 @@ teardown() {
   grep -q "model router not found or unreadable" "$RUN_SH"
 }
 
-@test "run.sh maps Council agents to model routing domains" {
+@test "run.sh reads Council model routing domain from frontmatter" {
+  grep -q "_agent_frontmatter_scalar" "$RUN_SH"
+  grep -q '"model_domain"' "$RUN_SH"
+  grep -q "frontmatter_domain" "$RUN_SH"
+}
+
+@test "run.sh validates and normalizes frontmatter model_domain before routing" {
+  grep -q "_agent_model_domain_canonical" "$RUN_SH"
+  grep -q "invalid model_domain" "$RUN_SH"
+  grep -q "_agent_legacy_model_domain" "$RUN_SH"
+  grep -Fq "tr '[:upper:]-' '[:lower:]_'" "$RUN_SH"
+  ! grep -Fq "gsub(" "$RUN_SH"
+}
+
+@test "run.sh normalizes CRLF before frontmatter delimiter checks" {
+  grep -q 'sub(/\\r$/, "", line)' "$RUN_SH"
+  grep -q 'NR == 1 && line == "---"' "$RUN_SH"
+  grep -q 'in_frontmatter && line == "---"' "$RUN_SH"
+}
+
+@test "run.sh keeps legacy Council agent domain fallback mapping" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
   grep -q "backend_review" "$RUN_SH"
@@ -74,6 +94,23 @@ teardown() {
   grep -q "brainstorm" "$RUN_SH"
   grep -q "liaison|tech-writer|devrel-writer" "$RUN_SH"
   grep -q "longform" "$RUN_SH"
+}
+
+@test "agent frontmatter declares Walter model routing domains" {
+  ruby -ryaml -rdate -e '
+    allowed = %w[backend_review frontend longform quick_refactor phi brainstorm default]
+    Dir["agents/*.md"].each do |path|
+      text = File.read(path)
+      parts = text.split(/^---\s*$/m, 3)
+      abort("#{path}: missing frontmatter") if parts.length < 3 || parts[1].strip.empty?
+      data = YAML.safe_load(parts[1], permitted_classes: [Date], aliases: false)
+      domain = data["model_domain"]
+      abort("#{path}: missing model_domain") unless domain.is_a?(String)
+      abort("#{path}: invalid model_domain #{domain.inspect}") unless allowed.include?(domain)
+      raw = parts[1].lines.grep(/\A[[:space:]]*model_domain[[:space:]]*:/).first
+      abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{allowed.join("|")})([[:space:]]+#.*)?[[:space:]]*\z/)
+    end
+  '
 }
 
 @test "run.sh does not hardcode primary Council models" {
