@@ -142,6 +142,12 @@ write_malformed_claude_hook_settings() {
   printf '{bad-json\n' >"$test_home/.claude/settings.json"
 }
 
+write_non_object_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  printf '[]\n' >"$test_home/.claude/settings.json"
+}
+
 stub_high_risk_wrappers() {
   local wrapper_dir="$1"
   local tool
@@ -287,6 +293,25 @@ SH
   [[ "$output" == *"Enforcement mode: policy-only"* ]]
 }
 
+@test "walter doctor --enforcement reports unknown for non-object Claude settings" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-non-object-hooks"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_non_object_claude_hook_settings "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"settings.json top-level JSON is not an object"* ]]
+  [[ "$output" != *"settings.json is not valid JSON"* ]]
+  [[ "$output" == *"Enforcement mode: policy-only"* ]]
+}
+
 @test "walter doctor --enforcement reports enforced when hooks and wrappers are active" {
   command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
 
@@ -396,6 +421,29 @@ SH
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"wrapper PATH not first"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+}
+
+@test "walter doctor --enforcement reports when wrapper dir is absent from PATH" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-wrapper-not-in-path"
+  local earlier_dir="$BATS_TEST_TMPDIR/earlier-bin-not-in-path"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-not-in-path"
+  mkdir -p "$test_home/.config/walter-os" "$earlier_dir"
+  : >"$test_home/.config/walter-os/env"
+  write_claude_hook_settings "$test_home"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$earlier_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"wrapper PATH not active"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
 }
 

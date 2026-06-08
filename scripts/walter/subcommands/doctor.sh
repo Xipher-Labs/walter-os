@@ -158,7 +158,11 @@ doctor_check_claude_hooks() {
   fi
 
   if ! jq -e 'type == "object"' "$settings" >/dev/null 2>&1; then
-    log_warn "Claude Code hooks unknown ($settings is not valid JSON)"
+    if jq -e . "$settings" >/dev/null 2>&1; then
+      log_warn "Claude Code hooks unknown ($settings top-level JSON is not an object)"
+    else
+      log_warn "Claude Code hooks unknown ($settings is not valid JSON)"
+    fi
     return 1
   fi
 
@@ -210,7 +214,10 @@ doctor_check_wrapper_path() {
     first_path="${first_path%/}"
   done
   if [[ "$first_path" != "$wrapper_dir" ]]; then
-    log_warn "wrapper PATH not first ($wrapper_dir must be first in PATH)"
+    case ":$PATH:" in
+      *":$wrapper_dir:"*) log_warn "wrapper PATH not first ($wrapper_dir must be first in PATH)" ;;
+      *) log_warn "wrapper PATH not active ($wrapper_dir is not in PATH)" ;;
+    esac
     return 1
   fi
 
