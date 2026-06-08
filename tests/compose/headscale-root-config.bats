@@ -13,6 +13,7 @@ setup() {
   CADDY_TEMPLATE="$REPO_ROOT/setup/caddy/Caddyfile.template"
   CF_TUNNEL="$REPO_ROOT/setup/walter-host/cloudflare/02-create-tunnel.sh"
   CF_ACCESS="$REPO_ROOT/setup/walter-host/cloudflare/04-create-access.sh"
+  KNOWN_ISSUES="$REPO_ROOT/docs/operational/known-issues.md"
 }
 
 @test "root all-in-one Headscale config has a render template" {
@@ -122,4 +123,11 @@ setup() {
 
   grep -Fq 'URL admin: headscale-admin.${WALTER_DOMAIN}' "$HOST_COMPOSE"
   grep -Fq 'URL clients: headscale.${WALTER_DOMAIN}/derp + /key' "$HOST_COMPOSE"
+}
+
+@test "Headscale admin known issue uses current hostname" {
+  [[ -f "$KNOWN_ISSUES" ]]
+
+  grep -Fq 'https://headscale-admin.${WALTER_DOMAIN}/admin/' "$KNOWN_ISSUES"
+  ! grep -Fq 'https://hs.${WALTER_DOMAIN}/admin/' "$KNOWN_ISSUES"
 }
