@@ -239,6 +239,16 @@ SH
   done
 }
 
+stub_partial_high_risk_wrappers() {
+  local wrapper_dir="$1"
+  mkdir -p "$wrapper_dir"
+  cat >"$wrapper_dir/gh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$wrapper_dir/gh"
+}
+
 # --- source-level checks (no network required) ---
 
 @test "doctor.sh handles --client-only flag (source check)" {
@@ -604,6 +614,28 @@ SH
   [[ "$output" == *"high-risk tool wrappers first in PATH"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
   [[ "$output" == *"High-risk wrappers are active, but supported host hooks were not confirmed."* ]]
+}
+
+@test "walter doctor --enforcement reports partial when wrappers are incomplete" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for direct-bypass assertion"
+
+  local test_home="$BATS_TEST_TMPDIR/home-wrapper-incomplete"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-incomplete"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  stub_partial_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"direct binary bypass visible: curl"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+  [[ "$output" != *"Enforcement mode: policy-only"* ]]
 }
 
 @test "walter doctor --enforcement requires wrapper dir first in PATH" {

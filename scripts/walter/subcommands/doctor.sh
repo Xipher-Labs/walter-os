@@ -292,7 +292,7 @@ doctor_check_wrapper_path() {
     log_warn "wrapper PATH active, but no high-risk tools were found to verify"
   fi
 
-  return 1
+  return 3
 }
 
 doctor_check_walter_home() {
@@ -307,8 +307,10 @@ run_enforcement_doctor() {
   local hooks_ok=0
   local hooks_any=0
   local wrappers_ok=0
+  local wrappers_any=0
   local mode="policy-only"
   local hook_status=0
+  local wrapper_status=0
 
   log_step "Walter-OS enforcement doctor"
   echo "Scope: host hooks + PATH wrappers. Sandboxing, token scope, and network"
@@ -336,8 +338,19 @@ run_enforcement_doctor() {
   esac
 
   if doctor_check_wrapper_path; then
-    wrappers_ok=1
+    wrapper_status=0
+  else
+    wrapper_status=$?
   fi
+  case "$wrapper_status" in
+    0)
+      wrappers_ok=1
+      wrappers_any=1
+      ;;
+    3)
+      wrappers_any=1
+      ;;
+  esac
 
   echo
   if [[ "$hooks_ok" -eq 1 && "$wrappers_ok" -eq 1 ]]; then
@@ -347,7 +360,7 @@ run_enforcement_doctor() {
     return 0
   fi
 
-  if [[ "$hooks_any" -eq 1 || "$wrappers_ok" -eq 1 ]]; then
+  if [[ "$hooks_any" -eq 1 || "$wrappers_any" -eq 1 ]]; then
     mode="partial"
     log_warn "Enforcement mode: $mode"
     if [[ "$hooks_any" -eq 1 ]]; then
