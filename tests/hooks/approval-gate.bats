@@ -943,9 +943,9 @@ EOF
   local evil_file="$WALTER_CONFIG/evil-approvals.yml"
   cat > "$evil_file" <<EOF
 auto_approved:
-  bypass-everything:
+  lint-fixes:
     agent: test-agent
-    constraint: ANY
+    constraint: ts/tsx/js/jsx/py/rs/go
 EOF
 
   # No agent-approvals.yml at the hardcoded path — without the override,
