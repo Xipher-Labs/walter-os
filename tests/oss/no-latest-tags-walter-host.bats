@@ -20,17 +20,22 @@ SERVICES_DIR="$REPO_ROOT/setup/walter-host/services"
 #
 # Filter rules (applied to the content portion of each match):
 # - leading whitespace + '#'  : commented-out compose / Dockerfile lines
-# - migration:latest          : Infisical's npm script NAME, not an image tag
 # - walter-control-tower:latest : LOCAL build image, not a registry pull;
 #                                 tracked separately, low supply-chain risk
 # - 'image: ghcr.io/xqdoo00o/chatgpt-to-api:latest' inside a comment block
 #   in llm-proxies/compose.yml: opt-in alternative documented but not used.
 #
-# Any new exception MUST be justified in the PR body that adds it.
-#
-# Patterns use POSIX-portable [[:space:]] (NOT `\s`, which is not a
-# whitespace class in grep BRE/ERE — Copilot R1 of #66 flagged this).
-NOISE_PATTERN='(^|:)[[:space:]]*#|migration:latest|walter-control-tower:latest|image:[[:space:]]+ghcr\.io/xqdoo00o/chatgpt-to-api:latest'
+# Any new exception MUST be exact-match scoped here and justified in
+# the PR body that adds it. Do not add broad substring exclusions:
+# `image: evil:latest # migration:latest` must still fail.
+_filter_known_exceptions() {
+  awk '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*image:[[:space:]]+walter-control-tower:latest([[:space:]]|$)/ { next }
+    /^[[:space:]]*image:[[:space:]]+ghcr[.]io\/xqdoo00o\/chatgpt-to-api:latest([[:space:]]|$)/ { next }
+    { print }
+  '
+}
 
 # Token-boundary helper: we previously used `\b`, which grep BRE/ERE
 # interprets as a backspace character, NOT a word boundary (Copilot R1).
@@ -63,14 +68,26 @@ _assert_no_unfiltered_matches() {
     echo "$output" >&2
     return 1
   fi
-  # status == 0: matches found. Filter against NOISE_PATTERN.
-  filtered="$(printf '%s\n' "$output" | _strip_grep_prefix | grep -Ev "$NOISE_PATTERN" || true)"
+  # status == 0: matches found. Filter only exact known exceptions.
+  filtered="$(printf '%s\n' "$output" | _strip_grep_prefix | _filter_known_exceptions)"
   if [ -n "$filtered" ]; then
     echo "FAIL: $label" >&2
     echo "$filtered" >&2
     return 1
   fi
   return 0
+}
+
+@test "latest-tag filter keeps real findings with exception text in comments" {
+  filtered="$(printf '%s\n' '    image: registry.example/app:latest # migration:latest' | _filter_known_exceptions)"
+
+  [[ "$filtered" == *'registry.example/app:latest'* ]]
+}
+
+@test "latest-tag filter drops exact local Control Tower image exception" {
+  filtered="$(printf '%s\n' '    image: walter-control-tower:latest' | _filter_known_exceptions)"
+
+  [[ -z "$filtered" ]]
 }
 
 @test "no compose service uses :latest tag (P1-02)" {
@@ -100,6 +117,10 @@ _assert_no_unfiltered_matches() {
 
   # Must reference openclaw@<version>, never openclaw@latest, never bare openclaw
   grep -q 'npm install -g openclaw@[0-9]' "$compose"
-  ! grep -qE "npm install -g openclaw@latest${TAG_BOUNDARY}" "$compose"
-  ! grep -E 'npm install -g openclaw[^@]' "$compose"
+  if grep -qE "npm install -g openclaw@latest${TAG_BOUNDARY}" "$compose"; then
+    return 1
+  fi
+  if grep -E 'npm install -g openclaw[^@]' "$compose"; then
+    return 1
+  fi
 }
