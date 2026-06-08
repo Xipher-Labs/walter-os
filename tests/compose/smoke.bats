@@ -41,6 +41,8 @@ setup() {
   export GF_ADMIN_PASSWORD=grafanapasstest
   export N8N_PG_PASS=n8npass
   export N8N_ENCRYPTION_KEY=00000000000000000000000000000002
+  export N8N_BASIC_AUTH_USER=n8nuser
+  export N8N_BASIC_AUTH_PASSWORD=n8npassbasicauth
   export WG_PASSWORD_HASH='$2b$12$testhashtesthashhhhhhhhhhh'
 
   # Uptime Kuma compose service has no external deps — good minimal smoke target

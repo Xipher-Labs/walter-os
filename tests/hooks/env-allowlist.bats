@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016
 # tests/hooks/env-allowlist.bats
 #
 # Audit P1-09 regression coverage. `~/.config/walter-os/env` must NOT
@@ -22,7 +23,7 @@ setup() {
 }
 
 teardown() {
-  cd "$BATS_TEST_DIRNAME"
+  cd /tmp || cd / || true
   case "$TMP_HOME" in
     /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac
@@ -165,6 +166,84 @@ ENV
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"VAR=hello"* ]]
+}
+
+@test "P1-09: env file cannot redirect override allowlist mid-parse" {
+  evil_cfg="$TMP_HOME/evil-config"
+  mkdir -p "$evil_cfg"
+  echo 'MY_CUSTOM_VAR' > "$evil_cfg/env-allowlist.txt"
+  cat > "$TMP_CFG/env" <<ENV
+WALTER_CONFIG=$evil_cfg
+MY_CUSTOM_VAR=hello
+ENV
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; echo \"MY_CUSTOM_VAR=\${MY_CUSTOM_VAR:-UNSET}\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MY_CUSTOM_VAR=UNSET"* ]]
+  [[ "$output" == *"$TMP_CFG/env-allowlist.txt"* ]]
+}
+
+@test "P1-09: override allowlist cannot permit shell startup hooks" {
+  cat > "$TMP_CFG/env-allowlist.txt" <<'ENV'
+BASH_ENV
+ENV
+  echo "BASH_ENV=$TMP_HOME/evil.sh" > "$TMP_CFG/env"
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1; echo \"BASH_ENV=\${BASH_ENV:-UNSET}\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BASH_ENV=UNSET"* ]]
+  [[ "$output" == *"BASH_ENV is a dangerous shell/runtime key"* ]]
+  [[ "$output" != *"Add it to"* ]]
+}
+
+@test "P1-09: protected keys are not overwritten when caller freezes roots" {
+  echo 'WALTER_CONFIG=/tmp/evil' > "$TMP_CFG/env"
+
+  run bash -c "source '$LOADER'; WALTER_ENV_PROTECTED_KEYS='WALTER_CONFIG WALTER_OS_HOME' walter_env_load_allowlist '$TMP_CFG/env' 2>&1; echo \"WALTER_CONFIG=\$WALTER_CONFIG\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WALTER_CONFIG=$TMP_CFG"* ]]
+}
+
+@test "P1-09: export-prefixed installer env lines are accepted" {
+  echo 'export WALTER_OS_HOME=/opt/walter-os' > "$TMP_CFG/env"
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; echo \"\${WALTER_OS_HOME:-UNSET}\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"/opt/walter-os"* ]]
+}
+
+@test "P1-09: malformed warnings redact raw line content" {
+  cat > "$TMP_CFG/env" <<'ENV'
+export TOKEN super-secret-value
+ENV
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env' 2>&1"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not a KEY=VALUE pair"* ]]
+  [[ "$output" != *"super-secret-value"* ]]
+}
+
+@test "P1-09: unmatched quote values do not abort parsing" {
+  echo 'WALTER_TIMEZONE="' > "$TMP_CFG/env"
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; printf '%s' \"\${WALTER_TIMEZONE:-UNSET}\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == '"' ]]
+}
+
+@test "P1-09: CRLF line endings do not leak carriage returns into values" {
+  printf 'WALTER_DOMAIN=walter.test\r\n' > "$TMP_CFG/env"
+
+  run bash -c "source '$LOADER'; walter_env_load_allowlist '$TMP_CFG/env'; printf '%q' \"\$WALTER_DOMAIN\""
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == "walter.test" ]]
 }
 
 @test "P1-09: WALTER_MODEL_* routing keys are allowlisted" {

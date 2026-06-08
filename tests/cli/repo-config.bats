@@ -116,6 +116,15 @@ YAML
   [[ "$output" == *"unknown mode requested; safest guided semantics apply"* ]]
 }
 
+@test "mode contract helper matches documented autonomy semantics" {
+  run bash -e -c "source '$REPO_ROOT/scripts/walter/lib/repo-config.sh'; walter_repo_config_print_mode_contract lite; walter_repo_config_print_mode_contract guided; walter_repo_config_print_mode_contract full"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"lite = plan, report, and request approval; no autonomous code, PR, deploy, or merge progression"* ]]
+  [[ "$output" == *"guided = default human-in-the-loop delivery; agents may prepare work and PRs; humans approve intent, architecture, merge, and production deploy"* ]]
+  [[ "$output" == *"full = policy-bounded autonomy for eligible non-protected paths; protected actions, secrets, money, PHI, auth, destructive operations, and production deploys still require humans"* ]]
+}
+
 @test "unknown top-level keys warn but do not fail" {
   write_valid_config
   printf '\nexperimental_knob: true\n' >> "$TMP_DIR/repo/walter-repo-config.yaml"

@@ -13,7 +13,7 @@ This is the catalogue of the **optional** self-hosted service stack
 | **Forgejo** | Self-hosted Git + CI runner | `git.your-domain` | core | ~256 MB | [`setup/walter-host/services/forgejo/`](../../setup/walter-host/services/forgejo/) |
 | **Plane** | Project management + issue tracker | `plane.your-domain` | core | ~512 MB | [`setup/walter-host/services/plane/`](../../setup/walter-host/services/plane/) |
 | **Infisical** | Secrets vault (runtime + operator) | `secrets.your-domain` | core | ~512 MB | [`setup/walter-host/services/infisical/`](../../setup/walter-host/services/infisical/) |
-| **LiteLLM (Walter-Bridge)** | AI model gateway (37 aliases across 17 providers) | `bridge.your-domain` | core | ~256 MB | [`setup/walter-host/services/litellm/`](../../setup/walter-host/services/litellm/) |
+| **LiteLLM (Walter-Bridge)** | AI model gateway (37 aliases across 17 providers) | `llm.your-domain` | core | ~256 MB | [`setup/walter-host/services/litellm/`](../../setup/walter-host/services/litellm/) |
 | **n8n** | Workflow automation | `n8n.your-domain` | core | ~512 MB | [`setup/walter-host/services/n8n/`](../../setup/walter-host/services/n8n/) |
 | **Uptime Kuma** | Service health monitoring | `status.your-domain` | core | ~128 MB | [`setup/walter-host/services/uptime-kuma/`](../../setup/walter-host/services/uptime-kuma/) |
 | **Grafana** | Metrics dashboards + alerting | `grafana.your-domain` | monitoring | ~256 MB | [`setup/walter-host/services/observability/`](../../setup/walter-host/services/observability/) |
@@ -23,12 +23,12 @@ This is the catalogue of the **optional** self-hosted service stack
 | **Drawio** | Technical diagrams | `draw.your-domain` | design | ~128 MB | [`setup/walter-host/services/drawio/`](../../setup/walter-host/services/drawio/) |
 | **RocketChat** | Team messaging | `chat.your-domain` | comms | ~512 MB | [`setup/walter-host/services/rocketchat/`](../../setup/walter-host/services/rocketchat/) |
 | **Synapse** | Matrix homeserver | `matrix.your-domain` | comms | ~256 MB | [`setup/walter-host/services/synapse/`](../../setup/walter-host/services/synapse/) |
-| **Element** | Matrix web client | `element.your-domain` | comms | ~64 MB | [`setup/walter-host/services/synapse/`](../../setup/walter-host/services/synapse/) |
-| **Headscale** | Self-hosted Tailscale control plane | `hs.your-domain` | core | ~64 MB | [`setup/walter-host/services/headscale/`](../../setup/walter-host/services/headscale/) |
-| **Headscale UI** | Headscale web interface | `hsui.your-domain` | core | ~32 MB | [`setup/walter-host/services/headscale/`](../../setup/walter-host/services/headscale/) |
-| **wg-easy (WireGuard)** | WireGuard VPN with admin UI | `wg.your-domain` | core | ~32 MB | [`setup/walter-host/services/wireguard/`](../../setup/walter-host/services/wireguard/) |
-| **Metabase** | Analytics / SQL dashboards | `analytics.your-domain` | analytics | ~1 GB | [`setup/walter-host/services/`](../../setup/walter-host/services/) |
-| **PostHog** | Product analytics + session replay | `ph.your-domain` | marketing | ~6 GB* | [`setup/walter-host/services/`](../../setup/walter-host/services/) |
+| **Element** | Matrix web client | `chat-matrix.your-domain` | comms | ~64 MB | [`setup/walter-host/services/synapse/`](../../setup/walter-host/services/synapse/) |
+| **Headscale** | Self-hosted Tailscale control plane | `headscale.your-domain` | core | ~64 MB | [`setup/walter-host/services/headscale/`](../../setup/walter-host/services/headscale/) |
+| **Headscale UI** | Headscale web interface | `headscale-admin.your-domain` | core | ~32 MB | [`setup/walter-host/services/headscale/`](../../setup/walter-host/services/headscale/) |
+| **wg-easy (WireGuard)** | WireGuard VPN with admin UI | `vpn.your-domain` | core | ~32 MB | [`setup/walter-host/services/wireguard/`](../../setup/walter-host/services/wireguard/) |
+| **Metabase** | Analytics / SQL dashboards | `metabase.your-domain` | analytics | ~1 GB | [`setup/walter-host/services/`](../../setup/walter-host/services/) |
+| **PostHog** | Product analytics + session replay | `posthog.your-domain` | marketing | ~6 GB* | [`setup/walter-host/services/`](../../setup/walter-host/services/) |
 | **Postiz** | Social media scheduling | `postiz.your-domain` | marketing | ~512 MB | [`setup/walter-host/services/postiz/`](../../setup/walter-host/services/postiz/) |
 | **SeaweedFS** | Distributed object storage | internal | analytics | ~256 MB | [`setup/walter-host/services/`](../../setup/walter-host/services/) |
 | **Control Tower** | Agent Council browser UI | Tailscale-only | core | ~512 MB | [`apps/control-tower/`](../../apps/control-tower/) |

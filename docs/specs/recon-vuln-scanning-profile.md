@@ -20,20 +20,21 @@ Pattern reference: the existing repo already splits Claude Code's settings into 
 
 - Building a managed pentest service. Walter-OS provides the CLIs; operator drives the engagement.
 - Bundling Greenbone/OpenVAS in `default`. Heavy footprint, slow update cadence, separate concern.
-- Authorization workflow automation (TOSAS / disclosure templates). Skill-level future work.
-- Auto-running nuclei after every `walter-os deploy`. Operator chooses targets; we don't auto-scan.
+- Authorization workflow automation (Target Owner Signed Authorization
+  Statement templates / disclosure templates). Skill-level future work.
+- Auto-running nuclei after every deployment. Operator chooses targets; we don't auto-scan.
 
 ## Decisions (proposed)
 
 | # | Decision | Why |
 |---|---|---|
-| D-1 | **New settings profile: `pentest`** alongside `default` and `high-risk`. Lives in `~/.claude/settings.pentest.json` and `~/.codex/config.pentest.toml`. Activated via `walter-os profile pentest` — extends the existing `walter-os profile {default,high-risk}` swap pattern to a third profile name. Requires the same code-path additions in `cmd_profile` for the new profile name. | Same swap pattern, third tier. |
-| D-2 | **CLI-skills, NOT MCPs.** Walter-OS vendors `skills/nuclei-cli/`, `skills/httpx-cli/`, `skills/subfinder-cli/`, `skills/trivy-cli/`, `skills/grype-cli/`. No third-party MCP supply chain. | Same rationale as `heygen-cli`, `hcloud-cli` etc. CLI is the official surface for all these tools; MCPs would just be uncontrolled wrappers. |
+| D-1 | **New settings profile: `pentest`** alongside `default` and `high-risk`. Lives in `~/.claude/settings.pentest.json` and `~/.codex/config.pentest.toml`. Activated via an extended `walter-os profile pentest` implementation that must update both Claude and Codex config targets; today's `walter-os profile` command is not sufficient because it only handles the existing Claude settings swap. This is future profile-generator work; the current installer does not ship `install.sh --profile-pentest`. | Same swap pattern, third tier, but explicitly expands the current profile command. |
+| D-2 | **CLI-skills, NOT MCPs.** Walter-OS vendors `skills/nuclei-cli/`, `skills/httpx-cli/`, `skills/subfinder-cli/`, `skills/amass-cli/`, `skills/theharvester-cli/`, `skills/trivy-cli/`, and `skills/grype-cli/`. No third-party MCP supply chain. | Same rationale as `heygen-cli`, `hcloud-cli` etc. CLI is the official surface for all these tools; MCPs would just be uncontrolled wrappers. |
 | D-3 | **Authorization gate ALWAYS required for any function that hits a third-party target.** This applies to recon tools whether the call is read-only (subfinder, httpx, theHarvester, nuclei probes) or arguably state-changing — the risk is unauthorized scanning, not state mutation. The gate refuses to run against a target unless the operator explicitly types the target hostname AND a one-line authorization note ("operator owns walter.example", "bug bounty program at hackerone.com/foo", etc.). | Legal cover. Recon tools are PRIMARILY read-only but the risk class is "unauthorized probing" — characterizing them as "state-changing" would mis-frame the threat. The note gets logged. |
 | D-4 | **Greenbone/OpenVAS deferred to a `heavy-pentest` profile.** Documented as opt-in, RAM/storage expectations called out. Not part of v0.4.1. | Greenbone is a separate concern; folding it in delays the lightweight CLI ship. |
 | D-5 | **Default profile gains `trivy` + `grype` as `info`-only.** These are container/dep CVE scanners on the operator's OWN artifacts (Docker images they built, repos they own) — no third-party target involved. Safe to run in default. | Catches CVEs in operator's own supply chain without flipping to pentest profile. |
-| D-6 | **`pentest` profile, when active, makes approval-gate stricter, not looser.** Every nuclei/httpx invocation is classified by `_classify_command` (new patterns: `nuclei-scan`, `httpx-probe`, `subfinder-enum`, `amass-enum`, `theharvester-enum`) and the corresponding `CATEGORY_MIN_TIER` entries set the tier minimum to `high`. CATEGORY_MIN_TIER is a TIER-MINIMUM matrix (low/medium/high) — recon tools require an agent at tier `high` (currently only `reviewer` per `~/.config/walter-os/trust-tiers.yml`) before the gate's classification path even runs. The classifier additions are part of this spec. | The profile UNLOCKS the tooling but does NOT loosen the gate; reflexive guardrails remain. Both halves are required — adding entries to `CATEGORY_MIN_TIER` without matching `_classify_command` patterns is a no-op (the tier check only applies to categories the classifier emits). |
-| D-7 | **Daily-supply-chain-audit checks the recon tools too.** When the `pentest` profile is active, the audit cycles through trivy/grype/nuclei version pinning + CVE checks. | Consistency: every tool in any profile is pinned + scanned. |
+| D-6 | **`pentest` profile, when active, makes approval-gate stricter, not looser.** Every nuclei/httpx invocation is classified by `_classify_command` (new patterns: `nuclei-scan`, `httpx-probe`, `subfinder-enum`, `amass-enum`, `theharvester-enum`) and the corresponding `CATEGORY_MIN_TIER` entries set the tier minimum to `high`. The active profile source of truth is the same profile state that `walter-os profile` writes; hooks may receive it as `WALTER_PROFILE=pentest` or derive it from that persisted profile state before `analyze()` calls `_classify_command`. CATEGORY_MIN_TIER is a TIER-MINIMUM matrix (low/medium/high) — after `_classify_command` emits one of the recon categories, the trust-tier decision requires an agent at tier `high` (currently only `reviewer` per `~/.config/walter-os/trust-tiers.yml`). The classifier/profile-state additions are part of this spec. | The profile UNLOCKS the tooling but does NOT loosen the gate; reflexive guardrails remain. Both halves are required — adding entries to `CATEGORY_MIN_TIER` without matching `_classify_command` patterns is a no-op (the tier check only applies to categories the classifier emits). |
+| D-7 | **Daily-supply-chain-audit checks the recon tools too.** The audit always checks default-profile scanners (`trivy` and `grype`) when installed. When the `pentest` profile is active, it also checks pentest-only tools such as `nuclei`, `httpx`, `subfinder`, `amass`, and `theHarvester`. | Consistency: every tool in any profile is pinned + scanned. |
 
 ## Tool evaluation matrix
 
@@ -41,7 +42,7 @@ Pattern reference: the existing repo already splits Claude Code's settings into 
 |---|---|---|---|
 | **trivy** | Container + filesystem + git repo CVE scanner | **default** (operator-own artifacts only) | Mature, Aqua Security, weekly DB updates, free. |
 | **grype** | Filesystem + container CVE scanner (similar to trivy, second opinion) | **default** | Mature, Anchore, daily DB. |
-| **nuclei** | Template-based vuln scanner (web / SSL / DNS / API). Read-only HTTP probes. | **pentest** | Mature, ProjectDiscovery, very high template-quality. THIS IS THE PRIMARY TOOL. |
+| **nuclei** | Template-based vuln scanner (web / SSL / DNS / API). Often uses HTTP probes, but templates can be intrusive or stateful depending on configuration. | **pentest** | Mature, ProjectDiscovery, very high template-quality. THIS IS THE PRIMARY TOOL. |
 | **httpx** | Fast HTTP probe — title, status, tech detection. | **pentest** | Same maintainer as nuclei. Pairs naturally. |
 | **subfinder** | Subdomain enumeration via passive sources (Censys, Shodan, ChaosDB, etc.). | **pentest** | Same maintainer. Passive sources = no direct scan of target. |
 | **amass** | Subdomain enum + active brute-force + ASN mapping. | **pentest** (deeper option) | More features than subfinder but slower; ship both, operator picks. |
@@ -62,10 +63,10 @@ Selection for v0.4.1:
 - [ ] `daily-supply-chain-audit` extended `check_versions()` includes trivy + grype version pinning if installed.
 
 ### AC-2 — `pentest` MCP profile
-- [ ] `~/.claude/settings.pentest.json` template generated by `install.sh --profile-pentest`.
+- [ ] `~/.claude/settings.pentest.json` template generated by the same profile-generation path used for `default` and `high-risk`.
 - [ ] `~/.codex/config.pentest.toml` same.
 - [ ] `walter-os profile pentest` switches both. `walter-os profile default` switches back.
-- [ ] Profile contents: same MCP set as `default` PLUS the recon skill autoloads (`nuclei-cli`, `httpx-cli`, `subfinder-cli`, `amass-cli`, `theHarvester-cli`).
+- [ ] Profile contents: same MCP set as `default` PLUS the recon skill autoloads (`nuclei-cli`, `httpx-cli`, `subfinder-cli`, `amass-cli`, `theharvester-cli`).
 
 ### AC-3 — Recon CLI skills (5 skills)
 Each skill follows the heygen-cli / hcloud-cli template:
@@ -74,24 +75,25 @@ Each skill follows the heygen-cli / hcloud-cli template:
 - [ ] `skills/httpx-cli/SKILL.md` + `httpx.sh`. Same gate.
 - [ ] `skills/subfinder-cli/SKILL.md` + `subfinder.sh`. Same gate.
 - [ ] `skills/amass-cli/SKILL.md` + `amass.sh`. Same gate. Comment on the active-brute-force mode explicitly (it's louder than subfinder; operator must opt in with `--active`).
-- [ ] `skills/theHarvester-cli/SKILL.md` + `theharvester.sh`. Same gate. Passive sources only.
+- [ ] `skills/theharvester-cli/SKILL.md` + `theharvester.sh`. Same gate. Passive sources only.
 
 ### AC-4 — Approval-gate hardening for pentest mode
 - [ ] `hooks/approval-gate.sh` `CATEGORY_MIN_TIER` adds:
   - `nuclei-scan=high`
-  - `subfinder-scan=high`
-  - `amass-scan=high`
+  - `subfinder-enum=high`
+  - `amass-enum=high`
   - `httpx-probe=high`
-  - `theharvester-probe=high`
-- [ ] When `WALTER_PROFILE=pentest` is detected, the gate ALSO requires `WALTER_PENTEST_AUTH=<reason>` to be set in the same env. Without it, the hook blocks with `pentest profile active but WALTER_PENTEST_AUTH not set`.
-- [ ] bats coverage in `tests/hooks/approval-gate.bats` for: `WALTER_PROFILE=pentest` without auth → block; with auth → allow + log.
+  - `theharvester-enum=high`
+- [ ] When the persisted profile state or `WALTER_PROFILE=pentest` indicates pentest mode, the gate ALSO requires `WALTER_PENTEST_AUTH=<reason>` to be set in the same env. Without it, the hook blocks with `pentest profile active but WALTER_PENTEST_AUTH not set`.
+- [ ] bats coverage in `tests/hooks/approval-gate.bats` for: persisted pentest profile without auth → block; `WALTER_PROFILE=pentest` without auth → block; with auth → allow + log.
 
 ### AC-5 — Pentest audit log
-- [ ] Every authorized scan appends a JSONL record to `~/.config/walter-os/pentest-log.jsonl`:
+- [ ] Every authorized scan appends a JSONL record to `~/.config/walter-os/pentest-log.jsonl` with mode `0600`; parent directories are created with mode `0700`.
   ```json
   {"ts":"2026-...","tool":"nuclei","target":"walter.example","auth":"operator owns walter.example","operator":"ops-bot"}
   ```
 - [ ] `walter-os pentest log` subcommand prints the log filtered by tool / target / date range.
+- [ ] `walter-os pentest log prune --older-than <duration>` documents and enforces local retention; default retention is 90 days unless `WALTER_PENTEST_LOG_RETENTION_DAYS` overrides it.
 - [ ] Auditable trail for incident-response or bug-bounty disclosure submission.
 
 ### AC-6 — Legal + operator-facing docs
@@ -132,11 +134,11 @@ Each skill follows the heygen-cli / hcloud-cli template:
 ┌──────────────────────────────────────────────────────────────────┐
 │  Skill invocation                                                │
 │  $ source skills/nuclei-cli/nuclei.sh                            │
-│  $ nuclei_scan https://walter.example                            │
+│  $ nuclei_scan https://walter.example --auth "operator owns host"│
 │     ├─► approval-gate.sh: WALTER_PROFILE=pentest +               │
 │     │                     WALTER_PENTEST_AUTH set + category    │
 │     │                     `nuclei-scan` requires tier `high`     │
-│     ├─► reflexive guardrail: operator MUST type "go" in chat     │
+│     ├─► interactive sessions may add a separate confirmation     │
 │     ├─► append to pentest-log.jsonl                              │
 │     └─► exec nuclei -u $TARGET -t /path/to/templates             │
 └──────────────────────────────────────────────────────────────────┘
@@ -144,7 +146,7 @@ Each skill follows the heygen-cli / hcloud-cli template:
 
 ## Threat model
 
-- **Operator scans a third-party target without permission.** The `--auth "<reason>"` flag + `WALTER_PENTEST_AUTH` env + reflexive guardrail force the operator to type a justification three times before any HTTP probe leaves the machine. If they still do it, that's an operator decision; the audit trail is in `pentest-log.jsonl`.
+- **Operator scans a third-party target without permission.** The `--auth "<reason>"` flag + `WALTER_PENTEST_AUTH` env force an explicit written justification before any HTTP probe leaves the machine. Interactive shells may add a separate confirmation prompt, but that prompt is not the normative control in this spec. If the operator still scans, that's an operator decision; the audit trail is in `pentest-log.jsonl`.
 - **Agent triggers a scan via prompt injection.** `nuclei-scan` is `tier=high` in approval-gate; agents at `medium` or lower cannot trigger it. Lateral movement via MCP is blocked by the standing-approvals lockdown (P1-06 fix).
 - **Template repo poisoning (nuclei loads templates from a community repo).** `nuclei_template_update` pins to a specific commit SHA of `projectdiscovery/nuclei-templates`. Same pattern as P0-05 submodule pinning.
 
@@ -160,7 +162,7 @@ Each skill follows the heygen-cli / hcloud-cli template:
 1. AC-1 — trivy + grype skills (default profile, no new MCP profile yet)
 2. AC-3a — nuclei-cli skill + authorization gate
 3. AC-3b — httpx-cli, subfinder-cli (compose with nuclei)
-4. AC-3c — amass-cli, theHarvester-cli
+4. AC-3c — amass-cli, theharvester-cli
 5. AC-2 — `pentest` MCP profile + `walter-os profile pentest` subcommand
 6. AC-4 — approval-gate `CATEGORY_MIN_TIER` extensions + `WALTER_PENTEST_AUTH` gate
 7. AC-5 — pentest-log + `walter-os pentest log` subcommand

@@ -24,7 +24,10 @@ setup() {
 @test "cloudflared installer adds status-code based /ready guard" {
   grep -q '/usr/local/sbin/walter-cloudflared-ready-check' "$INSTALL_SCRIPT"
   grep -q 'systemctl is-active --quiet cloudflared' "$INSTALL_SCRIPT"
-  grep -Fq 'ready_code=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://\${CLOUDFLARED_METRICS_ADDR}/ready"' "$INSTALL_SCRIPT"
+  grep -Fq 'if ready_code=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://\${CLOUDFLARED_METRICS_ADDR}/ready" 2>/dev/null); then' "$INSTALL_SCRIPT"
+  grep -Fq 'ready_code=000' "$INSTALL_SCRIPT"
+  run grep -F '|| echo 000' "$INSTALL_SCRIPT"
+  [ "$status" -ne 0 ]
   grep -Fq '200) exit 0' "$INSTALL_SCRIPT"
   grep -Fq '000)' "$INSTALL_SCRIPT"
   grep -Fq 'systemctl restart cloudflared' "$INSTALL_SCRIPT"

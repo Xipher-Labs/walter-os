@@ -9,6 +9,8 @@ import PreviewEvidencePanel from "@/app/components/PreviewEvidencePanel";
 import OperatorReadiness from "@/app/components/OperatorReadiness";
 import TopNav from "@/app/components/ui/TopNav";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Walter Council Control Tower — overview.
  *

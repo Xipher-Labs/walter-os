@@ -2,6 +2,8 @@
 # tests/cli/preview.bats
 #
 # Covers: docs/specs/preview-environment-bundle.md
+#
+# shellcheck disable=SC2030,SC2031
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -169,6 +171,22 @@ SH
   [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
 }
 
+@test "preview capture rejects oversized wait-ms before arithmetic" {
+  install_fake_npx
+
+  run bash "$WALTER_OS_BIN" preview capture \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --name home \
+    --out "$TMP_DIR/out" \
+    --wait-ms 999999999999999999999999999999999999
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"--wait-ms must be <= 30000"* ]]
+  [[ "$output" != *"value too great for base"* ]]
+  [[ ! -e "$FAKE_NPX_LOG" ]]
+}
+
 @test "preview capture rejects non-http preview URLs" {
   install_fake_npx
 
@@ -319,6 +337,26 @@ SH
   echo "$output" | jq -e '.safety.preview_deploy == true'
 }
 
+@test "preview plan rejects duplicate preview_deploy keys before boolean parsing" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  printf 'preview_deploy: true\npreview_deploy: yes\n' > "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app control-tower \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"multiple preview_deploy keys"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-plan.json" ]]
+}
+
 @test "preview plan fails closed unless preview_deploy is enabled" {
   write_preview_artifacts
   config_file="$TMP_DIR/walter-repo-config.yaml"
@@ -441,6 +479,23 @@ SH
   cd "$TMP_DIR"
   printf '{"users":[{"id":"dash-demo"}]}\n' > ./-seed.json
   printf 'fake png bytes\n' > ./-screen.png
+  fake_bin="$TMP_DIR/fake-cp-bin"
+  real_cp="$(command -v cp)"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/cp" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == "--" ]]; then
+    echo "BSD cp does not support --" >&2
+    exit 64
+  fi
+done
+exec "${REAL_CP:?}" "$@"
+SH
+  chmod +x "$fake_bin/cp"
+  export REAL_CP="$real_cp"
+  export PATH="$fake_bin:$PATH"
 
   run bash "$WALTER_OS_BIN" preview bundle \
     --pr 235 \

@@ -261,6 +261,12 @@ preview_plan_status() {
   local payload="$1" expected_pr="$2"
   jq -nc --argjson plan "$payload" --argjson expected_pr "$expected_pr" '
     def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
+    def expected_actions: [
+      "deploy_ephemeral_preview",
+      "apply_seed_fixture",
+      "capture_screenshots",
+      "write_preview_bundle"
+    ];
     ($plan | if type == "object" then . else {} end) as $p |
     ($p.seed_manifest | if type == "object" then . else {} end) as $seed |
     ($p.actions | if type == "array" then . else [] end) as $actions |
@@ -275,10 +281,7 @@ preview_plan_status() {
         (($p.app // "") | type == "string" and length > 0) and
         (($p.branch // "") | type == "string" and length > 0) and
         (($seed.sha256 // "") | sha256_ok) and
-        ($actions | index("deploy_ephemeral_preview") != null) and
-        ($actions | index("apply_seed_fixture") != null) and
-        ($actions | index("capture_screenshots") != null) and
-        ($actions | index("write_preview_bundle") != null) and
+        ($actions == expected_actions) and
         ($safety.dry_run == true) and
         ($safety.preview_deploy == true) and
         ($safety.production_secrets == "rejected") and

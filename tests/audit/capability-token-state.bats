@@ -55,6 +55,18 @@ teardown() {
   [ "$output" -ge 1 ]
 }
 
+@test "orphaned capability token dir message mentions valid active session state" {
+  mkdir -p "$WALTER_CONFIG/state/caps-stale-session"
+
+  run bash "$AUDIT_RUNNER"
+
+  [ "$status" -eq 0 ]
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -r 'select(.id == "cap-cleanup-stale") | .desc' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "no matching valid active session state"
+}
+
 @test "malformed capability session state reports cap-state-malformed" {
   printf '{not-json\n' > "$WALTER_CONFIG/state/session-bad.json"
 
@@ -65,6 +77,11 @@ teardown() {
   run jq -s 'map(select(.severity == "high" and .id == "cap-state-malformed")) | length' "$AUDIT_FINDINGS"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
+}
+
+@test "check_cap_state uses mktemp with an explicit template" {
+  grep -Fq 'active_caps_tmp="$(mktemp "${TMPDIR:-/tmp}/walter-cap-state.XXXXXX")"' "$AUDIT"
+  ! grep -Fq 'active_caps_tmp="$(mktemp)"' "$AUDIT"
 }
 
 @test "capability session state missing public key path is malformed" {
@@ -88,6 +105,35 @@ teardown() {
   [ "$status" -eq 0 ]
   [ -s "$AUDIT_FINDINGS" ]
   run jq -s 'map(select(.severity == "high" and .id == "cap-state-malformed")) | length' "$AUDIT_FINDINGS"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
+@test "capability session state references missing public key" {
+  mkdir -p "$WALTER_CONFIG/state/caps-active-session"
+  jq -n \
+    --arg session_id "active-session" \
+    --arg private_key "$WALTER_CONFIG/state/session-active-session.key" \
+    --arg public_key "$WALTER_CONFIG/state/session-active-session.pub" \
+    --arg caps_dir "$WALTER_CONFIG/state/caps-active-session" \
+    '{
+      session_id: $session_id,
+      started_at: "2026-01-01T00:00:00Z",
+      last_activity_at: "2026-01-01T00:00:00Z",
+      capability_private_key_path: $private_key,
+      capability_public_key_path: $public_key,
+      capability_tokens_dir: $caps_dir,
+      max_hours_at_start: 8,
+      max_idle_min_at_start: 60
+    }' > "$WALTER_CONFIG/state/session-active-session.json"
+  printf 'PRIVATE\n' > "$WALTER_CONFIG/state/session-active-session.key"
+  chmod 600 "$WALTER_CONFIG/state/session-active-session.key"
+
+  run bash "$AUDIT_RUNNER"
+
+  [ "$status" -eq 0 ]
+  [ -s "$AUDIT_FINDINGS" ]
+  run jq -s 'map(select(.severity == "high" and .id == "cap-state-missing" and (.desc | contains("missing public key")))) | length' "$AUDIT_FINDINGS"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }

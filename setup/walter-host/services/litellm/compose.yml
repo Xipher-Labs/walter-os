@@ -98,7 +98,7 @@ services:
         - CMD-SHELL
         - >-
           psql -U litellm -d litellm -v ON_ERROR_STOP=1 -Atqc
-          "SELECT CASE WHEN count(*) < ((current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) * 9 / 10) THEN 1 ELSE 0 END FROM pg_stat_activity;"
+          "SELECT CASE WHEN count(*) < ((current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int) * 9 / 10) THEN 1 ELSE 0 END FROM pg_stat_activity WHERE pid <> pg_backend_pid();"
           | grep -qx 1
       interval: 10s
       timeout: 5s

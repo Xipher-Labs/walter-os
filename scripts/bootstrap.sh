@@ -121,6 +121,11 @@ if [[ $DRY -eq 1 ]]; then
   dry "docker exec walter-caddy caddy reload --config /etc/caddy/Caddyfile"
   info ""
 
+  step "Step 0b: Render Headscale config from template"
+  dry "envsubst '\$WALTER_DOMAIN' < setup/headscale/config.yaml.template > setup/headscale/config.yaml"
+  dry "docker restart headscale (if container is running)"
+  info ""
+
   step "Wait for Postgres (pg_isready) then sync role passwords"
   dry "docker exec walter-postgres pg_isready -U walter"
   dry "docker exec walter-postgres psql -U walter -c 'ALTER USER forgejo WITH PASSWORD ...'"
@@ -228,6 +233,7 @@ fi
 #
 # The SHELL-FORMAT positional arg tells envsubst which $-references to
 # expand; any $-reference whose name is not in the list is left alone.
+# shellcheck disable=SC2016 # envsubst shell-format must stay literal.
 WALTER_DOMAIN="$WALTER_DOMAIN" \
 WALTER_ADMIN_EMAIL="${WALTER_ADMIN_EMAIL:-admin@example.com}" \
   envsubst '$WALTER_DOMAIN $WALTER_ADMIN_EMAIL' < "$CADDY_TEMPLATE" > "$CADDY_FILE"
@@ -252,6 +258,45 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CADDY_CONTAINER}$";
   fi
 else
   info "Caddy container not running yet — it will use the rendered Caddyfile on startup."
+fi
+
+# ---------- Step 0b: Render Headscale config from template ----------
+# The root all-in-one compose stack mounts setup/headscale/config.yaml
+# read-only into the Headscale container. Headscale does not expand shell
+# placeholders from YAML, so bootstrap owns the render step just like Caddy.
+
+step "Step 0b: Rendering Headscale config from template..."
+
+HEADSCALE_TEMPLATE="${REPO_ROOT}/setup/headscale/config.yaml.template"
+HEADSCALE_FILE="${REPO_ROOT}/setup/headscale/config.yaml"
+HEADSCALE_CONTAINER="${HEADSCALE_CONTAINER:-headscale}"
+
+if [[ ! -f "$HEADSCALE_TEMPLATE" ]]; then
+  err "Headscale config template not found at: $HEADSCALE_TEMPLATE"
+  err "Cannot render Headscale config — aborting."
+  exit 1
+fi
+
+WALTER_DOMAIN="$WALTER_DOMAIN" \
+  envsubst "\$WALTER_DOMAIN" < "$HEADSCALE_TEMPLATE" > "$HEADSCALE_FILE"
+
+ok "Headscale config rendered to: $HEADSCALE_FILE"
+
+if grep -qE '\$\{[A-Z_][A-Z0-9_]*\}' "$HEADSCALE_FILE"; then
+  warn "Headscale config still contains unexpanded variables:"
+  grep -E '\$\{[A-Z_][A-Z0-9_]*\}' "$HEADSCALE_FILE" | head -5 | while IFS= read -r line; do
+    warn "  $line"
+  done
+fi
+
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${HEADSCALE_CONTAINER}$"; then
+  if docker restart "$HEADSCALE_CONTAINER" >/dev/null 2>&1; then
+    ok "Headscale restarted with rendered config."
+  else
+    warn "Headscale restart returned non-zero. Restart it manually after checking the rendered config."
+  fi
+else
+  info "Headscale container not running yet — it will use the rendered config on startup."
 fi
 
 # ---------- Step 1: Wait for Postgres + sync passwords BEFORE app services ----------

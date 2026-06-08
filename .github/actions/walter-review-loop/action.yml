@@ -23,13 +23,13 @@ inputs:
     required: true
   base-branch:
     description: The base branch for the diff (e.g. main).
-    required: true
+    required: false
     default: main
   severity-gate-config:
     description: |
-      Path to a severity-gate config file (see
-      docs/specs/pr-review-severity-gate.md). If empty, the action uses
-      built-in defaults.
+      V1 placeholder for a future severity-gate config file. This input
+      is currently not read by the action; status remains coarse until
+      structured findings parsing lands.
     required: false
     default: ''
   run-copilot:
@@ -60,7 +60,7 @@ outputs:
   findings-json:
     description: |
       JSON array of {round, tool, severity, file, line, message}
-      objects. Empty array if no findings.
+      objects. V1 placeholder: currently always [] until parsing lands.
     value: ${{ steps.collect.outputs.findings-json }}
   rounds-completed:
     description: |
@@ -70,10 +70,9 @@ outputs:
     value: ${{ steps.collect.outputs.rounds-completed }}
   status:
     description: |
-      Overall verdict — one of:
-        clean     — no findings remaining; safe to merge.
-        findings  — MINOR/COSMETIC findings remain; operator decides.
-        escalate  — BLOCKER/MAJOR findings remain; do not merge.
+      Overall v1 verdict: escalate when no rounds ran, findings when at
+      least one round ran. Severity-based clean/findings/escalate is
+      deferred until structured findings parsing lands.
     value: ${{ steps.collect.outputs.status }}
 
 runs:
@@ -154,16 +153,18 @@ runs:
           exit 0
         fi
 
-        CODEX_HOME="$CODEX_HOME_INPUT" \
-          codex exec review --base "$BASE_BRANCH" \
-          > /tmp/codex-review.txt 2>&1 || true
-
-        if [[ -s /tmp/codex-review.txt ]]; then
+        if CODEX_HOME="$CODEX_HOME_INPUT" codex review --base "$BASE_BRANCH" > /tmp/codex-review.txt 2>&1; then
           echo "codex-ran=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::Codex Round 2 complete. Output at /tmp/codex-review.txt ($(wc -l < /tmp/codex-review.txt) lines)."
+          if [[ -s /tmp/codex-review.txt ]]; then
+            echo "::notice::Codex Round 2 complete. Output at /tmp/codex-review.txt ($(wc -l < /tmp/codex-review.txt) lines)."
+          else
+            echo "::warning::Codex Round 2 completed but produced no output."
+          fi
         else
+          codex_status=$?
           echo "codex-ran=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::Codex produced no output. Skipping Round 2 results."
+          echo "::warning::Codex review failed with exit code $codex_status. Skipping Round 2 results."
+          cat /tmp/codex-review.txt >&2 || true
         fi
         echo "::endgroup::"
 

@@ -127,13 +127,13 @@ walter_repo_config_print_mode_contract() {
 
   case "$mode" in
     lite)
-      summary="lite = plan, report, and request approval; no autonomous code/PR/deploy progression"
+      summary="lite = plan, report, and request approval; no autonomous code, PR, deploy, or merge progression"
       ;;
     guided)
-      summary="guided = default human-in-the-loop delivery; agents may prepare work, humans approve intent/architecture/merge"
+      summary="guided = default human-in-the-loop delivery; agents may prepare work and PRs; humans approve intent, architecture, merge, and production deploy"
       ;;
     full)
-      summary="full = policy-bounded autonomy for eligible non-protected paths; protected actions still require humans"
+      summary="full = policy-bounded autonomy for eligible non-protected paths; protected actions, secrets, money, PHI, auth, destructive operations, and production deploys still require humans"
       ;;
     *)
       mode="guided"

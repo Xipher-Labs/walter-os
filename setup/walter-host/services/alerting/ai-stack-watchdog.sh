@@ -135,7 +135,11 @@ cf_healthy() {
   # metrics endpoint itself is unreachable (000), never declare down on that.
   if [[ -n "${CLOUDFLARED_METRICS:-}" ]]; then
     local ready_code
-    ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null || echo 000)
+    if ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null); then
+      :
+    else
+      ready_code=000
+    fi
     case "$ready_code" in
       200) return 0 ;;   # ready
       000) : ;;          # metrics unreachable → fall through to log-scan fallback
@@ -189,8 +193,8 @@ else
 fi
 
 # ---------- 2. litellm-db connection saturation ----------
-used=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' \n' || true)
-max=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT setting FROM pg_settings WHERE name='max_connections';" 2>/dev/null | tr -d ' \n' || true)
+used=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT count(*) FROM pg_stat_activity WHERE pid <> pg_backend_pid();" 2>/dev/null | tr -d ' \n' || true)
+max=$(timeout 10s docker exec litellm-db psql -U litellm -d litellm -tAc "SELECT current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int;" 2>/dev/null | tr -d ' \n' || true)
 if [[ "${used:-}" =~ ^[0-9]+$ && "${max:-}" =~ ^[0-9]+$ && "$max" -gt 0 ]]; then
   pct=$(( used * 100 / max ))
   if [[ "$pct" -ge "$DB_SAT_PCT" ]]; then
