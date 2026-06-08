@@ -23,9 +23,20 @@ The alias-to-model mapping lives in
 `setup/walter-host/services/litellm/config.yaml` for the Walter-Bridge stack.
 Agents never hard-code provider names or model slugs.
 
-If `LITELLM_BASE_URL` is unavailable, `scripts/agents/lib/llm.sh` falls back
-to direct Anthropic (`ANTHROPIC_API_KEY`), then enterprise key
-(`ANTHROPIC_ENTERPRISE_KEY` when `WALTER_AGENT_CONTEXT=work`).
+If `LITELLM_BASE_URL` is unavailable, `scripts/agents/lib/llm.sh` uses a
+provider-aware direct fallback. Today that fallback supports only Anthropic-
+compatible aliases (`claude`, `haiku`, `sonnet`, `opus`, `claude-haiku-*`,
+`claude-sonnet-*`, `claude-opus-*`, official Claude model IDs such as
+`claude-3-5-sonnet-*`, and `anthropic/claude-*`) through
+`ANTHROPIC_API_KEY`, or `ANTHROPIC_ENTERPRISE_KEY` when
+`WALTER_AGENT_CONTEXT=work`.
+
+LiteLLM-only and non-Anthropic routes (`cheap`, `claude-sub`,
+`claude-sub-opus`, `codex`, `codex-sub`, `gemini-sub`, `local-ollama`, and
+similar) are not sent to Anthropic. Without LiteLLM or a matching direct
+runtime implementation, `llm.sh` fails closed with an operator-facing error.
+That prevents a declared Codex/Gemini/local/subscription route from being
+silently executed by the wrong provider.
 
 This guide covers model aliases once an LLM backend exists. LiteLLM aliases
 describe what the gateway can serve; `walter ai configure` declares what this
@@ -42,13 +53,18 @@ See [`ai-capability-profiles.md`](ai-capability-profiles.md) and
 [`multi-model-routing.md`](multi-model-routing.md) for Claude-only,
 Codex-only, Gemini-only, local-only, and mixed routing profiles. Workflows
 should query the model/runtime resolver before dispatching to Codex, Claude,
-Gemini/nanobanana, direct APIs, or local LLMs.
+Gemini/nanobanana, direct APIs, or local LLMs, and then verify that the chosen
+runtime has either a LiteLLM route or a supported direct fallback.
 
 ---
 
 ## Cost tiers
 
 Choose the alias that matches the task's cost/quality trade-off.
+
+The "Provider model" column is illustrative. For Anthropic, use the exact
+official Claude model ID supported by your account or the local LiteLLM alias
+defined in `setup/walter-host/services/litellm/config.yaml`.
 
 ### Cheap — fast, low-cost
 

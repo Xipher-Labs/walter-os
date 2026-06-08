@@ -61,6 +61,16 @@ print('found' if 'walter-embed' in names else 'missing')
   [ "$result" = "found" ]
 }
 
+@test "claude shorthand model entry exists [AC-7]" {
+  result=$(python3 -c "
+import yaml
+data = yaml.safe_load(open('$CONFIG'))
+names = [m['model_name'] for m in data.get('model_list', [])]
+print('found' if 'claude' in names else 'missing')
+")
+  [ "$result" = "found" ]
+}
+
 # AC-1: at least 20 model entries
 @test "config has at least 20 model entries [AC-1]" {
   count=$(python3 -c "

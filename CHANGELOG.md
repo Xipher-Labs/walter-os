@@ -69,7 +69,15 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-No user-facing changes yet.
+### Fixed
+
+- **AI runtime fallback (#428).** `scripts/agents/lib/llm.sh` now fails closed
+  when LiteLLM is unavailable and a router-selected alias requires Codex,
+  Gemini, local/Ollama, or another non-Anthropic runtime, instead of sending
+  that alias through the direct Anthropic fallback.
+- **LiteLLM Claude shorthand (#428).** The default LiteLLM configs now expose
+  `claude` as a Sonnet route so `walter ai configure` preferences work through
+  both LiteLLM and direct Anthropic fallback.
 
 ## [0.6.1] — 2026-06-07
 

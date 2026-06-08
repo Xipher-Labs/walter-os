@@ -63,6 +63,26 @@ WALTER_MODEL_OVERRIDE=gemini walter-os status --models
 The PHI route is the exception. `walter_model_for phi` ignores
 `WALTER_MODEL_OVERRIDE` and refuses non-local values.
 
+## Runtime Execution
+
+`walter_model_for` resolves the preferred runtime alias for a domain. Execution
+still depends on a configured gateway or direct runtime:
+
+- With `LITELLM_BASE_URL` and `LITELLM_API_KEY`, `scripts/agents/lib/llm.sh`
+  sends the resolved alias to LiteLLM. The alias must exist as a `model_name`
+  in the operator's LiteLLM config. LiteLLM owns provider credentials,
+  telemetry, budget caps, and alias-to-provider mapping.
+- Without LiteLLM, `llm.sh` supports only Anthropic-compatible direct fallback
+  through `ANTHROPIC_API_KEY` or `ANTHROPIC_ENTERPRISE_KEY`.
+- If a route resolves to `cheap`, `claude-sub`, `codex`, `codex-sub`,
+  `gemini-sub`, `local-ollama`, or another LiteLLM-only/non-Anthropic alias
+  without LiteLLM or a matching direct runtime, `llm.sh` fails closed instead
+  of sending the request to Anthropic.
+
+This means `WALTER_MODEL_*` values declare preference, not proof of executable
+credentials. Use `walter ai status` to inspect declared/detected availability
+before running long-lived workflows.
+
 ## Status
 
 Show the effective routing table:
