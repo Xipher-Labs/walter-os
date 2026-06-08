@@ -83,9 +83,9 @@ code-scanning alerts.
 
 Remaining post-release follow-ups are tracked in the open security and
 operations issues: #122, #123, #225, #235, #342, and #363. The GitHub
-code-scanning follow-up set #390-#396 was triaged before the final v0.6.1
-cut; several Scorecard alerts remain visible until GitHub settings, project
-age, or external OpenSSF processes catch up.
+code-scanning follow-up set #390-#396 was triaged/dispositioned before the
+final v0.6.1 cut; several Scorecard alerts remain visible until GitHub
+settings, project age, or external OpenSSF processes catch up.
 
 ### Added
 

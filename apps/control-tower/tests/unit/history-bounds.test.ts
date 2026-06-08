@@ -32,7 +32,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
+  if (!testDir) return;
+  try {
+    rmSync(testDir, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup must not hide the test failure that triggered teardown.
+  }
 });
 
 function makeLines(n: number): string {

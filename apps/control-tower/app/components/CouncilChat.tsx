@@ -29,7 +29,7 @@ function formatElapsed(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function createSessionId(sessionType: "chat" | "ideation"): string {
+export function createSessionId(sessionType: "chat" | "ideation"): string {
   const cryptoApi = globalThis.crypto;
   if (typeof cryptoApi?.randomUUID === "function") {
     return `${sessionType}-${cryptoApi.randomUUID()}`;
@@ -263,7 +263,14 @@ export default function CouncilChat({
     setSynthesis(null);
     setSpinResult(null);
 
-    const sid = createSessionId(sessionType);
+    let sid: string;
+    try {
+      sid = createSessionId(sessionType);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase("idle");
+      return;
+    }
     setSessionId(sid);
 
     const newResponses = initResponses();
