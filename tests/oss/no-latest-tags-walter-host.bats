@@ -55,6 +55,7 @@ _strip_grep_prefix() {
 # `if [ "$status" -eq 0 ]` arm silently passed on grep errors.
 _assert_no_unfiltered_matches() {
   local label="$1"
+  local filtered
   shift
   run grep -rn "$@"
   if [ "$status" -eq 1 ]; then
@@ -120,6 +121,7 @@ _assert_no_unfiltered_matches() {
 
 @test "openclaw compose pins openclaw npm package to a packed version (P1-01)" {
   local compose="$SERVICES_DIR/openclaw/compose.yml"
+  local uncommented
   [ -f "$compose" ]
   uncommented="$(grep -Ev '^[[:space:]]*#' "$compose")"
 
