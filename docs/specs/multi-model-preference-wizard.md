@@ -142,6 +142,7 @@ operator wants a single entry point; that's out of scope here.
 ┌─────────────────────────────────────────────────────────────────┐
 │  scripts/walter/lib/model-router.sh                             │
 │    walter_model_for <domain> → echoes resolved model name(s)    │
+│    walter_model_resolve <domain> <out-var> → assigns + metadata │
 │    walter_model_phi_lock     → echoes the PHI-locked model      │
 └────────────────────────────────┬────────────────────────────────┘
                                  │ consulted by
@@ -149,7 +150,7 @@ operator wants a single entry point; that's out of scope here.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Skills (pr-review, frontend-quality, web-security-baseline,    │
 │  architect, content-writer, …)                                  │
-│    MODEL=$(walter_model_for backend_review)                     │
+│    walter_model_resolve backend_review MODEL                    │
 │    llm_invoke "$AGENT" "$MODEL" …                               │
 └────────────────────────────────┬────────────────────────────────┘
                                  │ via existing LiteLLM gateway

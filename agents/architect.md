@@ -16,7 +16,8 @@ Planning and architecture work should resolve through the brainstorm route:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-architect_model="$(walter_model_for brainstorm)"
+architect_model=""
+walter_model_resolve brainstorm architect_model
 ```
 
 Default preference is Claude + Codex in parallel for non-trivial plans. The

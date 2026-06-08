@@ -27,7 +27,8 @@ Use the long-form route for model selection:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-writing_model="$(walter_model_for longform)"
+writing_model=""
+walter_model_resolve longform writing_model
 ```
 
 Default preference is Claude for voice, narrative structure, and nuanced prose.
