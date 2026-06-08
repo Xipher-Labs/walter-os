@@ -69,7 +69,12 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-No user-facing changes yet.
+### Added
+
+- Headscale service diagnostics for `/machine/register` failures: operators can
+  run `setup/walter-host/services/headscale/deploy.sh --diagnose` to detect the
+  known Tailscale/Headscale capability-version drift signature and get the
+  safer break-glass recovery path.
 
 ## [0.6.1] — 2026-06-07
 
