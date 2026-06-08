@@ -9,6 +9,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+TRUSTED_WALTER_CONFIG="$WALTER_CONFIG"
+TRUSTED_WALTER_OS_HOME="$REPO_ROOT"
 
 INPUT="$(cat)"
 
@@ -111,16 +113,19 @@ if ! printf '%s' "$INPUT" | jq -e 'type == "object"' >/dev/null 2>&1; then
   _block "Walter-OS session timeout: non-object hook input — failing closed for safety."
 fi
 
-_env_loader="${WALTER_OS_HOME:-$REPO_ROOT}/scripts/walter/lib/env-loader.sh"
+_env_loader="${TRUSTED_WALTER_OS_HOME}/scripts/walter/lib/env-loader.sh"
 if [[ -f "$_env_loader" ]]; then
   # shellcheck source=/dev/null
   source "$_env_loader"
   walter_env_load_allowlist "${HOME}/.config/walter-os/overlay/personal.env"
-  walter_env_load_allowlist "${WALTER_CONFIG}/env"
+  WALTER_ENV_ALLOWLIST_ROOT="$TRUSTED_WALTER_CONFIG" \
+  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME" \
+    walter_env_load_allowlist "${TRUSTED_WALTER_CONFIG}/env"
 fi
 unset _env_loader
 
-WALTER_OS_HOME="${WALTER_OS_HOME:-$REPO_ROOT}"
+WALTER_CONFIG="$TRUSTED_WALTER_CONFIG"
+WALTER_OS_HOME="$TRUSTED_WALTER_OS_HOME"
 _session_lib="${WALTER_OS_HOME}/scripts/walter/lib/session-state.sh"
 if [[ ! -f "$_session_lib" ]]; then
   _block "Walter-OS session timeout: session-state library missing — failing closed for safety."

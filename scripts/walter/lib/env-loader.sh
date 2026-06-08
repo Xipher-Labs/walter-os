@@ -59,16 +59,31 @@ WALTER_ENV_ALLOWLIST=(
   WALTER_MODEL_OVERRIDE
 )
 
+_walter_env_key_dangerous() {
+  case "$1" in
+    BASH_ENV|ENV|LD_*|DYLD_*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_walter_env_key_protected() {
+  local key="$1" protected
+  for protected in ${WALTER_ENV_PROTECTED_KEYS:-}; do
+    [[ "$key" == "$protected" ]] && return 0
+  done
+  return 1
+}
+
 # Returns 0 if $1 is in the allowlist (built-in + operator override file).
 _walter_env_key_allowed() {
-  local key="$1"
+  local key="$1" override_file="${2:-}"
   local allowed
+  _walter_env_key_dangerous "$key" && return 1
   for allowed in "${WALTER_ENV_ALLOWLIST[@]}"; do
     [[ "$key" == "$allowed" ]] && return 0
   done
   # Operator-extended allowlist
-  local override_file="${WALTER_CONFIG:-$HOME/.config/walter-os}/env-allowlist.txt"
-  if [[ -f "$override_file" ]]; then
+  if [[ -n "$override_file" && -f "$override_file" ]]; then
     if grep -qxF "$key" "$override_file" 2>/dev/null; then
       return 0
     fi
@@ -86,10 +101,15 @@ walter_env_load_allowlist() {
   local env_file="$1"
   [[ -f "$env_file" ]] || return 0
 
-  local line key value rest
+  local allowlist_root override_file
+  allowlist_root="${WALTER_ENV_ALLOWLIST_ROOT:-${WALTER_CONFIG:-$HOME/.config/walter-os}}"
+  override_file="${allowlist_root}/env-allowlist.txt"
+
+  local line key value
   local lineno=0
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
+    line="${line%$'\r'}"
 
     # Strip leading whitespace
     line="${line#"${line%%[![:space:]]*}"}"
@@ -97,25 +117,31 @@ walter_env_load_allowlist() {
     # Skip blanks + comments
     [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
 
-    # Must match `KEY=...` where KEY is [A-Z_][A-Z0-9_]*
-    if [[ ! "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
-      echo "walter-env-loader: WARN line $lineno: not a KEY=VALUE pair, ignored: $line" >&2
+    # Must match `KEY=...` or `export KEY=...` where KEY is
+    # [A-Z_][A-Z0-9_]*.
+    if [[ ! "$line" =~ ^(export[[:space:]]+)?([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      echo "walter-env-loader: WARN line $lineno: not a KEY=VALUE pair, ignored." >&2
       continue
     fi
-    key="${BASH_REMATCH[1]}"
-    value="${BASH_REMATCH[2]}"
+    key="${BASH_REMATCH[2]}"
+    value="${BASH_REMATCH[3]}"
 
     # Strip surrounding quotes (single OR double) — do NOT interpret content.
     # We deliberately do not parse escape sequences. `\n` stays as the two
     # characters `\` + `n`. Operators who need a newline should not use
     # this file.
-    if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+    if [[ "${#value}" -ge 2 && "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
       value="${value:1:${#value}-2}"
-    elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+    elif [[ "${#value}" -ge 2 && "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
       value="${value:1:${#value}-2}"
     fi
 
-    if ! _walter_env_key_allowed "$key"; then
+    if _walter_env_key_protected "$key"; then
+      echo "walter-env-loader: WARN line $lineno: $key is protected by the caller, ignored." >&2
+      continue
+    fi
+
+    if ! _walter_env_key_allowed "$key" "$override_file"; then
       echo "walter-env-loader: WARN line $lineno: $key is not in the env allowlist, ignored. Add it to \${WALTER_CONFIG}/env-allowlist.txt if you really need it." >&2
       continue
     fi
