@@ -1,8 +1,9 @@
 # Headscale config
 # Reference: https://github.com/juanfont/headscale/blob/main/config-example.yaml
 #
-# Rendered by scripts/bootstrap.sh into setup/headscale/config.yaml for the
-# root all-in-one compose stack. Headscale does not expand ${...} itself.
+# Rendered by install.sh before root docker compose startup and by
+# scripts/bootstrap.sh during bootstrap/re-bootstrap. Headscale does not
+# expand ${...} itself.
 
 server_url: https://headscale.${WALTER_DOMAIN}
 listen_addr: 0.0.0.0:8080

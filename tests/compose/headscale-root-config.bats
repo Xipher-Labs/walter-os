@@ -91,6 +91,13 @@ setup() {
   [[ "$render_line" -lt "$compose_line" ]]
 }
 
+@test "install fails closed when the Headscale template is missing" {
+  [[ -f "$INSTALL" ]]
+
+  grep -Fq 'Headscale config template not found at:' "$INSTALL"
+  grep -Fq 'Cannot start root compose stack without rendering setup/headscale/config.yaml.' "$INSTALL"
+}
+
 @test "root compose mounts the rendered Headscale config" {
   [[ -f "$COMPOSE" ]]
 
@@ -130,4 +137,14 @@ setup() {
 
   grep -Fq 'https://headscale-admin.${WALTER_DOMAIN}/admin/' "$KNOWN_ISSUES"
   ! grep -Fq 'https://hs.${WALTER_DOMAIN}/admin/' "$KNOWN_ISSUES"
+}
+
+@test "Headscale docs use a minimal re-render command" {
+  [[ -f "$ROOT_CONFIG" ]]
+  [[ -f "$ROOT_TEMPLATE" ]]
+
+  grep -Fq "envsubst '\$WALTER_DOMAIN'" "$ROOT_CONFIG"
+  grep -Fq "envsubst '\$WALTER_DOMAIN'" "$REPO_ROOT/setup/SERVICES-INVENTORY.md"
+  grep -Fq 'Rendered by install.sh before root docker compose startup' "$ROOT_TEMPLATE"
+  grep -Fq 'scripts/bootstrap.sh during bootstrap/re-bootstrap' "$ROOT_TEMPLATE"
 }

@@ -275,7 +275,7 @@ Layer 7 — meta:
 | Admin UI | `goodieshq/headscale-admin:0.25.6` on port 8086 |
 | Bootstrap | Create namespace via headscale CLI (`docker exec headscale headscale namespaces create default`) |
 | Config file | `setup/headscale/config.yaml` — rendered from `setup/headscale/config.yaml.template` before root compose starts |
-| Note | Headscale config embeds `server_url`; rerun `./install.sh --step 6` or `scripts/bootstrap.sh --force` after changing `WALTER_DOMAIN`. |
+| Note | Headscale config embeds `server_url`; after changing `WALTER_DOMAIN`, re-render only this file with `WALTER_DOMAIN=example.com envsubst '$WALTER_DOMAIN' < setup/headscale/config.yaml.template > setup/headscale/config.yaml`, then restart `headscale` if it is running. |
 
 ### syncthing (file sync hub)
 

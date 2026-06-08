@@ -2157,19 +2157,22 @@ step_6() {
     return 0
   fi
 
-  if [[ -f "$headscale_template" ]]; then
-    if ! command -v envsubst >/dev/null 2>&1; then
-      err "'envsubst' not found. Install gettext (macOS: brew install gettext; Linux: apt install gettext)."
-      return 1
-    fi
-    if [[ -z "${WALTER_DOMAIN:-}" ]]; then
-      err "WALTER_DOMAIN is required to render Headscale config."
-      err "Set WALTER_DOMAIN in .env.local or the personal overlay, then re-run ./install.sh --step 6."
-      return 1
-    fi
-    WALTER_DOMAIN="$WALTER_DOMAIN" envsubst "\$WALTER_DOMAIN" < "$headscale_template" > "$headscale_config"
-    ok "Rendered Headscale config for domain: $WALTER_DOMAIN"
+  if [[ ! -f "$headscale_template" ]]; then
+    err "Headscale config template not found at: $headscale_template"
+    err "Cannot start root compose stack without rendering setup/headscale/config.yaml."
+    return 1
   fi
+  if ! command -v envsubst >/dev/null 2>&1; then
+    err "'envsubst' not found. Install gettext (macOS: brew install gettext; Linux: apt install gettext)."
+    return 1
+  fi
+  if [[ -z "${WALTER_DOMAIN:-}" ]]; then
+    err "WALTER_DOMAIN is required to render Headscale config."
+    err "Set WALTER_DOMAIN in .env.local or the personal overlay, then re-run ./install.sh --step 6."
+    return 1
+  fi
+  WALTER_DOMAIN="$WALTER_DOMAIN" envsubst "\$WALTER_DOMAIN" < "$headscale_template" > "$headscale_config"
+  ok "Rendered Headscale config for domain: $WALTER_DOMAIN"
 
   say "Starting services via docker compose..."
   docker compose -f "$compose_file" up -d

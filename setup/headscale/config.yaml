@@ -1,11 +1,13 @@
 # Headscale config placeholder for the root all-in-one compose stack.
 #
 # Regenerate with:
-#   WALTER_DOMAIN=your-domain.example scripts/bootstrap.sh --force
+#   WALTER_DOMAIN=your-domain.example envsubst '$WALTER_DOMAIN' \
+#     < setup/headscale/config.yaml.template > setup/headscale/config.yaml
+#   docker restart headscale  # optional, only if the container is running
 #
-# Headscale does not expand ${...} itself. scripts/bootstrap.sh renders
-# setup/headscale/config.yaml.template into this file before restarting the
-# container when it is already running.
+# Headscale does not expand ${...} itself. install.sh renders this file before
+# root docker compose startup; scripts/bootstrap.sh also renders it during
+# bootstrap/re-bootstrap.
 
 server_url: https://headscale.${WALTER_DOMAIN}
 listen_addr: 0.0.0.0:8080
