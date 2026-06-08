@@ -896,9 +896,9 @@ PRs #55–#59 and land as the bundle epic completes.)
   the P0-03 jq-missing path). `install.sh` adds `yq` to its required-
   tools list and runtime preflight, so a degraded install is caught
   at install time. Side fix: the `declare -A CATEGORY_MIN_TIER` array
-  is now wrapped in `set +u` … `set -u` because bash 3.2 (macOS
-  default) misparses `[token-with-dashes]=value` under `set -u` —
-  this was a latent script-load failure on macOS.
+  initialization keeps its nounset relaxation narrowly scoped.
+  `approval-gate.sh` requires Bash 4+ for associative arrays; macOS
+  `/bin/bash` 3.2 is not a supported runtime for that hook.
 
 - **Audit P1-06 closed.** Standing-approvals YAML path is now hardcoded
   to `$WALTER_CONFIG/agent-approvals.yml`. The previous
