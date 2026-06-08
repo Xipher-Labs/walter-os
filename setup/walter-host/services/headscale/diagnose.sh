@@ -30,6 +30,7 @@ Exit codes:
   0  No known registration drift signature found
   1  Known Headscale/Tailscale capability-version drift signature found
   2  Invalid arguments or unreadable mock log
+  3  Unable to inspect Headscale logs
 EOF
 }
 
@@ -85,11 +86,19 @@ read_logs() {
   fi
 
   if command -v docker >/dev/null 2>&1; then
-    docker logs "$CONTAINER" --since "$SINCE" 2>&1 || true
-    return
+    local output
+    if output="$(docker logs "$CONTAINER" --since "$SINCE" 2>&1)"; then
+      printf '%s\n' "$output"
+      return
+    fi
+
+    echo "ERROR: could not inspect Headscale logs from container '${CONTAINER}'." >&2
+    echo "$output" >&2
+    exit 3
   fi
 
-  echo "WARNING: docker not available; cannot inspect Headscale logs." >&2
+  echo "ERROR: docker not available; cannot inspect Headscale logs." >&2
+  exit 3
 }
 
 detect_headscale_version() {

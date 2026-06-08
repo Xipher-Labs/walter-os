@@ -5,6 +5,8 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   DIAGNOSE="$REPO_ROOT/setup/walter-host/services/headscale/diagnose.sh"
   DEPLOY="$REPO_ROOT/setup/walter-host/services/headscale/deploy.sh"
+  TEST_BIN="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$TEST_BIN"
 }
 
 @test "headscale diagnose detects capver drift signature" {
@@ -46,6 +48,41 @@ setup() {
 
   [ "$status" -eq 2 ]
   echo "$output" | grep -Fq "mock log is not readable"
+}
+
+@test "headscale diagnose fails inconclusive when docker logs cannot be inspected" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -Fq "could not inspect Headscale logs"
+  echo "$output" | grep -Fq "Cannot connect to the Docker daemon"
+}
+
+@test "headscale diagnose fails inconclusive when docker is unavailable" {
+  [[ -x "$DIAGNOSE" ]]
+
+  if PATH="/bin:/usr/bin" command -v docker >/dev/null 2>&1; then
+    skip "docker is available in the minimal PATH on this runner"
+  fi
+
+  run env PATH="/bin:/usr/bin" "$DIAGNOSE"
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -Fq "docker not available"
 }
 
 @test "headscale diagnose is documented from the runbook" {
