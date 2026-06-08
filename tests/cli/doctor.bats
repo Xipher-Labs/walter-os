@@ -269,8 +269,10 @@ SH
   # is deterministic and equally meaningful for regression protection.
   local doctor_sh="$REPO_ROOT/scripts/walter/subcommands/doctor.sh"
   # Must contain a check that gates SSH on CLIENT_ONLY
+  # shellcheck disable=SC2016
   grep -qE 'if \[\[ \$CLIENT_ONLY (-ne|!=) 1' "$doctor_sh"
   # And the SSH check must be inside that gate (next line after the if)
+  # shellcheck disable=SC2016
   grep -EA 1 'CLIENT_ONLY (-ne|!=) 1' "$doctor_sh" | grep -qE 'ssh.*walter-vm'
 }
 

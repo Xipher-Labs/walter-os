@@ -1,6 +1,6 @@
 /**
  * Mode API — reads/sets consensus mode state.
- * Reads from ~/.config/walter-os/mode.json (written by walter-os CLI, T-32).
+ * Reads from Control Tower's state dir (written by walter-os CLI, T-32).
  * Toggle calls the walter-os CLI via child_process.exec (server-side only).
  *
  * GET  /api/mode          — returns current mode state
@@ -20,7 +20,10 @@ export const runtime = "nodejs";
 // U-r2-2: use execFile (not exec) to prevent shell injection via WALTER_OS_BIN env var.
 // execFile bypasses /bin/sh and passes args as an array, so metacharacters are inert.
 const execFileAsync = promisify(execFile);
-const CONFIG_DIR = process.env.WALTER_CONFIG_DIR ?? "/root/.config/walter-os";
+const CONFIG_DIR =
+  process.env.WALTER_CONFIG_DIR ??
+  process.env.WALTER_CONFIG ??
+  "/var/lib/walter-os/control-tower";
 
 export interface ModeState {
   consensus: boolean;
@@ -68,6 +71,11 @@ export async function POST(request: Request): Promise<Response> {
     const walterBin = process.env.WALTER_OS_BIN ?? "/usr/local/bin/walter-os";
     await execFileAsync(walterBin, ["mode", "consensus", action], {
       timeout: 10000,
+      env: {
+        ...process.env,
+        WALTER_CONFIG: process.env.WALTER_CONFIG ?? CONFIG_DIR,
+        WALTER_CONFIG_DIR: CONFIG_DIR,
+      },
     });
     const newState = readModeJson();
     return Response.json(newState);

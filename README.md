@@ -181,8 +181,9 @@ walter ai configure --profile mixed
 walter ai status
 ```
 
-The provider wizard writes `~/.config/walter-os/providers.yaml` and activates
-the matching env vars in your private overlay or `.env.local`. Current LLM
+The provider wizard writes `~/.config/walter-os/providers.yaml` and, when the
+Walter env file already exists, patches it (`$WALTER_OS_HOME/.env.local`, or
+`WALTER_ENV_LOCAL` when set) with the matching private env vars. Current LLM
 slugs: `litellm`, `anthropic`, `openai`, `gemini`, and `ollama`. Use LiteLLM
 when you want one self-hosted gateway, direct Anthropic/OpenAI/Gemini when you
 only have one vendor account, and Ollama/local when compliance or security

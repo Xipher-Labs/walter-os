@@ -31,30 +31,62 @@ _heygen_preflight() {
   return 0
 }
 
+_heygen_require_value() {
+  local flag="$1" value="${2:-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "heygen-cli: $flag requires a value" >&2
+    return 2
+  fi
+  return 0
+}
+
+_heygen_urlencode() {
+  jq -nr --arg value "$1" '$value | @uri'
+}
+
+_heygen_validate_json_object() {
+  local label="$1" value="$2"
+  if ! printf '%s' "$value" | jq -ce 'type == "object"' >/dev/null 2>&1; then
+    echo "heygen-cli: $label must be a JSON object" >&2
+    return 2
+  fi
+  return 0
+}
+
 # Internal — wrap curl with consistent headers + error handling.
 # Args: <method> <path> [body-as-json-string]
 _heygen_request() {
   local method="$1" path="$2" body="${3:-}"
   local url="https://api.heygen.com${path}"
-  local response http_code
+  local response http_code body_only
+  local curl_args=(
+    -sS
+    --connect-timeout 10
+    --max-time 60
+    -w $'\n%{http_code}'
+    -X "$method"
+    -H "x-api-key: ${HEYGEN_API_KEY}"
+  )
 
   if [[ -n "$body" ]]; then
-    response="$(curl -sS -w '\n%{http_code}' \
-      -X "$method" \
-      -H "x-api-key: ${HEYGEN_API_KEY}" \
-      -H 'Content-Type: application/json' \
-      -d "$body" \
-      "$url")"
-  else
-    response="$(curl -sS -w '\n%{http_code}' \
-      -X "$method" \
-      -H "x-api-key: ${HEYGEN_API_KEY}" \
-      "$url")"
+    curl_args+=(
+      -H 'Content-Type: application/json'
+      --data-raw "$body"
+    )
   fi
 
-  local http_code body_only
+  if ! response="$(curl "${curl_args[@]}" "$url")"; then
+    echo "heygen-cli: transport error calling ${method} ${path}" >&2
+    return 6
+  fi
+
   http_code="$(printf '%s' "$response" | tail -n1)"
   body_only="$(printf '%s' "$response" | sed '$d')"
+  if [[ ! "$http_code" =~ ^[0-9][0-9][0-9]$ ]]; then
+    echo "heygen-cli: transport error calling ${method} ${path} (missing HTTP status)" >&2
+    printf '%s\n' "$body_only" >&2
+    return 6
+  fi
 
   case "$http_code" in
     2*) printf '%s\n' "$body_only" ;;
@@ -107,7 +139,7 @@ heygen_get_video_status() {
     echo "heygen-cli: video_id required" >&2
     return 2
   fi
-  _heygen_request GET "/v1/video_status.get?video_id=${video_id}"
+  _heygen_request GET "/v1/video_status.get?video_id=$(_heygen_urlencode "$video_id")"
 }
 
 # ----- State-changing (paid — operator-confirmation in chat required) -----
@@ -120,18 +152,6 @@ heygen_get_video_status() {
 heygen_generate_video() {
   _heygen_preflight || return $?
   local avatar="" voice="" script="" background="#0a0a0a" ratio="16:9"
-
-  # Helper: require a value follows the flag, then shift past both. Copilot
-  # R1 flagged that bare `shift 2` would silently mis-parse if a flag was
-  # passed without its argument (e.g., `--avatar --voice ID`).
-  _heygen_require_value() {
-    local flag="$1" value="$2"
-    if [[ -z "$value" || "$value" == --* ]]; then
-      echo "heygen-cli: $flag requires a value" >&2
-      return 2
-    fi
-    return 0
-  }
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -180,7 +200,6 @@ heygen_generate_video() {
         if   $ratio == "16:9" then { width: 1920, height: 1080 }
         elif $ratio == "9:16" then { width: 1080, height: 1920 }
         elif $ratio == "1:1"  then { width: 1080, height: 1080 }
-        else                       { width: 1920, height: 1080 }
         end
       )
     }')"
@@ -192,7 +211,11 @@ heygen_generate_video() {
 heygen_generate_from_template() {
   _heygen_preflight || return $?
   local template_id="${1:-}"
-  shift || true
+  if [[ -z "$template_id" || "$template_id" == --* ]]; then
+    echo "heygen-cli: template_id required" >&2
+    return 2
+  fi
+  shift
   local variables="{}"
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -207,9 +230,7 @@ heygen_generate_from_template() {
       *) echo "heygen-cli: unknown flag $1" >&2; return 2 ;;
     esac
   done
-  if [[ -z "$template_id" ]]; then
-    echo "heygen-cli: template_id required" >&2
-    return 2
-  fi
-  _heygen_request POST "/v2/template/${template_id}/generate" "$variables"
+  _heygen_validate_json_object "--variables" "$variables" || return $?
+  variables="$(printf '%s' "$variables" | jq -c '.')"
+  _heygen_request POST "/v2/template/$(_heygen_urlencode "$template_id")/generate" "$variables"
 }

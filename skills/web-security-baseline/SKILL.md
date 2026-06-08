@@ -15,12 +15,13 @@ For cross-model review, use the backend/security route:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-security_model="$(walter_model_for backend_review)"
+security_model=""
+walter_model_resolve backend_review security_model
 ```
 
 Default preference is Codex because these reviews emphasize threat modeling,
 edge cases, deployment flow, and backend correctness. If the diff contains PHI
-or medical data, switch to `walter_model_for phi`.
+or medical data, switch to `walter_model_resolve phi security_model`.
 
 This is BASELINE — it doesn't replace a real security audit before launch.
 It catches the well-known patterns. For high-stakes systems ([Project B], [Project A]

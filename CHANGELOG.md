@@ -69,8 +69,20 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
+### Added
+
 - Added `walter doctor --enforcement` to report whether local tool execution is
   `enforced`, `partial`, or `policy-only`.
+
+### Fixed
+
+- **AI runtime fallback (#428).** `scripts/agents/lib/llm.sh` now fails closed
+  when LiteLLM is unavailable and a router-selected alias requires Codex,
+  Gemini, local/Ollama, or another non-Anthropic runtime, instead of sending
+  that alias through the direct Anthropic fallback.
+- **LiteLLM Claude shorthand (#428).** The default LiteLLM configs now expose
+  `claude` as a Sonnet route so `walter ai configure` preferences work through
+  both LiteLLM and direct Anthropic fallback.
 
 ## [0.6.1] — 2026-06-07
 
@@ -84,9 +96,9 @@ code-scanning alerts.
 
 Remaining post-release follow-ups are tracked in the open security and
 operations issues: #122, #123, #225, #235, #342, and #363. The GitHub
-code-scanning follow-up set #390-#396 was triaged before the final v0.6.1
-cut; several Scorecard alerts remain visible until GitHub settings, project
-age, or external OpenSSF processes catch up.
+code-scanning follow-up set #390-#396 was triaged/dispositioned before the
+final v0.6.1 cut; several Scorecard alerts remain visible until GitHub
+settings, project age, or external OpenSSF processes catch up.
 
 ### Added
 
@@ -889,9 +901,9 @@ PRs #55–#59 and land as the bundle epic completes.)
   the P0-03 jq-missing path). `install.sh` adds `yq` to its required-
   tools list and runtime preflight, so a degraded install is caught
   at install time. Side fix: the `declare -A CATEGORY_MIN_TIER` array
-  is now wrapped in `set +u` … `set -u` because bash 3.2 (macOS
-  default) misparses `[token-with-dashes]=value` under `set -u` —
-  this was a latent script-load failure on macOS.
+  initialization keeps its nounset relaxation narrowly scoped.
+  `approval-gate.sh` requires Bash 4+ for associative arrays; macOS
+  `/bin/bash` 3.2 is not a supported runtime for that hook.
 
 - **Audit P1-06 closed.** Standing-approvals YAML path is now hardcoded
   to `$WALTER_CONFIG/agent-approvals.yml`. The previous

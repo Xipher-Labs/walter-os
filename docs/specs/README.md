@@ -15,6 +15,8 @@ the top level. Move shipped, superseded, or operator-specific design records to
 | [`walter-bridge-litellm-expansion.md`](walter-bridge-litellm-expansion.md) | LiteLLM/provider expansion for the Walter bridge. |
 | [`openclaw.md`](openclaw.md) | OpenClaw gateway trust model and runtime contract. |
 | [`oss-trust-v0.5.0-small-batch.md`](oss-trust-v0.5.0-small-batch.md) | OSS Trust roadmap small-batch: C-3 pre-commit framework, D-1 GitHub Security Advisories partner, E-3 `@types/*` allowlist, E-4 `walter-os justify revoke` CLI. |
+| [`oss-trust-roadmap.md`](oss-trust-roadmap.md) | Umbrella roadmap for runtime sandboxing, audit-chain receipts, provenance, and OSS trust work through v1.0. |
+| [`recon-vuln-scanning-profile.md`](recon-vuln-scanning-profile.md) | Proposed high-risk recon/pentest profile with authorization gates, audit logging, and CLI skill boundaries. |
 | [`delivery-orchestrator.md`](delivery-orchestrator.md) | AD-1 coordinator contract for role routing, feature-state ownership, and fail-closed delivery gates. |
 | [`feature-state-ledger.md`](feature-state-ledger.md) | Persistent `.walter/features/<id>/state.yaml` runtime ledger for autonomous delivery state. |
 | [`post-merge-feedback-loop.md`](post-merge-feedback-loop.md) | Read-only AD-13 post-merge health classification before fix-PR/rollback automation. |

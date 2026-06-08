@@ -32,6 +32,23 @@ The capability profile is private operator metadata written to:
 It updates only the managed `WALTER_MODEL_*` keys and preserves unrelated
 operator settings. Neither file stores API keys or secrets.
 
+Capability profiles declare what Walter-OS is allowed to try. They do not
+create credentials or install CLIs. Runtime execution still needs one of:
+
+- LiteLLM credentials (`LITELLM_BASE_URL` + `LITELLM_API_KEY`) for gateway
+  aliases that exist in the operator's LiteLLM config. The default
+  Walter-Bridge config exposes aliases such as `claude`, `sonnet`, `haiku`,
+  `opus`, `cheap`, `gpt`, `claude-sub`, `codex-sub`, and `gemini-sub`.
+- A supported direct fallback. Today `scripts/agents/lib/llm.sh` supports only
+  Anthropic-compatible direct fallback through `ANTHROPIC_API_KEY` or
+  `ANTHROPIC_ENTERPRISE_KEY`.
+
+Capability route values such as `codex`, `gemini`, and `ollama` declare the
+operator's preferred tool family. They are not automatically guaranteed to be
+LiteLLM `model_name` entries. If the configured route needs Codex, Gemini, or
+local/Ollama and LiteLLM is not available, `llm.sh` fails closed instead of
+silently using another provider.
+
 ## Path Decision
 
 The active capability file lives under `~/.config/walter-os/` because it is

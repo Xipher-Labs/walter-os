@@ -3,7 +3,7 @@
  *
  * Extracted from history.ts to be unit-testable.
  * Provides:
- * - atomicAppend: uses write-to-tmp + rename for crash safety
+ * - atomicAppend: uses write-to-tmp + rename to avoid partial writes
  * - pruneIfNeeded: caps the file at maxLines, keeping the most recent entries
  *
  * Refs: docs/specs/walter-council-v2.md
@@ -33,6 +33,11 @@ function readExistingFile(filePath: string): string | null {
 function atomicWritePrivate(filePath: string, content: string): void {
   const dir = path.dirname(filePath);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // Best effort: writing below remains non-fatal for history persistence.
+  }
 
   const tmpDir = mkdtempSync(path.join(dir, ".history-write-"));
   const tmpPath = path.join(tmpDir, "payload");
@@ -52,9 +57,10 @@ function atomicWritePrivate(filePath: string, content: string): void {
 /**
  * Append a single JSONL line to the file.
  *
- * Uses an exclusive temp directory + write-to-temp + rename pattern for
- * crash safety. The final rename is atomic on POSIX filesystems when source
- * and destination are on the same mount.
+ * Uses an exclusive temp directory + write-to-temp + rename pattern so readers
+ * see either the previous file or the complete replacement file. The final
+ * rename is atomic on POSIX filesystems when source and destination are on the
+ * same mount.
  *
  * Note: this approach is not safe for very high-frequency concurrent writes
  * (last-writer-wins on concurrent renames). For the council-chat use case

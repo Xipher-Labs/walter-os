@@ -4,6 +4,7 @@
 # Domain-based model routing for Walter-OS skills and agents.
 # Source this file, then call:
 #   walter_model_for <backend_review|frontend|longform|quick_refactor|phi|brainstorm|default>
+#   walter_model_resolve <domain> <out-var>
 #
 # Values are LiteLLM-style aliases. A comma-separated value means the caller may
 # fan out to multiple models and merge the outputs.
@@ -259,6 +260,10 @@ walter_model_select_primary() {
 
   IFS=',' read -r primary _ <<<"$value"
   printf -v "$var_name" '%s' "$primary"
+}
+
+walter_model_resolve() {
+  walter_model_select_primary "$@"
 }
 
 walter_models_print_effective() {

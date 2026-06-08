@@ -8,10 +8,10 @@
 #   2. ~/.config/walter-os was mounted read-only, so even if the CLI
 #      were present, it couldn't write mode.json.
 #
-# These tests assert both fixes stay in place. The actual `mode consensus
-# on|off` exec path is exercised by Playwright in apps/control-tower/tests/
-# but that requires a running container — these static guards catch the
-# image / compose drift that broke the toggle in the first place.
+# These tests assert the image keeps the CLI available while constraining
+# the writable surface to Control Tower's own mode-state volume. Runtime
+# API behavior is covered by the Control Tower test suite; these static
+# guards catch image / compose drift before a container is built.
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -45,8 +45,8 @@ setup() {
   grep -qE "^ENV[[:space:]]+WALTER_OS_HOME=/opt/walter-os" "$DOCKERFILE"
 }
 
-@test "AC-1 (#176): Dockerfile sets WALTER_CONFIG to /root/.config/walter-os" {
-  grep -qE "^ENV[[:space:]]+WALTER_CONFIG=/root/\\.config/walter-os" "$DOCKERFILE"
+@test "AC-1 (#176): Dockerfile sets WALTER_CONFIG to Control Tower state dir" {
+  grep -qE "^ENV[[:space:]]+WALTER_CONFIG=/var/lib/walter-os/control-tower" "$DOCKERFILE"
 }
 
 @test "AC-1 (#176): Dockerfile sets WALTER_CONFIG_DIR (CT route alignment)" {
@@ -54,7 +54,7 @@ setup() {
   # while bin/walter-os + mode.sh read WALTER_CONFIG. Both must point at
   # the same path so the read (CT route) and write (CLI exec) paths
   # agree (Copilot R1 #194).
-  grep -qE "^ENV[[:space:]]+WALTER_CONFIG_DIR=/root/\\.config/walter-os" "$DOCKERFILE"
+  grep -qE "^ENV[[:space:]]+WALTER_CONFIG_DIR=/var/lib/walter-os/control-tower" "$DOCKERFILE"
 }
 
 @test "AC-1 (#176): .dockerignore allows the bundled paths (build context check)" {
@@ -77,36 +77,91 @@ setup() {
   grep -qE "apk add .* jq" "$DOCKERFILE" || grep -qE "apk add .*jq" "$DOCKERFILE"
 }
 
-# ---------------------------------------------------------------------------
-# AC-2: container does NOT run as the non-root nextjs user
-# ---------------------------------------------------------------------------
+@test "AC-1 (#176): Dockerfile installs su-exec for privilege drop" {
+  grep -qE "apk add .* su-exec" "$DOCKERFILE" || grep -qE "apk add .*su-exec" "$DOCKERFILE"
+}
 
-@test "AC-2 (#176): Dockerfile does NOT set USER nextjs" {
-  # /root/ on the host is mode 700 root:root. Running as a non-root UID
-  # makes mode.json writes fail with EPERM even with :rw mount. The
-  # trade-off (single-operator private VM) is documented in the
-  # Dockerfile comments.
-  ! grep -qE "^USER[[:space:]]+nextjs" "$DOCKERFILE"
+@test "AC-1 (#176): Dockerfile uses entrypoint to prepare mode state volume" {
+  grep -qE "^COPY[[:space:]]+apps/control-tower/docker-entrypoint\\.sh[[:space:]]+/usr/local/bin/control-tower-entrypoint" "$DOCKERFILE"
+  grep -qE '^ENTRYPOINT[[:space:]]+\["control-tower-entrypoint"\]' "$DOCKERFILE"
 }
 
 # ---------------------------------------------------------------------------
-# AC-3: compose mounts /root/.config/walter-os RW (not RO)
+# AC-2: container drops privileges after preparing the volume
 # ---------------------------------------------------------------------------
 
-@test "AC-3 (#176): root compose.yml mounts walter-os config RW for control-tower" {
+@test "AC-2 (#176): entrypoint prepares volume then execs as node" {
+  local entrypoint="$REPO_ROOT/apps/control-tower/docker-entrypoint.sh"
+  [[ -f "$entrypoint" ]]
+  grep -Fq 'chown -R node:node "$WALTER_CONFIG_DIR"' "$entrypoint"
+  grep -Fq 'exec su-exec node "$@"' "$entrypoint"
+}
+
+@test "AC-2 (#176): entrypoint aligns WALTER_CONFIG and WALTER_CONFIG_DIR" {
+  local entrypoint="$REPO_ROOT/apps/control-tower/docker-entrypoint.sh"
+  [[ -f "$entrypoint" ]]
+  grep -Fq 'export WALTER_CONFIG="${WALTER_CONFIG:-$default_state_dir}"' "$entrypoint"
+  grep -Fq 'export WALTER_CONFIG_DIR="${WALTER_CONFIG_DIR:-$WALTER_CONFIG}"' "$entrypoint"
+}
+
+# ---------------------------------------------------------------------------
+# AC-3: compose mounts only Control Tower mode state RW
+# ---------------------------------------------------------------------------
+
+@test "AC-3 (#176): root compose.yml mounts dedicated Control Tower state RW" {
   [[ -f "$ROOT_COMPOSE" ]] || skip "root compose.yml missing"
-  # Extract the control-tower service block and assert the config mount
-  # is :rw (or unsuffixed, which defaults to RW for bind mounts).
   awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
     "$ROOT_COMPOSE" \
-    | grep -E '/root/\.config/walter-os:/root/\.config/walter-os' \
-    | grep -qvE ':ro($|\s)'
+    | grep -qE 'control_tower_config:/var/lib/walter-os/control-tower:rw'
+  grep -qE '^  control_tower_config:$' "$ROOT_COMPOSE"
 }
 
-@test "AC-3 (#176): standalone compose.yml mounts walter-os config RW" {
+@test "AC-3 (#176): root compose.yml does not mount operator config RW into CT" {
+  [[ -f "$ROOT_COMPOSE" ]] || skip "root compose.yml missing"
+  ! awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '/root/\.config/walter-os'
+}
+
+@test "AC-3 (#176): standalone compose.yml mounts dedicated Control Tower state RW" {
   [[ -f "$STANDALONE_COMPOSE" ]] || skip "standalone compose missing"
-  grep -E '/root/\.config/walter-os:/root/\.config/walter-os' "$STANDALONE_COMPOSE" \
-    | grep -qvE ':ro($|\s)'
+  grep -qE 'control_tower_config:/var/lib/walter-os/control-tower:rw' "$STANDALONE_COMPOSE"
+  grep -qE '^  control_tower_config:$' "$STANDALONE_COMPOSE"
+}
+
+@test "AC-3 (#176): standalone compose.yml does not mount operator config RW into CT" {
+  [[ -f "$STANDALONE_COMPOSE" ]] || skip "standalone compose missing"
+  ! grep -qE '/root/\.config/walter-os' "$STANDALONE_COMPOSE"
+}
+
+@test "AC-3 (#176): root compose.yml hardens Control Tower privileges" {
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE 'no-new-privileges:true'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE 'cap_drop:'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '^[[:space:]]+-[[:space:]]+ALL$'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE 'cap_add:'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '^[[:space:]]+-[[:space:]]+CHOWN$'
+  awk '/^  control-tower:/{flag=1;next} flag && /^  [a-z][a-z0-9-]+:/{flag=0} flag' \
+    "$ROOT_COMPOSE" \
+    | grep -qE '^[[:space:]]+-[[:space:]]+FOWNER$'
+}
+
+@test "AC-3 (#176): standalone compose.yml hardens Control Tower privileges" {
+  grep -qE 'no-new-privileges:true' "$STANDALONE_COMPOSE"
+  grep -qE 'cap_drop:' "$STANDALONE_COMPOSE"
+  grep -qE '^[[:space:]]+-[[:space:]]+ALL$' "$STANDALONE_COMPOSE"
+  grep -qE 'cap_add:' "$STANDALONE_COMPOSE"
+  grep -qE '^[[:space:]]+-[[:space:]]+CHOWN$' "$STANDALONE_COMPOSE"
+  grep -qE '^[[:space:]]+-[[:space:]]+FOWNER$' "$STANDALONE_COMPOSE"
 }
 
 # ---------------------------------------------------------------------------

@@ -142,6 +142,7 @@ operator wants a single entry point; that's out of scope here.
 ┌─────────────────────────────────────────────────────────────────┐
 │  scripts/walter/lib/model-router.sh                             │
 │    walter_model_for <domain> → echoes resolved model name(s)    │
+│    walter_model_resolve <domain> <out-var> → assigns + metadata │
 │    walter_model_phi_lock     → echoes the PHI-locked model      │
 └────────────────────────────────┬────────────────────────────────┘
                                  │ consulted by
@@ -149,19 +150,28 @@ operator wants a single entry point; that's out of scope here.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Skills (pr-review, frontend-quality, web-security-baseline,    │
 │  architect, content-writer, …)                                  │
-│    MODEL=$(walter_model_for backend_review)                     │
+│    walter_model_resolve backend_review MODEL                    │
 │    llm_invoke "$AGENT" "$MODEL" …                               │
 └────────────────────────────────┬────────────────────────────────┘
-                                 │ via existing LiteLLM gateway
+                                 │ via LiteLLM when configured,
+                                 │ otherwise provider-aware direct fallback
+                                 │ or fail-closed runtime mismatch
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  LiteLLM (setup/walter-host/services/litellm/config.yaml)       │
-│    routes "codex" → openai/codex-cli                            │
 │    routes "claude" → anthropic/claude-sonnet-4-5                │
-│    routes "openrouter/claude" → openrouter/anthropic/claude...  │
-│    routes "local-ollama" → ollama/llama-3.x (Phase L homelab)   │
+│    routes "sonnet" → anthropic/claude-sonnet-4-5                │
+│    routes "gpt" → gpt-5.5                                       │
+│    routes "cheap" → gemini/gemini-2.5-flash                     │
+│    routes "claude-sub" → claude subscription router             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+Without LiteLLM, `scripts/agents/lib/llm.sh` only supports
+Anthropic-compatible direct fallback today. Non-Anthropic routes such as
+`cheap`, `claude-sub`, `codex`, `gemini`, or `local-ollama` must have a
+LiteLLM route or a future matching direct runtime branch; otherwise invocation
+fails closed.
 
 ## Threat model + safety
 

@@ -65,6 +65,12 @@ LIB_DIR="$SCRIPT_DIR/lib"
 source "$LIB_DIR/plane.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/llm.sh"
+[[ -r "$LIB_DIR/model-selection.sh" ]] || {
+  echo "agents/run.sh: model-selection.sh not found or unreadable at $LIB_DIR/model-selection.sh (run install.sh?)" >&2
+  exit 3
+}
+# shellcheck disable=SC1091
+source "$LIB_DIR/model-selection.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/metrics.sh"
 # shellcheck disable=SC1091
@@ -77,8 +83,13 @@ source "$LIB_DIR/alerts.sh"
 source "$LIB_DIR/vote.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/mode.sh"
-# shellcheck disable=SC1091
-source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+
+MODEL_ROUTER="$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
+[[ -r "$MODEL_ROUTER" ]] || {
+  echo "agents/run.sh: model router not found or unreadable at $MODEL_ROUTER (run install.sh?)" >&2
+  exit 3
+}
+export WALTER_MODEL_ROUTER_SH="$MODEL_ROUTER"
 
 AUDIT="$WALTER_OS_HOME/scripts/agent-audit-log.sh"
 WATCHDOG="$WALTER_OS_HOME/scripts/agent-runtime-watchdog.sh"
@@ -373,7 +384,7 @@ fi
 # Pick model based on the agent's domain and operator-configured availability.
 MODEL_DOMAIN="$(_agent_model_domain "$AGENT")"
 MODEL=""
-walter_model_select_primary "$MODEL_DOMAIN" MODEL
+walter_agent_select_model "$MODEL_DOMAIN" MODEL || exit 3
 
 # ---------- invoke LLM under watchdog ----------
 
@@ -535,7 +546,10 @@ metric_set "walter_council_heartbeat_age_seconds" "agent=\"${AGENT}\"" 0 || true
 if [[ "$RESULT_LABEL" == "success" ]]; then
   _LESSON_EXTRACT_RUNNER="$(mktemp -t walter-lesson-runner.XXXXXX)"
   LESSON_MODEL=""
-  walter_model_select_primary default LESSON_MODEL
+  if ! walter_agent_select_model default LESSON_MODEL sonnet; then
+    echo "agents/run.sh: WARN lesson model selection failed; using sonnet fallback." >&2
+    LESSON_MODEL="sonnet"
+  fi
   # Note: _LESSON_EXTRACT_RUNNER is cleaned by the consolidated _run_cleanup trap above.
   # SECURITY: WALTER_LESSON_TITLE is exported so it reaches the runner via env.
   # TITLE must NOT be interpolated into the heredoc — it comes from Plane and is

@@ -15,13 +15,15 @@ the cli.js server module to keep server in foreground. Tracked as TODO.
 ## Headscale admin UI served at /admin/ not /
 
 `goodieshq/headscale-admin` serves the SPA under `/admin/`. The
-cloudflared route to `hs.${WALTER_DOMAIN}` doesn't rewrite paths.
+cloudflared route to `headscale-admin.${WALTER_DOMAIN}` does not rewrite
+paths.
 
-**Workaround**: visit `https://hs.${WALTER_DOMAIN}/admin/` directly.
+**Workaround**: visit `https://headscale-admin.${WALTER_DOMAIN}/admin/`
+directly.
 
-**Real fix**: add Caddy/nginx in front of headscale-admin that 301
-redirects `/` → `/admin/`. Or change cloudflared to use `originRequest`
-with a path rewrite.
+**Real fix**: add Caddy/nginx in front of headscale-admin that 301 redirects
+`/` -> `/admin/`. Or change cloudflared to use `originRequest` with a path
+rewrite.
 
 ## PostHog blank page when reached via tunnel (Caddy host-header mismatch)
 

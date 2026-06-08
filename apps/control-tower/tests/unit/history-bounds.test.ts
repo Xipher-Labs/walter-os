@@ -23,7 +23,7 @@ import * as os from "os";
 // We test the internal pruning function directly
 import { pruneIfNeeded, atomicAppend } from "@/server/council/history-io";
 
-let testDir: string;
+let testDir: string | undefined;
 let testFile: string;
 
 beforeEach(() => {
@@ -32,7 +32,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
+  if (!testDir) return;
+  try {
+    rmSync(testDir, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup must not hide the test failure that triggered teardown.
+  } finally {
+    testDir = undefined;
+  }
 });
 
 function makeLines(n: number): string {
@@ -93,6 +100,14 @@ describe("atomicAppend [history concurrency]", () => {
     atomicAppend(testFile, '{"session_id":"s-private","ts":"2026-01-01"}');
 
     expect(statSync(testFile).mode & 0o777).toBe(0o600);
+  });
+
+  it("tightens an existing parent directory to owner-only permissions", () => {
+    chmodSync(testDir, 0o777);
+
+    atomicAppend(testFile, '{"session_id":"s1","ts":"2026-01-01"}');
+
+    expect(statSync(testDir).mode & 0o777).toBe(0o700);
   });
 
   it("handles concurrent writes without corruption", async () => {

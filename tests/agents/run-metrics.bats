@@ -42,9 +42,28 @@ teardown() {
   grep -q "walter_council_tokens_total" "$RUN_SH"
 }
 
-@test "run.sh sources model-router.sh for Council model selection" {
+@test "run.sh wires Council model selection through model-selection helper" {
   grep -q "model-router\.sh" "$RUN_SH"
-  grep -q "walter_model_select_primary" "$RUN_SH"
+  grep -q "model-selection\.sh" "$RUN_SH"
+  grep -q "walter_agent_select_model" "$RUN_SH"
+}
+
+@test "run.sh fails closed before sourcing model-selection helper" {
+  local guard_line exit_line source_line
+  guard_line=$(grep -nF '[[ -r "$LIB_DIR/model-selection.sh" ]]' "$RUN_SH" | head -1 | cut -d: -f1)
+  source_line=$(grep -n 'source "$LIB_DIR/model-selection\.sh"' "$RUN_SH" | head -1 | cut -d: -f1)
+  exit_line=$(awk -v start="$guard_line" -v end="$source_line" 'NR >= start && NR < end && /exit 3/ { print NR; exit }' "$RUN_SH")
+
+  [[ -n "$guard_line" ]]
+  [[ -n "$exit_line" ]]
+  [[ -n "$source_line" ]]
+  [[ "$guard_line" -lt "$source_line" ]]
+  [[ "$exit_line" -lt "$source_line" ]]
+}
+
+@test "run.sh fails closed on unreadable model router" {
+  grep -qF '[[ -r "$MODEL_ROUTER" ]]' "$RUN_SH"
+  grep -q "model router not found or unreadable" "$RUN_SH"
 }
 
 @test "run.sh maps Council agents to model routing domains" {
