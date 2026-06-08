@@ -237,6 +237,8 @@ LITELLM_UI_PASS=uipass
 GF_ADMIN_PASSWORD=grafanapass
 N8N_PG_PASS=n8npass
 N8N_ENCRYPTION_KEY=00000000000000000000000000000000
+N8N_BASIC_AUTH_USER=n8nuser
+N8N_BASIC_AUTH_PASSWORD=n8npass-basic-auth
 WG_PASSWORD_HASH=dummyhash
 ENV
   run docker compose --env-file "$TMPENV" config --quiet

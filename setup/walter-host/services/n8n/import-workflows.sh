@@ -7,6 +7,7 @@
 # Usage:
 #   ./import-workflows.sh
 #   N8N_API_KEY=<key> N8N_URL=http://localhost:5678 ./import-workflows.sh
+#   N8N_API_KEY=<key> N8N_BASIC_AUTH_USER=<user> N8N_BASIC_AUTH_PASSWORD=<pass> ./import-workflows.sh
 #
 # Prereqs:
 #   - n8n running (docker compose up -d n8n)
@@ -19,6 +20,8 @@ set -euo pipefail
 
 N8N_URL="${N8N_URL:-http://localhost:5678}"
 N8N_API_KEY="${N8N_API_KEY:-}"
+N8N_BASIC_AUTH_USER="${N8N_BASIC_AUTH_USER:-}"
+N8N_BASIC_AUTH_PASSWORD="${N8N_BASIC_AUTH_PASSWORD:-}"
 WORKFLOWS_DIR="$(cd "$(dirname "$0")/workflows" && pwd)"
 
 if [[ -z "$N8N_API_KEY" ]]; then
@@ -32,8 +35,17 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+curl_auth_args=()
+if [[ -n "$N8N_BASIC_AUTH_USER" || -n "$N8N_BASIC_AUTH_PASSWORD" ]]; then
+  if [[ -z "$N8N_BASIC_AUTH_USER" || -z "$N8N_BASIC_AUTH_PASSWORD" ]]; then
+    echo "[import-workflows] ERROR: set both N8N_BASIC_AUTH_USER and N8N_BASIC_AUTH_PASSWORD, or neither." >&2
+    exit 1
+  fi
+  curl_auth_args=(-u "${N8N_BASIC_AUTH_USER}:${N8N_BASIC_AUTH_PASSWORD}")
+fi
+
 # Verify n8n is reachable
-if ! curl -sf -o /dev/null "${N8N_URL}/api/v1/workflows" \
+if ! curl -sf "${curl_auth_args[@]}" -o /dev/null "${N8N_URL}/api/v1/workflows" \
     -H "X-N8N-API-KEY: ${N8N_API_KEY}"; then
   echo "[import-workflows] ERROR: Cannot reach n8n at ${N8N_URL}" >&2
   echo "  Check that n8n is running: docker compose ps n8n" >&2
@@ -49,14 +61,14 @@ import_workflow() {
 
   # Check if workflow already exists by name
   local existing_id
-  existing_id=$(curl -sf "${N8N_URL}/api/v1/workflows" \
+  existing_id=$(curl -sf "${curl_auth_args[@]}" "${N8N_URL}/api/v1/workflows" \
     -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
     | jq -r --arg name "$name" '.data[] | select(.name == $name) | .id' \
     | head -1)
 
   if [[ -n "$existing_id" ]]; then
     # Update existing
-    curl -sf -X PUT "${N8N_URL}/api/v1/workflows/${existing_id}" \
+    curl -sf "${curl_auth_args[@]}" -X PUT "${N8N_URL}/api/v1/workflows/${existing_id}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
       -H "Content-Type: application/json" \
       -d "@${file}" >/dev/null
@@ -64,7 +76,7 @@ import_workflow() {
   else
     # Create new
     local new_id
-    new_id=$(curl -sf -X POST "${N8N_URL}/api/v1/workflows" \
+    new_id=$(curl -sf "${curl_auth_args[@]}" -X POST "${N8N_URL}/api/v1/workflows" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
       -H "Content-Type: application/json" \
       -d "@${file}" \
