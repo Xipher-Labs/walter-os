@@ -53,6 +53,13 @@ teardown() {
   grep -q "frontmatter_domain" "$RUN_SH"
 }
 
+@test "run.sh validates and normalizes frontmatter model_domain before routing" {
+  grep -q "_agent_model_domain_canonical" "$RUN_SH"
+  grep -q "invalid model_domain" "$RUN_SH"
+  grep -q "_agent_legacy_model_domain" "$RUN_SH"
+  grep -Fq "tr '[:upper:]-' '[:lower:]_'" "$RUN_SH"
+}
+
 @test "run.sh normalizes CRLF before frontmatter delimiter checks" {
   grep -q 'sub(/\\r$/, "", line)' "$RUN_SH"
   grep -q 'NR == 1 && line == "---"' "$RUN_SH"

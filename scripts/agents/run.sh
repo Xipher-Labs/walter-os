@@ -116,16 +116,7 @@ case "$AGENT" in
   *)          EXPECTED_LANE="" ;;  # unknown agent → don't lane-check
 esac
 
-_agent_model_domain() {
-  # Prefer explicit persona metadata. Keep the case mapping as a compatibility
-  # fallback for legacy agent files and external aliases.
-  local frontmatter_domain
-  frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"
-  if [[ -n "$frontmatter_domain" ]]; then
-    printf '%s\n' "$frontmatter_domain"
-    return 0
-  fi
-
+_agent_legacy_model_domain() {
   case "${1:-}" in
     coder|reviewer|security-auditor) echo "backend_review" ;;
     researcher|triage|architect)     echo "brainstorm" ;;
@@ -151,12 +142,45 @@ _agent_frontmatter_scalar() {
       if (line ~ "^[[:space:]]*" key "[[:space:]]*:") {
         sub(/^[^:]*:[[:space:]]*/, "", line)
         sub(/[[:space:]]+#.*$/, "", line)
+        gsub(/^["'\''"]|["'\''"]$/, "", line)
         sub(/[[:space:]]+$/, "", line)
         print line
         exit
       }
     }
   ' "$file"
+}
+
+_agent_model_domain_canonical() {
+  local domain="${1:-}"
+  [[ -n "$domain" ]] || return 1
+
+  domain="$(printf '%s' "$domain" | tr '[:upper:]-' '[:lower:]_')"
+  case "$domain" in
+    backend_review|frontend|longform|quick_refactor|phi|brainstorm|default)
+      printf '%s\n' "$domain"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_agent_model_domain() {
+  # Prefer explicit persona metadata. Keep the case mapping as a compatibility
+  # fallback for legacy agent files and external aliases.
+  local frontmatter_domain canonical_domain
+  frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"
+  if [[ -n "$frontmatter_domain" ]]; then
+    if canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"; then
+      printf '%s\n' "$canonical_domain"
+      return 0
+    fi
+
+    echo "agents/run.sh: WARN invalid model_domain '${frontmatter_domain}' in ${AGENT_PERSONA}; using legacy agent mapping." >&2
+  fi
+
+  _agent_legacy_model_domain "$1"
 }
 
 # ---------- pull issue + check lane/context ----------
