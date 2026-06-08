@@ -58,6 +58,7 @@ teardown() {
   grep -q "invalid model_domain" "$RUN_SH"
   grep -q "_agent_legacy_model_domain" "$RUN_SH"
   grep -Fq "tr '[:upper:]-' '[:lower:]_'" "$RUN_SH"
+  ! grep -Fq "gsub(" "$RUN_SH"
 }
 
 @test "run.sh normalizes CRLF before frontmatter delimiter checks" {

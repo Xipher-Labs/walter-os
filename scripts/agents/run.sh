@@ -142,7 +142,6 @@ _agent_frontmatter_scalar() {
       if (line ~ "^[[:space:]]*" key "[[:space:]]*:") {
         sub(/^[^:]*:[[:space:]]*/, "", line)
         sub(/[[:space:]]+#.*$/, "", line)
-        gsub(/^["'\''"]|["'\''"]$/, "", line)
         sub(/[[:space:]]+$/, "", line)
         print line
         exit
