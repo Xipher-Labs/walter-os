@@ -80,5 +80,6 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
-  [ "${lines[-1]}" = "sonnet" ]
+  last_line="$(printf '%s\n' "$output" | tail -1)"
+  [ "$last_line" = "sonnet" ]
 }
