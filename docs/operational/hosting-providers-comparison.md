@@ -59,10 +59,12 @@ this requirement. See the self-host and local-only entries below.
 | CCX33 | 8 dedicated | 16 GB | 240 GB | ~€36/mo | CPU-heavy marketing; below FULL profile |
 
 **Recommended for walter-host FULL profile**:
-**CX53** (16 vCPU / 32 GB RAM / 360 GB SSD) is the minimum Hetzner Cloud
-shape that satisfies the FULL profile preflight. CX41 remains comfortable for
-the marketing core on smaller profile mixes, but it does not satisfy the FULL
-profile CPU, RAM, or disk thresholds. The full-stack RAM budget:
+**CX53-class capacity** (16 vCPU / 32 GB RAM / at least 320 GB SSD) is the
+minimum Hetzner Cloud shape that satisfies the FULL profile preflight. Hetzner's
+CX53 currently provides 360 GB SSD, which clears that 320 GB threshold. CX41
+remains comfortable for the marketing core on smaller profile mixes, but it
+does not satisfy the FULL profile CPU, RAM, or disk thresholds. The full-stack
+RAM budget:
 
 | Service group | Approx RAM |
 |---|---|
