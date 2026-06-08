@@ -44,7 +44,8 @@ teardown() {
 
 @test "run.sh sources model-router.sh for Council model selection" {
   grep -q "model-router\.sh" "$RUN_SH"
-  grep -q "walter_model_select_primary" "$RUN_SH"
+  grep -q "model-selection\.sh" "$RUN_SH"
+  grep -q "walter_agent_select_model" "$RUN_SH"
 }
 
 @test "run.sh maps Council agents to model routing domains" {
