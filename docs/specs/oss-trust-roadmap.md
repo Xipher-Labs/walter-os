@@ -109,7 +109,7 @@ The per-session ephemeral key (Ed25519) is generated at session start, stored at
 
 ### DEC-3 — Tamper-evident log: hybrid local + Rekor for public attestation
 
-- **Local linear hash-chain** over `~/.config/walter-os/audit/<date>.jsonl` files. Each row's last field is `prev_hash = sha256(prev_row_normalized)`. `walter-os audit verify-chain` walks the chain end-to-end.
+- **Local linear hash-chain** over `~/.config/walter-os/audit/chain-YYYY-MM-DD.jsonl` files, with matching daily root and receipt artifacts defined in `docs/specs/audit-chain-merkle-and-receipts.md`. Each row's last field is `prev_hash = sha256(prev_row_normalized)`. `walter-os audit verify-chain` walks the chain end-to-end.
 - **Optional Sigstore Rekor upload** of daily-summary digests (NOT per-row content). Operator can opt in via `WALTER_AUDIT_REKOR_UPLOAD=1`. Walter-OS keeps the canonical `{date, root, operator, walter_os_version}` payload in the local receipt and submits its signed SHA-256 digest as a Rekor `hashedrekord`. No log content leaves the machine, and recovery still requires the local receipt or an external backup of that payload metadata.
 
 **Rejected**: full per-row Rekor upload. Privacy + cost; daily root hash is enough for tamper detection.
@@ -132,7 +132,7 @@ Per-item ACs live in each item's own spec, filed when picked up. Recommended ord
 1. **v0.4.1 must-haves**: A-1, A-2, A-4, C-3, D-1, E-1, E-3, E-4 (network egress + capability tokens + session timeout + pre-commit framework + Security Advisories + Passing Badge + the two carryover follow-ups). These are the "ship in v0.4.1 or this roadmap is too slow" items.
 2. **v0.5.x flow**: A-3 (sandbox), A-5 (RO mounts), B-1 (linear hash-chain log), B-2 (signed receipts).
 3. **v0.6.0 polish**: B-3 (telemetry), E-2 (Silver Badge).
-4. **v1.0 capstone**: C-1 (SLSA L3), C-2 (reproducible builds).
+4. **v1.0 capstone**: C-1 (SLSA-oriented provenance), C-2 (reproducible release artifacts).
 
 ## Architecture sketch (v0.4.1 milestone)
 
