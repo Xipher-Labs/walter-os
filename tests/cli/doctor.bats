@@ -147,6 +147,30 @@ write_misplaced_claude_hook_settings() {
 JSON
 }
 
+write_bash_only_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  cat >"$test_home/.claude/settings.json" <<JSON
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/bash-denylist.sh'", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh", "_walter_os": true },
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/capability-check.sh'", "_walter_os": true },
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/network-gate.sh'", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/branch-flow-guard.sh", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/pre-commit-tests.sh", "_walter_os": true }
+        ]
+      }
+    ]
+  }
+}
+JSON
+}
+
 write_unmanaged_claude_hook_settings() {
   local test_home="$1"
   mkdir -p "$test_home/.claude"
@@ -320,6 +344,32 @@ SH
   [[ "$output" == *"Claude Code PreToolUse hooks partially active"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
   [[ "$output" != *"Claude Code PreToolUse hooks active"* ]]
+}
+
+@test "walter doctor --enforcement requires non-Bash gate hooks" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-bash-only-hooks"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-bash-only-hooks"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_bash_only_claude_hook_settings "$test_home"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Claude Code hook missing: hooks/approval-gate.sh for Read"* ]]
+  [[ "$output" == *"Claude Code hook missing: hooks/approval-gate.sh for Write"* ]]
+  [[ "$output" == *"Claude Code hook missing: hooks/capability-check.sh for Write"* ]]
+  [[ "$output" == *"Claude Code PreToolUse hooks partially active"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+  [[ "$output" != *"Enforcement mode: enforced"* ]]
 }
 
 @test "walter doctor --enforcement ignores unmanaged hook entries" {

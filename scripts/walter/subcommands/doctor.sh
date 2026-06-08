@@ -152,6 +152,9 @@ doctor_check_claude_hooks() {
     "$WALTER_OS_HOME/hooks/network-gate.sh|Bash"
     "$WALTER_OS_HOME/hooks/branch-flow-guard.sh|Bash"
     "$WALTER_OS_HOME/hooks/pre-commit-tests.sh|Bash"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|Read"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh|Write"
+    "$WALTER_OS_HOME/hooks/capability-check.sh|Write"
     "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh|Write"
   )
 
