@@ -249,6 +249,12 @@ SH
   chmod +x "$wrapper_dir/gh"
 }
 
+stub_symlink_high_risk_wrapper() {
+  local wrapper_dir="$1"
+  mkdir -p "$wrapper_dir"
+  ln -s "$(type -P true)" "$wrapper_dir/gh"
+}
+
 # --- source-level checks (no network required) ---
 
 @test "doctor.sh handles --client-only flag (source check)" {
@@ -646,6 +652,26 @@ SH
   [[ "$output" == *"direct binary bypass visible: curl"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
   [[ "$output" != *"Enforcement mode: policy-only"* ]]
+}
+
+@test "walter doctor --enforcement rejects symlink wrappers" {
+  local test_home="$BATS_TEST_TMPDIR/home-wrapper-symlink"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-symlink"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  stub_symlink_high_risk_wrapper "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"wrapper symlink bypass visible: gh"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+  [[ "$output" != *"Enforcement mode: enforced"* ]]
 }
 
 @test "walter doctor --enforcement requires wrapper dir first in PATH" {

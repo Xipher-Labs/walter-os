@@ -293,7 +293,13 @@ doctor_check_wrapper_path() {
     [[ -n "$resolved" ]] || continue
     installed=$((installed + 1))
     case "$resolved" in
-      "$wrapper_dir"/*) wrapped=$((wrapped + 1)) ;;
+      "$wrapper_dir"/*)
+        if [[ -L "$resolved" ]]; then
+          log_warn "wrapper symlink bypass visible: $tool -> $resolved"
+        else
+          wrapped=$((wrapped + 1))
+        fi
+        ;;
       *) log_warn "direct binary bypass visible: $tool -> $resolved" ;;
     esac
   done
