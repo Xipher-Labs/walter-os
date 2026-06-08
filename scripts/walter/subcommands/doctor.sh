@@ -4,6 +4,7 @@
 # Usage:
 #   walter doctor                  full check (local + remote)
 #   walter doctor --client-only    local tools only, skip SSH/remote checks
+#   walter doctor --enforcement    report hook/wrapper enforcement mode
 set -euo pipefail
 
 # Validate WALTER_OS_HOME before any use: must be an absolute path containing
@@ -19,9 +20,11 @@ WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
 
 # ---------- arg parse ----------
 CLIENT_ONLY=0
+ENFORCEMENT_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --client-only) CLIENT_ONLY=1 ;;
+    --enforcement|--hooks|--hook-enforcement) ENFORCEMENT_ONLY=1 ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -30,6 +33,7 @@ for arg in "$@"; do
   esac
 done
 
+# shellcheck source=/dev/null
 source "$WALTER_OS_HOME/scripts/walter/lib/log.sh"
 
 ok=0; warn=0; fail=0
@@ -114,6 +118,174 @@ check_legacy_secret_key() {
     warn=$((warn + 1))
   fi
 }
+
+doctor_claude_hook_present() {
+  local settings="$1" hook_path="$2"
+
+  jq -e --arg hook "$hook_path" '
+    [(.hooks.PreToolUse // [])[]?
+      | (.hooks // [])[]?
+      | select(._walter_os == true)
+      | (.command // "")
+      | select(contains($hook))]
+    | length > 0
+  ' "$settings" >/dev/null 2>&1
+}
+
+doctor_check_claude_hooks() {
+  local settings="${CLAUDE_HOME:-$HOME/.claude}/settings.json"
+  local hook
+  local missing=0
+  local present=0
+  local -a required_hooks=(
+    "$WALTER_OS_HOME/hooks/bash-denylist.sh"
+    "$WALTER_OS_HOME/hooks/approval-gate.sh"
+    "$WALTER_OS_HOME/hooks/capability-check.sh"
+    "$WALTER_OS_HOME/hooks/network-gate.sh"
+    "$WALTER_OS_HOME/hooks/branch-flow-guard.sh"
+    "$WALTER_OS_HOME/hooks/pre-commit-tests.sh"
+    "$WALTER_OS_HOME/hooks/wiki-validator-hook.sh"
+  )
+
+  if [[ ! -f "$settings" ]]; then
+    log_warn "Claude Code hooks missing ($settings not found)"
+    return 1
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "Claude Code hooks unknown (jq missing; cannot inspect settings.json)"
+    return 1
+  fi
+
+  if ! jq -e 'type == "object"' "$settings" >/dev/null 2>&1; then
+    log_warn "Claude Code hooks unknown ($settings is not valid JSON)"
+    return 1
+  fi
+
+  for hook in "${required_hooks[@]}"; do
+    if doctor_claude_hook_present "$settings" "$hook"; then
+      present=$((present + 1))
+    else
+      log_warn "Claude Code hook missing: ${hook#"$WALTER_OS_HOME"/}"
+      missing=$((missing + 1))
+    fi
+  done
+
+  if [[ "$missing" -eq 0 ]]; then
+    log_ok "Claude Code PreToolUse hooks active"
+    return 0
+  fi
+
+  if [[ "$present" -gt 0 ]]; then
+    log_warn "Claude Code PreToolUse hooks partially active ($present/${#required_hooks[@]})"
+    return 0
+  fi
+
+  return 1
+}
+
+doctor_check_wrapper_path() {
+  local wrapper_dir="${WALTER_WRAPPER_DIR:-}"
+  local first_path tool resolved
+  local installed=0
+  local wrapped=0
+  local -a high_risk_tools=(gh curl hcloud cloudflared docker vercel railway stripe)
+
+  if [[ -z "$wrapper_dir" ]]; then
+    log_info "high-risk tool wrappers not configured (set WALTER_WRAPPER_DIR to enable this check)"
+    return 1
+  fi
+
+  if [[ ! -d "$wrapper_dir" ]]; then
+    log_warn "wrapper PATH not configured ($wrapper_dir missing)"
+    return 1
+  fi
+
+  while [[ "$wrapper_dir" != "/" && "$wrapper_dir" == */ ]]; do
+    wrapper_dir="${wrapper_dir%/}"
+  done
+
+  first_path="${PATH%%:*}"
+  while [[ "$first_path" != "/" && "$first_path" == */ ]]; do
+    first_path="${first_path%/}"
+  done
+  if [[ "$first_path" != "$wrapper_dir" ]]; then
+    log_warn "wrapper PATH not first ($wrapper_dir must be first in PATH)"
+    return 1
+  fi
+
+  for tool in "${high_risk_tools[@]}"; do
+    resolved="$(type -P "$tool" 2>/dev/null || true)"
+    [[ -n "$resolved" ]] || continue
+    installed=$((installed + 1))
+    case "$resolved" in
+      "$wrapper_dir"/*) wrapped=$((wrapped + 1)) ;;
+      *) log_warn "direct binary bypass visible: $tool -> $resolved" ;;
+    esac
+  done
+
+  if [[ "$installed" -gt 0 && "$installed" -eq "$wrapped" ]]; then
+    log_ok "high-risk tool wrappers first in PATH"
+    return 0
+  fi
+
+  if [[ "$installed" -eq 0 ]]; then
+    log_warn "wrapper PATH active, but no high-risk tools were found to verify"
+  fi
+
+  return 1
+}
+
+run_enforcement_doctor() {
+  local hooks_ok=0
+  local wrappers_ok=0
+  local mode="policy-only"
+
+  log_step "Walter-OS enforcement doctor"
+  echo "Scope: host hooks + PATH wrappers. Sandboxing, token scope, and network"
+  echo "controls are stronger isolation layers and are reported separately."
+  echo
+
+  if doctor_check_claude_hooks; then
+    hooks_ok=1
+  fi
+
+  if doctor_check_wrapper_path; then
+    wrappers_ok=1
+  fi
+
+  echo
+  if [[ "$hooks_ok" -eq 1 && "$wrappers_ok" -eq 1 ]]; then
+    mode="enforced"
+    log_ok "Enforcement mode: $mode"
+    echo "Tool calls are expected to pass through Walter hooks and wrappers."
+    return 0
+  fi
+
+  if [[ "$hooks_ok" -eq 1 || "$wrappers_ok" -eq 1 ]]; then
+    mode="partial"
+    log_warn "Enforcement mode: $mode"
+    if [[ "$hooks_ok" -eq 1 ]]; then
+      echo "Claude Code hooks are active, but direct binary bypasses may remain."
+      echo "Remediation: install/enable Walter wrappers or run high-risk work in a sandbox."
+    else
+      echo "High-risk wrappers are active, but supported host hooks were not detected."
+      echo "Remediation: run ./install.sh --upgrade, then re-run walter doctor --enforcement."
+    fi
+    return 0
+  fi
+
+  log_err "Enforcement mode: $mode"
+  echo "Agent instructions may still ask tools to behave safely, but Walter-OS"
+  echo "could not verify that tool execution is intercepted before it runs."
+  echo "Remediation: run ./install.sh --upgrade, then re-run walter doctor --enforcement."
+  return 1
+}
+
+if [[ "$ENFORCEMENT_ONLY" -eq 1 ]]; then
+  run_enforcement_doctor
+  exit $?
+fi
 
 log_step "Walter-OS doctor"
 

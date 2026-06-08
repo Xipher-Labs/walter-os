@@ -69,7 +69,8 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
-No user-facing changes yet.
+- Added `walter doctor --enforcement` to report whether local tool execution is
+  `enforced`, `partial`, or `policy-only`.
 
 ## [0.6.1] — 2026-06-07
 

@@ -60,10 +60,110 @@ prepare_doctor_symlinks() {
   ln -s "$REPO_ROOT/AGENTS.md" "$test_home/.codex/AGENTS.md"
 }
 
+write_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  cat >"$test_home/.claude/settings.json" <<JSON
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/bash-denylist.sh'", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh", "_walter_os": true },
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/capability-check.sh'", "_walter_os": true },
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/network-gate.sh'", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/branch-flow-guard.sh", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/pre-commit-tests.sh", "_walter_os": true }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|LS",
+        "hooks": [
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh", "_walter_os": true }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh", "_walter_os": true },
+          { "type": "command", "command": "'$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh' -- '$REPO_ROOT/hooks/capability-check.sh'", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/wiki-validator-hook.sh", "_walter_os": true }
+        ]
+      }
+    ]
+  }
+}
+JSON
+}
+
+write_partial_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  cat >"$test_home/.claude/settings.json" <<JSON
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh", "_walter_os": true }
+        ]
+      }
+    ]
+  }
+}
+JSON
+}
+
+write_unmanaged_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  cat >"$test_home/.claude/settings.json" <<JSON
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh" }
+        ]
+      }
+    ]
+  }
+}
+JSON
+}
+
+write_malformed_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  printf '{bad-json\n' >"$test_home/.claude/settings.json"
+}
+
+stub_high_risk_wrappers() {
+  local wrapper_dir="$1"
+  local tool
+  mkdir -p "$wrapper_dir"
+  for tool in gh curl hcloud cloudflared docker vercel railway stripe; do
+    cat >"$wrapper_dir/$tool" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+    chmod +x "$wrapper_dir/$tool"
+  done
+}
+
 # --- source-level checks (no network required) ---
 
 @test "doctor.sh handles --client-only flag (source check)" {
   grep -qE "\-\-client.only|client_only" "${REPO_ROOT}/scripts/walter/subcommands/doctor.sh"
+}
+
+@test "doctor.sh handles --enforcement flag (source check)" {
+  grep -q -- "--enforcement" "${REPO_ROOT}/scripts/walter/subcommands/doctor.sh"
+  grep -q "run_enforcement_doctor" "${REPO_ROOT}/scripts/walter/subcommands/doctor.sh"
 }
 
 @test "doctor.sh skips ssh check in --client-only mode (source check)" {
@@ -97,6 +197,182 @@ prepare_doctor_symlinks() {
   grep -qE 'if \[\[ \$CLIENT_ONLY (-ne|!=) 1' "$doctor_sh"
   # And the SSH check must be inside that gate (next line after the if)
   grep -EA 1 'CLIENT_ONLY (-ne|!=) 1' "$doctor_sh" | grep -qE 'ssh.*walter-vm'
+}
+
+@test "walter doctor --enforcement reports policy-only when Claude hooks are absent" {
+  local test_home="$BATS_TEST_TMPDIR/home-policy-only"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Enforcement mode: policy-only"* ]]
+  [[ "$output" == *"could not verify that tool execution is intercepted"* ]]
+}
+
+@test "walter doctor --enforcement reports partial when Claude hooks are active without wrappers" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-partial"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_claude_hook_settings "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Claude Code PreToolUse hooks active"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+  [[ "$output" == *"high-risk tool wrappers not configured"* ]]
+}
+
+@test "walter doctor --enforcement reports partial when only some Walter hooks are active" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-partial-hooks"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_partial_claude_hook_settings "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Claude Code PreToolUse hooks partially active"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+}
+
+@test "walter doctor --enforcement ignores unmanaged hook entries" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-unmanaged-hooks"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_unmanaged_claude_hook_settings "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Enforcement mode: policy-only"* ]]
+}
+
+@test "walter doctor --enforcement reports unknown for malformed Claude settings" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-malformed-hooks"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_malformed_claude_hook_settings "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"settings.json is not valid JSON"* ]]
+  [[ "$output" != *"parse error"* ]]
+  [[ "$output" == *"Enforcement mode: policy-only"* ]]
+}
+
+@test "walter doctor --enforcement reports enforced when hooks and wrappers are active" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-enforced"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_claude_hook_settings "$test_home"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Claude Code PreToolUse hooks active"* ]]
+  [[ "$output" == *"high-risk tool wrappers first in PATH"* ]]
+  [[ "$output" == *"Enforcement mode: enforced"* ]]
+}
+
+@test "walter doctor --enforcement accepts trailing slash in wrapper dir" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-wrapper-trailing-slash"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-trailing-slash"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_claude_hook_settings "$test_home"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir/" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"high-risk tool wrappers first in PATH"* ]]
+  [[ "$output" == *"Enforcement mode: enforced"* ]]
+}
+
+@test "walter doctor --enforcement reports partial when only wrappers are active" {
+  local test_home="$BATS_TEST_TMPDIR/home-wrapper-only"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-only"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"high-risk tool wrappers first in PATH"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
+  [[ "$output" == *"High-risk wrappers are active, but supported host hooks were not detected."* ]]
+}
+
+@test "walter doctor --enforcement requires wrapper dir first in PATH" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-wrapper-not-first"
+  local earlier_dir="$BATS_TEST_TMPDIR/earlier-bin"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-not-first"
+  mkdir -p "$test_home/.config/walter-os" "$earlier_dir"
+  : >"$test_home/.config/walter-os/env"
+  write_claude_hook_settings "$test_home"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$earlier_dir:$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"wrapper PATH not first"* ]]
+  [[ "$output" == *"Enforcement mode: partial"* ]]
 }
 
 @test "walter doctor accepts Infisical runtime without legacy secrets.env" {
