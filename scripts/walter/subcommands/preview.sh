@@ -163,9 +163,14 @@ validate_branch_ref() {
 }
 
 validate_wait_ms() {
-  local wait_ms="$1"
+  local wait_ms="$1" normalized
   [[ "$wait_ms" =~ ^[0-9]+$ ]] || die_usage "--wait-ms must be a non-negative integer"
-  (( 10#$wait_ms <= 30000 )) || die_usage "--wait-ms must be <= 30000"
+  normalized="$wait_ms"
+  while [[ "$normalized" == 0* && "${#normalized}" -gt 1 ]]; do
+    normalized="${normalized#0}"
+  done
+  [[ "${#normalized}" -le 5 ]] || die_usage "--wait-ms must be <= 30000"
+  (( 10#$normalized <= 30000 )) || die_usage "--wait-ms must be <= 30000"
 }
 
 repo_config_path() {
