@@ -452,6 +452,28 @@ SH
   [[ "$output" == *"Enforcement mode: enforced"* ]]
 }
 
+@test "walter doctor --enforcement normalizes WALTER_OS_HOME trailing slash" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-enforced-trailing-slash"
+  local wrapper_dir="$BATS_TEST_TMPDIR/wrappers-trailing-slash"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_claude_hook_settings "$test_home"
+  stub_high_risk_wrappers "$wrapper_dir"
+
+  run env \
+    HOME="$test_home" \
+    PATH="$wrapper_dir:$PATH" \
+    WALTER_OS_HOME="${REPO_ROOT}/" \
+    WALTER_WRAPPER_DIR="$wrapper_dir" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Claude Code PreToolUse hooks active"* ]]
+  [[ "$output" == *"Enforcement mode: enforced"* ]]
+}
+
 @test "walter doctor --enforcement reports partial when partial hooks and wrappers are active" {
   command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
 

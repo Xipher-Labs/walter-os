@@ -6,7 +6,7 @@
 #   walter doctor --client-only    local tools only, skip SSH/remote checks
 #   walter doctor --enforcement    report hook/wrapper enforcement mode
 #   walter doctor --hooks          alias for --enforcement
-#   walter doctor --hook-enforcement
+#   walter doctor --hook-enforcement  alias for --enforcement
 set -euo pipefail
 
 # Validate WALTER_OS_HOME before any use: must be an absolute path containing
@@ -18,6 +18,9 @@ if [[ ! "$WALTER_OS_HOME" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
   echo "doctor: invalid WALTER_OS_HOME value (contains unsafe characters)" >&2
   exit 2
 fi
+while [[ "$WALTER_OS_HOME" != "/" && "$WALTER_OS_HOME" == */ ]]; do
+  WALTER_OS_HOME="${WALTER_OS_HOME%/}"
+done
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
 
 # ---------- arg parse ----------
