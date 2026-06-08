@@ -20,13 +20,14 @@ MODELS = {
 
 
 def yaml_value(path, key):
-    pattern = re.compile(rf"^\s*{re.escape(key)}\s*:\s*(.*?)\s*(?:#.*)?$")
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*:\s*(.*)$")
     try:
         with path.open("r", encoding="utf-8") as handle:
             for raw_line in handle:
                 match = pattern.match(raw_line.rstrip("\r\n"))
                 if match:
-                    return match.group(1).strip()
+                    value = re.sub(r"(^|\s)#.*$", "", match.group(1))
+                    return value.strip()
     except OSError:
         return ""
     return ""
@@ -51,9 +52,10 @@ def validate_gemini_capability():
 
     provider_gemini = yaml_value(path, "provider_gemini")
     if provider_gemini == "disabled":
+        profile = yaml_value(path, "profile") or "mixed"
         print(
             f"nanobanana: provider_gemini is disabled in {path}. "
-            "Run `walter ai configure --profile mixed --set image_generation=gemini` "
+            f"Run `walter ai configure --profile {profile} --set image_generation=gemini` "
             "or choose another image workflow.",
             file=sys.stderr,
         )
