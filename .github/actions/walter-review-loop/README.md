@@ -7,7 +7,7 @@ A composite GitHub Action that implements the **Walter-OS 3-round PR review patt
 For every PR your workflow runs it on:
 
 1. **Round 1 — Copilot** — requests Copilot review via the GitHub REST API (the only endpoint that works for the Copilot reviewer bot; `gh pr edit --add-reviewer` variants all fail with `Could not resolve user/team`).
-2. **Round 2 — Codex** — runs `codex exec review` against the PR's base branch, if the `codex` CLI is on PATH and an `auth.json` is mounted.
+2. **Round 2 — Codex** — runs `codex review --base <branch>` against the PR's base branch, if the `codex` CLI is on PATH and an `auth.json` is mounted.
 3. **Round 3 — Collaborative** — emitted as a status verdict; the workflow that consumes this action is responsible for the collaborative round when findings remain after Rounds 1+2.
 
 Each round is **graceful-degradation**:
@@ -58,8 +58,8 @@ jobs:
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `pr-number` | yes | — | The PR number to review. |
-| `base-branch` | yes | `main` | The base branch for the diff. |
-| `severity-gate-config` | no | `''` | Optional path to a severity-gate config (Walter-OS-specific — see [docs/specs/pr-review-severity-gate.md](../../../docs/specs/pr-review-severity-gate.md) in the Walter-OS repo). |
+| `base-branch` | no | `main` | The base branch for the diff. |
+| `severity-gate-config` | no | `''` | V1 placeholder for future severity-gate parsing. Currently not read by the action. See [docs/specs/pr-review-severity-gate.md](https://github.com/Xipher-Labs/walter-os/blob/main/docs/specs/pr-review-severity-gate.md). |
 | `run-copilot` | no | `true` | Whether to request Copilot review (Round 1). |
 | `run-codex` | no | `true` | Whether to run Codex review (Round 2). |
 | `github-token` | no | `${{ github.token }}` | Token used to request Copilot review. |
@@ -69,7 +69,7 @@ jobs:
 
 | Output | Description |
 |---|---|
-| `findings-json` | JSON array of `{round, tool, severity, file, line, message}` objects. Empty in v1 — the calling workflow reads raw outputs from PR comments + `/tmp/codex-review.txt`. Future iterations will parse findings into structured form. |
+| `findings-json` | V1 placeholder. Currently always `[]`; the calling workflow reads raw outputs from PR comments + `/tmp/codex-review.txt`. Future iterations will parse findings into structured form. |
 | `rounds-completed` | JSON array listing which rounds actually ran. Subset of `['copilot-round-1', 'codex-round-2', 'collaborative-round-3']`. |
 | `status` | Overall verdict — `clean` / `findings` / `escalate`. v1 emits `escalate` when no rounds ran, `findings` otherwise; future iterations will parse severities and emit `clean` when all findings are MINOR/COSMETIC. |
 
@@ -90,6 +90,7 @@ Recommended workflow:
     fi
     mkdir -p /tmp/codex-minimal
     printf '%s' "$CODEX_AUTH_JSON" > /tmp/codex-minimal/auth.json
+    chmod 600 /tmp/codex-minimal/auth.json
 - uses: Xipher-Labs/walter-os/.github/actions/walter-review-loop@main
   with:
     pr-number: ${{ github.event.pull_request.number }}
@@ -106,7 +107,7 @@ Without `CODEX_AUTH_JSON`, Round 2 is automatically skipped and the action still
 
 ## License
 
-Apache-2.0 — see [LICENSE-APACHE](../../../LICENSE-APACHE) in the Walter-OS repo. You may copy, adapt, and redistribute this action without restriction beyond attribution.
+Apache-2.0 — see [LICENSE-APACHE](https://github.com/Xipher-Labs/walter-os/blob/main/LICENSE-APACHE) in the Walter-OS repo. You may copy, adapt, and redistribute this action without restriction beyond attribution.
 
 ## Limitations (v1)
 
