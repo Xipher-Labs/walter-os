@@ -23,7 +23,7 @@ setup() {
 }
 
 teardown() {
-  cd "$BATS_TEST_DIRNAME" || return
+  cd "$BATS_TEST_DIRNAME" || true
   case "$TMP_HOME" in
     /tmp/*|/var/folders/*|/var/tmp/*) rm -rf "$TMP_HOME" ;;
   esac
@@ -181,6 +181,7 @@ ENV
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"BASH_ENV=UNSET"* ]]
+  [[ "$output" == *"$TMP_CFG/env-allowlist.txt"* ]]
 }
 
 @test "P1-09: override allowlist cannot permit shell startup hooks" {

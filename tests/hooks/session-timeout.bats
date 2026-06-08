@@ -254,6 +254,26 @@ EOF
   echo "$json" | jq -e '.hookSpecificOutput.permissionDecision == "allow"'
 }
 
+@test "UserPromptSubmit hook maps session write failures to state-write" {
+  export WALTER_SESSION_NOW_EPOCH=1767225600
+  state_root="$WALTER_CONFIG/state"
+  mkdir -p "$state_root"
+  chmod a-w "$state_root"
+  if touch "$state_root/probe" 2>/dev/null; then
+    chmod u+w "$state_root"
+    rm -f "$state_root/probe"
+    skip "filesystem does not enforce non-writable state directory"
+  fi
+
+  run _call_hook
+
+  chmod u+w "$state_root"
+  [ "$status" -eq 0 ]
+  json="$(printf '%s\n' "$output" | tail -n 1)"
+  echo "$json" | jq -e '.hookSpecificOutput.permissionDecision == "block"'
+  echo "$json" | jq -er '.hookSpecificOutput.permissionDecisionReason' | grep -q 'state-write'
+}
+
 @test "UserPromptSubmit hook allows restart prompt after expiry" {
   export WALTER_SESSION_MAX_IDLE_MIN=600
   export WALTER_SESSION_NOW_EPOCH=1767225600

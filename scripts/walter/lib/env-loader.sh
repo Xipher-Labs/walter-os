@@ -67,10 +67,10 @@ _walter_env_key_dangerous() {
 }
 
 _walter_env_key_protected() {
-  local key="$1" protected
-  for protected in ${WALTER_ENV_PROTECTED_KEYS:-}; do
-    [[ "$key" == "$protected" ]] && return 0
-  done
+  local key="$1"
+  case " ${WALTER_ENV_PROTECTED_KEYS:-} " in
+    *" $key "*) return 0 ;;
+  esac
   return 1
 }
 
@@ -142,7 +142,7 @@ walter_env_load_allowlist() {
     fi
 
     if ! _walter_env_key_allowed "$key" "$override_file"; then
-      echo "walter-env-loader: WARN line $lineno: $key is not in the env allowlist, ignored. Add it to \${WALTER_CONFIG}/env-allowlist.txt if you really need it." >&2
+      echo "walter-env-loader: WARN line $lineno: $key is not in the env allowlist, ignored. Add it to ${override_file} if you really need it." >&2
       continue
     fi
 
