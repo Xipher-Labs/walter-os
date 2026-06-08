@@ -84,10 +84,38 @@ audit_dependency_failure_best_effort() {
 # same shell. It exists for testing the gate against synthetic
 # approvals files; using it logs a WARN to stderr every invocation.
 STANDING_APPROVALS="$WALTER_CONFIG/agent-approvals.yml"
+STANDING_APPROVALS_INVALID_REASON=""
+validate_standing_approvals_override_path() {
+  local override_path="$1"
+
+  if [[ "$override_path" == -* ]]; then
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: option-like paths are not allowed"
+    return 1
+  fi
+  if [[ -L "$override_path" ]]; then
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: symlinks are not allowed"
+    return 1
+  fi
+  if [[ ! -f "$override_path" ]]; then
+    STANDING_APPROVALS_INVALID_REASON="invalid standing-approvals override path: file does not exist or is not a regular non-symlink file"
+    return 1
+  fi
+  return 0
+}
+
+approval_gate_yq_read() {
+  local expr="$1" file="$2"
+  yq "$expr" -- "$file"
+}
+
 if [[ "${WALTER_AGENT_ALLOW_OVERRIDE:-0}" == "1" \
       && -n "${WALTER_STANDING_APPROVALS_OVERRIDE:-}" ]]; then
-  echo "approval-gate: WARN — using override standing-approvals path: $WALTER_STANDING_APPROVALS_OVERRIDE" >&2
-  STANDING_APPROVALS="$WALTER_STANDING_APPROVALS_OVERRIDE"
+  if validate_standing_approvals_override_path "$WALTER_STANDING_APPROVALS_OVERRIDE"; then
+    echo "approval-gate: WARN — using override standing-approvals path: $WALTER_STANDING_APPROVALS_OVERRIDE" >&2
+    STANDING_APPROVALS="$WALTER_STANDING_APPROVALS_OVERRIDE"
+  else
+    echo "approval-gate: WARN — $STANDING_APPROVALS_INVALID_REASON" >&2
+  fi
 elif [[ -n "${WALTER_STANDING_APPROVALS:-}" ]]; then
   # Operator set the old override env var without the allow flag.
   # Ignore it but tell them so they know it's not silently taking effect.
@@ -160,12 +188,26 @@ declare -a BLOCK_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 # medium-required: low tier is blocked unless the agent has an explicit override.
 # high-required: low and medium tier are blocked unless override.
 
-# Bash 3.2 (macOS default) misparses `[token-with-dashes]=value` inside
-# `declare -A` under `set -u` — it treats the dashed token as
-# `${token-with-dashes}` (default-substitution parameter expansion),
-# then errors on the inner unset variable. Bash 4+ (Linux, brew bash)
-# handles it correctly. Wrap the array literal in `set +u` so this
-# script loads cleanly on every bash we support.
+if (( BASH_VERSINFO[0] < 4 )); then
+  _bash_version_reason="requires Bash >= 4.0 for associative arrays; macOS /bin/bash 3.2 is not supported. Install GNU bash and re-run the hook."
+  if [[ $# -gt 0 ]]; then
+    echo "approval-gate: BLOCK — $_bash_version_reason" >&2
+    exit 7
+  fi
+  _bash_version_reason="approval-gate: $_bash_version_reason"
+  _bash_version_reason_json="${_bash_version_reason//\\/\\\\}"
+  _bash_version_reason_json="${_bash_version_reason_json//\"/\\\"}"
+  _bash_version_reason_json="${_bash_version_reason_json//$'\n'/\\n}"
+  _bash_version_reason_json="${_bash_version_reason_json//$'\r'/\\r}"
+  _bash_version_reason_json="${_bash_version_reason_json//$'\t'/\\t}"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"%s"}}\n' "$_bash_version_reason_json"
+  exit 0
+fi
+
+# This script requires Bash 4+ for associative arrays (`declare -A`);
+# macOS /bin/bash 3.2 is not a supported runtime for this hook.
+# Keep the nounset relaxation narrowly scoped to this compatibility-
+# sensitive associative-array initialization.
 set +u
 declare -A CATEGORY_MIN_TIER=(
   [git-push-feature-branch]="medium"
@@ -188,6 +230,13 @@ _tier_rank() {
     medium) echo 2 ;;
     high)   echo 3 ;;
     *)      echo 0 ;;
+  esac
+}
+
+is_known_agent_name() {
+  case "$1" in
+    triage|researcher|coder|reviewer|janitor|liaison|test-agent|unknown) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -422,6 +471,8 @@ _trust_tier_allows() {
   local agent="$1" category="$2"
   local min_tier="${CATEGORY_MIN_TIER[$category]:-low}"
 
+  is_known_agent_name "$agent" || return 1
+
   if [[ ! -f "$TRUST_TIERS" ]]; then
     [[ "$min_tier" == "low" ]] && return 0
     return 1
@@ -433,12 +484,12 @@ _trust_tier_allows() {
 
   # Read agent tier
   local tier
-  tier=$(yq ".agents.${agent}.tier // \"\"" "$TRUST_TIERS" 2>/dev/null)
+  tier=$(approval_gate_yq_read ".agents.${agent}.tier // \"\"" "$TRUST_TIERS" 2>/dev/null)
   [[ -z "$tier" || "$tier" == "null" ]] && return 1
 
   # Check per-agent override first
   local override
-  override=$(yq ".agents.${agent}.overrides[\"${category}\"] // \"\"" "$TRUST_TIERS" 2>/dev/null)
+  override=$(approval_gate_yq_read ".agents.${agent}.overrides[\"${category}\"] // \"\"" "$TRUST_TIERS" 2>/dev/null)
   if [[ "$override" == "allow" ]]; then
     return 0
   elif [[ "$override" == "block" ]]; then
@@ -458,6 +509,7 @@ _trust_tier_allows() {
 reason=""
 decision="allow"
 PANIC_LOCKED=0
+TERMINAL_BLOCK=0
 
 # Helper: regex match (returns 0 if matches)
 matches_any_regex() {
@@ -509,14 +561,11 @@ matches_standing_approval() {
   # An attacker who controls WALTER_AGENT_NAME could inject yq syntax that
   # makes select() always true, bypassing the gate.
   # See: docs/operational/security-audit-2026-05-11.md P0-02
-  case "$agent" in
-    triage|researcher|coder|reviewer|janitor|liaison|test-agent|unknown) ;;
-    *) return 1 ;;
-  esac
+  is_known_agent_name "$agent" || return 1
 
   # Fetch matching rules: where rules.<key>.agent == $agent
   local rules
-  rules=$(yq ".auto_approved // {} | to_entries[] | select(.value.agent == \"$agent\") | .key" "$STANDING_APPROVALS" 2>/dev/null)
+  rules=$(approval_gate_yq_read ".auto_approved // {} | to_entries[] | select(.value.agent == \"$agent\") | .key" "$STANDING_APPROVALS" 2>/dev/null)
   [[ -z "$rules" ]] && return 1
 
   # For each rule, check tool/target constraint heuristically.
@@ -550,6 +599,11 @@ block() {
   decision="block"
 }
 
+terminal_block() {
+  block "$1"
+  TERMINAL_BLOCK=1
+}
+
 # Helper: check trust tier for the current operation.
 # If the operation is categorizable and the agent's tier disallows it,
 # sets decision=block. If the decision is already block and the tier
@@ -566,14 +620,14 @@ apply_trust_tier() {
     # Check if this tier-restricted category requires a higher tier.
     if ! _trust_tier_allows "$agent" "$category"; then
       local agent_tier
-      if [[ -f "$TRUST_TIERS" ]] && command -v yq >/dev/null 2>&1; then
-        agent_tier=$(yq ".agents.${agent}.tier // \"unknown\"" "$TRUST_TIERS" 2>/dev/null || echo "unknown")
+      if is_known_agent_name "$agent" && [[ -f "$TRUST_TIERS" ]] && command -v yq >/dev/null 2>&1; then
+        agent_tier=$(approval_gate_yq_read ".agents.${agent}.tier // \"unknown\"" "$TRUST_TIERS" 2>/dev/null || echo "unknown")
       else
         agent_tier="unavailable"
       fi
       block "trust tier '${agent_tier}' does not permit category '$category' (agent: $agent)"
     fi
-  elif [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+  elif [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
     if [[ "$category" == "capability-token-mint" ]]; then
       return 0
     fi
@@ -757,17 +811,21 @@ if [[ $# -gt 0 ]]; then
       # Panic lock check — must run before any pattern matching.
       check_panic_lock || true
 
+      if [[ -n "$STANDING_APPROVALS_INVALID_REASON" && "$PANIC_LOCKED" -eq 0 ]]; then
+        terminal_block "$STANDING_APPROVALS_INVALID_REASON"
+      fi
+
       if [[ "$decision" == "allow" ]]; then
         analyze "$cli_tool" "$cli_command"
       fi
 
       # Trust tier check: applied after analyze() but before standing approvals.
       # PANIC_LOCKED check is inside apply_trust_tier (via decision check).
-      if [[ "$PANIC_LOCKED" -eq 0 ]]; then
+      if [[ "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
         apply_trust_tier "$cli_tool" "$cli_command"
       fi
 
-      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]] && \
          ! is_capability_terminal_block "$cli_tool" "$cli_command"; then
         # Standing-approval check (CLI-mode hint: WALTER_AGENT_NAME env)
         # Guard: skip entirely when PANIC_LOCKED — panic lock is terminal, no override allowed.
@@ -785,7 +843,7 @@ if [[ $# -gt 0 ]]; then
       # check if this category is consensus-eligible → exit 8 (awaiting-consensus).
       # Exit 8 means: "don't execute, trigger council vote instead of operator escalation."
       # PANIC_LOCKED: panic lock always wins — never exit 8 when panic locked.
-      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]]; then
+      if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
         if consensus_mode_is_on; then
           # Use explicit --category if given, else try to classify the command
           effective_category="$cli_category"
@@ -911,16 +969,20 @@ esac
 # Panic lock check — must run before any pattern matching.
 check_panic_lock || true
 
+if [[ -n "$STANDING_APPROVALS_INVALID_REASON" && "$PANIC_LOCKED" -eq 0 ]]; then
+  terminal_block "$STANDING_APPROVALS_INVALID_REASON"
+fi
+
 if [[ "$decision" == "allow" ]]; then
   analyze "$tool" "$payload"
 fi
 
 # Trust tier check: applied after analyze(), before standing approvals.
-if [[ "$PANIC_LOCKED" -eq 0 ]]; then
+if [[ "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]]; then
   apply_trust_tier "$tool" "$payload"
 fi
 
-if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 ]] && \
+if [[ "$decision" == "block" && "$PANIC_LOCKED" -eq 0 && "$TERMINAL_BLOCK" -eq 0 ]] && \
    ! is_capability_terminal_block "$tool" "$payload"; then
   # Guard: skip when PANIC_LOCKED — panic lock is terminal, no override allowed.
   agent="${WALTER_AGENT_NAME:-unknown}"

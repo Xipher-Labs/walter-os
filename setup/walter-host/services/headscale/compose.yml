@@ -8,7 +8,7 @@
 #   3. Headscale assigns each device an IP in 100.64.0.0/10 mesh
 #   4. All P2P, encrypted, controlled by YOU
 #
-# URL admin: headscale.${WALTER_DOMAIN} (CF Access)
+# URL admin: headscale-admin.${WALTER_DOMAIN} (CF Access)
 # URL clients: headscale.${WALTER_DOMAIN}/derp + /key (CF Tunnel, no Access — clients use API key)
 #
 # Note: clients need to reach the server WITHOUT CF Access auth (machines can't

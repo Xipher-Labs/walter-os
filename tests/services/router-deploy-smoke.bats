@@ -24,6 +24,107 @@ assert_router_deploy_contract() {
   grep -Fq "\"$litellm_aliases\"" "$deploy"
 }
 
+make_fake_curl() {
+  local fakebin="$1"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+out=""
+url=""
+headers=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o)
+      out="$2"
+      shift 2
+      ;;
+    -H)
+      headers+=("$2")
+      shift 2
+      ;;
+    -w|--max-time|-X|--data-binary)
+      shift 2
+      ;;
+    -sS)
+      shift
+      ;;
+    http://*|https://*)
+      url="$1"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+{
+  printf 'URL=%s\n' "$url"
+  for header in "${headers[@]}"; do
+    printf 'HEADER=%s\n' "$header"
+  done
+} >> "${CURL_LOG:?CURL_LOG required}"
+
+if [[ "$url" == */v1/models ]]; then
+  printf '{"data":[{"id":"router-model"}]}' > "$out"
+else
+  printf '{"choices":[{"message":{"content":"ROUTER_SMOKE_OK"}}]}' > "$out"
+fi
+printf '200'
+SH
+  chmod +x "$fakebin/curl"
+}
+
+make_fake_docker() {
+  local fakebin="$1"
+  cat > "$fakebin/docker" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  compose)
+    exit 0
+    ;;
+  inspect)
+    printf 'healthy\n'
+    exit 0
+    ;;
+  logs)
+    exit 0
+    ;;
+  *)
+    echo "unexpected docker command: $*" >&2
+    exit 1
+    ;;
+esac
+SH
+  chmod +x "$fakebin/docker"
+}
+
+run_deploy_smoke_with_litellm_env() {
+  local env_line="$1"
+  local tmpdir fakebin litellm_env
+  tmpdir="$(mktemp -d)"
+  fakebin="$tmpdir/bin"
+  mkdir -p "$fakebin"
+  make_fake_curl "$fakebin"
+  litellm_env="$tmpdir/litellm.env"
+  printf '%s\n' "$env_line" > "$litellm_env"
+
+  CURL_LOG="$tmpdir/curl.log" \
+    PATH="$fakebin:$PATH" \
+    ROUTER_BASE_URL="http://router.local" \
+    ROUTER_API_KEY="router-key" \
+    LITELLM_ENV_FILE="$litellm_env" \
+    LITELLM_BASE_URL="http://litellm.local" \
+    LITELLM_SMOKE_MODELS="litellm-model" \
+    "$PATTERN_DIR/deploy-smoke.sh" >/dev/null
+
+  cat "$tmpdir/curl.log"
+  rm -rf "$tmpdir"
+}
+
 @test "shared deploy smoke helper probes advertised router models" {
   local smoke="$PATTERN_DIR/deploy-smoke.sh"
   local curl_lines
@@ -105,4 +206,82 @@ assert_router_deploy_contract() {
   grep -Fq 'CCR_APIKEY: ${CCR_APIKEY:-}' "$LITELLM_COMPOSE"
   grep -Fq 'CSR_APIKEY: ${CSR_APIKEY:-}' "$LITELLM_COMPOSE"
   grep -Fq 'GSR_APIKEY: ${GSR_APIKEY:-}' "$LITELLM_COMPOSE"
+}
+
+@test "deploy-smoke strips unquoted inline comments from LiteLLM key" {
+  run run_deploy_smoke_with_litellm_env "LITELLM_MASTER_KEY=sk-litellm # rotate"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"URL=http://litellm.local/v1/chat/completions"* ]]
+  [[ "$output" == *"HEADER=Authorization: Bearer sk-litellm"* ]]
+  [[ "$output" != *"Bearer sk-litellm # rotate"* ]]
+}
+
+@test "deploy-smoke preserves quoted hashes and strips trailing comments" {
+  run run_deploy_smoke_with_litellm_env 'LITELLM_MASTER_KEY="sk#litellm" # rotate'
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HEADER=Authorization: Bearer sk#litellm"* ]]
+  [[ "$output" != *"rotate"* ]]
+}
+
+@test "deploy-smoke preserves single-quoted literal comments" {
+  run run_deploy_smoke_with_litellm_env "LITELLM_MASTER_KEY='sk # literal' # rotate"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HEADER=Authorization: Bearer sk # literal"* ]]
+  [[ "$output" != *"rotate"* ]]
+}
+
+@test "deploy-router strips unquoted inline comments from router API key" {
+  local tmpdir fakebin router_dir log
+  tmpdir="$(mktemp -d)"
+  fakebin="$tmpdir/bin"
+  router_dir="$tmpdir/router"
+  mkdir -p "$fakebin" "$router_dir"
+  make_fake_curl "$fakebin"
+  make_fake_docker "$fakebin"
+  printf '%s\n' "CCR_APIKEY=sk-router # rotate" > "$router_dir/.env"
+
+  run env \
+    CURL_LOG="$tmpdir/curl.log" \
+    PATH="$fakebin:$PATH" \
+    SVC_DIR="$router_dir" \
+    ENV_FILE="$router_dir/.env" \
+    ROUTER_HEALTH_WAIT_ATTEMPTS=1 \
+    ROUTER_HEALTH_WAIT_SECONDS=1 \
+    "$PATTERN_DIR/deploy-router.sh" "test-router" "1456" "CCR_APIKEY" ""
+
+  [ "$status" -eq 0 ]
+  log="$(cat "$tmpdir/curl.log")"
+  [[ "$log" == *"URL=http://127.0.0.1:1456/v1/models"* ]]
+  [[ "$log" == *"HEADER=Authorization: Bearer sk-router"* ]]
+  [[ "$log" != *"Bearer sk-router # rotate"* ]]
+  rm -rf "$tmpdir"
+}
+
+@test "deploy-router preserves env override literally" {
+  local tmpdir fakebin router_dir log
+  tmpdir="$(mktemp -d)"
+  fakebin="$tmpdir/bin"
+  router_dir="$tmpdir/router"
+  mkdir -p "$fakebin" "$router_dir"
+  make_fake_curl "$fakebin"
+  make_fake_docker "$fakebin"
+  printf '%s\n' "CCR_APIKEY=from-file" > "$router_dir/.env"
+
+  run env \
+    CURL_LOG="$tmpdir/curl.log" \
+    PATH="$fakebin:$PATH" \
+    SVC_DIR="$router_dir" \
+    ENV_FILE="$router_dir/.env" \
+    CCR_APIKEY="sk-router # literal" \
+    ROUTER_HEALTH_WAIT_ATTEMPTS=1 \
+    ROUTER_HEALTH_WAIT_SECONDS=1 \
+    "$PATTERN_DIR/deploy-router.sh" "test-router" "1456" "CCR_APIKEY" ""
+
+  [ "$status" -eq 0 ]
+  log="$(cat "$tmpdir/curl.log")"
+  [[ "$log" == *"HEADER=Authorization: Bearer sk-router # literal"* ]]
+  rm -rf "$tmpdir"
 }

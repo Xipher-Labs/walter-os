@@ -105,6 +105,18 @@ path_base() {
   printf '%s\n' "${path##*/}"
 }
 
+cp_operand() {
+  local path="$1"
+  case "$path" in
+    -*)
+      printf './%s\n' "$path"
+      ;;
+    *)
+      printf '%s\n' "$path"
+      ;;
+  esac
+}
+
 reject_secret_like_artifact() {
   local path="$1" base lower
   base="$(path_base "$path")"
@@ -163,9 +175,14 @@ validate_branch_ref() {
 }
 
 validate_wait_ms() {
-  local wait_ms="$1"
+  local wait_ms="$1" normalized
   [[ "$wait_ms" =~ ^[0-9]+$ ]] || die_usage "--wait-ms must be a non-negative integer"
-  (( 10#$wait_ms <= 30000 )) || die_usage "--wait-ms must be <= 30000"
+  normalized="$wait_ms"
+  while [[ "$normalized" == 0* && "${#normalized}" -gt 1 ]]; do
+    normalized="${normalized#0}"
+  done
+  [[ "${#normalized}" -le 5 ]] || die_usage "--wait-ms must be <= 30000"
+  (( 10#$normalized <= 30000 )) || die_usage "--wait-ms must be <= 30000"
 }
 
 repo_config_path() {
@@ -187,17 +204,18 @@ preview_deploy_enabled() {
     return 0
   fi
 
-  local count=0 value="" parsed
-  while IFS= read -r parsed; do
-    count=$((count + 1))
-    value="$(printf '%s' "$parsed" | tr '[:upper:]' '[:lower:]')"
-  done < <(sed -nE 's/^preview_deploy:[[:space:]]*([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])[[:space:]]*(#.*)?$/\1/p' < "$config_path")
+  local key_count value="" parsed
+  key_count="$(grep -Ec '^preview_deploy[[:space:]]*:' < "$config_path" || true)"
 
-  if (( count > 1 )); then
+  if (( key_count > 1 )); then
     die_usage "multiple preview_deploy keys in config: $config_path"
   fi
-  if grep -Eq '^preview_deploy:' < "$config_path" && [[ -z "$value" ]]; then
-    die_usage "preview_deploy must be true or false in config: $config_path"
+  if (( key_count == 1 )); then
+    parsed="$(sed -nE 's/^preview_deploy[[:space:]]*:[[:space:]]*([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])[[:space:]]*(#.*)?$/\1/p' < "$config_path")"
+    if [[ -z "$parsed" ]]; then
+      die_usage "preview_deploy must be true or false in config: $config_path"
+    fi
+    value="$(printf '%s' "$parsed" | tr '[:upper:]' '[:lower:]')"
   fi
 
   printf '%s\n' "${value:-false}"
@@ -219,12 +237,14 @@ artifact_json() {
 }
 
 copy_artifact() {
-  local source="$1" dest_dir="$2" dest
+  local source="$1" dest_dir="$2" dest source_operand dest_operand
   dest="${dest_dir}/$(path_base "$source")"
   if [[ -e "$dest" ]]; then
     die_usage "duplicate artifact basename: $(path_base "$source")"
   fi
-  cp -p -- "$source" "$dest"
+  source_operand="$(cp_operand "$source")"
+  dest_operand="$(cp_operand "$dest")"
+  cp -p "$source_operand" "$dest_operand"
   printf '%s\n' "$dest"
 }
 

@@ -23,20 +23,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 WALTER_CONFIG="${WALTER_CONFIG:-${HOME}/.config/walter-os}"
+TRUSTED_WALTER_CONFIG="$WALTER_CONFIG"
+TRUSTED_WALTER_OS_HOME="$REPO_ROOT"
 
 # Load operator env via the allowlist parser, NOT bash `source` (audit
 # P1-09). Sourcing the raw file lets any attacker who can write to
 # ~/.config/walter-os/env execute arbitrary shell at every Claude Code
 # session start.
-_walter_env_loader_lib="${WALTER_OS_HOME:-$REPO_ROOT}/scripts/walter/lib/env-loader.sh"
+_walter_env_loader_lib="${TRUSTED_WALTER_OS_HOME}/scripts/walter/lib/env-loader.sh"
 if [[ -f "$_walter_env_loader_lib" ]]; then
   # shellcheck source=/dev/null
   source "$_walter_env_loader_lib"
-  walter_env_load_allowlist "${WALTER_CONFIG}/env"
+  WALTER_ENV_ALLOWLIST_ROOT="$TRUSTED_WALTER_CONFIG" \
+  WALTER_ENV_PROTECTED_KEYS="WALTER_CONFIG WALTER_OS_HOME TRUSTED_WALTER_CONFIG TRUSTED_WALTER_OS_HOME" \
+    walter_env_load_allowlist "${TRUSTED_WALTER_CONFIG}/env"
 fi
 unset _walter_env_loader_lib
 
-WALTER_OS_HOME="${WALTER_OS_HOME:-$REPO_ROOT}"
+WALTER_CONFIG="$TRUSTED_WALTER_CONFIG"
+WALTER_OS_HOME="$TRUSTED_WALTER_OS_HOME"
 
 TODAY="$(date +%Y-%m-%d)"
 STATUS="${WALTER_CONFIG}/audit-status.json"

@@ -6,6 +6,7 @@ setup() {
   PREFLIGHT="$REPO_ROOT/setup/walter-host/preflight-check.sh"
   WALTER_HOST_README="$REPO_ROOT/setup/walter-host/README.md"
   RESOURCE_BUDGET="$REPO_ROOT/docs/operational/resource-budget.md"
+  HOSTING_COMPARISON="$REPO_ROOT/docs/operational/hosting-providers-comparison.md"
   TEST_BIN="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$TEST_BIN"
 }
@@ -49,6 +50,8 @@ setup() {
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -Fq "override accepted"
+  echo "$output" | grep -Fq "WARNING: FULL profile requires at least 16 vCPU"
+  ! echo "$output" | grep -Fq "ERROR:"
 }
 
 @test "preflight avoids Bash 4-only uppercase expansion" {
@@ -160,6 +163,7 @@ EOF
 @test "Walter-host docs recommend CX53 for full profile" {
   [[ -f "$WALTER_HOST_README" ]]
   [[ -f "$RESOURCE_BUDGET" ]]
+  [[ -f "$HOSTING_COMPARISON" ]]
 
   grep -Fq "FULL profile" "$WALTER_HOST_README"
   grep -Fq "CX53" "$WALTER_HOST_README"
@@ -170,4 +174,8 @@ EOF
   grep -Fq "Full profile requires" "$RESOURCE_BUDGET"
   grep -Fq "Total recommended | **320 GB**" "$RESOURCE_BUDGET"
   ! grep -Fq "(all profiles) requires" "$RESOURCE_BUDGET"
+  grep -Fq "Recommended for walter-host FULL profile" "$HOSTING_COMPARISON"
+  grep -Fq "CX53" "$HOSTING_COMPARISON"
+  grep -Fq "16 vCPU / 32 GB RAM" "$HOSTING_COMPARISON"
+  ! grep -Fq "CX41 (16 GB) fits the full stack" "$HOSTING_COMPARISON"
 }

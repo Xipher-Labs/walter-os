@@ -23,8 +23,8 @@ The v0.6.1 release workflow emitted GitHub Actions Node.js 20 deprecation
 warnings from two places:
 
 - Walter-OS-owned release jobs. These use direct `actions/checkout` calls and
-  should stay pinned to a commit whose action metadata declares `runs.using:
-  node24`.
+  should stay pinned to a commit whose action metadata declares
+  `runs.using: node24`.
 - The upstream SLSA reusable workflow
   `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0`.
   Walter-OS intentionally uses the upstream semver tag for verifier identity

@@ -16,12 +16,14 @@ review model through:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-review_model="$(walter_model_for backend_review)"
+review_model=""
+walter_model_resolve backend_review review_model
 ```
 
 Default preference is Codex for backend, security, infrastructure, and edge-case
-review. Frontend-heavy PRs may additionally use `walter_model_for frontend`.
-PHI/medical diffs must use `walter_model_for phi` and stay local.
+review. Frontend-heavy PRs may additionally use
+`walter_model_resolve frontend review_model`. PHI/medical diffs must use
+`walter_model_resolve phi review_model` and stay local.
 
 ## Required before opening a PR
 

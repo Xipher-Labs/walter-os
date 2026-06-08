@@ -39,12 +39,22 @@ setup() {
   awk '/^inputs:/,/^outputs:/' "$ACTION_YML" | grep -qE "^[[:space:]]+pr-number:"
 }
 
-@test "AC-1: action declares required input base-branch" {
+@test "AC-1: action declares optional input base-branch with safe default" {
   awk '/^inputs:/,/^outputs:/' "$ACTION_YML" | grep -qE "^[[:space:]]+base-branch:"
+  awk '/^[[:space:]]+base-branch:/,/^[[:space:]]+severity-gate-config:/' "$ACTION_YML" \
+    | grep -qE "^[[:space:]]+required:[[:space:]]+false[[:space:]]*$"
+  awk '/^[[:space:]]+base-branch:/,/^[[:space:]]+severity-gate-config:/' "$ACTION_YML" \
+    | grep -qE "^[[:space:]]+default:[[:space:]]+main[[:space:]]*$"
 }
 
 @test "AC-1: action declares optional input severity-gate-config" {
   awk '/^inputs:/,/^outputs:/' "$ACTION_YML" | grep -qE "^[[:space:]]+severity-gate-config:"
+}
+
+@test "AC-1: severity-gate-config is documented as v1 placeholder" {
+  awk '/^[[:space:]]+severity-gate-config:/,/^[[:space:]]+run-copilot:/' "$ACTION_YML" \
+    | grep -qiE "v1 placeholder|currently not read"
+  grep -qiE "severity-gate-config.*v1 placeholder|v1 placeholder.*severity-gate-config" "$ACTION_README"
 }
 
 @test "AC-1: action declares optional input run-codex" {
@@ -78,7 +88,10 @@ setup() {
 @test "AC-3: Copilot step uses REST endpoint /requested_reviewers (not graphql)" {
   grep -q "pulls/.*requested_reviewers" "$ACTION_YML"
   # Verify it's NOT using the broken GraphQL path.
-  ! grep -q "gh pr edit --add-reviewer" "$ACTION_YML"
+  if grep -q "gh pr edit --add-reviewer" "$ACTION_YML"; then
+    echo "action.yml should not use the broken gh pr edit reviewer path" >&2
+    return 1
+  fi
 }
 
 @test "AC-3: Copilot step posts copilot-pull-request-reviewer[bot]" {
@@ -115,6 +128,39 @@ setup() {
   grep -qE "\\! -f.*auth\\.json|auth.json.*missing" "$ACTION_YML"
 }
 
+@test "AC-4: Codex step uses documented codex review command" {
+  grep -qE 'codex[[:space:]]+review[[:space:]]+--base[[:space:]]+"\$BASE_BRANCH"' "$ACTION_YML"
+  if grep -qE 'codex[[:space:]]+exec[[:space:]]+review' "$ACTION_YML"; then
+    echo "action.yml should use codex review, not codex exec review" >&2
+    return 1
+  fi
+  grep -qE 'codex[[:space:]]+review' "$ACTION_README"
+  if grep -qE 'codex[[:space:]]+exec[[:space:]]+review' "$ACTION_README"; then
+    echo "README should document codex review, not codex exec review" >&2
+    return 1
+  fi
+}
+
+@test "AC-4: Codex step only marks ran true after command success" {
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE 'if[[:space:]]+CODEX_HOME="\$CODEX_HOME_INPUT"[[:space:]]+codex[[:space:]]+review'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -q 'codex-ran=true'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -q 'codex-ran=false'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -q 'Codex review failed'
+}
+
+@test "AC-4: Codex empty output still counts as a completed round" {
+  awk '/if CODEX_HOME=.*codex review/,/else/' "$ACTION_YML" \
+    | grep -q 'codex-ran=true'
+  if awk '/Codex produced no output/,/fi/' "$ACTION_YML" | grep -q 'codex-ran=false'; then
+    echo "empty successful Codex output should not mark codex-ran=false" >&2
+    return 1
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Workflow wiring (AC-5)
 # ---------------------------------------------------------------------------
@@ -135,6 +181,17 @@ setup() {
 @test "AC-5: workflow has the minimum permissions (read+pr write)" {
   awk '/^permissions:/,/^jobs:/' "$WORKFLOW" | grep -q "contents: read"
   awk '/^permissions:/,/^jobs:/' "$WORKFLOW" | grep -q "pull-requests: write"
+  if awk '/^permissions:/,/^jobs:/' "$WORKFLOW" | grep -q "issues: write"; then
+    echo "pr-review.yml should not request issues: write in v1" >&2
+    return 1
+  fi
+}
+
+@test "AC-5: workflow writes Codex auth with restrictive permissions" {
+  awk '/Mount Codex auth/,/Run Walter-OS review loop/' "$WORKFLOW" \
+    | grep -qE "umask[[:space:]]+077"
+  awk '/Mount Codex auth/,/Run Walter-OS review loop/' "$WORKFLOW" \
+    | grep -qE "chmod[[:space:]]+600[[:space:]]+/tmp/codex-minimal/auth\\.json"
 }
 
 # ---------------------------------------------------------------------------
@@ -164,6 +221,16 @@ setup() {
 
 @test "AC-7: action README documents the Codex auth setup" {
   grep -qE "CODEX_AUTH_JSON|auth\\.json" "$ACTION_README"
+  grep -qE "umask[[:space:]]+077" "$ACTION_README"
+  grep -qE "chmod[[:space:]]+600[[:space:]]+/tmp/codex-minimal/auth\\.json" "$ACTION_README"
+}
+
+@test "AC-7: action README uses standalone GitHub links" {
+  if grep -qE '\]\(\\.\\./\\.\\./\\.\\./' "$ACTION_README"; then
+    echo "README should not use repo-relative links that break downstream" >&2
+    return 1
+  fi
+  grep -qE 'https://github.com/Xipher-Labs/walter-os/' "$ACTION_README"
 }
 
 # ---------------------------------------------------------------------------
@@ -181,10 +248,10 @@ setup() {
   #     if: ${{ env.CODEX_AUTH_JSON != '' }}
   # GitHub evaluates `if:` BEFORE the step's `env:` block, so the
   # env reference is always empty → step never runs.
-  ! grep -qE 'if: \$\{\{ env\.CODEX_AUTH_JSON' "$WORKFLOW" || {
+  if grep -qE 'if: \$\{\{ env\.CODEX_AUTH_JSON' "$WORKFLOW"; then
     echo "pr-review.yml still uses the broken step-level if-on-env pattern (#185)" >&2
     return 1
-  }
+  fi
 }
 
 @test "AC-9 (#185): pr-review.yml Codex mount step gates inside the shell" {

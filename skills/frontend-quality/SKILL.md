@@ -25,7 +25,8 @@ UI, UX, visual hierarchy, accessibility copy, or interaction details:
 
 ```bash
 source "$WALTER_OS_HOME/scripts/walter/lib/model-router.sh"
-frontend_model="$(walter_model_for frontend)"
+frontend_model=""
+walter_model_resolve frontend frontend_model
 ```
 
 Default preference is Claude. The operator may point the alias at another

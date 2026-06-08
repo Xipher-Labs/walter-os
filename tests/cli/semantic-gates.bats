@@ -264,6 +264,40 @@ MARKDOWN
   [[ "$output" == *"missing reviewable decision/risk language"* ]]
 }
 
+@test "semantic-gates does not count review substrings as architecture evidence" {
+  cat > "$TMP_DIR/repo/docs/specs/example-feature.md" <<'MARKDOWN'
+# Example feature - spec
+
+## Problem
+
+Operators need a readiness check.
+
+## Non-goals
+
+- Replacing human approval.
+
+## Architecture review
+
+The implementation includes a preview mode.
+
+## Acceptance criteria
+
+- [ ] AC-1: Verify this exits 1 when review evidence is only a substring.
+
+## Test plan
+
+- `bats tests/cli/semantic-gates.bats`
+MARKDOWN
+  write_referencing_test
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"architecture-review: fail"* ]]
+  [[ "$output" == *"missing reviewable decision/risk language"* ]]
+}
+
 @test "semantic-gates accepts non-shell test files that reference the spec" {
   write_valid_spec
   cat > "$TMP_DIR/repo/tests/cli/example_feature_test.go" <<'GO'
@@ -384,6 +418,33 @@ SH
   [[ "$output" == *"unable to traverse tests directory"* ]]
 }
 
+@test "semantic-gates reports grep scan errors as gate failures" {
+  write_valid_spec
+  write_referencing_test
+  local real_grep
+  real_grep="$(command -v grep)"
+  mkdir -p "$TMP_DIR/bin"
+  cat > "$TMP_DIR/bin/grep" <<SH
+#!/usr/bin/env sh
+for arg in "\$@"; do
+  if [ "\$arg" = "-qF" ]; then
+    echo "grep: simulated read error" >&2
+    exit 2
+  fi
+done
+exec "$real_grep" "\$@"
+SH
+  chmod +x "$TMP_DIR/bin/grep"
+
+  run env PATH="$TMP_DIR/bin:$PATH" "$WALTER_OS_BIN" semantic-gates \
+    "$TMP_DIR/repo/docs/specs/example-feature.md" --repo "$TMP_DIR/repo"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"test-relevance: fail"* ]]
+  [[ "$output" == *"unable to scan test file"* ]]
+  [[ "$output" != *"no test file references docs/specs/example-feature.md"* ]]
+}
+
 @test "semantic-gates --json emits machine-readable gate results" {
   write_valid_spec
   write_referencing_test
@@ -419,4 +480,29 @@ SH
   [ "$status" -eq 1 ]
   jq -e '.status == "fail"' <<<"$output"
   jq -e 'any(.gates["ac-testability"].messages[]; contains("\t") or contains("\r"))' <<<"$output"
+}
+
+@test "semantic-gates --json escapes backspace formfeed and strips other controls" {
+  write_valid_spec
+  write_referencing_test
+  replace_acceptance_criteria_with_weak_substrings
+  awk '
+    /^## Test plan$/ {
+      printf "- [ ] AC-3: Keep this\bweak\fand\001invalid\n\n"
+      print
+      next
+    }
+    { print }
+  ' "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    > "$TMP_DIR/repo/docs/specs/example-feature.md.tmp"
+  mv "$TMP_DIR/repo/docs/specs/example-feature.md.tmp" \
+    "$TMP_DIR/repo/docs/specs/example-feature.md"
+
+  run "$WALTER_OS_BIN" semantic-gates "$TMP_DIR/repo/docs/specs/example-feature.md" \
+    --repo "$TMP_DIR/repo" --json
+
+  [ "$status" -eq 1 ]
+  jq -e '.status == "fail"' <<<"$output"
+  jq -e 'any(.gates["ac-testability"].messages[]; contains("\b") and contains("\f"))' <<<"$output"
+  jq -e 'all(.gates["ac-testability"].messages[]; contains("\u0001") | not)' <<<"$output"
 }

@@ -406,6 +406,26 @@ write_preview_plan() {
   echo "$output" | jq -e '.findings | index("invalid preview plan")'
 }
 
+@test "AC4: preview plan with unexpected actions is invalid evidence" {
+  local fixture="$TMP_DIR/extra-action-plan.json"
+  local plan="$TMP_DIR/preview-plan.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_plan "$plan"
+  jq '.actions += ["deploy_production"]' "$plan" > "$TMP_DIR/extra-action-plan-updated.json"
+  mv "$TMP_DIR/extra-action-plan-updated.json" "$plan"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-plan "$plan" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.preview.plan.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview plan")'
+}
+
 @test "AC4: malformed preview report types block without crashing" {
   local fixture="$TMP_DIR/malformed-report.json"
   local report="$TMP_DIR/preview-report.json"

@@ -153,8 +153,10 @@ explicitly operator-driven.
 
 ### Headscale config
 
-**Where:** `setup/walter-host/services/headscale/config.yaml`. Server URL, IP
-prefixes, DERP, magic DNS settings.
+**Where:** `setup/headscale/config.yaml.template` for the root all-in-one stack
+and `setup/walter-host/services/headscale/config.yaml.template` for the
+extracted Walter-host service. Server URL, IP prefixes, DERP, magic DNS
+settings.
 
 **Coverage:** Full for daemon config. **Manual:** user creation
 (`headscale users create`), preauthkey minting, ACL JSON. No ACL file in

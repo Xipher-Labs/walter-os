@@ -67,6 +67,29 @@ CURL_STUB
   chmod +x "${TEST_HOME}/bin/curl"
 }
 
+install_anthropic_curl_capture() {
+  local capture_file="$1"
+  local response_text="$2"
+  cat > "${TEST_HOME}/bin/curl" <<CURL_STUB
+#!/usr/bin/env bash
+capture_file="${capture_file}"
+response_text="${response_text}"
+payload=""
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -d|--data|--data-raw|--data-binary)
+      shift
+      payload="\${1:-}"
+      ;;
+  esac
+  shift || true
+done
+printf '%s\n' "\$payload" >> "\$capture_file"
+jq -nc --arg text "\$response_text" '{content: [{type: "text", text: \$text}]}'
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+}
+
 last_spend_model() {
   jq -r '.model' "${HOME}/.config/walter-os/cli-spend.jsonl" | tail -1
 }
@@ -93,6 +116,133 @@ last_spend_model() {
   unset LITELLM_BASE_URL LITELLM_API_KEY
   export ANTHROPIC_API_KEY="sk-ant-test"
   llm_available
+}
+
+@test "llm.sh: direct Anthropic fallback rejects Codex aliases before curl [AC-1]" {
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  cat > "${TEST_HOME}/bin/curl" <<'CURL_STUB'
+#!/usr/bin/env bash
+echo "curl should not be called for non-Anthropic direct fallback" >&2
+exit 99
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+
+  run llm_invoke "test-agent" "codex" "sys" "usr" 512
+  [ "$status" -eq 4 ]
+  echo "$output" | grep -q "requires LiteLLM or a matching direct runtime"
+  echo "$output" | grep -q "codex"
+}
+
+@test "llm.sh: direct Anthropic fallback rejects local aliases before curl [AC-1]" {
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  cat > "${TEST_HOME}/bin/curl" <<'CURL_STUB'
+#!/usr/bin/env bash
+echo "curl should not be called for local direct fallback" >&2
+exit 99
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+
+  run llm_invoke "test-agent" "local-ollama" "sys" "usr" 512
+  [ "$status" -eq 4 ]
+  echo "$output" | grep -q "requires LiteLLM or a matching direct runtime"
+  echo "$output" | grep -q "local-ollama"
+}
+
+@test "llm.sh: direct Anthropic fallback rejects LiteLLM cheap alias before curl [AC-1]" {
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  cat > "${TEST_HOME}/bin/curl" <<'CURL_STUB'
+#!/usr/bin/env bash
+echo "curl should not be called for LiteLLM-only cheap fallback" >&2
+exit 99
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+
+  run llm_invoke "test-agent" "cheap" "sys" "usr" 512
+  [ "$status" -eq 4 ]
+  echo "$output" | grep -q "requires LiteLLM or a matching direct runtime"
+  echo "$output" | grep -q "cheap"
+}
+
+@test "llm.sh: direct Anthropic fallback rejects LiteLLM claude-sub aliases before curl [AC-1]" {
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  cat > "${TEST_HOME}/bin/curl" <<'CURL_STUB'
+#!/usr/bin/env bash
+echo "curl should not be called for LiteLLM-only claude-sub fallback" >&2
+exit 99
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+
+  run llm_invoke "test-agent" "claude-sub" "sys" "usr" 512
+  [ "$status" -eq 4 ]
+  echo "$output" | grep -q "requires LiteLLM or a matching direct runtime"
+  echo "$output" | grep -q "claude-sub"
+}
+
+@test "llm.sh: direct Anthropic fallback rejects non-Claude anthropic tags before curl [AC-1]" {
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  cat > "${TEST_HOME}/bin/curl" <<'CURL_STUB'
+#!/usr/bin/env bash
+echo "curl should not be called for non-Claude anthropic tags" >&2
+exit 99
+CURL_STUB
+  chmod +x "${TEST_HOME}/bin/curl"
+
+  run llm_invoke "test-agent" "anthropic/codex" "sys" "usr" 512
+  [ "$status" -eq 4 ]
+  echo "$output" | grep -q "requires LiteLLM or a matching direct runtime"
+  echo "$output" | grep -q "anthropic/codex"
+}
+
+@test "llm.sh: direct Anthropic fallback resolves claude shorthand [AC-1]" {
+  local capture_file
+  capture_file="$(mktemp "${TEST_HOME}/claude-capture.XXXXXX")"
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  install_anthropic_curl_capture "$capture_file" "direct-claude-response"
+
+  run llm_invoke "test-agent" "claude" "sys" "usr" 512
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"direct-claude-response"* ]]
+  [ "$(jq -r '.model' "$capture_file")" = "claude-sonnet-4-5" ]
+}
+
+@test "llm.sh: direct Anthropic fallback accepts official Claude model IDs [AC-1]" {
+  local capture_file
+  capture_file="$(mktemp "${TEST_HOME}/claude-id-capture.XXXXXX")"
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  install_anthropic_curl_capture "$capture_file" "official-id-response"
+
+  run llm_invoke "test-agent" "claude-3-5-sonnet-20241022" "sys" "usr" 512
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"official-id-response"* ]]
+  [ "$(jq -r '.model' "$capture_file")" = "claude-3-5-sonnet-20241022" ]
+}
+
+@test "llm.sh: direct Anthropic fallback accepts anthropic-prefixed Claude IDs [AC-1]" {
+  local capture_file
+  capture_file="$(mktemp "${TEST_HOME}/anthropic-claude-capture.XXXXXX")"
+  source "$LLM_LIB"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+  export ANTHROPIC_API_KEY="sk-ant-test"
+  install_anthropic_curl_capture "$capture_file" "prefixed-id-response"
+
+  run llm_invoke "test-agent" "anthropic/claude-3-5-sonnet-20241022" "sys" "usr" 512
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"prefixed-id-response"* ]]
+  [ "$(jq -r '.model' "$capture_file")" = "claude-3-5-sonnet-20241022" ]
 }
 
 # -----------------------------------------------------------------------

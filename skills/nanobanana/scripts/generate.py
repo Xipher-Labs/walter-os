@@ -7,6 +7,7 @@ Usage:
 """
 import argparse
 import os
+import re
 import sys
 from io import BytesIO
 from pathlib import Path
@@ -16,20 +17,24 @@ MODELS = {
     "flash3": "gemini-3.1-flash-image-preview",
     "pro": "gemini-3-pro-image-preview",
 }
+SUPPORTED_AI_PROFILES = {
+    "claude-only",
+    "codex-only",
+    "gemini-only",
+    "local-only",
+    "mixed",
+}
 
 
 def yaml_value(path, key):
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*:\s*(.*)$")
     try:
         with path.open("r", encoding="utf-8") as handle:
             for raw_line in handle:
-                line = raw_line.rstrip("\r\n").lstrip()
-                name, separator, value = line.partition(":")
-                if not separator or name.strip() != key:
-                    continue
-                value = value.strip()
-                if " #" in value:
-                    value = value.split(" #", 1)[0].rstrip()
-                return value
+                match = pattern.match(raw_line.rstrip("\r\n"))
+                if match:
+                    value = re.sub(r"(^|\s)#.*$", "", match.group(1))
+                    return value.strip()
     except OSError:
         return ""
     return ""
@@ -37,6 +42,12 @@ def yaml_value(path, key):
 
 def image_generation_uses_gemini(value):
     return "gemini" in {route.strip() for route in value.split(",")}
+
+
+def configure_profile_hint(profile):
+    if profile in SUPPORTED_AI_PROFILES:
+        return profile
+    return "mixed"
 
 
 def capabilities_file():
@@ -54,9 +65,11 @@ def validate_gemini_capability():
 
     provider_gemini = yaml_value(path, "provider_gemini")
     if provider_gemini == "disabled":
+        profile = configure_profile_hint(yaml_value(path, "profile"))
         print(
             f"nanobanana: provider_gemini is disabled in {path}. "
-            "Run `walter ai configure --profile mixed --set image_generation=gemini` or choose another image workflow.",
+            f"Run `walter ai configure --profile {profile} --set image_generation=gemini` "
+            "or choose another image workflow.",
             file=sys.stderr,
         )
         sys.exit(3)

@@ -29,8 +29,7 @@ YAML
   run python3 "$GENERATE_PY" --prompt "test" --out "$TEST_HOME/out.png"
   [ "$status" -eq 3 ]
   echo "$output" | grep -q "provider_gemini is disabled"
-  echo "$output" | grep -q "walter ai configure --profile mixed --set image_generation=gemini"
-  ! echo "$output" | grep -q "walter ai configure --set image_generation=gemini"
+  echo "$output" | grep -q "walter ai configure --profile claude-only --set image_generation=gemini"
   ! echo "$output" | grep -q "Missing deps"
 }
 
@@ -44,7 +43,33 @@ YAML
   run python3 "$GENERATE_PY" --prompt "test" --out "$TEST_HOME/out.png"
   [ "$status" -eq 3 ]
   echo "$output" | grep -q "provider_gemini is disabled"
-  ! echo "$output" | grep -q "Missing deps"
+  ! echo "$output" | grep -q "Set GEMINI_API_KEY"
+}
+
+@test "nanobanana falls back to mixed for invalid profile hints" {
+  write_capabilities <<'YAML'
+profile: banana-mode
+provider_gemini: disabled
+route_image_generation: gemini
+YAML
+
+  run python3 "$GENERATE_PY" --prompt "test" --out "$TEST_HOME/out.png"
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -q "walter ai configure --profile mixed --set image_generation=gemini"
+  ! echo "$output" | grep -q "banana-mode --set"
+}
+
+@test "nanobanana keeps hash characters that are not YAML comments" {
+  write_capabilities <<'YAML'
+profile: mixed
+provider_gemini: enabled
+route_image_generation: gemini#preview
+YAML
+
+  run python3 "$GENERATE_PY" --prompt "test" --out "$TEST_HOME/out.png"
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -q "route_image_generation must include gemini"
+  ! echo "$output" | grep -q "Set GEMINI_API_KEY"
 }
 
 @test "nanobanana blocks when image generation is not routed to Gemini" {

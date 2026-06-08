@@ -109,7 +109,11 @@ setup() {
 
 @test "db saturation psql probes are bounded" {
   grep -q 'timeout 10s docker exec litellm-db psql .*pg_stat_activity' "$WATCHDOG"
-  grep -q 'timeout 10s docker exec litellm-db psql .*max_connections' "$WATCHDOG"
+  grep -q 'pid <> pg_backend_pid()' "$WATCHDOG"
+  grep -q "current_setting('max_connections')" "$WATCHDOG"
+  grep -q "current_setting('superuser_reserved_connections')" "$WATCHDOG"
+  run grep -q 'SELECT count(\*) FROM pg_stat_activity;' "$WATCHDOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "cloudflared log fallback evaluates the last relevant event" {
@@ -120,7 +124,11 @@ setup() {
 }
 
 @test "cloudflared metrics readiness is authoritative when reachable" {
-  grep -Fq "ready_code=" "$WATCHDOG"
+  grep -Fq 'if ready_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${CLOUDFLARED_METRICS}/ready" 2>/dev/null); then' "$WATCHDOG"
+  grep -Fq "ready_code=000" "$WATCHDOG"
+  run awk '/^cf_healthy\\(\\) \\{/{flag=1} flag; /^if ! cf_healthy; then/{flag=0}' "$WATCHDOG"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'|| echo 000'* ]]
   grep -Fq '%{http_code}' "$WATCHDOG"
   grep -Fq "200) return 0" "$WATCHDOG"
   grep -Fq "000) :" "$WATCHDOG"
