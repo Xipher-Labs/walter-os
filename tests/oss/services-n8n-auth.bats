@@ -92,6 +92,27 @@ teardown() {
   grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
 }
 
+@test "n8n deploy.sh treats blank quoted/whitespace auth values as missing (P1-03)" {
+  TMP_SVC="$(mktemp -d)"
+  cp "$ENV_TEMPLATE" "$TMP_SVC/.env.template"
+  {
+    printf '%s\n' 'N8N_PG_PASS=pg'
+    printf '%s\n' 'N8N_ENCRYPTION_KEY=encryption'
+    printf '%s\n' 'N8N_BASIC_AUTH_USER=""'
+    printf 'N8N_BASIC_AUTH_PASSWORD=   \n'
+  } > "$TMP_SVC/.env"
+  chmod 600 "$TMP_SVC/.env"
+
+  run env N8N_DEPLOY_ENV_ONLY=1 SVC_DIR="$TMP_SVC" \
+    N8N_BASIC_AUTH_USER=operator \
+    N8N_BASIC_AUTH_PASSWORD=provided-secret \
+    bash "$DEPLOY"
+
+  [ "$status" -eq 0 ]
+  grep -q '^N8N_BASIC_AUTH_USER=operator$' "$TMP_SVC/.env"
+  grep -q '^N8N_BASIC_AUTH_PASSWORD=provided-secret$' "$TMP_SVC/.env"
+}
+
 @test "n8n import-workflows supports optional basic-auth curl args (P1-03)" {
   [ -f "$IMPORT_SCRIPT" ]
   grep -q 'N8N_BASIC_AUTH_USER' "$IMPORT_SCRIPT"
