@@ -17,6 +17,13 @@ MODELS = {
     "flash3": "gemini-3.1-flash-image-preview",
     "pro": "gemini-3-pro-image-preview",
 }
+SUPPORTED_AI_PROFILES = {
+    "claude-only",
+    "codex-only",
+    "gemini-only",
+    "local-only",
+    "mixed",
+}
 
 
 def yaml_value(path, key):
@@ -37,6 +44,12 @@ def image_generation_uses_gemini(value):
     return "gemini" in {route.strip() for route in value.split(",")}
 
 
+def configure_profile_hint(profile):
+    if profile in SUPPORTED_AI_PROFILES:
+        return profile
+    return "mixed"
+
+
 def capabilities_file():
     configured = os.environ.get("WALTER_AI_CAPABILITIES_FILE")
     if configured:
@@ -52,7 +65,7 @@ def validate_gemini_capability():
 
     provider_gemini = yaml_value(path, "provider_gemini")
     if provider_gemini == "disabled":
-        profile = yaml_value(path, "profile") or "mixed"
+        profile = configure_profile_hint(yaml_value(path, "profile"))
         print(
             f"nanobanana: provider_gemini is disabled in {path}. "
             f"Run `walter ai configure --profile {profile} --set image_generation=gemini` "
