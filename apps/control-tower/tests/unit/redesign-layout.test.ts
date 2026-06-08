@@ -56,7 +56,7 @@ describe("redesign layout — AC-3 (responsive overview grid)", () => {
 
   it("forces dynamic rendering for runtime operator env links", () => {
     const src = readFileSync(join(root, "app/page.tsx"), "utf8");
-    expect(src).toContain('export const dynamic = "force-dynamic"');
+    expect(src).toMatch(/export\s+const\s+dynamic\s*=\s*["']force-dynamic["']/);
   });
 });
 
