@@ -132,18 +132,23 @@ echo "Walter-host capacity preflight: profile=${profile_label}"
 echo "Detected: vCPU=${vcpu}, RAM=$((ram_mb / 1024)) GB, disk=${disk_gb} GB"
 echo "Required: vCPU=${required_vcpu}, RAM=$((required_ram_mb / 1024)) GB, disk=${required_disk_gb} GB"
 
+capacity_message_level="ERROR"
+if [[ "${WALTER_PREFLIGHT_ALLOW_UNDERSIZED:-}" == "1" ]]; then
+  capacity_message_level="WARNING"
+fi
+
 if (( vcpu < required_vcpu )); then
-  echo "ERROR: ${profile_label_upper} profile requires at least ${required_vcpu} vCPU; detected ${vcpu}." >&2
+  echo "${capacity_message_level}: ${profile_label_upper} profile requires at least ${required_vcpu} vCPU; detected ${vcpu}." >&2
   failed=1
 fi
 
 if (( ram_mb < required_ram_mb )); then
-  echo "ERROR: ${profile_label_upper} profile requires at least $((required_ram_mb / 1024)) GB RAM; detected $((ram_mb / 1024)) GB." >&2
+  echo "${capacity_message_level}: ${profile_label_upper} profile requires at least $((required_ram_mb / 1024)) GB RAM; detected $((ram_mb / 1024)) GB." >&2
   failed=1
 fi
 
 if (( disk_gb < required_disk_gb )); then
-  echo "ERROR: ${profile_label_upper} profile requires at least ${required_disk_gb} GB disk; detected ${disk_gb} GB." >&2
+  echo "${capacity_message_level}: ${profile_label_upper} profile requires at least ${required_disk_gb} GB disk; detected ${disk_gb} GB." >&2
   failed=1
 fi
 
