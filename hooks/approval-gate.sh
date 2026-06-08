@@ -160,6 +160,16 @@ declare -a BLOCK_PATH_PATTERNS=("${WALTER_PROTECTED_PATH_PATTERNS[@]}")
 # medium-required: low tier is blocked unless the agent has an explicit override.
 # high-required: low and medium tier are blocked unless override.
 
+if (( BASH_VERSINFO[0] < 4 )); then
+  _bash_version_reason="approval-gate: requires Bash >= 4.0 for associative arrays; macOS /bin/bash 3.2 is not supported. Install GNU bash and re-run the hook."
+  if [[ $# -gt 0 ]]; then
+    echo "approval-gate: BLOCK — $_bash_version_reason" >&2
+    exit 7
+  fi
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"%s"}}\n' "$_bash_version_reason"
+  exit 0
+fi
+
 # This script requires Bash 4+ for associative arrays (`declare -A`);
 # macOS /bin/bash 3.2 is not a supported runtime for this hook. Keep the
 # array literal inside `set +u` so nounset cannot turn dashed keys into
