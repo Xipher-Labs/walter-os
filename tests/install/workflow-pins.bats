@@ -83,6 +83,20 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "readme-lint rejects markdownlint @latest global installs" {
+  local workflow="$BATS_TEST_TMPDIR/readme-lint.yml"
+  cat > "$workflow" <<'YAML'
+jobs:
+  lint:
+    steps:
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli@latest
+YAML
+
+  run grep -Eq 'npm (install|i) -g markdownlint-cli(@latest)?([[:space:]]|$)' "$workflow"
+  [ "$status" -eq 0 ]
+}
+
 @test "SLSA generator allowlist rejects suffixed release tags" {
   cat > "$BATS_TEST_TMPDIR/slsa-suffix.yml" <<'YAML'
 jobs:
