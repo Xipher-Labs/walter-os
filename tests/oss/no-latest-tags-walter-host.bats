@@ -92,7 +92,9 @@ _assert_no_unfiltered_matches() {
 }
 
 @test "openclaw bare-install pattern catches end-of-line install" {
-  printf '%s\n' 'npm install -g openclaw' | grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN"
+  if ! printf '%s\n' 'npm install -g openclaw' | grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN"; then
+    return 1
+  fi
   if printf '%s\n' 'npm install -g openclaw@2026.5.7' | grep -Eq "$OPENCLAW_BARE_INSTALL_PATTERN"; then
     return 1
   fi
