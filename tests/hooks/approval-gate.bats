@@ -35,6 +35,9 @@ set -euo pipefail
 
 expr="${1:-}"
 file="${2:-}"
+if [[ "$file" == "--" ]]; then
+  file="${3:-}"
+fi
 
 case "$expr" in
   ".agents."*".tier // "*)
@@ -902,6 +905,16 @@ EOF
   [[ "$status" -eq 7 ]]
 }
 
+@test "P0-02: malicious WALTER_AGENT_NAME does not bypass trust tiers" {
+  command -v yq >/dev/null 2>&1 || skip "yq required for trust-tier injection test"
+
+  export WALTER_AGENT_NAME='test-agent") | "medium" #'
+
+  run "$HOOK" check "gh pr create --title test --body test" --tool Bash
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ trust[[:space:]]tier|BLOCK ]]
+}
+
 # ---------------------------------------------------------------------------
 # P1-05 — yq fail-closed at hook entry (audit hardening)
 # ---------------------------------------------------------------------------
@@ -940,9 +953,9 @@ EOF
   local evil_file="$WALTER_CONFIG/evil-approvals.yml"
   cat > "$evil_file" <<EOF
 auto_approved:
-  bypass-everything:
+  lint-fixes:
     agent: test-agent
-    constraint: ANY
+    constraint: ts/tsx/js/jsx/py/rs/go
 EOF
 
   # No agent-approvals.yml at the hardcoded path — without the override,
@@ -953,7 +966,7 @@ EOF
   export WALTER_AGENT_NAME=test-agent
   # Do NOT set WALTER_AGENT_ALLOW_OVERRIDE — the env var must be ignored.
 
-  run "$HOOK" check "rm -rf /var/lib" --tool Bash
+  run "$HOOK" check "auth/index.ts" --tool Edit
   # 7 = blocked. If the override leaked through, it would be 0 (allowed).
   [[ "$status" -eq 7 ]]
   echo "$output" | grep -qi 'WALTER_STANDING_APPROVALS env var is ignored' || echo "(warn message check is best-effort — stderr may be captured separately)"
@@ -978,6 +991,79 @@ EOF
   export WALTER_STANDING_APPROVALS_OVERRIDE="$override_file"
   export WALTER_AGENT_NAME=test-agent
 
-  run "$HOOK" check "git push origin main" --tool Bash
+  run "$HOOK" check "auth/index.ts" --tool Edit
   [[ "$status" -eq 7 ]]
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  run "$HOOK" check "auth/index.ts" --tool Edit
+  [[ "$status" -eq 0 ]]
+}
+
+@test "P1-06: WALTER_STANDING_APPROVALS_OVERRIDE rejects option-like paths" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  cat > "$WALTER_CONFIG/agent-approvals.yml" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
+  local override_file="$WALTER_CONFIG/-override-approvals.yml"
+  cat > "$override_file" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  export WALTER_STANDING_APPROVALS_OVERRIDE="-override-approvals.yml"
+  export WALTER_AGENT_NAME=test-agent
+
+  run bash -c "cd '$WALTER_CONFIG' && '$HOOK' check 'auth/index.ts' --tool Edit"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ invalid[[:space:]]standing-approvals[[:space:]]override[[:space:]]path ]]
+}
+
+@test "P1-06: invalid standing-approvals override is terminal" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  cat > "$WALTER_CONFIG/agent-approvals.yml" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  export WALTER_STANDING_APPROVALS_OVERRIDE="-missing-approvals.yml"
+  export WALTER_AGENT_NAME=test-agent
+
+  run bash -c "cd '$WALTER_CONFIG' && '$HOOK' check 'auth/index.ts' --tool Edit"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ invalid[[:space:]]standing-approvals[[:space:]]override[[:space:]]path ]]
+  [[ "$output" != *"standing approval matched"* ]]
+}
+
+@test "P1-06: WALTER_STANDING_APPROVALS_OVERRIDE rejects symlinks" {
+  command -v yq >/dev/null 2>&1 || skip "yq required"
+
+  local real_file="$WALTER_CONFIG/real-override-approvals.yml"
+  local linked_file="$WALTER_CONFIG/linked-override-approvals.yml"
+  cat > "$real_file" <<EOF
+auto_approved:
+  lint-fixes:
+    agent: test-agent
+    constraint: ts/tsx/js/jsx/py/rs/go
+EOF
+  ln -s "$real_file" "$linked_file"
+
+  export WALTER_AGENT_ALLOW_OVERRIDE=1
+  export WALTER_STANDING_APPROVALS_OVERRIDE="$linked_file"
+  export WALTER_AGENT_NAME=test-agent
+
+  run "$HOOK" check "auth/index.ts" --tool Edit
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ symlinks[[:space:]]are[[:space:]]not[[:space:]]allowed ]]
 }
