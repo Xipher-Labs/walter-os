@@ -117,6 +117,30 @@ write_partial_claude_hook_settings() {
 JSON
 }
 
+write_substring_claude_hook_settings() {
+  local test_home="$1"
+  mkdir -p "$test_home/.claude"
+  cat >"$test_home/.claude/settings.json" <<JSON
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$REPO_ROOT/hooks/bash-denylist.sh.bak", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/approval-gate.sh.bak", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/capability-check.sh.bak", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/network-gate.sh.bak", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/branch-flow-guard.sh.bak", "_walter_os": true },
+          { "type": "command", "command": "$REPO_ROOT/hooks/pre-commit-tests.sh.bak", "_walter_os": true }
+        ]
+      }
+    ]
+  }
+}
+JSON
+}
+
 write_misplaced_claude_hook_settings() {
   local test_home="$1"
   mkdir -p "$test_home/.claude"
@@ -350,6 +374,24 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"Claude Code PreToolUse hooks partially active"* ]]
   [[ "$output" == *"Enforcement mode: partial"* ]]
+}
+
+@test "walter doctor --enforcement rejects hook path substrings" {
+  command -v jq >/dev/null 2>&1 || skip "jq required for Claude hook inspection"
+
+  local test_home="$BATS_TEST_TMPDIR/home-substring-hooks"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+  write_substring_claude_hook_settings "$test_home"
+
+  run env \
+    HOME="$test_home" \
+    WALTER_OS_HOME="${REPO_ROOT}" \
+    "${WALTER_BIN}" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Claude Code hook missing: hooks/bash-denylist.sh for Bash"* ]]
+  [[ "$output" == *"Enforcement mode: policy-only"* ]]
 }
 
 @test "walter doctor --enforcement ignores hooks under wrong matchers" {

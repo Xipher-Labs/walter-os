@@ -12,7 +12,7 @@ set -euo pipefail
 
 # Validate WALTER_OS_HOME before any use: must be an absolute path containing
 # only safe characters. Reject single quotes, semicolons, $, backticks, etc.
-# This prevents injection via check() even if eval is used inside.
+# This keeps later bash -c checks and hook path comparisons bounded to a safe path shape.
 # See: docs/operational/security-audit-2026-05-11.md P0-04
 WALTER_OS_HOME="${WALTER_OS_HOME:?WALTER_OS_HOME required — set in personal.env or export. Default: /opt/walter-os}"
 if [[ ! "$WALTER_OS_HOME" =~ ^/[A-Za-z0-9/_.-]*$ ]]; then
@@ -125,21 +125,43 @@ check_legacy_secret_key() {
   fi
 }
 
+doctor_command_has_hook_token() {
+  local command="$1"
+  local hook_path="$2"
+  local token
+
+  for token in $command; do
+    token="${token#\"}"
+    token="${token%\"}"
+    token="${token#\'}"
+    token="${token%\'}"
+    if [[ "$token" == "$hook_path" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 doctor_claude_hook_present() {
   local settings="$1" hook_path="$2" matcher="$3"
+  local command
 
-  jq -e --arg hook "$hook_path" --arg matcher "$matcher" '
+  while IFS= read -r command; do
+    if doctor_command_has_hook_token "$command" "$hook_path"; then
+      return 0
+    fi
+  done < <(jq -r --arg matcher "$matcher" '
     def matcher_applies($expected):
       . == "*" or ((split("|") | index($expected)) != null);
 
-    [(.hooks.PreToolUse // [])[]?
+    (.hooks.PreToolUse // [])[]?
       | select((.matcher // "*") | matcher_applies($matcher))
       | (.hooks // [])[]?
       | select(._walter_os == true)
       | (.command // "")
-      | select(contains($hook))]
-    | length > 0
-  ' "$settings" >/dev/null 2>&1
+  ' "$settings" 2>/dev/null)
+
+  return 1
 }
 
 doctor_check_claude_hooks() {
