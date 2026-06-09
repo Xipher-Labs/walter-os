@@ -40,12 +40,8 @@ run_router() {
     "$@"
 }
 
-last_output_line() {
-  output_without_router_warnings | tail -1
-}
-
-output_has_line() {
-  output_without_router_warnings | grep -Fxq "$1"
+output_is_exactly() {
+  [ "$(output_without_router_warnings)" = "$1" ]
 }
 
 output_without_router_warnings() {
@@ -68,35 +64,35 @@ output_without_router_warnings() {
   run run_router bash -c "source '$ROUTER'; walter_model_for backend_review"
 
   [ "$status" -eq 0 ]
-  output_has_line "codex"
+  output_is_exactly "codex"
 }
 
 @test "model-router: per-domain env override wins" {
   run run_router WALTER_MODEL_FRONTEND=claude-opus bash -c "source '$ROUTER'; walter_model_for frontend"
 
   [ "$status" -eq 0 ]
-  output_has_line "claude-opus"
+  output_is_exactly "claude-opus"
 }
 
 @test "model-router: comma-separated parallel route is preserved" {
   run run_router WALTER_MODEL_BRAINSTORM=claude,codex,gemini bash -c "source '$ROUTER'; walter_model_for brainstorm"
 
   [ "$status" -eq 0 ]
-  output_has_line "claude,codex,gemini"
+  output_is_exactly "claude,codex,gemini"
 }
 
 @test "model-router: primary selector chooses first route and preserves domain" {
   run run_router WALTER_MODEL_BRAINSTORM=claude,codex,gemini bash -c "source '$ROUTER'; model=''; walter_model_select_primary brainstorm model; printf '%s|%s\n' \"\$model\" \"\$WALTER_MODEL_DOMAIN\""
 
   [ "$status" -eq 0 ]
-  output_has_line "claude|brainstorm"
+  output_is_exactly "claude|brainstorm"
 }
 
 @test "model-router: resolve alias assigns without losing domain metadata" {
   run run_router WALTER_MODEL_BACKEND_REVIEW=codex bash -c "source '$ROUTER'; model=''; walter_model_resolve backend_review model; printf '%s|%s\n' \"\$model\" \"\$WALTER_MODEL_DOMAIN\""
 
   [ "$status" -eq 0 ]
-  output_has_line "codex|backend_review"
+  output_is_exactly "codex|backend_review"
 }
 
 @test "model-router: routing examples avoid command substitution when metadata matters" {
@@ -110,14 +106,14 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_OVERRIDE=gemini-pro WALTER_MODEL_BACKEND_REVIEW=claude bash -c "source '$ROUTER'; walter_model_for backend_review"
 
   [ "$status" -eq 0 ]
-  output_has_line "gemini-pro"
+  output_is_exactly "gemini-pro"
 }
 
 @test "model-router: PHI ignores WALTER_MODEL_OVERRIDE" {
   run run_router WALTER_MODEL_OVERRIDE=codex WALTER_MODEL_PHI=ollama/llama3.3 bash -c "source '$ROUTER'; walter_model_for phi"
 
   [ "$status" -eq 0 ]
-  output_has_line "ollama/llama3.3"
+  output_is_exactly "ollama/llama3.3"
 }
 
 @test "model-router: PHI rejects non-local route and falls back closed" {
@@ -175,7 +171,7 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review"
 
   [ "$status" -eq 0 ]
-  output_has_line "codex"
+  output_is_exactly "codex"
 }
 
 @test "model-router: malformed domain row falls back without empty model" {
@@ -196,7 +192,7 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
 
   [ "$status" -eq 0 ]
-  output_has_line "codex"
+  output_is_exactly "codex"
 }
 
 @test "model-router: invalid default route rows are ignored" {
@@ -272,7 +268,7 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_PHI='ollama/llama3,127.0.0.1:11434' bash -c "source '$ROUTER'; walter_model_for phi"
 
   [ "$status" -eq 0 ]
-  output_has_line "ollama/llama3,127.0.0.1:11434"
+  output_is_exactly "ollama/llama3,127.0.0.1:11434"
 }
 
 @test "model-router: PHI rejects mixed local and remote routes" {
@@ -287,7 +283,7 @@ output_without_router_warnings() {
   run run_router WALTER_PHI_MODE=1 WALTER_MODEL_PHI=ollama/llama3 bash -c "source '$ROUTER'; tmp=\"\$(mktemp)\"; walter_model_for backend_review > \"\$tmp\"; model=\"\$(cat \"\$tmp\")\"; rm -f \"\$tmp\"; printf '%s|%s\n' \"\$model\" \"\$WALTER_MODEL_DOMAIN\""
 
   [ "$status" -eq 0 ]
-  output_has_line "ollama/llama3|phi"
+  output_is_exactly "ollama/llama3|phi"
 }
 
 @test "model-router: PHI rejects remote ollama-looking URLs" {
@@ -326,14 +322,14 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_PHI='127.0.0.1:11434' bash -c "source '$ROUTER'; walter_model_for phi"
 
   [ "$status" -eq 0 ]
-  output_has_line "127.0.0.1:11434"
+  output_is_exactly "127.0.0.1:11434"
 }
 
 @test "model-router: PHI accepts bracketed IPv6 loopback aliases" {
   run run_router WALTER_MODEL_PHI='[::1]:11434' bash -c "source '$ROUTER'; walter_model_for phi"
 
   [ "$status" -eq 0 ]
-  output_has_line "[::1]:11434"
+  output_is_exactly "[::1]:11434"
 }
 
 @test "model-router: invalid model values are rejected" {
@@ -385,5 +381,5 @@ YAML
   chmod 600 "$capabilities"
   rm -rf "$tmpdir"
   [ "$status" -eq 0 ]
-  output_has_line "codex"
+  output_is_exactly "codex"
 }
