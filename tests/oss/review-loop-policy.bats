@@ -31,8 +31,17 @@ AGENTS="$REPO_ROOT/AGENTS.md"
 
 @test "AGENTS.md makes Codex review capability-aware" {
     grep -q "walter ai status" "$AGENTS"
+    grep -q "walter-os status --models" "$AGENTS"
     grep -q "provider_codex" "$AGENTS"
     grep -q "Codex unavailable" "$AGENTS"
+    grep -q "code_review" "$AGENTS"
+    grep -q "infra_security_backend" "$AGENTS"
+    grep -q "WALTER_MODEL_BACKEND_REVIEW" "$AGENTS"
+}
+
+@test "AGENTS.md uses reviewer-agnostic Round 2 footer" {
+    grep -q "cross-review-round-2" "$AGENTS"
+    ! grep -q "Refs: codex-review-round-2" "$AGENTS"
 }
 
 @test "AGENTS.md has merge criteria section" {
