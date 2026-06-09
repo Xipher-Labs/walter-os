@@ -26,6 +26,13 @@ import { pruneIfNeeded, atomicAppend } from "@/server/council/history-io";
 let testDir: string | undefined;
 let testFile: string;
 
+function requireTestDir(): string {
+  if (!testDir) {
+    throw new Error("testDir must be initialized by beforeEach");
+  }
+  return testDir;
+}
+
 beforeEach(() => {
   testDir = mkdtempSync(path.join(os.tmpdir(), "walter-history-test-"));
   testFile = path.join(testDir, "test-history.jsonl");
@@ -103,11 +110,12 @@ describe("atomicAppend [history concurrency]", () => {
   });
 
   it("tightens an existing parent directory to owner-only permissions", () => {
-    chmodSync(testDir, 0o777);
+    const dir = requireTestDir();
+    chmodSync(dir, 0o777);
 
     atomicAppend(testFile, '{"session_id":"s1","ts":"2026-01-01"}');
 
-    expect(statSync(testDir).mode & 0o777).toBe(0o700);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
   });
 
   it("handles concurrent writes without corruption", async () => {
