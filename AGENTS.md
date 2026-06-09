@@ -200,15 +200,17 @@ The `verification-before-completion` workflow enforces this list.
    before invoking a second reviewer:
    ```bash
    walter ai status
+   walter-os status --models
    ```
    If `provider_codex` is enabled/detected and Codex auth is available, invoke
    Codex CLI:
    ```bash
-   CODEX_HOME=/tmp/codex-minimal codex review --base <target-branch> \
-     > /tmp/codex-review.txt 2>&1
+   CODEX_REVIEW_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/codex-review.XXXXXX")"
+   chmod 600 "$CODEX_REVIEW_OUTPUT"
+   codex review --base <target-branch> > "$CODEX_REVIEW_OUTPUT" 2>&1
    ```
-   (See Codex bypass pattern below if `~/.codex/config.toml` has parse
-   errors.)
+   (See the secure Codex bypass pattern below if `~/.codex/config.toml` has
+   parse errors.)
    Codex unavailable: inspect `walter ai status` for the visible
    `code_review` / `infra_security_backend` capability routes, then inspect
    `walter-os status --models` or the overlay `personal.env` for the derived
@@ -273,14 +275,23 @@ gh api -X POST \
 # (`gpt-5.3-codex`), which a ChatGPT-account login rejects with HTTP 400
 # ("not supported when using Codex with a ChatGPT account") and the review
 # silently produces no findings.
-mkdir -p /tmp/codex-minimal \
-  && printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' > /tmp/codex-minimal/config.toml \
-  && cp ~/.codex/auth.json /tmp/codex-minimal/
-CODEX_HOME=/tmp/codex-minimal codex review --base <target-branch> \
-  > /tmp/codex-review.txt 2>&1
+CODEX_MINIMAL_HOME="$(mktemp -d "${TMPDIR:-/tmp}/codex-minimal.XXXXXX")"
+chmod 700 "$CODEX_MINIMAL_HOME"
+trap 'rm -rf "$CODEX_MINIMAL_HOME"' EXIT
+printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' \
+  > "$CODEX_MINIMAL_HOME/config.toml"
+cp ~/.codex/auth.json "$CODEX_MINIMAL_HOME/auth.json"
+chmod 600 "$CODEX_MINIMAL_HOME/config.toml" "$CODEX_MINIMAL_HOME/auth.json"
+CODEX_REVIEW_OUTPUT="$CODEX_MINIMAL_HOME/review.txt"
+: > "$CODEX_REVIEW_OUTPUT"
+chmod 600 "$CODEX_REVIEW_OUTPUT"
+CODEX_HOME="$CODEX_MINIMAL_HOME" codex review --base <target-branch> \
+  > "$CODEX_REVIEW_OUTPUT" 2>&1
 
 # Standard path (clean codex config):
-codex review --base <target-branch> > /tmp/codex-review.txt 2>&1
+CODEX_REVIEW_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/codex-review.XXXXXX")"
+chmod 600 "$CODEX_REVIEW_OUTPUT"
+codex review --base <target-branch> > "$CODEX_REVIEW_OUTPUT" 2>&1
 ```
 
 Paste relevant Codex findings as a PR comment and address them with
