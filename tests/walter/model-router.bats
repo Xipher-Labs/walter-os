@@ -164,6 +164,20 @@ output_without_router_warnings() {
   [ "$count" -eq 1 ]
 }
 
+@test "model-router: recovers when missing domain table appears later" {
+  local domains_file="$TMP_CONFIG/model-domains-late.tsv"
+
+  run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "
+    source '$ROUTER'
+    walter_model_domains >/dev/null 2>&1 || true
+    printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex\tBackend review\n' > \"\$WALTER_MODEL_DOMAINS_FILE\"
+    walter_model_for backend_review
+  " 2>&1
+
+  [ "$status" -eq 0 ]
+  output_is_exactly "codex"
+}
+
 @test "model-router: CRLF domain table rows do not leak carriage returns" {
   local domains_file="$TMP_CONFIG/model-domains-crlf.tsv"
   printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex\tBackend review\r\n' > "$domains_file"
@@ -255,6 +269,21 @@ output_without_router_warnings() {
   [ "$status" -ne 0 ]
   count="$(printf '%s\n' "$output" | grep -c "model domain table has no valid rows" || true)"
   [ "$count" -eq 1 ]
+}
+
+@test "model-router: recovers when empty domain table is fixed later" {
+  local domains_file="$TMP_CONFIG/model-domains-empty-then-fixed.tsv"
+  printf '# domain\tenv\tdefault\tdescription\n' > "$domains_file"
+
+  run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "
+    source '$ROUTER'
+    walter_model_domains >/dev/null 2>&1 || true
+    printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex\tBackend review\n' > \"\$WALTER_MODEL_DOMAINS_FILE\"
+    walter_model_for backend_review
+  " 2>&1
+
+  [ "$status" -eq 0 ]
+  output_is_exactly "codex"
 }
 
 @test "model-router: print effective fails when canonical table is missing" {

@@ -48,6 +48,7 @@ _walter_model_load_domain_rows() {
   if [[ ! -r "$file" ]]; then
     _walter_model_warn_once "domains-unreadable" \
       "walter-model-router: WARN model domain table is missing or unreadable: $file"
+    __WALTER_MODEL_DOMAIN_ROWS_FILE=""
     return 1
   fi
 
@@ -70,6 +71,7 @@ _walter_model_load_domain_rows() {
   if (( valid_count == 0 )); then
     _walter_model_warn_once "domains-empty" \
       "walter-model-router: WARN model domain table has no valid rows: $file"
+    __WALTER_MODEL_DOMAIN_ROWS_FILE=""
     return 1
   fi
 
