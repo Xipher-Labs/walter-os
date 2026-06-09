@@ -64,16 +64,19 @@ _vote_select_model() {
   router_sh="$(_vote_model_router_sh)"
   selection_sh="$(_vote_model_selection_sh)"
 
-  if [[ -f "$router_sh" ]]; then
-    if ! declare -F walter_agent_select_model >/dev/null; then
-      if [[ -f "$selection_sh" ]]; then
-        # shellcheck disable=SC1090,SC1091
-        source "$selection_sh"
-      fi
+  if ! declare -F walter_agent_select_model >/dev/null; then
+    if [[ -f "$selection_sh" ]]; then
+      # shellcheck disable=SC1090,SC1091
+      source "$selection_sh"
     fi
-    local WALTER_MODEL_ROUTER_SH="${WALTER_MODEL_ROUTER_SH:-$router_sh}"
-    if declare -F walter_agent_select_model >/dev/null &&
-      walter_agent_select_model backend_review selected_model haiku; then
+  fi
+
+  if declare -F walter_agent_select_model >/dev/null; then
+    if [[ -z "${WALTER_MODEL_ROUTER_SH:-}" && -f "$router_sh" ]]; then
+      local WALTER_MODEL_ROUTER_SH="$router_sh"
+    fi
+
+    if walter_agent_select_model backend_review selected_model haiku; then
       model="$selected_model"
     fi
   fi

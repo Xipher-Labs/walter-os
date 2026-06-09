@@ -214,6 +214,9 @@ MOCK_LLM
     export LLM_SH="$MOCK_LIB_DIR/llm.sh"
     export WALTER_CONSENSUS_VOTES_LOG="/dev/null"
     source "$LIB"
+    _vote_model_router_sh() {
+      printf "%s\n" "/definitely/missing/walter-model-router.sh"
+    }
     walter_agent_select_model() {
       printf -v "$2" "sonnet"
     }
