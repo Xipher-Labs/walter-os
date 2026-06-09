@@ -195,20 +195,30 @@ The `verification-before-completion` workflow enforces this list.
    commit message, `Refs: copilot-review-round-1` in the footer.
 4. Claude re-requests Copilot review.
 
-**Round 2 — Codex cross-review (standard, NOT a fallback)**
-5. Once Copilot Round 1 fixes are pushed, Claude invokes Codex CLI:
+**Round 2 — configured cross-review (standard, NOT a fallback)**
+5. Once Copilot Round 1 fixes are pushed, check declared AI availability
+   before invoking a second reviewer:
+   ```bash
+   walter ai status
+   ```
+   If `provider_codex` is enabled/detected and Codex auth is available, invoke
+   Codex CLI:
    ```bash
    CODEX_HOME=/tmp/codex-minimal codex review --base <target-branch> \
      > /tmp/codex-review.txt 2>&1
    ```
    (See Codex bypass pattern below if `~/.codex/config.toml` has parse
    errors.)
-6. Codex independently audits the PR — it catches what Copilot misses:
+   Codex unavailable: use the operator's declared `backend_review` route when it
+   maps to another available reviewer, or escalate instead of pretending Round 2
+   ran. Do not require Codex on machines configured as `claude-only`,
+   `gemini-only`, or `local-only`.
+6. The second reviewer independently audits the PR — it catches what Copilot misses:
    cross-file deployment-flow issues, compose/env-template drift, supply-
    chain gaps, hidden security regressions.
-7. Claude addresses each Codex finding: one commit per finding,
+7. Claude addresses each second-review finding: one commit per finding,
    `Refs: codex-review-round-2` in the footer.
-8. Claude re-requests Copilot review (so Copilot sees the Codex-driven
+8. Claude re-requests Copilot review (so Copilot sees the second-review
    fixes too).
 
 **Round 3 — Collaborative (only if findings remain after Round 2)**
@@ -226,8 +236,10 @@ The `verification-before-completion` workflow enforces this list.
   post-merge cleanup PR
 
 **When Copilot is unavailable** (PR > 20k LOC cap, or repeated capacity
-refusals): skip Copilot, run Codex twice (as Round 1 and Round 2). Or
-split the PR.
+refusals): skip Copilot and run two independent configured reviewer passes when
+available. If the operator only has one review-capable runtime, run that once
+and escalate the missing second pass instead of inventing coverage. Or split
+the PR.
 
 **How to auto-request Copilot review** (mandatory after every `gh pr create`):
 
@@ -246,7 +258,8 @@ gh api -X POST \
   without it. If you skip the call you've half-finished Round 1 and Copilot
   won't post a review at all.
 
-**How to invoke Codex review** (mandatory in every substantive PR):
+**How to invoke Codex review** (mandatory in every substantive PR only when
+`walter ai status` shows Codex is available):
 
 ```bash
 # If ~/.codex/config.toml has parse errors, use the minimal bypass that
