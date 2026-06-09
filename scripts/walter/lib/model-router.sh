@@ -12,25 +12,15 @@
 # shellcheck disable=SC2034 # used by sourced callers
 WALTER_MODEL_ROUTER_VERSION=1
 
-_walter_model_ensure_warn_dir() {
-  [[ -n "${__WALTER_MODEL_WARN_DIR:-}" ]] && return 0
-  __WALTER_MODEL_WARN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/walter-model-router-warnings.XXXXXX" 2>/dev/null || true)"
-}
-
 _walter_model_warn_once() {
-  local key="${1:-}" message="${2:-}" warn_file
+  local key="${1:-}" message="${2:-}"
   [[ -n "$key" && -n "$message" ]] || return 0
 
-  _walter_model_ensure_warn_dir
-  if [[ -n "${__WALTER_MODEL_WARN_DIR:-}" ]]; then
-    warn_file="$__WALTER_MODEL_WARN_DIR/$key"
-    if [[ ! -e "$warn_file" ]]; then
-      printf '%s\n' "$message" >&2
-      : > "$warn_file" 2>/dev/null || true
-    fi
+  if [[ $'\n'"${__WALTER_MODEL_WARNED_KEYS:-}"$'\n' == *$'\n'"$key"$'\n'* ]]; then
     return 0
   fi
 
+  __WALTER_MODEL_WARNED_KEYS="${__WALTER_MODEL_WARNED_KEYS:-}"$'\n'"$key"
   printf '%s\n' "$message" >&2
 }
 
@@ -44,9 +34,17 @@ _walter_model_domains_file() {
   printf '%s\n' "$script_dir/model-domains.tsv"
 }
 
-_walter_model_domain_rows() {
+_walter_model_load_domain_rows() {
   local file line domain env default description valid_count=0
   file="$(_walter_model_domains_file)"
+  if [[ "${__WALTER_MODEL_DOMAIN_ROWS_FILE:-}" == "$file" ]]; then
+    return "${__WALTER_MODEL_DOMAIN_ROWS_STATUS:-1}"
+  fi
+
+  __WALTER_MODEL_DOMAIN_ROWS_FILE="$file"
+  __WALTER_MODEL_DOMAIN_ROWS=""
+  __WALTER_MODEL_DOMAIN_ROWS_STATUS=1
+
   if [[ ! -r "$file" ]]; then
     _walter_model_warn_once "domains-unreadable" \
       "walter-model-router: WARN model domain table is missing or unreadable: $file"
@@ -66,7 +64,7 @@ _walter_model_domain_rows() {
       continue
     fi
     valid_count=$((valid_count + 1))
-    printf '%s\n' "$line"
+    __WALTER_MODEL_DOMAIN_ROWS="${__WALTER_MODEL_DOMAIN_ROWS}${line}"$'\n'
   done < "$file"
 
   if (( valid_count == 0 )); then
@@ -74,13 +72,19 @@ _walter_model_domain_rows() {
       "walter-model-router: WARN model domain table has no valid rows: $file"
     return 1
   fi
+
+  __WALTER_MODEL_DOMAIN_ROWS="${__WALTER_MODEL_DOMAIN_ROWS%$'\n'}"
+  __WALTER_MODEL_DOMAIN_ROWS_STATUS=0
+}
+
+_walter_model_domain_rows() {
+  _walter_model_load_domain_rows || return 1
+  printf '%s\n' "$__WALTER_MODEL_DOMAIN_ROWS"
 }
 
 walter_model_domains() {
-  local rows
-  _walter_model_ensure_warn_dir
-  rows="$(_walter_model_domain_rows)" || return 1
-  printf '%s\n' "$rows" | cut -f1
+  _walter_model_load_domain_rows || return 1
+  printf '%s\n' "$__WALTER_MODEL_DOMAIN_ROWS" | cut -f1
 }
 
 _walter_model_domain_exists() {
@@ -150,7 +154,7 @@ _walter_model_domain_slug() {
 
 walter_model_default_for() {
   local slug
-  _walter_model_ensure_warn_dir
+  _walter_model_load_domain_rows || true
   slug="$(_walter_model_domain_slug "${1:-default}")"
   _walter_model_domain_field "$slug" default \
     || { [[ "$slug" == "phi" ]] && printf '%s\n' "local-ollama"; } \
@@ -160,7 +164,7 @@ walter_model_default_for() {
 
 walter_model_env_for() {
   local slug
-  _walter_model_ensure_warn_dir
+  _walter_model_load_domain_rows || true
   slug="$(_walter_model_domain_slug "${1:-default}")"
   _walter_model_domain_field "$slug" env \
     || { [[ "$slug" == "phi" ]] && printf '%s\n' "WALTER_MODEL_PHI"; } \
@@ -326,7 +330,7 @@ walter_model_for() {
   local requested="${1:-default}"
   local key slug env_key configured fallback
 
-  _walter_model_ensure_warn_dir
+  _walter_model_load_domain_rows || true
   key="$(_walter_model_domain_key "$requested")"
   slug="$(tr '[:upper:]' '[:lower:]' <<<"$key")"
 
@@ -389,7 +393,6 @@ walter_model_resolve() {
 
 walter_models_print_effective() {
   local domain domains
-  _walter_model_ensure_warn_dir
   domains="$(walter_model_domains)" || return 1
   while IFS= read -r domain; do
     [[ -n "$domain" ]] || continue
