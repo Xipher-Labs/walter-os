@@ -32,10 +32,10 @@ teardown() {
 @test "model-router: domains come from canonical table" {
   local expected
   [[ -f "$DOMAINS" ]]
-  expected="$(awk -F '\t' '$0 !~ /^#/ && NF >= 3 { print $1 }' "$DOMAINS" | paste -sd, -)"
+  expected="$(awk -F '\t' '$0 !~ /^#/ && NF >= 3 { print $1 }' "$DOMAINS")"
   [[ -n "$expected" ]]
 
-  run bash -c "source '$ROUTER'; walter_model_domains | paste -sd, -"
+  run bash -c "source '$ROUTER'; walter_model_domains"
 
   [ "$status" -eq 0 ]
   [ "$output" = "$expected" ]
