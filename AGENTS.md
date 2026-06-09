@@ -209,15 +209,20 @@ The `verification-before-completion` workflow enforces this list.
    ```
    (See Codex bypass pattern below if `~/.codex/config.toml` has parse
    errors.)
-   Codex unavailable: use the operator's declared `backend_review` route when it
-   maps to another available reviewer, or escalate instead of pretending Round 2
-   ran. Do not require Codex on machines configured as `claude-only`,
-   `gemini-only`, or `local-only`.
+   Codex unavailable: inspect `walter ai status` for the visible
+   `code_review` / `infra_security_backend` capability routes, then inspect
+   `walter-os status --models` or the overlay `personal.env` for the derived
+   `WALTER_MODEL_BACKEND_REVIEW` model-router preference. Use the first
+   declared, available reviewer from those routes, or escalate instead of
+   pretending Round 2 ran. Do not require Codex on machines configured as
+   `claude-only`, `gemini-only`, or `local-only`.
 6. The second reviewer independently audits the PR — it catches what Copilot misses:
    cross-file deployment-flow issues, compose/env-template drift, supply-
    chain gaps, hidden security regressions.
 7. Claude addresses each second-review finding: one commit per finding,
-   `Refs: codex-review-round-2` in the footer.
+   `Refs: cross-review-round-2` in the footer. Keep Codex-specific footers only
+   for Codex-only follow-up commits that are not part of the general Round 2
+   process.
 8. Claude re-requests Copilot review (so Copilot sees the second-review
    fixes too).
 
