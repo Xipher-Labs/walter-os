@@ -1,8 +1,8 @@
 # Cloudflare Tunnel + Access setup for Walter-VM
 
-Replaces Tailscale for VM connectivity. Uses Cloudflare's edge to terminate
-TLS + auth, with `cloudflared` running on the VM as the only outbound
-connection (no inbound ports needed).
+Uses Cloudflare's edge to terminate TLS + auth for Walter-VM web services,
+with `cloudflared` running on the VM as the outbound tunnel connector. Services
+listed in `02-create-tunnel.sh` use this path.
 
 ## Architecture
 
@@ -20,8 +20,11 @@ connection (no inbound ports needed).
 [docker-compose service ports on 127.0.0.1]
 ```
 
-**Public ports on Hetzner**: only `22/tcp` (SSH) until you lock that down too.
-Nothing else. Even `80`/`443` can be closed in UFW after Tunnel is verified.
+**Public ports on Hetzner**: for tunnel-only services, only `22/tcp` (SSH)
+until you lock that down too. If you enable the Headscale client control plane,
+`headscale.${WALTER_DOMAIN}` must use a DNS-only direct origin route instead
+of Cloudflare Tunnel, so keep the required HTTPS origin path open for that
+hostname.
 
 ## Domain layout
 
@@ -40,6 +43,16 @@ Nothing else. Even `80`/`443` can be closed in UFW after Tunnel is verified.
 
 Auth: Cloudflare Access policy = "email domain ends in `${WALTER_DOMAIN}`".
 Login methods: Google (via Workspace) OR One-Time PIN to email.
+
+### Direct-route services
+
+`headscale.${WALTER_DOMAIN}` is intentionally excluded from
+`02-create-tunnel.sh`. Cloudflare does not support the WebSocket POSTs required
+by Headscale/Tailscale TS2021 registration traffic, so routing clients through
+Cloudflare Tunnel can produce `No Upgrade header in TS2021 request` and failed
+device registration. Publish the Headscale client hostname with a DNS-only
+direct origin route. Keep `headscale-admin.${WALTER_DOMAIN}` behind
+Cloudflare Access.
 
 ## Path-scoped bypasses
 
@@ -106,7 +119,7 @@ export TUNNEL_ID="..."            # filled by 02-create-tunnel.sh
 
 - ✅ No client install on Mac (browser-only access)
 - ✅ Works from any device, anywhere
-- ✅ No inbound ports on Hetzner
+- ✅ No inbound ports on Hetzner for tunnel-only web services
 - ✅ Browser-based auth (no auth-key juggling)
 - ✅ Granular per-hostname policies if needed later
 - ✅ Free for personal use
@@ -115,5 +128,7 @@ export TUNNEL_ID="..."            # filled by 02-create-tunnel.sh
 
 - SSH to the VM (separate; goes via Hetzner public IP + key auth, OR can be
   added via `cloudflared access ssh` for a SSH-over-Cloudflare flow).
+- Headscale client registration traffic, which must use the DNS-only direct
+  origin path described above.
 - Inter-service communication (services talk to each other on the docker
   network internally, not via Cloudflare).

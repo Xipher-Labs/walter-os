@@ -44,8 +44,9 @@ if [[ ! -r "$PORT_MAP_FILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Canonical subdomain list — single source of truth for what is publicly
-# reachable. Must match site blocks in setup/caddy/Caddyfile.template
+# Canonical tunnel subdomain list — single source of truth for what is
+# reachable through Cloudflare Tunnel. Must match compatible site blocks in
+# setup/caddy/Caddyfile.template
 # (Caddy is the one that actually dispatches to the right container, so
 # adding a subdomain here without a matching Caddy block makes Caddy
 # return its default 404 — "no matching site" — for that hostname; a
@@ -56,6 +57,13 @@ fi
 #   1. Add a site block in setup/caddy/Caddyfile.template
 #   2. Add the subdomain to this list
 #   3. tests/cloudflare/tunnel-ingress-caddy-routing.bats asserts parity
+#
+# Direct-routed services:
+#   Headscale is served by Caddy but intentionally kept out of Cloudflare
+#   Tunnel. Cloudflare does not support the WebSocket POSTs required by Headscale.
+#   Tailscale TS2021 registration traffic through the tunnel shows up in
+#   Headscale logs as "No Upgrade header in TS2021 request". Publish
+#   headscale.$DOMAIN through a DNS-only direct origin path instead.
 # ---------------------------------------------------------------------------
 SUBDOMAINS=(
   chat
@@ -64,7 +72,6 @@ SUBDOMAINS=(
   draw
   git
   grafana
-  headscale
   headscale-admin
   home
   llm
@@ -80,6 +87,10 @@ SUBDOMAINS=(
   sync
   tower
   vpn
+)
+
+DIRECT_ROUTE_SUBDOMAINS=(
+  headscale
 )
 
 cf() {
@@ -175,6 +186,12 @@ add_cname() {
 # ingress can never silently drift. Tracking: issue #174 (Copilot R1).
 for sub in "${SUBDOMAINS[@]}"; do
   add_cname "${sub}.${DOMAIN}"
+done
+
+echo
+echo "Direct-route services not added to the Cloudflare Tunnel:"
+for sub in "${DIRECT_ROUTE_SUBDOMAINS[@]}"; do
+  echo "  - ${sub}.${DOMAIN} (create DNS-only direct origin record; do not proxy through Cloudflare Tunnel)"
 done
 
 echo

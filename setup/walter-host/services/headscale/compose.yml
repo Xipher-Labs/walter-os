@@ -9,12 +9,13 @@
 #   4. All P2P, encrypted, controlled by YOU
 #
 # URL admin: headscale-admin.${WALTER_DOMAIN} (CF Access)
-# URL clients: headscale.${WALTER_DOMAIN}/derp + /key (CF Tunnel, no Access — clients use API key)
+# URL clients: headscale.${WALTER_DOMAIN} (DNS-only direct route, no Cloudflare Tunnel or Access)
 #
-# Note: clients need to reach the server WITHOUT CF Access auth (machines can't
-# do interactive Google login). Workaround: bypass CF Access for /derp and
-# specific Tailscale paths, OR use Headscale's built-in token auth + expose
-# raw via separate subdomain.
+# Note: clients need to reach the server without CF Access auth because
+# machines cannot do interactive Google login. They also must not register
+# through Cloudflare Tunnel: Cloudflare does not support the WebSocket POSTs
+# required by Headscale/Tailscale TS2021 registration traffic. Publish
+# headscale.${WALTER_DOMAIN} through DNS-only direct origin routing instead.
 #
 # Compatibility note: Headscale can lag newer Tailscale client capability
 # versions. If registration fails with capability-version drift, see RUNBOOK.md
