@@ -20,7 +20,8 @@ REQUIRED_FIELDS = {
 }.freeze
 
 def load_model_domains
-  path = ENV.fetch("WALTER_MODEL_DOMAINS_FILE", File.join(REPO_ROOT, "scripts/walter/lib/model-domains.tsv"))
+  path = ENV["WALTER_MODEL_DOMAINS_FILE"]
+  path = File.join(REPO_ROOT, "scripts/walter/lib/model-domains.tsv") if path.nil? || path.empty?
   domains = File.readlines(path, chomp: true).each_with_object([]) do |raw_line, rows|
     line = raw_line.delete_suffix("\r")
     next if line.start_with?("#") || line.strip.empty?

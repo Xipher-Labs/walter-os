@@ -217,6 +217,12 @@ AGENT
   [[ "$output" == *"model domain table has no valid rows"* ]]
 }
 
+@test "frontmatter lint treats empty model domain env as default path" {
+  run env WALTER_MODEL_DOMAINS_FILE= ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+
+  [[ "$status" -eq 0 ]]
+}
+
 @test "run.sh reports unreadable model domain table distinctly" {
   grep -q "model domain table is missing or unreadable" "$RUN_SH"
 }

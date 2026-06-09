@@ -22,6 +22,7 @@ setup() {
   unset WALTER_MODEL_PHI
   unset WALTER_MODEL_BRAINSTORM
   unset WALTER_MODEL_DEFAULT
+  unset WALTER_PHI_MODE
 }
 
 teardown() {
