@@ -119,14 +119,12 @@ _walter_model_domain_field() {
   return 1
 }
 
-_walter_model_domain_key() {
+_walter_model_normalize_domain() {
   local requested normalized
   requested="${1:-default}"
   case "$requested" in
     phi|medical|health|local)
-      echo "PHI"
-      return 0
-      ;;
+      normalized="phi" ;;
     backend|backend-review|security|review)
       normalized="backend_review" ;;
     frontend|front-end|ui|ux|design)
@@ -143,7 +141,55 @@ _walter_model_domain_key() {
       normalized="$(tr '[:upper:]-' '[:lower:]_' <<<"$requested")" ;;
   esac
 
-  if _walter_model_domain_exists "$normalized"; then
+  printf '%s\n' "$normalized"
+}
+
+_walter_model_legacy_domain_exists() {
+  case "${1:-}" in
+    backend_review|frontend|longform|quick_refactor|phi|brainstorm|default)
+      return 0 ;;
+    *)
+      return 1 ;;
+  esac
+}
+
+_walter_model_legacy_default_for() {
+  case "${1:-default}" in
+    backend_review|quick_refactor)
+      printf '%s\n' "codex" ;;
+    phi)
+      printf '%s\n' "local-ollama" ;;
+    brainstorm)
+      printf '%s\n' "claude,codex" ;;
+    frontend|longform|default|*)
+      printf '%s\n' "claude" ;;
+  esac
+}
+
+_walter_model_legacy_env_for() {
+  case "${1:-default}" in
+    backend_review)
+      printf '%s\n' "WALTER_MODEL_BACKEND_REVIEW" ;;
+    frontend)
+      printf '%s\n' "WALTER_MODEL_FRONTEND" ;;
+    longform)
+      printf '%s\n' "WALTER_MODEL_LONGFORM" ;;
+    quick_refactor)
+      printf '%s\n' "WALTER_MODEL_QUICK_REFACTOR" ;;
+    phi)
+      printf '%s\n' "WALTER_MODEL_PHI" ;;
+    brainstorm)
+      printf '%s\n' "WALTER_MODEL_BRAINSTORM" ;;
+    default|*)
+      printf '%s\n' "WALTER_MODEL_DEFAULT" ;;
+  esac
+}
+
+_walter_model_domain_key() {
+  local normalized
+  normalized="$(_walter_model_normalize_domain "${1:-default}")"
+
+  if _walter_model_domain_exists "$normalized" || _walter_model_legacy_domain_exists "$normalized"; then
     tr '[:lower:]' '[:upper:]' <<<"$normalized"
   else
     echo "DEFAULT"
@@ -159,9 +205,7 @@ walter_model_default_for() {
   _walter_model_load_domain_rows || true
   slug="$(_walter_model_domain_slug "${1:-default}")"
   _walter_model_domain_field "$slug" default \
-    || { [[ "$slug" == "phi" ]] && printf '%s\n' "local-ollama"; } \
-    || _walter_model_domain_field default default \
-    || printf '%s\n' "claude"
+    || _walter_model_legacy_default_for "$slug"
 }
 
 walter_model_env_for() {
@@ -169,9 +213,7 @@ walter_model_env_for() {
   _walter_model_load_domain_rows || true
   slug="$(_walter_model_domain_slug "${1:-default}")"
   _walter_model_domain_field "$slug" env \
-    || { [[ "$slug" == "phi" ]] && printf '%s\n' "WALTER_MODEL_PHI"; } \
-    || _walter_model_domain_field default env \
-    || printf '%s\n' "WALTER_MODEL_DEFAULT"
+    || _walter_model_legacy_env_for "$slug"
 }
 
 walter_model_value_valid() {
@@ -353,7 +395,7 @@ walter_model_for() {
     echo "walter-model-router: WARN invalid WALTER_MODEL_OVERRIDE ignored" >&2
   fi
 
-  env_key="$(walter_model_env_for "$slug")"
+  env_key="$(walter_model_env_for "$requested")"
   configured="${!env_key:-}"
   fallback="$(walter_model_default_for "$requested")"
 

@@ -139,6 +139,20 @@ output_without_router_warnings() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: missing domain table preserves legacy domain default" {
+  run run_router WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  [ "$status" -eq 0 ]
+  output_is_exactly "codex"
+}
+
+@test "model-router: missing domain table preserves domain env override" {
+  run run_router WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" WALTER_MODEL_BACKEND_REVIEW=claude-opus bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  [ "$status" -eq 0 ]
+  output_is_exactly "claude-opus"
+}
+
 @test "model-router: sourcing does not create warning temp dirs" {
   local warn_tmp
   warn_tmp="$TMP_CONFIG/router-warnings"
@@ -195,7 +209,7 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"claude"* ]]
+  output_is_exactly "codex"
   [[ "$output" == *"WARN"* ]]
 }
 
@@ -216,7 +230,7 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"claude"* ]]
+  output_is_exactly "codex"
   [[ "$output" == *"WARN"* ]]
 }
 
@@ -227,7 +241,7 @@ output_without_router_warnings() {
   run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"claude"* ]]
+  output_is_exactly "codex"
   [[ "$output" == *"WARN"* ]]
 }
 
