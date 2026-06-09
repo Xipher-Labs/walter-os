@@ -12,25 +12,188 @@
 # shellcheck disable=SC2034 # used by sourced callers
 WALTER_MODEL_ROUTER_VERSION=1
 
-_walter_model_domain_key() {
-  case "${1:-default}" in
-    backend|backend-review|backend_review|security|review)
-      echo "BACKEND_REVIEW" ;;
-    frontend|front-end|ui|ux|design)
-      echo "FRONTEND" ;;
-    longform|long-form|writing|content)
-      echo "LONGFORM" ;;
-    quick|quick-refactor|quick_refactor|refactor)
-      echo "QUICK_REFACTOR" ;;
+_walter_model_warn_once() {
+  local key="${1:-}" message="${2:-}"
+  [[ -n "$key" && -n "$message" ]] || return 0
+
+  if [[ $'\n'"${__WALTER_MODEL_WARNED_KEYS:-}"$'\n' == *$'\n'"$key"$'\n'* ]]; then
+    return 0
+  fi
+
+  __WALTER_MODEL_WARNED_KEYS="${__WALTER_MODEL_WARNED_KEYS:-}"$'\n'"$key"
+  printf '%s\n' "$message" >&2
+}
+
+_walter_model_domains_file() {
+  local script_dir
+  if [[ -n "${WALTER_MODEL_DOMAINS_FILE:-}" ]]; then
+    printf '%s\n' "$WALTER_MODEL_DOMAINS_FILE"
+    return 0
+  fi
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  printf '%s\n' "$script_dir/model-domains.tsv"
+}
+
+_walter_model_load_domain_rows() {
+  local file line domain env default description valid_count=0
+  file="$(_walter_model_domains_file)"
+  if [[ "${__WALTER_MODEL_DOMAIN_ROWS_FILE:-}" == "$file" ]]; then
+    return "${__WALTER_MODEL_DOMAIN_ROWS_STATUS:-1}"
+  fi
+
+  __WALTER_MODEL_DOMAIN_ROWS_FILE="$file"
+  __WALTER_MODEL_DOMAIN_ROWS=""
+  __WALTER_MODEL_DOMAIN_ROWS_STATUS=1
+
+  if [[ ! -r "$file" ]]; then
+    _walter_model_warn_once "domains-unreadable" \
+      "walter-model-router: WARN model domain table is missing or unreadable: $file"
+    __WALTER_MODEL_DOMAIN_ROWS_FILE=""
+    return 1
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -n "${line//[[:space:]]/}" && "${line#\#}" == "$line" ]] || continue
+    IFS=$'\t' read -r domain env default description <<<"$line"
+    if [[ -z "$domain" || -z "$env" || -z "$default" ||
+      ! "$domain" =~ ^[a-z][a-z0-9_]*$ ||
+      ! "$env" =~ ^WALTER_MODEL_[A-Z0-9_]+$ ]] ||
+      ! walter_model_value_valid "$default"; then
+      _walter_model_warn_once "domains-malformed" \
+        "walter-model-router: WARN ignoring malformed model domain row in $file"
+      continue
+    fi
+    valid_count=$((valid_count + 1))
+    __WALTER_MODEL_DOMAIN_ROWS="${__WALTER_MODEL_DOMAIN_ROWS}${line}"$'\n'
+  done < "$file"
+
+  if (( valid_count == 0 )); then
+    _walter_model_warn_once "domains-empty" \
+      "walter-model-router: WARN model domain table has no valid rows: $file"
+    __WALTER_MODEL_DOMAIN_ROWS_FILE=""
+    return 1
+  fi
+
+  __WALTER_MODEL_DOMAIN_ROWS="${__WALTER_MODEL_DOMAIN_ROWS%$'\n'}"
+  __WALTER_MODEL_DOMAIN_ROWS_STATUS=0
+}
+
+_walter_model_domain_rows() {
+  _walter_model_load_domain_rows || return 1
+  printf '%s\n' "$__WALTER_MODEL_DOMAIN_ROWS"
+}
+
+walter_model_domains() {
+  _walter_model_load_domain_rows || return 1
+  printf '%s\n' "$__WALTER_MODEL_DOMAIN_ROWS" | cut -f1
+}
+
+_walter_model_domain_exists() {
+  local requested="${1:-}" domain _env _default _description
+  [[ -n "$requested" ]] || return 1
+
+  while IFS=$'\t' read -r domain _env _default _description; do
+    [[ "$domain" == "$requested" ]] && return 0
+  done < <(_walter_model_domain_rows)
+
+  return 1
+}
+
+_walter_model_domain_field() {
+  local requested="${1:-}" field="${2:-}" domain env default description
+  [[ -n "$requested" && -n "$field" ]] || return 1
+
+  while IFS=$'\t' read -r domain env default description; do
+    if [[ "$domain" == "$requested" ]]; then
+      case "$field" in
+        env) printf '%s\n' "$env" ;;
+        default) printf '%s\n' "$default" ;;
+        description) printf '%s\n' "$description" ;;
+        *) return 1 ;;
+      esac
+      return 0
+    fi
+  done < <(_walter_model_domain_rows)
+
+  return 1
+}
+
+_walter_model_normalize_domain() {
+  local requested normalized
+  requested="${1:-default}"
+  case "$requested" in
     phi|medical|health|local)
-      echo "PHI" ;;
+      normalized="phi" ;;
+    backend|backend-review|security|review)
+      normalized="backend_review" ;;
+    frontend|front-end|ui|ux|design)
+      normalized="frontend" ;;
+    longform|long-form|writing|content)
+      normalized="longform" ;;
+    quick|quick-refactor|refactor)
+      normalized="quick_refactor" ;;
     brainstorm|brainstorming|plan|planning|research)
-      echo "BRAINSTORM" ;;
+      normalized="brainstorm" ;;
     default|"")
-      echo "DEFAULT" ;;
+      normalized="default" ;;
     *)
-      echo "DEFAULT" ;;
+      normalized="$(tr '[:upper:]-' '[:lower:]_' <<<"$requested")" ;;
   esac
+
+  printf '%s\n' "$normalized"
+}
+
+_walter_model_legacy_domain_exists() {
+  case "${1:-}" in
+    backend_review|frontend|longform|quick_refactor|phi|brainstorm|default)
+      return 0 ;;
+    *)
+      return 1 ;;
+  esac
+}
+
+_walter_model_legacy_default_for() {
+  case "${1:-default}" in
+    backend_review|quick_refactor)
+      printf '%s\n' "codex" ;;
+    phi)
+      printf '%s\n' "local-ollama" ;;
+    brainstorm)
+      printf '%s\n' "claude,codex" ;;
+    frontend|longform|default|*)
+      printf '%s\n' "claude" ;;
+  esac
+}
+
+_walter_model_legacy_env_for() {
+  case "${1:-default}" in
+    backend_review)
+      printf '%s\n' "WALTER_MODEL_BACKEND_REVIEW" ;;
+    frontend)
+      printf '%s\n' "WALTER_MODEL_FRONTEND" ;;
+    longform)
+      printf '%s\n' "WALTER_MODEL_LONGFORM" ;;
+    quick_refactor)
+      printf '%s\n' "WALTER_MODEL_QUICK_REFACTOR" ;;
+    phi)
+      printf '%s\n' "WALTER_MODEL_PHI" ;;
+    brainstorm)
+      printf '%s\n' "WALTER_MODEL_BRAINSTORM" ;;
+    default|*)
+      printf '%s\n' "WALTER_MODEL_DEFAULT" ;;
+  esac
+}
+
+_walter_model_domain_key() {
+  local normalized
+  normalized="$(_walter_model_normalize_domain "${1:-default}")"
+
+  if _walter_model_domain_exists "$normalized" || _walter_model_legacy_domain_exists "$normalized"; then
+    tr '[:lower:]' '[:upper:]' <<<"$normalized"
+  else
+    echo "DEFAULT"
+  fi
 }
 
 _walter_model_domain_slug() {
@@ -38,15 +201,19 @@ _walter_model_domain_slug() {
 }
 
 walter_model_default_for() {
-  case "$(_walter_model_domain_key "${1:-default}")" in
-    BACKEND_REVIEW)  echo "codex" ;;
-    FRONTEND)        echo "claude" ;;
-    LONGFORM)        echo "claude" ;;
-    QUICK_REFACTOR)  echo "codex" ;;
-    PHI)             echo "local-ollama" ;;
-    BRAINSTORM)      echo "claude,codex" ;;
-    DEFAULT|*)       echo "claude" ;;
-  esac
+  local slug
+  _walter_model_load_domain_rows || true
+  slug="$(_walter_model_domain_slug "${1:-default}")"
+  _walter_model_domain_field "$slug" default \
+    || _walter_model_legacy_default_for "$slug"
+}
+
+walter_model_env_for() {
+  local slug
+  _walter_model_load_domain_rows || true
+  slug="$(_walter_model_domain_slug "${1:-default}")"
+  _walter_model_domain_field "$slug" env \
+    || _walter_model_legacy_env_for "$slug"
 }
 
 walter_model_value_valid() {
@@ -60,6 +227,7 @@ walter_model_value_valid() {
   # character we do not want in a model alias or endpoint-like value.
   stripped="${value//[A-Za-z0-9._\/@:+,\[\]-]/}"
   [[ -z "$stripped" ]] || return 1
+  [[ "$value" != *, && "$value" != ,* && "$value" != *,,* ]] || return 1
 
   IFS=',' read -ra routes <<<"$value"
   for route in "${routes[@]}"; do
@@ -206,8 +374,9 @@ walter_model_for() {
   local requested="${1:-default}"
   local key slug env_key configured fallback
 
+  _walter_model_load_domain_rows || true
   key="$(_walter_model_domain_key "$requested")"
-  slug="$(_walter_model_domain_slug "$requested")"
+  slug="$(tr '[:upper:]' '[:lower:]' <<<"$key")"
 
   if [[ "$key" == "PHI" || "${WALTER_PHI_MODE:-0}" == "1" ]]; then
     export WALTER_MODEL_DOMAIN="phi"
@@ -226,7 +395,7 @@ walter_model_for() {
     echo "walter-model-router: WARN invalid WALTER_MODEL_OVERRIDE ignored" >&2
   fi
 
-  env_key="WALTER_MODEL_${key}"
+  env_key="$(walter_model_env_for "$requested")"
   configured="${!env_key:-}"
   fallback="$(walter_model_default_for "$requested")"
 
@@ -267,8 +436,10 @@ walter_model_resolve() {
 }
 
 walter_models_print_effective() {
-  local domain
-  for domain in backend_review frontend longform quick_refactor phi brainstorm default; do
+  local domain domains
+  domains="$(walter_model_domains)" || return 1
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] || continue
     printf '  %s: %s\n' "$domain" "$(walter_model_for "$domain")"
-  done
+  done <<<"$domains"
 }

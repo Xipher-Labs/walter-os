@@ -9,6 +9,8 @@ setup() {
   TMP_HOME="$(mktemp -d)"
   export HOME="$TMP_HOME"
   export WALTER_CONFIG="$TMP_HOME/.config/walter-os"
+  export WALTER_PHI_MODE=0
+  unset WALTER_MODEL_DOMAIN WALTER_MODEL_PHI
   mkdir -p "$WALTER_CONFIG" "$TMP_HOME/.config/walter-os/overlay"
   cat > "$TMP_HOME/.config/walter-os/overlay/personal.env" <<ENV
 WALTER_OS_HOME=${REPO_ROOT}

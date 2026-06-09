@@ -18,6 +18,8 @@ setup() {
   export WALTER_OS_HOME="$BATS_TEST_DIRNAME/../.."
   export WALTER_CONFIG="$(mktemp -d -t walter-config-XXXXXX)"
   unset WALTER_MODEL_OVERRIDE WALTER_MODEL_BACKEND_REVIEW WALTER_MODEL_DEFAULT
+  unset WALTER_MODEL_DOMAIN WALTER_MODEL_PHI
+  export WALTER_PHI_MODE=0
 }
 
 teardown() {
@@ -74,6 +76,7 @@ teardown() {
 
 @test "run.sh validates and normalizes frontmatter model_domain before routing" {
   grep -q "_agent_model_domain_canonical" "$RUN_SH"
+  grep -q "model-domains.tsv" "$RUN_SH"
   grep -q "invalid model_domain" "$RUN_SH"
   grep -q "_agent_legacy_model_domain" "$RUN_SH"
   grep -Fq "tr '[:upper:]-' '[:lower:]_'" "$RUN_SH"
@@ -110,6 +113,39 @@ PERSONA
   [[ "$output" == *"duplicate model_domain"* ]]
 }
 
+@test "run.sh fails closed on unknown explicit model_domain" {
+  local helper persona
+  helper="$(mktemp -t walter-run-helper-XXXXXX)"
+  persona="$(mktemp -t walter-agent-persona-XXXXXX)"
+  awk '
+    /^_agent_frontmatter_scalar\(\)/ { emit = 1 }
+    emit { print }
+    /^_agent_model_domain\(\)/ { in_target = 1 }
+    emit && in_target && /^}/ { exit }
+  ' "$RUN_SH" > "$helper"
+  cat > "$persona" <<'PERSONA'
+---
+name: invalid-domain
+description: Agent fixture with unsupported routing metadata.
+tools: Read
+model: router
+model_domain: typo_domain
+---
+Body
+PERSONA
+
+  run bash -c '
+    source "$1"
+    AGENT_PERSONA="$2"
+    _agent_model_domain reviewer
+  ' bash "$helper" "$persona"
+  rm -f "$helper" "$persona"
+
+  [[ "$status" -eq 3 ]]
+  [[ "$output" == *"invalid model_domain 'typo_domain'"* ]]
+  [[ "$output" == *"refusing to run"* ]]
+}
+
 @test "run.sh keeps legacy Council agent domain fallback mapping" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
@@ -121,9 +157,30 @@ PERSONA
 }
 
 @test "agent frontmatter declares Walter model routing domains" {
-  ruby -ryaml -rdate -e '
-    allowed = %w[backend_review frontend longform quick_refactor phi brainstorm default]
-    Dir["agents/*.md"].each do |path|
+  REPO_ROOT="$BATS_TEST_DIRNAME/../.." ruby -ryaml -rdate -e '
+    repo = File.expand_path(ENV.fetch("REPO_ROOT"))
+    domains_file = File.join(repo, "scripts/walter/lib/model-domains.tsv")
+    valid_model_route = lambda do |value|
+      !value.nil? &&
+        !value.empty? &&
+        value.match?(/\A[A-Za-z0-9._\/@:+,\[\]-]+\z/) &&
+        value.split(",", -1).all? { |route| !route.empty? }
+    end
+    allowed = File.readlines(domains_file, chomp: true)
+      .map { |line| line.delete_suffix("\r") }
+      .reject { |line| line.start_with?("#") || line.strip.empty? }
+      .map do |line|
+        columns = line.split("\t", 4)
+        abort("invalid model domain row: #{line}") if columns.length < 3
+        domain, env_key, default_model = columns
+        abort("invalid model domain name: #{domain}") unless domain.match?(/\A[a-z][a-z0-9_]*\z/)
+        abort("invalid model domain env key: #{env_key}") unless env_key.match?(/\AWALTER_MODEL_[A-Z0-9_]+\z/)
+        abort("invalid model domain default: #{default_model.inspect}") if default_model.nil? || default_model.empty?
+        abort("invalid model domain default: #{default_model.inspect}") unless valid_model_route.call(default_model)
+        domain
+      end
+    domain_pattern = Regexp.union(allowed).source
+    Dir[File.join(repo, "agents/*.md")].each do |path|
       text = File.read(path)
       parts = text.split(/^---\s*$/m, 3)
       abort("#{path}: missing frontmatter") if parts.length < 3 || parts[1].strip.empty?
@@ -134,7 +191,7 @@ PERSONA
       raw_domains = parts[1].lines.grep(/\A[[:space:]]*model_domain[[:space:]]*:/)
       abort("#{path}: duplicate model_domain keys") unless raw_domains.length == 1
       raw = raw_domains.first
-      abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{allowed.join("|")})([[:space:]]+#.*)?[[:space:]]*\z/)
+      abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{domain_pattern})([[:space:]]+#.*)?[[:space:]]*\z/)
     end
   '
 }
@@ -159,6 +216,117 @@ AGENT
 
   [[ "$status" -ne 0 ]]
   [[ "$output" == *"duplicate model_domain"* ]]
+}
+
+@test "frontmatter lint derives model domains from canonical table" {
+  grep -q "model-domains.tsv" "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  ! grep -q "VALID_MODEL_DOMAINS = %w" "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+}
+
+@test "frontmatter lint rejects malformed model domain table rows" {
+  local domains_file
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  printf 'backend_review\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  rm -f "$domains_file"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"invalid model domain row"* ]]
+}
+
+@test "frontmatter lint reports unreadable model domain table cleanly" {
+  local domains_dir
+  domains_dir="$(mktemp -d -t walter-model-domains-XXXXXX)"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_dir" ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  rm -rf "$domains_dir"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"model domain table unreadable"* ]]
+  [[ "$output" != *"from "* ]]
+}
+
+@test "frontmatter lint rejects empty model domain table" {
+  local domains_file
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  printf '# domain\tenv\tdefault\tdescription\n\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  rm -f "$domains_file"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"model domain table has no valid rows"* ]]
+}
+
+@test "frontmatter lint rejects invalid model domain defaults" {
+  local domains_file
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex;rm\tBackend review\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  rm -f "$domains_file"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"invalid model domain default"* ]]
+}
+
+@test "frontmatter lint treats empty model domain env as default path" {
+  run env WALTER_MODEL_DOMAINS_FILE= ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+
+  [[ "$status" -eq 0 ]]
+}
+
+@test "run.sh reports unreadable model domain table distinctly" {
+  grep -q "model domain table is missing or unreadable" "$RUN_SH"
+}
+
+@test "run.sh fails closed when model domain table is unreadable" {
+  grep -q "canonical_status == 2" "$RUN_SH"
+  grep -q "invalid model_domain allowlist" "$RUN_SH"
+  grep -q "refusing to run" "$RUN_SH"
+}
+
+@test "run.sh fails closed when model domain table has no valid rows" {
+  local helper domains_file
+  helper="$(mktemp -t walter-run-domain-helper-XXXXXX)"
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  awk '/^_agent_model_domain_canonical\(\)/,/^}/' "$RUN_SH" > "$helper"
+  cat > "$domains_file" <<'TSV'
+# domain	env	default
+not a valid row
+frontend	WALTER_MODEL_FRONTEND
+TSV
+
+  run bash -c '
+    source "$1"
+    export WALTER_MODEL_DOMAINS_FILE="$2"
+    _agent_model_domain_canonical backend_review
+  ' bash "$helper" "$domains_file"
+  rm -f "$helper" "$domains_file"
+
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"model domain table has no valid rows"* ]]
+}
+
+@test "run.sh rejects model domain rows with invalid defaults" {
+  local helper domains_file
+  helper="$(mktemp -t walter-run-domain-helper-XXXXXX)"
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  awk '/^_agent_model_domain_canonical\(\)/,/^}/' "$RUN_SH" > "$helper"
+  cat > "$domains_file" <<'TSV'
+backend_review	WALTER_MODEL_BACKEND_REVIEW	codex;rm	Backend review
+TSV
+
+  run bash -c '
+    source "$1"
+    export WALTER_MODEL_DOMAINS_FILE="$2"
+    _agent_model_domain_canonical backend_review
+  ' bash "$helper" "$domains_file"
+  rm -f "$helper" "$domains_file"
+
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"model domain table has no valid rows"* ]]
 }
 
 @test "run.sh does not hardcode primary Council models" {

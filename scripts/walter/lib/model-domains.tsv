@@ -1,0 +1,8 @@
+# domain	env	default	description
+backend_review	WALTER_MODEL_BACKEND_REVIEW	codex	Backend, security, infrastructure, and data-correctness review
+frontend	WALTER_MODEL_FRONTEND	claude	UX, UI, visual critique, and accessibility writing
+longform	WALTER_MODEL_LONGFORM	claude	Docs, essays, proposals, and narrative content
+quick_refactor	WALTER_MODEL_QUICK_REFACTOR	codex	Small code edits and mechanical refactors
+phi	WALTER_MODEL_PHI	local-ollama	PHI, medical, privileged, or compliance-sensitive data
+brainstorm	WALTER_MODEL_BRAINSTORM	claude,codex	Planning, strategy, second opinions, and research synthesis
+default	WALTER_MODEL_DEFAULT	claude	Fallback model/runtime when no stronger domain applies

@@ -12,6 +12,8 @@ setup() {
   export WALTER_AI_CAPABILITIES_FILE="$TEST_CONFIG/missing-ai-capabilities.yaml"
   unset LITELLM_BASE_URL LITELLM_API_KEY
   unset WALTER_MODEL_BACKEND_REVIEW WALTER_MODEL_DEFAULT WALTER_MODEL_OVERRIDE
+  unset WALTER_MODEL_DOMAIN WALTER_MODEL_PHI
+  export WALTER_PHI_MODE=0
 }
 
 teardown() {
@@ -66,7 +68,9 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
-  [ "$output" = "sonnet" ]
+  local last_line
+  last_line="$(printf '%s\n' "$output" | tail -1)"
+  [ "$last_line" = "sonnet" ]
 }
 
 @test "agent model selection allows LiteLLM-only aliases when LiteLLM is configured" {
@@ -81,7 +85,9 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
-  [ "$output" = "codex" ]
+  local last_line
+  last_line="$(printf '%s\n' "$output" | tail -1)"
+  [ "$last_line" = "codex" ]
 }
 
 @test "agent model selection can fall back safely for lesson extraction" {
@@ -94,6 +100,7 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
+  local last_line
   last_line="$(printf '%s\n' "$output" | tail -1)"
   [ "$last_line" = "sonnet" ]
 }

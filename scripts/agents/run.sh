@@ -172,34 +172,68 @@ _agent_frontmatter_scalar() {
 
 _agent_model_domain_canonical() {
   local domain="${1:-}"
+  local domains_file awk_status
   [[ -n "$domain" ]] || return 1
 
   domain="$(printf '%s' "$domain" | tr '[:upper:]-' '[:lower:]_')"
-  case "$domain" in
-    backend_review|frontend|longform|quick_refactor|phi|brainstorm|default)
-      printf '%s\n' "$domain"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  domains_file="${WALTER_MODEL_DOMAINS_FILE:-$WALTER_OS_HOME/scripts/walter/lib/model-domains.tsv}"
+  if [[ ! -r "$domains_file" ]]; then
+    echo "agents/run.sh: WARN model domain table is missing or unreadable: ${domains_file}" >&2
+    return 2
+  fi
+
+  awk -F '\t' -v domain="$domain" '
+    { sub(/\r$/, "", $0) }
+    $0 !~ /^#/ &&
+      NF >= 3 &&
+      $1 ~ /^[a-z][a-z0-9_]*$/ &&
+      $2 ~ /^WALTER_MODEL_[A-Z0-9_]+$/ &&
+      $3 ~ /^[A-Za-z0-9._\/@:+,\[\]-]+$/ &&
+      $3 !~ /(^,|,,|,$)/ {
+        valid = 1
+        if ($1 == domain) { found = 1 }
+      }
+    END {
+      if (found) { exit 0 }
+      if (valid) { exit 1 }
+      exit 2
+    }
+  ' "$domains_file"
+  awk_status=$?
+  if (( awk_status == 0 )); then
+    printf '%s\n' "$domain"
+    return 0
+  fi
+  if (( awk_status > 1 )); then
+    echo "agents/run.sh: WARN model domain table has no valid rows: ${domains_file}" >&2
+    return 2
+  fi
+
+  return 1
 }
 
 _agent_model_domain() {
   # Prefer explicit persona metadata. Keep the case mapping as a compatibility
   # fallback for legacy agent files and external aliases.
-  local frontmatter_domain canonical_domain
+  local frontmatter_domain canonical_domain canonical_status
   if ! frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"; then
     echo "agents/run.sh: invalid model_domain metadata in ${AGENT_PERSONA}" >&2
     exit 3
   fi
   if [[ -n "$frontmatter_domain" ]]; then
-    if canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"; then
+    canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"
+    canonical_status=$?
+    if (( canonical_status == 0 )); then
       printf '%s\n' "$canonical_domain"
       return 0
     fi
+    if (( canonical_status == 2 )); then
+      echo "agents/run.sh: invalid model_domain allowlist; refusing to run ${AGENT_PERSONA}" >&2
+      exit 3
+    fi
 
-    echo "agents/run.sh: WARN invalid model_domain '${frontmatter_domain}' in ${AGENT_PERSONA}; using legacy agent mapping." >&2
+    echo "agents/run.sh: invalid model_domain '${frontmatter_domain}' in ${AGENT_PERSONA}; refusing to run." >&2
+    exit 3
   fi
 
   _agent_legacy_model_domain "$1"

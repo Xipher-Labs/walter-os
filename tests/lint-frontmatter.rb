@@ -19,15 +19,38 @@ REQUIRED_FIELDS = {
   "command" => %w[description]
 }.freeze
 
-VALID_MODEL_DOMAINS = %w[
-  backend_review
-  frontend
-  longform
-  quick_refactor
-  phi
-  brainstorm
-  default
-].freeze
+def load_model_domains
+  path = ENV["WALTER_MODEL_DOMAINS_FILE"]
+  path = File.join(REPO_ROOT, "scripts/walter/lib/model-domains.tsv") if path.nil? || path.empty?
+  domains = File.readlines(path, chomp: true).each_with_object([]) do |raw_line, rows|
+    line = raw_line.delete_suffix("\r")
+    next if line.start_with?("#") || line.strip.empty?
+
+    columns = line.split("\t", 4)
+    abort "invalid model domain row in #{path}: #{line}" if columns.length < 3
+    domain, env_key, default_model = columns
+    abort "invalid model domain name in #{path}: #{domain}" unless domain.match?(/\A[a-z][a-z0-9_]*\z/)
+    abort "invalid model domain env key in #{path}: #{env_key}" unless env_key.match?(/\AWALTER_MODEL_[A-Z0-9_]+\z/)
+    abort "invalid model domain default in #{path}: #{default_model.inspect}" if default_model.nil? || default_model.empty?
+    abort "invalid model domain default in #{path}: #{default_model.inspect}" unless valid_model_route?(default_model)
+
+    rows << domain
+  end
+  abort "model domain table has no valid rows: #{path}" if domains.empty?
+
+  domains
+rescue SystemCallError => e
+  abort "model domain table unreadable: #{path} (#{e.message})"
+end
+
+def valid_model_route?(value)
+  return false if value.nil? || value.empty?
+  return false unless value.match?(/\A[A-Za-z0-9._\/@:+,\[\]-]+\z/)
+
+  value.split(",", -1).all? { |route| !route.empty? }
+end
+
+MODEL_DOMAINS = load_model_domains.freeze
 
 def frontmatter_from(path)
   text = File.read(path)
@@ -84,12 +107,12 @@ def validate_agent_metadata(data, frontmatter)
   domain = data["model_domain"]
   raw_domains = frontmatter.each_line.grep(/\A[[:space:]]*model_domain[[:space:]]*:/)
   raw_domain = raw_domains.first
-  domain_pattern = VALID_MODEL_DOMAINS.join("|")
+  domain_pattern = Regexp.union(MODEL_DOMAINS).source
 
   return "'model_domain' must be declared exactly once (duplicate model_domain keys are not allowed)" unless raw_domains.length == 1
   return "'model_domain' must be a string" unless domain.is_a?(String)
-  unless VALID_MODEL_DOMAINS.include?(domain)
-    return "'model_domain' must be one of: #{VALID_MODEL_DOMAINS.join(', ')}"
+  unless MODEL_DOMAINS.include?(domain)
+    return "'model_domain' must be one of: #{MODEL_DOMAINS.join(', ')}"
   end
   unless raw_domain&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{domain_pattern})([[:space:]]+#.*)?[[:space:]]*\z/)
     return "'model_domain' must be an unquoted scalar supported by scripts/agents/run.sh"
