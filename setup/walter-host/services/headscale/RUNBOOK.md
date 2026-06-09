@@ -59,9 +59,14 @@ If the helper prints one of these known blockers, follow the matching recovery
 path before treating Headscale as healthy:
 
 - `Headscale container is not running` means the service is stopped or exited.
-  Start it with `docker compose -f /opt/walter-vm/services/headscale/compose.yml
-  up -d`, then re-run `./deploy.sh --diagnose`. Do not use stale logs as proof
-  of health after the container has stopped.
+  Start it with:
+
+  ```bash
+  docker compose -f /opt/walter-vm/services/headscale/compose.yml up -d
+  ```
+
+  Then re-run `./deploy.sh --diagnose`. Do not use stale logs as proof of
+  health after the container has stopped.
 - `capability-version drift detected` means the server rejected client
   registration before the node joined the tailnet. Use the version pin or
   upgrade paths below.

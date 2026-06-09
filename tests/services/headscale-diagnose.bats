@@ -70,6 +70,8 @@ EOF
   echo "$output" | grep -Fq "TS2021 WebSocket proxy warning detected"
   echo "$output" | grep -Fq "reverse proxy is not passing WebSocket upgrade headers"
   echo "$output" | grep -Fq "Cloudflare Tunnel/Caddy route"
+  echo "$output" | grep -Fq 'headscale.${WALTER_DOMAIN}'
+  ! echo "$output" | grep -Fq 'headscale.${WALTER_DOMAIN}.'
 }
 
 @test "headscale diagnose exits cleanly without capver signature" {
@@ -101,6 +103,7 @@ EOF
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -Fq "Usage: diagnose.sh [options]"
+  echo "$output" | grep -Fq "No known runtime or registration blocker found"
   ! echo "$output" | grep -Fq "setup/walter-host/services/headscale/diagnose.sh"
 }
 
@@ -177,6 +180,7 @@ EOF
   grep -Fq "capability-version drift detected" "$runbook"
   grep -Fq "Headscale container is not running" "$runbook"
   grep -Fq "TS2021 WebSocket proxy warning detected" "$runbook"
+  ! grep -Fq 'Start it with `docker compose -f /opt/walter-vm/services/headscale/compose.yml' "$runbook"
 }
 
 @test "headscale deploy exposes diagnose mode" {

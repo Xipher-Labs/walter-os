@@ -28,7 +28,7 @@ usage() {
     '  -h, --help                    Show this help' \
     '' \
     'Exit codes:' \
-    '  0  No known registration drift signature found' \
+    '  0  No known runtime or registration blocker found' \
     '  1  Known Headscale runtime or registration blocker found' \
     '  2  Invalid arguments or unreadable mock log' \
     '  3  Unable to inspect Headscale logs'
@@ -211,7 +211,7 @@ if grep -Fq "No Upgrade header in TS2021 request" <<<"$logs"; then
     'header. This usually means the reverse proxy is not passing WebSocket upgrade headers through to Headscale.' \
     '' \
     'Recommended recovery:' \
-    "1. Inspect the Cloudflare Tunnel/Caddy route for headscale.\${WALTER_DOMAIN}." \
+    "1. Inspect the Cloudflare Tunnel/Caddy route for headscale.\${WALTER_DOMAIN}" \
     '2. Verify WebSocket upgrade headers reach the Headscale container.' \
     '3. Re-run this diagnostic and a live registration smoke test.' \
     '' \
