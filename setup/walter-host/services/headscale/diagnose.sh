@@ -3,7 +3,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+if [[ -n "$SCRIPT_SOURCE" && "$SCRIPT_SOURCE" != "bash" && "$SCRIPT_SOURCE" != "-bash" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+else
+  SCRIPT_DIR="$(pwd -P)"
+fi
 COMPOSE_FILE="${WALTER_HEADSCALE_COMPOSE:-${SCRIPT_DIR}/compose.yml}"
 CONTAINER="${WALTER_HEADSCALE_CONTAINER:-headscale}"
 SINCE="${WALTER_HEADSCALE_LOG_SINCE:-10m}"
@@ -192,11 +197,16 @@ logs="$(read_logs)"
 if grep -Fq "capability version must be set" <<<"$logs"; then
   printf '%s\n' \
     '' \
-    'RESULT: capability-version drift detected.' \
+    'RESULT: capability-version rejection signature detected.' \
     '' \
-    'Headscale is rejecting client registration before the node joins the tailnet.' \
-    'Do not keep retrying tailscale up as a break-glass path while this signature' \
-    'is present.' \
+    'Headscale logged "capability version must be set". During a real' \
+    'tailscale up attempt, this usually means the server rejected client' \
+    'registration before the node joined the tailnet.' \
+    '' \
+    'Important: a manual curl to /key without a capver query can produce the' \
+    'same log line. If you just probed /key manually, clear the log window,' \
+    'run a live tailscale up registration attempt, and re-run this diagnostic' \
+    'before treating the finding as confirmed client/server drift.' \
     '' \
     'Recommended recovery:' \
     '1. Use the Hetzner Cloud Firewall SSH allow-list break-glass path.' \

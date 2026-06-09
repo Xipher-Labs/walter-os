@@ -67,9 +67,12 @@ path before treating Headscale as healthy:
 
   Then re-run `./deploy.sh --diagnose`. Do not use stale logs as proof of
   health after the container has stopped.
-- `capability-version drift detected` means the server rejected client
-  registration before the node joined the tailnet. Use the version pin or
-  upgrade paths below.
+- `capability-version rejection signature detected` means Headscale logged
+  `capability version must be set`. During a real `tailscale up` attempt this
+  usually means the server rejected client registration before the node joined
+  the tailnet. A manual `curl /key` probe without a `capver` query can produce
+  the same log line, so clear the log window and retry a real registration
+  before treating the finding as confirmed client/server drift.
 - `TS2021 WebSocket proxy warning detected` means Headscale saw a TS2021 request
   without an `Upgrade` header. Inspect the Cloudflare Tunnel/Caddy route for
   `headscale.${WALTER_DOMAIN}` and verify WebSocket upgrade headers reach the
