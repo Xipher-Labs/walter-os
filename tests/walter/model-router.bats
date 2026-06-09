@@ -41,7 +41,7 @@ run_router() {
 }
 
 last_output_line() {
-  printf '%s\n' "$output" | tail -1
+  output_without_router_warnings | tail -1
 }
 
 output_without_router_warnings() {
