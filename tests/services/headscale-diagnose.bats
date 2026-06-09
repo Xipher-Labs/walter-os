@@ -28,6 +28,50 @@ setup() {
   echo "$output" | grep -Fq "RUNBOOK.md"
 }
 
+@test "headscale diagnose detects stopped container before reading stale logs" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "exited"
+  exit 0
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "INFO registration request completed"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "Headscale container is not running"
+  echo "$output" | grep -Fq "docker compose -f"
+  echo "$output" | grep -Fq "deploy.sh --diagnose"
+}
+
+@test "headscale diagnose detects TS2021 websocket proxy warning" {
+  [[ -x "$DIAGNOSE" ]]
+
+  log_file="$BATS_TEST_TMPDIR/headscale.log"
+  printf '%s\n' \
+    'WRN No Upgrade header in TS2021 request. If headscale is behind a reverse proxy, make sure it is configured to pass WebSockets through.' \
+    > "$log_file"
+
+  run "$DIAGNOSE" --mock-log "$log_file"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "TS2021 WebSocket proxy warning detected"
+  echo "$output" | grep -Fq "reverse proxy is not passing WebSocket upgrade headers"
+  echo "$output" | grep -Fq "Cloudflare Tunnel/Caddy route"
+}
+
 @test "headscale diagnose exits cleanly without capver signature" {
   [[ -x "$DIAGNOSE" ]]
 
@@ -131,6 +175,8 @@ EOF
 
   grep -Fq "deploy.sh --diagnose" "$runbook"
   grep -Fq "capability-version drift detected" "$runbook"
+  grep -Fq "Headscale container is not running" "$runbook"
+  grep -Fq "TS2021 WebSocket proxy warning detected" "$runbook"
 }
 
 @test "headscale deploy exposes diagnose mode" {

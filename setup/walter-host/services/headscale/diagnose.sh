@@ -29,7 +29,7 @@ usage() {
     '' \
     'Exit codes:' \
     '  0  No known registration drift signature found' \
-    '  1  Known Headscale/Tailscale capability-version drift signature found' \
+    '  1  Known Headscale runtime or registration blocker found' \
     '  2  Invalid arguments or unreadable mock log' \
     '  3  Unable to inspect Headscale logs'
 }
@@ -141,14 +141,46 @@ detect_tailscale_version() {
   fi
 }
 
+detect_container_state() {
+  if [[ -n "$MOCK_LOG" ]]; then
+    return
+  fi
+
+  if command -v docker >/dev/null 2>&1; then
+    docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null || true
+  fi
+}
+
 headscale_version="$(detect_headscale_version)"
 tailscale_version="$(detect_tailscale_version)"
-logs="$(read_logs)"
+container_state="$(detect_container_state)"
 
 echo "Headscale registration diagnostic"
 echo "Headscale: ${headscale_version:-unknown}"
 echo "Tailscale client: ${tailscale_version:-unknown}"
+if [[ -n "$container_state" ]]; then
+  echo "Container state: $container_state"
+fi
 echo "Log window: ${MOCK_LOG:-docker logs ${CONTAINER} --since ${SINCE}}"
+
+if [[ -n "$container_state" && "$container_state" != "running" ]]; then
+  printf '%s\n' \
+    '' \
+    'RESULT: Headscale container is not running.' \
+    '' \
+    'The tailnet cannot accept client registration while the service is stopped,' \
+    'even if stale logs do not show a current capability-version signature.' \
+    '' \
+    'Recommended recovery:' \
+    "1. Start or redeploy the service: docker compose -f ${COMPOSE_FILE} up -d" \
+    '2. Re-run: deploy.sh --diagnose' \
+    '3. Retry a live client registration smoke test before relying on Headscale.' \
+    '' \
+    "Reference: ${RUNBOOK_PATH}"
+  exit 1
+fi
+
+logs="$(read_logs)"
 
 if grep -Fq "capability version must be set" <<<"$logs"; then
   printf '%s\n' \
@@ -165,6 +197,23 @@ if grep -Fq "capability version must be set" <<<"$logs"; then
     '   confirming compatibility, or keep Headscale non-critical.' \
     '3. Re-run this diagnostic and a live registration smoke test before treating' \
     '   Headscale as healthy.' \
+    '' \
+    "Reference: ${RUNBOOK_PATH}"
+  exit 1
+fi
+
+if grep -Fq "No Upgrade header in TS2021 request" <<<"$logs"; then
+  printf '%s\n' \
+    '' \
+    'RESULT: TS2021 WebSocket proxy warning detected.' \
+    '' \
+    'Headscale is receiving TS2021 registration traffic without an Upgrade' \
+    'header. This usually means the reverse proxy is not passing WebSocket upgrade headers through to Headscale.' \
+    '' \
+    'Recommended recovery:' \
+    "1. Inspect the Cloudflare Tunnel/Caddy route for headscale.\${WALTER_DOMAIN}." \
+    '2. Verify WebSocket upgrade headers reach the Headscale container.' \
+    '3. Re-run this diagnostic and a live registration smoke test.' \
     '' \
     "Reference: ${RUNBOOK_PATH}"
   exit 1
