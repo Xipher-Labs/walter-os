@@ -160,6 +160,16 @@ healthy_prs='[
   [[ "$output" == *"--target must look like vX.Y.Z or X.Y.Z"* ]]
 }
 
+@test "#499: --expected-commit requires post-release mode" {
+  local fixture="$TMP_DIR/expected-commit-pre-release.json"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$healthy_prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --expected-commit def456 --fixture "$fixture" --json
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"--expected-commit requires --post-release"* ]]
+}
+
 @test "regression: non-git checkout exits with controlled runtime error" {
   local fake_bin="$TMP_DIR/bin"
   local not_repo="$TMP_DIR/not-a-repo"

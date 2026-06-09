@@ -340,6 +340,9 @@ cmd_doctor() {
 
   [[ -n "$target" ]] || usage_error "--target is required"
   valid_target_tag "$target" || usage_error "--target must look like vX.Y.Z or X.Y.Z"
+  if [[ -n "$expected_commit" && "$post_release" -eq 0 ]]; then
+    usage_error "--expected-commit requires --post-release"
+  fi
 
   local target_version="${target#v}"
   local target_tag="v${target_version}"
