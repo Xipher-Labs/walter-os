@@ -14,6 +14,8 @@ artifact format for preview evidence.
   contract before live provider adapters exist.
 - Add `walter-os preview capture` to produce screenshot artifacts from an
   existing preview URL.
+- Add `walter-os preview local` as the first provider-shaped adapter for
+  loopback previews that are already running on the operator machine.
 - Package an existing preview URL, seed manifest, and screenshots into a
   local report bundle with deterministic layout and artifact hashes.
 - Surface local preview plans, screenshots, and report bundles in Control Tower
@@ -85,6 +87,14 @@ If `walter-repo-config.yaml` is absent or does not declare top-level
 writing a plan. This preserves the AD-10 invariant that preview deploys are
 opt-in per repo.
 
+`walter-os preview local` writes the same bundle layout as
+`walter-os preview bundle`, but records `kind: "preview-report"` and
+`provider: "local"` for a loopback preview that is already running. The command
+accepts only `localhost`, `127.0.0.1`, or `[::1]` HTTP(S) URLs, requires
+`preview_deploy: true`, and records `use_existing_local_preview` instead of
+`deploy_ephemeral_preview`. It does not deploy a cloud preview, mint
+credentials, or connect to a remote provider.
+
 ## Acceptance Criteria
 
 - AC1: The command copies the seed manifest and screenshots into the preview
@@ -103,6 +113,9 @@ opt-in per repo.
   HTTP(S) preview URL and refuses unsafe names, missing `npx`, and overwrites.
 - AC9: Control Tower reads preview evidence without deploying or minting
   credentials and renders complete, planned, partial, and invalid states.
+- AC10: `walter-os preview local` packages a loopback preview as
+  `provider: "local"` only when `preview_deploy: true` is configured, and
+  rejects non-loopback URLs before writing a report.
 
 ## Related
 

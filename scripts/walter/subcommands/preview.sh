@@ -12,14 +12,17 @@ usage() {
 Usage: walter-os preview bundle --pr <number> --url <url> --seed <path> --screenshot <path> [--screenshot <path>...] [--out <dir>] [--json]
        walter-os preview plan --dry-run --pr <number> --provider <provider> --app <name> --branch <branch> --seed <path> [--config <path>] [--out <dir>] [--json]
        walter-os preview capture --pr <number> --url <url> --name <slug> [--out <dir>] [--wait-ms <ms>] [--json]
+       walter-os preview local --pr <number> --url <loopback-url> --seed <path> --screenshot <path> [--screenshot <path>...] [--config <path>] [--out <dir>] [--json]
 
 Creates a local preview evidence bundle from an existing preview URL, captures
-screenshots, or writes a dry-run preview deployment plan. The commands do not
-deploy, mint credentials, or touch production secrets.
+screenshots, writes a dry-run preview deployment plan, or records a loopback
+local preview adapter result. The commands do not deploy to cloud providers,
+mint credentials, or touch production secrets.
 
 Subcommands:
   bundle    Build .walter/previews/preview-pr-<number>/ evidence bundle.
   capture   Capture a screenshot artifact from an existing preview URL.
+  local     Package a loopback local preview as provider=local evidence.
   plan      Write a dry-run preview deployment plan.
 
 Options for bundle:
@@ -49,6 +52,16 @@ Options for plan:
   --config <path>        walter-repo-config.yaml path. Defaults to cwd.
   --out <dir>            Output root. Defaults to .walter/previews.
   --json                 Print preview-plan JSON instead of a short summary.
+
+Options for local:
+  --pr <number>          Pull request number.
+  --url <loopback-url>   Existing local preview URL. Must use localhost,
+                         127.0.0.1, or [::1].
+  --seed <path>          Seed data manifest or fixture used for preview.
+  --screenshot <path>    Screenshot artifact. Repeat for multiple screenshots.
+  --config <path>        walter-repo-config.yaml path. Defaults to cwd.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --json                 Print preview-report JSON instead of a short summary.
 EOF
 }
 
@@ -183,6 +196,13 @@ validate_wait_ms() {
   done
   [[ "${#normalized}" -le 5 ]] || die_usage "--wait-ms must be <= 30000"
   (( 10#$normalized <= 30000 )) || die_usage "--wait-ms must be <= 30000"
+}
+
+validate_loopback_preview_url() {
+  local url="$1" loopback_url_re='^https?://(localhost|127\.0\.0\.1|\[::1\])($|[:/?#])'
+  [[ "$url" =~ ^https?:// ]] || die_usage "preview URL must start with http:// or https://"
+  [[ "$url" =~ $loopback_url_re ]] \
+    || die_usage "local preview URL must use localhost, 127.0.0.1, or [::1]"
 }
 
 repo_config_path() {
@@ -498,6 +518,152 @@ cmd_plan() {
   fi
 }
 
+cmd_local() {
+  require_jq
+
+  local pr="" url="" seed="" config="" out_root=".walter/previews" json_output=0
+  local -a screenshots=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --url)
+        url="${2:-}"
+        [[ -n "$url" ]] || die_usage "--url requires a value"
+        shift 2
+        ;;
+      --seed)
+        seed="${2:-}"
+        [[ -n "$seed" ]] || die_usage "--seed requires a value"
+        shift 2
+        ;;
+      --screenshot)
+        screenshots+=("${2:-}")
+        [[ -n "${2:-}" ]] || die_usage "--screenshot requires a value"
+        shift 2
+        ;;
+      --config)
+        config="${2:-}"
+        [[ -n "$config" ]] || die_usage "--config requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  validate_positive_pr "$pr"
+  validate_loopback_preview_url "$url"
+  [[ -n "$seed" ]] || die_usage "--seed is required"
+  [[ "${#screenshots[@]}" -gt 0 ]] || die_usage "at least one --screenshot is required"
+  validate_artifact "$seed"
+
+  local screenshot
+  for screenshot in "${screenshots[@]}"; do
+    validate_artifact "$screenshot"
+  done
+
+  local config_path preview_enabled
+  config_path="$(repo_config_path "$config")"
+  preview_enabled="$(preview_deploy_enabled "$config_path")"
+  if [[ "$preview_enabled" != "true" ]]; then
+    die_usage "preview_deploy is not enabled in config: $config_path"
+  fi
+
+  local bundle_dir seed_dir screenshot_dir report_path readme_path
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  seed_dir="${bundle_dir}/seed"
+  screenshot_dir="${bundle_dir}/screenshots"
+  report_path="${bundle_dir}/preview-report.json"
+  readme_path="${bundle_dir}/README.md"
+
+  mkdir -p -- "$seed_dir" "$screenshot_dir"
+
+  local seed_dest screenshots_json="[]" screenshot_dest
+  seed_dest="$(copy_artifact "$seed" "$seed_dir")"
+  for screenshot in "${screenshots[@]}"; do
+    screenshot_dest="$(copy_artifact "$screenshot" "$screenshot_dir")"
+    screenshots_json="$(jq -c \
+      --argjson item "$(artifact_json "$screenshot" "$screenshot_dest")" \
+      '. + [$item]' <<<"$screenshots_json")"
+  done
+
+  local generated_at report_json
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  report_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg url "$url" \
+    --arg provider "local" \
+    --arg generated_at "$generated_at" \
+    --arg bundle_dir "$bundle_dir" \
+    --arg config_path "$config_path" \
+    --argjson seed_manifest "$(artifact_json "$seed" "$seed_dest")" \
+    --argjson screenshots "$screenshots_json" \
+    '{
+      schema_version: 1,
+      kind: "preview-report",
+      provider: $provider,
+      pr: $pr,
+      url: $url,
+      generated_at: $generated_at,
+      bundle_dir: $bundle_dir,
+      config_path: $config_path,
+      seed_manifest: $seed_manifest,
+      screenshots: $screenshots,
+      actions: [
+        "use_existing_local_preview",
+        "apply_seed_fixture",
+        "capture_screenshots",
+        "write_preview_bundle"
+      ],
+      safety: {
+        preview_deploy: true,
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "not performed",
+        hard_limit_floor: "preserved"
+      }
+    }')"
+
+  printf '%s\n' "$report_json" | jq . > "$report_path"
+  {
+    printf '# Local Preview Bundle PR #%s\n\n' "$pr"
+    printf -- '- URL: %s\n' "$url"
+    printf -- '- Provider: local\n'
+    printf -- "- Seed manifest: \`%s\`\n" "${seed_dest#"$bundle_dir"/}"
+    printf -- '- Screenshots: %s\n' "${#screenshots[@]}"
+    printf -- '- Safety: preview deploy enabled; credentials not minted; deploy not performed.\n'
+  } > "$readme_path"
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$report_json" | jq .
+  else
+    printf 'preview: local bundle written %s\n' "$bundle_dir"
+    printf 'preview: report %s\n' "$report_path"
+  fi
+}
+
 cmd_bundle() {
   require_jq
 
@@ -631,6 +797,9 @@ case "$cmd" in
     ;;
   bundle)
     cmd_bundle "$@"
+    ;;
+  local)
+    cmd_local "$@"
     ;;
   -h|--help|help)
     usage

@@ -81,6 +81,8 @@
 #                               Package preview evidence for review (no deploy)
 #   preview capture --pr N --url URL --name NAME
 #                               Capture screenshot artifact from preview URL
+#   preview local --pr N --url LOOPBACK_URL --seed FILE --screenshot FILE
+#                               Package local loopback preview evidence (no deploy)
 #   preview plan --dry-run --pr N --provider NAME --app NAME --branch REF --seed FILE
 #                               Plan preview deploy contract (no deploy)
 #   feature-state {init|validate|record-post-merge}

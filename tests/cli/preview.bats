@@ -416,6 +416,68 @@ SH
   [[ "$output" == *"unsupported preview provider: prod-shell"* ]]
 }
 
+@test "preview local writes a loopback preview bundle when enabled" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview local \
+    --pr 235 \
+    --url http://localhost:3000 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.kind == "preview-report"'
+  echo "$output" | jq -e '.provider == "local"'
+  echo "$output" | jq -e '.url == "http://localhost:3000"'
+  echo "$output" | jq -e '.safety.preview_deploy == true'
+  echo "$output" | jq -e '.safety.credentials == "not minted"'
+  echo "$output" | jq -e '.safety.deploy == "not performed"'
+  echo "$output" | jq -e '.actions | index("use_existing_local_preview")'
+  bundle_dir="$TMP_DIR/out/preview-pr-235"
+  [[ -f "$bundle_dir/preview-report.json" ]]
+  [[ -f "$bundle_dir/seed/seed.json" ]]
+  [[ -f "$bundle_dir/screenshots/home.png" ]]
+}
+
+@test "preview local rejects non-loopback URLs" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview local \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"local preview URL must use localhost, 127.0.0.1, or [::1]"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
+}
+
+@test "preview local fails closed unless preview_deploy is enabled" {
+  write_preview_artifacts
+  config_file="$TMP_DIR/walter-repo-config.yaml"
+  printf 'preview_deploy: false\n' > "$config_file"
+
+  run bash "$WALTER_OS_BIN" preview local \
+    --pr 235 \
+    --url http://127.0.0.1:3000 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"preview_deploy is not enabled"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
+}
+
 @test "preview bundle copies seed and screenshots into a report bundle" {
   write_preview_artifacts
 
@@ -561,10 +623,12 @@ SH
   [[ "$output" == *"Usage: walter-os preview bundle"* ]]
 }
 
-@test "help documents preview bundle" {
+@test "help documents preview commands" {
   run bash "$WALTER_OS_BIN" help
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"preview bundle"* ]]
+  [[ "$output" == *"preview capture"* ]]
+  [[ "$output" == *"preview local"* ]]
   [[ "$output" == *"preview plan"* ]]
 }
