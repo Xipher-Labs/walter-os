@@ -232,7 +232,8 @@ _agent_model_domain() {
       exit 3
     fi
 
-    echo "agents/run.sh: WARN invalid model_domain '${frontmatter_domain}' in ${AGENT_PERSONA}; using legacy agent mapping." >&2
+    echo "agents/run.sh: invalid model_domain '${frontmatter_domain}' in ${AGENT_PERSONA}; refusing to run." >&2
+    exit 3
   fi
 
   _agent_legacy_model_domain "$1"

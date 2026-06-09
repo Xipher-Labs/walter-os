@@ -12,18 +12,23 @@
 # shellcheck disable=SC2034 # used by sourced callers
 WALTER_MODEL_ROUTER_VERSION=1
 
+if [[ -z "${__WALTER_MODEL_WARN_DIR:-}" ]]; then
+  __WALTER_MODEL_WARN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/walter-model-router-warnings.XXXXXX" 2>/dev/null || true)"
+fi
+
 _walter_model_warn_once() {
-  local key="${1:-}" message="${2:-}" warn_dir warn_file
+  local key="${1:-}" message="${2:-}" warn_file
   [[ -n "$key" && -n "$message" ]] || return 0
-  warn_dir="${TMPDIR:-/tmp}/walter-model-router-warnings-$$"
-  warn_file="$warn_dir/$key"
-  if mkdir -p "$warn_dir" 2>/dev/null; then
+
+  if [[ -n "${__WALTER_MODEL_WARN_DIR:-}" ]]; then
+    warn_file="$__WALTER_MODEL_WARN_DIR/$key"
     if [[ ! -e "$warn_file" ]]; then
       printf '%s\n' "$message" >&2
       : > "$warn_file" 2>/dev/null || true
     fi
     return 0
   fi
+
   printf '%s\n' "$message" >&2
 }
 
@@ -169,6 +174,7 @@ walter_model_value_valid() {
   # character we do not want in a model alias or endpoint-like value.
   stripped="${value//[A-Za-z0-9._\/@:+,\[\]-]/}"
   [[ -z "$stripped" ]] || return 1
+  [[ "$value" != *, && "$value" != ,* && "$value" != *,,* ]] || return 1
 
   IFS=',' read -ra routes <<<"$value"
   for route in "${routes[@]}"; do

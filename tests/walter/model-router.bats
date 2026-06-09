@@ -194,6 +194,17 @@ output_without_router_warnings() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: trailing comma default route rows are ignored" {
+  local domains_file="$TMP_CONFIG/model-domains-trailing-comma.tsv"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex,\tBackend review\n' > "$domains_file"
+
+  run run_router WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"claude"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
 @test "model-router: malformed row warning is emitted once" {
   local count domains_file="$TMP_CONFIG/model-domains-malformed.tsv"
   printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\nfrontend\tWALTER_MODEL_FRONTEND\n' > "$domains_file"

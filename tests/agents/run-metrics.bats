@@ -113,6 +113,39 @@ PERSONA
   [[ "$output" == *"duplicate model_domain"* ]]
 }
 
+@test "run.sh fails closed on unknown explicit model_domain" {
+  local helper persona
+  helper="$(mktemp -t walter-run-helper-XXXXXX)"
+  persona="$(mktemp -t walter-agent-persona-XXXXXX)"
+  awk '
+    /^_agent_frontmatter_scalar\(\)/ { emit = 1 }
+    emit { print }
+    /^_agent_model_domain\(\)/ { in_target = 1 }
+    emit && in_target && /^}/ { exit }
+  ' "$RUN_SH" > "$helper"
+  cat > "$persona" <<'PERSONA'
+---
+name: invalid-domain
+description: Agent fixture with unsupported routing metadata.
+tools: Read
+model: router
+model_domain: typo_domain
+---
+Body
+PERSONA
+
+  run bash -c '
+    source "$1"
+    AGENT_PERSONA="$2"
+    _agent_model_domain reviewer
+  ' bash "$helper" "$persona"
+  rm -f "$helper" "$persona"
+
+  [[ "$status" -eq 3 ]]
+  [[ "$output" == *"invalid model_domain 'typo_domain'"* ]]
+  [[ "$output" == *"refusing to run"* ]]
+}
+
 @test "run.sh keeps legacy Council agent domain fallback mapping" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
