@@ -172,7 +172,7 @@ _agent_frontmatter_scalar() {
 
 _agent_model_domain_canonical() {
   local domain="${1:-}"
-  local domains_file
+  local domains_file awk_status
   [[ -n "$domain" ]] || return 1
 
   domain="$(printf '%s' "$domain" | tr '[:upper:]-' '[:lower:]_')"
@@ -182,18 +182,30 @@ _agent_model_domain_canonical() {
     return 2
   fi
 
-  if awk -F '\t' -v domain="$domain" '
+  awk -F '\t' -v domain="$domain" '
     { sub(/\r$/, "", $0) }
     $0 !~ /^#/ &&
       NF >= 3 &&
       $1 ~ /^[a-z][a-z0-9_]*$/ &&
       $2 ~ /^WALTER_MODEL_[A-Z0-9_]+$/ &&
-      $3 != "" &&
-      $1 == domain { found = 1 }
-    END { exit found ? 0 : 1 }
-  ' "$domains_file"; then
+      $3 != "" {
+        valid = 1
+        if ($1 == domain) { found = 1 }
+      }
+    END {
+      if (found) { exit 0 }
+      if (valid) { exit 1 }
+      exit 2
+    }
+  ' "$domains_file"
+  awk_status=$?
+  if (( awk_status == 0 )); then
     printf '%s\n' "$domain"
     return 0
+  fi
+  if (( awk_status > 1 )); then
+    echo "agents/run.sh: WARN model domain table has no valid rows: ${domains_file}" >&2
+    return 2
   fi
 
   return 1
