@@ -9,7 +9,7 @@ setup() {
   mkdir -p "$TEST_BIN"
 }
 
-@test "headscale diagnose detects capver drift signature" {
+@test "headscale diagnose detects capver rejection signature" {
   [[ -x "$DIAGNOSE" ]]
 
   log_file="$BATS_TEST_TMPDIR/headscale.log"
@@ -21,11 +21,26 @@ setup() {
     --tailscale-version "1.96.4"
 
   [ "$status" -eq 1 ]
-  echo "$output" | grep -Fq "capability-version drift detected"
+  echo "$output" | grep -Fq "capability-version rejection signature detected"
+  echo "$output" | grep -Fq "manual curl to /key without a capver query"
+  echo "$output" | grep -Fq "before treating the finding as confirmed client/server drift"
   echo "$output" | grep -Fq "Headscale: Headscale 0.26.0"
   echo "$output" | grep -Fq "Tailscale client: 1.96.4"
   echo "$output" | grep -Fq "Hetzner Cloud Firewall SSH allow-list"
   echo "$output" | grep -Fq "RUNBOOK.md"
+}
+
+@test "headscale diagnose can run from stdin for remote inspection" {
+  [[ -x "$DIAGNOSE" ]]
+
+  log_file="$BATS_TEST_TMPDIR/headscale.log"
+  printf 'INFO registration request completed\n' > "$log_file"
+
+  run bash -s -- --mock-log "$log_file" < "$DIAGNOSE"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -Fq "Headscale registration diagnostic"
+  echo "$output" | grep -Fq "no known runtime or registration blocker found"
 }
 
 @test "headscale diagnose detects stopped container before reading stale logs" {
@@ -243,7 +258,8 @@ EOF
   [[ -f "$runbook" ]]
 
   grep -Fq "deploy.sh --diagnose" "$runbook"
-  grep -Fq "capability-version drift detected" "$runbook"
+  grep -Fq "capability-version rejection signature detected" "$runbook"
+  grep -Fq "curl /key" "$runbook"
   grep -Fq "Headscale container is not running" "$runbook"
   grep -Fq "TS2021 WebSocket proxy warning detected" "$runbook"
   ! grep -Fq 'Start it with `docker compose -f /opt/walter-vm/services/headscale/compose.yml' "$runbook"
@@ -270,6 +286,6 @@ EOF
     --tailscale-version "1.96.4"
 
   [ "$status" -eq 1 ]
-  echo "$output" | grep -Fq "capability-version drift detected"
+  echo "$output" | grep -Fq "capability-version rejection signature detected"
   echo "$output" | grep -Fq "Headscale: Headscale 0.26.0"
 }
