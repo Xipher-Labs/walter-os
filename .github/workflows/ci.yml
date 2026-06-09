@@ -158,12 +158,12 @@ jobs:
           }
 
           printf 'run_all=%s\n' "$run_all" >> "$GITHUB_OUTPUT"
-          set_bool hooks '^(hooks/|tests/hooks/|tests/cloudflare/)'
+          set_bool hooks '^(hooks/|tests/hooks/)'
           set_bool agents_and_skills '^(scripts/agents/|agents/|skills/|tests/agents/|tests/skills/)'
           set_bool wiki_and_observability '^(scripts/wiki\.sh|scripts/wiki/|tests/wiki/|tests/litellm/|tests/walter-bridge/|setup/litellm/|setup/walter-bridge/)'
           set_bool cli_and_walter '^(bin/walter|bin/walter-os|scripts/walter/|tests/cli/|tests/walter/)'
           set_bool oss_audit_and_github '^(tests/oss/|tests/audit/|tests/github-actions/|\.github/workflows/.*\.ya?ml$)'
-          set_bool compose_and_services '^(compose\.yml|setup/walter-host/|tests/compose/|tests/walter-host/|tests/services/)'
+          set_bool compose_and_services '^(compose\.yml|setup/walter-host/|tests/compose/|tests/cloudflare/|tests/walter-host/|tests/services/)'
           set_bool install_contracts '^(install\.sh|Makefile|setup/personal-overlay-init\.sh|scripts/secrets-identity-init\.sh|tests/scripts/secrets-identity-init\.bats|tests/install/(hook-chain-content|makefile-ci-shellcheck-parity|escape-helpers|no-eval-in-helpers|workflow-pins|reproducible-builds|yq-flavor-and-arch)\.bats$)'
 
   bats-suite:
@@ -179,7 +179,6 @@ jobs:
             output: hooks
             paths: |
               tests/hooks/
-              tests/cloudflare/
           - name: agents-and-skills
             output: agents_and_skills
             paths: |
@@ -206,6 +205,7 @@ jobs:
             output: compose_and_services
             paths: |
               tests/compose/
+              tests/cloudflare/
               tests/walter-host/
               tests/services/
           - name: install-contracts
