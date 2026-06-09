@@ -69,6 +69,12 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
+### Added
+
+- `walter-os release doctor --post-release` verifies an already-published
+  release tag, GitHub Release state, required asset names, and asset digests
+  without tripping the pre-release "tag already exists" blocker.
+
 ## [0.6.2] — 2026-06-09
 
 **Release tag reconciliation patch.**

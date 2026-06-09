@@ -43,6 +43,44 @@ write_fixture() {
     }' > "$path"
 }
 
+write_post_release_fixture() {
+  local path="$1"
+  local tag_target="${2:-abc123}"
+  local release_json="${3:-}"
+
+  if [[ -z "$release_json" ]]; then
+    release_json="$(jq -nc '
+      {
+        exists: true,
+        tagName: "v0.6.1",
+        targetCommitish: "main",
+        isDraft: false,
+        isPrerelease: false,
+        assets: [
+          {name: "checksums.sha256", digest: "sha256:111"},
+          {name: "checksums.sha256.cosign.bundle", digest: "sha256:222"},
+          {name: "walter-os-v0.6.1.intoto.jsonl", digest: "sha256:333"},
+          {name: "walter-os-v0.6.1.sbom.cdx.json", digest: "sha256:444"},
+          {name: "walter-os-v0.6.1.source.tar.gz", digest: "sha256:555"}
+        ]
+      }')"
+  fi
+
+  jq -nc \
+    --arg tag_target "$tag_target" \
+    --argjson release_json "$release_json" \
+    '{
+      release: {
+        version: "0.6.1",
+        changelog_versions: ["0.6.1"],
+        tags: ["v0.6.1"],
+        tag_targets: {"v0.6.1": $tag_target},
+        github_release: $release_json
+      },
+      prs: []
+    }' > "$path"
+}
+
 healthy_prs='[
   {
     "number": 304,
@@ -278,6 +316,66 @@ SH
 
   [ "$status" -eq 1 ]
   echo "$output" | jq -e '.findings | index("tag already exists: v0.6.1")'
+}
+
+@test "#499: pre-release doctor still blocks an existing target tag" {
+  local fixture="$TMP_DIR/post-release-ready.json"
+  write_post_release_fixture "$fixture"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '.findings | index("tag already exists: v0.6.1")'
+}
+
+@test "#499: post-release mode accepts an existing tag and complete release assets" {
+  local fixture="$TMP_DIR/post-release-ready.json"
+  write_post_release_fixture "$fixture"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --post-release --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.mode == "post-release"'
+  echo "$output" | jq -e '.decision == "ready"'
+  echo "$output" | jq -e '.findings == []'
+}
+
+@test "#499: post-release mode reports release-artifact drift separately" {
+  local fixture="$TMP_DIR/post-release-drift.json"
+  local release_json
+  release_json="$(jq -nc '
+    {
+      exists: true,
+      tagName: "v0.6.1",
+      targetCommitish: "main",
+      isDraft: true,
+      isPrerelease: true,
+      assets: [
+        {name: "checksums.sha256", digest: "sha256:111"},
+        {name: "walter-os-v0.6.1.source.tar.gz", digest: null}
+      ]
+    }')"
+  write_post_release_fixture "$fixture" "abc123" "$release_json"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --post-release --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.counts.release_artifact_findings > 0'
+  echo "$output" | jq -e '.release_artifact_findings | index("GitHub Release is draft: v0.6.1")'
+  echo "$output" | jq -e '.release_artifact_findings | index("GitHub Release is prerelease: v0.6.1")'
+  echo "$output" | jq -e '.release_artifact_findings | index("release asset missing: checksums.sha256.cosign.bundle")'
+  echo "$output" | jq -e '.release_artifact_findings | index("release asset missing digest: walter-os-v0.6.1.source.tar.gz")'
+}
+
+@test "#499: post-release mode validates tag target when evidence names one" {
+  local fixture="$TMP_DIR/post-release-tag-drift.json"
+  write_post_release_fixture "$fixture" "abc123"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --post-release --expected-commit def456 --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.release_artifact_findings | index("tag v0.6.1 points at abc123, expected def456")'
 }
 
 @test "AC4: unresolved review threads block release" {
