@@ -2,7 +2,7 @@
 
 Uses Cloudflare's edge to terminate TLS + auth for Walter-VM web services,
 with `cloudflared` running on the VM as the outbound tunnel connector. Services
-listed in `02-create-tunnel.sh` use this path.
+listed in the `SUBDOMAINS` array in `02-create-tunnel.sh` use this path.
 
 ## Architecture
 
@@ -46,13 +46,14 @@ Login methods: Google (via Workspace) OR One-Time PIN to email.
 
 ### Direct-route services
 
-`headscale.${WALTER_DOMAIN}` is intentionally excluded from
-`02-create-tunnel.sh`. Cloudflare does not support the WebSocket POSTs required
-by Headscale/Tailscale TS2021 registration traffic, so routing clients through
+`headscale.${WALTER_DOMAIN}` is intentionally excluded from the tunnel
+`SUBDOMAINS` array in `02-create-tunnel.sh` and listed as a direct-route
+service instead. Cloudflare does not support the WebSocket POSTs required by
+Headscale/Tailscale TS2021 registration traffic, so routing clients through
 Cloudflare Tunnel can produce `No Upgrade header in TS2021 request` and failed
 device registration. Publish the Headscale client hostname with a DNS-only
-direct origin route. Keep `headscale-admin.${WALTER_DOMAIN}` behind
-Cloudflare Access.
+direct origin route. Keep `headscale-admin.${WALTER_DOMAIN}` behind Cloudflare
+Access.
 
 ## Path-scoped bypasses
 
