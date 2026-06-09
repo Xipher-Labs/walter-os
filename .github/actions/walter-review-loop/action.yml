@@ -144,7 +144,7 @@ runs:
         # this action is responsible for mounting auth.json at
         # ${CODEX_HOME_INPUT}/auth.json before the step runs.
         mkdir -p "$CODEX_HOME_INPUT"
-        echo 'approval_policy = "never"' > "$CODEX_HOME_INPUT/config.toml"
+        printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' > "$CODEX_HOME_INPUT/config.toml"
 
         if [[ ! -f "$CODEX_HOME_INPUT/auth.json" ]]; then
           echo "codex-ran=false" >> "$GITHUB_OUTPUT"

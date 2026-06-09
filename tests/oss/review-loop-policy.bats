@@ -29,6 +29,12 @@ AGENTS="$REPO_ROOT/AGENTS.md"
     grep -q "codex-minimal" "$AGENTS"
 }
 
+@test "AGENTS.md makes Codex review capability-aware" {
+    grep -q "walter ai status" "$AGENTS"
+    grep -q "provider_codex" "$AGENTS"
+    grep -q "Codex unavailable" "$AGENTS"
+}
+
 @test "AGENTS.md has merge criteria section" {
     grep -q "Merge criteria" "$AGENTS"
 }

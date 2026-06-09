@@ -117,8 +117,9 @@ setup() {
 
 @test "AC-4: Codex step uses the minimal-bypass CODEX_HOME pattern" {
   # Per AGENTS.md "How to invoke Codex review", the minimal bypass writes
-  # approval_policy = "never" + inherits auth.json. Verify both.
+  # approval_policy = "never", pins the supported model, and inherits auth.json.
   grep -q 'approval_policy = "never"' "$ACTION_YML"
+  grep -q 'model = "gpt-5.5"' "$ACTION_YML"
   grep -q "auth.json" "$ACTION_YML"
 }
 
@@ -217,6 +218,12 @@ setup() {
   grep -q "findings-json" "$ACTION_README"
   grep -q "rounds-completed" "$ACTION_README"
   grep -q "status" "$ACTION_README"
+}
+
+@test "AC-7: action README documents capability-aware Codex usage" {
+  grep -q "walter ai status" "$ACTION_README"
+  grep -q "CODEX_AUTH_JSON" "$ACTION_README"
+  grep -q "run-codex: false" "$ACTION_README"
 }
 
 @test "AC-7: action README documents the Codex auth setup" {
