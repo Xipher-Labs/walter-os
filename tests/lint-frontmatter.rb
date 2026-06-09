@@ -32,6 +32,7 @@ def load_model_domains
     abort "invalid model domain name in #{path}: #{domain}" unless domain.match?(/\A[a-z][a-z0-9_]*\z/)
     abort "invalid model domain env key in #{path}: #{env_key}" unless env_key.match?(/\AWALTER_MODEL_[A-Z0-9_]+\z/)
     abort "invalid model domain default in #{path}: #{default_model.inspect}" if default_model.nil? || default_model.empty?
+    abort "invalid model domain default in #{path}: #{default_model.inspect}" unless valid_model_route?(default_model)
 
     rows << domain
   end
@@ -40,6 +41,13 @@ def load_model_domains
   domains
 rescue SystemCallError => e
   abort "model domain table unreadable: #{path} (#{e.message})"
+end
+
+def valid_model_route?(value)
+  return false if value.nil? || value.empty?
+  return false unless value.match?(/\A[A-Za-z0-9._\/@:+,\[\]-]+\z/)
+
+  value.split(",", -1).all? { |route| !route.empty? }
 end
 
 MODEL_DOMAINS = load_model_domains.freeze

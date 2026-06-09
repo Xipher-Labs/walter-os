@@ -165,6 +165,17 @@ teardown() {
   [ "$output" = "codex" ]
 }
 
+@test "model-router: invalid default route rows are ignored" {
+  local domains_file="$TMP_CONFIG/model-domains-invalid-default.tsv"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex;rm\tBackend review\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"claude"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
 @test "model-router: walter_model_domains fails when all rows are malformed" {
   local domains_file="$TMP_CONFIG/model-domains-invalid.tsv"
   printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\n' > "$domains_file"

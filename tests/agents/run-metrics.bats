@@ -18,6 +18,8 @@ setup() {
   export WALTER_OS_HOME="$BATS_TEST_DIRNAME/../.."
   export WALTER_CONFIG="$(mktemp -d -t walter-config-XXXXXX)"
   unset WALTER_MODEL_OVERRIDE WALTER_MODEL_BACKEND_REVIEW WALTER_MODEL_DEFAULT
+  unset WALTER_MODEL_DOMAIN WALTER_MODEL_PHI
+  export WALTER_PHI_MODE=0
 }
 
 teardown() {
@@ -125,6 +127,12 @@ PERSONA
   REPO_ROOT="$BATS_TEST_DIRNAME/../.." ruby -ryaml -rdate -e '
     repo = File.expand_path(ENV.fetch("REPO_ROOT"))
     domains_file = File.join(repo, "scripts/walter/lib/model-domains.tsv")
+    valid_model_route = lambda do |value|
+      !value.nil? &&
+        !value.empty? &&
+        value.match?(/\A[A-Za-z0-9._\/@:+,\[\]-]+\z/) &&
+        value.split(",", -1).all? { |route| !route.empty? }
+    end
     allowed = File.readlines(domains_file, chomp: true)
       .map { |line| line.delete_suffix("\r") }
       .reject { |line| line.start_with?("#") || line.strip.empty? }
@@ -135,6 +143,7 @@ PERSONA
         abort("invalid model domain name: #{domain}") unless domain.match?(/\A[a-z][a-z0-9_]*\z/)
         abort("invalid model domain env key: #{env_key}") unless env_key.match?(/\AWALTER_MODEL_[A-Z0-9_]+\z/)
         abort("invalid model domain default: #{default_model.inspect}") if default_model.nil? || default_model.empty?
+        abort("invalid model domain default: #{default_model.inspect}") unless valid_model_route.call(default_model)
         domain
       end
     domain_pattern = Regexp.union(allowed).source
@@ -215,6 +224,18 @@ AGENT
 
   [[ "$status" -ne 0 ]]
   [[ "$output" == *"model domain table has no valid rows"* ]]
+}
+
+@test "frontmatter lint rejects invalid model domain defaults" {
+  local domains_file
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex;rm\tBackend review\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  rm -f "$domains_file"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"invalid model domain default"* ]]
 }
 
 @test "frontmatter lint treats empty model domain env as default path" {

@@ -52,7 +52,8 @@ _walter_model_domain_rows() {
     IFS=$'\t' read -r domain env default description <<<"$line"
     if [[ -z "$domain" || -z "$env" || -z "$default" ||
       ! "$domain" =~ ^[a-z][a-z0-9_]*$ ||
-      ! "$env" =~ ^WALTER_MODEL_[A-Z0-9_]+$ ]]; then
+      ! "$env" =~ ^WALTER_MODEL_[A-Z0-9_]+$ ]] ||
+      ! walter_model_value_valid "$default"; then
       echo "walter-model-router: WARN ignoring malformed model domain row in $file" >&2
       continue
     fi
