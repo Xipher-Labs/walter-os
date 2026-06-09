@@ -23,25 +23,6 @@ walter_agent_anthropic_model_compatible() {
   esac
 }
 
-_walter_agent_model_env_hint() {
-  case "${1:-default}" in
-    backend|backend-review|backend_review|security|review)
-      echo "WALTER_MODEL_BACKEND_REVIEW" ;;
-    frontend|front-end|ui|ux|design)
-      echo "WALTER_MODEL_FRONTEND" ;;
-    longform|long-form|writing|content)
-      echo "WALTER_MODEL_LONGFORM" ;;
-    quick|quick-refactor|quick_refactor|refactor)
-      echo "WALTER_MODEL_QUICK_REFACTOR" ;;
-    phi|medical|health|local)
-      echo "WALTER_MODEL_PHI" ;;
-    brainstorm|brainstorming|plan|planning|research)
-      echo "WALTER_MODEL_BRAINSTORM" ;;
-    *)
-      echo "WALTER_MODEL_DEFAULT" ;;
-  esac
-}
-
 walter_agent_select_model() {
   local domain="${1:-default}" var_name="${2:-WALTER_AGENT_SELECTED_MODEL}" fallback="${3:-}"
   local router_sh="${WALTER_MODEL_ROUTER_SH:-}"
@@ -71,7 +52,8 @@ walter_agent_select_model() {
       echo "agents/model-selection.sh: WARN model '${model}' for domain '${domain}' requires LiteLLM; using '${fallback}'." >&2
       model="$fallback"
     else
-      env_hint="$(_walter_agent_model_env_hint "$domain")"
+      env_hint="$(walter_model_env_for "$domain" || true)"
+      env_hint="${env_hint:-WALTER_MODEL_DEFAULT}"
       echo "agents/model-selection.sh: model '${model}' for domain '${domain}' requires LiteLLM." >&2
       echo "agents/model-selection.sh: set LITELLM_BASE_URL and LITELLM_API_KEY, or set ${env_hint}=sonnet for direct Anthropic." >&2
       return 3

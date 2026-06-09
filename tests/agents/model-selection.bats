@@ -66,7 +66,8 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
-  [ "$output" = "sonnet" ]
+  last_line="$(printf '%s\n' "$output" | tail -1)"
+  [ "$last_line" = "sonnet" ]
 }
 
 @test "agent model selection allows LiteLLM-only aliases when LiteLLM is configured" {
@@ -81,7 +82,8 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
-  [ "$output" = "codex" ]
+  last_line="$(printf '%s\n' "$output" | tail -1)"
+  [ "$last_line" = "codex" ]
 }
 
 @test "agent model selection can fall back safely for lesson extraction" {

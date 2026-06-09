@@ -7,15 +7,37 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   ROUTER="$REPO_ROOT/scripts/walter/lib/model-router.sh"
+  DOMAINS="$REPO_ROOT/scripts/walter/lib/model-domains.tsv"
   TMP_CONFIG=""
   [[ -f "$ROUTER" ]] || skip "model-router.sh not present"
   TMP_CONFIG="$(mktemp -d)"
   export WALTER_CONFIG="$TMP_CONFIG"
   unset WALTER_AI_CAPABILITIES_FILE
+  unset WALTER_MODEL_DOMAINS_FILE
+  unset WALTER_MODEL_OVERRIDE
+  unset WALTER_MODEL_BACKEND_REVIEW
+  unset WALTER_MODEL_FRONTEND
+  unset WALTER_MODEL_LONGFORM
+  unset WALTER_MODEL_QUICK_REFACTOR
+  unset WALTER_MODEL_PHI
+  unset WALTER_MODEL_BRAINSTORM
+  unset WALTER_MODEL_DEFAULT
 }
 
 teardown() {
   [[ -n "${TMP_CONFIG:-}" && -d "$TMP_CONFIG" ]] && rm -rf "$TMP_CONFIG"
+}
+
+@test "model-router: domains come from canonical table" {
+  local expected
+  [[ -f "$DOMAINS" ]]
+  expected="$(awk -F '\t' '$0 !~ /^#/ && NF >= 3 { print $1 }' "$DOMAINS" | paste -sd, -)"
+  [[ -n "$expected" ]]
+
+  run bash -c "source '$ROUTER'; walter_model_domains | paste -sd, -"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$expected" ]
 }
 
 @test "model-router: unset backend_review uses Codex default" {
@@ -79,6 +101,59 @@ teardown() {
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: PHI stays local when canonical table is missing" {
+  run env WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" WALTER_MODEL_PHI=codex bash -c "source '$ROUTER'; walter_model_for phi" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-ollama"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: walter_model_domains fails when canonical table is missing" {
+  run env WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" bash -c "source '$ROUTER'; walter_model_domains" 2>&1
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: CRLF domain table rows do not leak carriage returns" {
+  local domains_file="$TMP_CONFIG/model-domains-crlf.tsv"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex\tBackend review\r\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "codex" ]
+}
+
+@test "model-router: malformed domain row falls back without empty model" {
+  local domains_file="$TMP_CONFIG/model-domains.tsv"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"claude"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: walter_model_domains fails when all rows are malformed" {
+  local domains_file="$TMP_CONFIG/model-domains-invalid.tsv"
+  printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_domains" 2>&1
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no valid rows"* ]]
+}
+
+@test "model-router: print effective fails when canonical table is missing" {
+  run env WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" bash -c "source '$ROUTER'; walter_models_print_effective" 2>&1
+
+  [ "$status" -ne 0 ]
   [[ "$output" == *"WARN"* ]]
 }
 

@@ -172,23 +172,37 @@ _agent_frontmatter_scalar() {
 
 _agent_model_domain_canonical() {
   local domain="${1:-}"
+  local domains_file
   [[ -n "$domain" ]] || return 1
 
   domain="$(printf '%s' "$domain" | tr '[:upper:]-' '[:lower:]_')"
-  case "$domain" in
-    backend_review|frontend|longform|quick_refactor|phi|brainstorm|default)
-      printf '%s\n' "$domain"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  domains_file="${WALTER_MODEL_DOMAINS_FILE:-$WALTER_OS_HOME/scripts/walter/lib/model-domains.tsv}"
+  if [[ ! -r "$domains_file" ]]; then
+    echo "agents/run.sh: WARN model domain table is missing or unreadable: ${domains_file}" >&2
+    return 2
+  fi
+
+  if awk -F '\t' -v domain="$domain" '
+    { sub(/\r$/, "", $0) }
+    $0 !~ /^#/ &&
+      NF >= 3 &&
+      $1 ~ /^[a-z][a-z0-9_]*$/ &&
+      $2 ~ /^WALTER_MODEL_[A-Z0-9_]+$/ &&
+      $3 != "" &&
+      $1 == domain { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$domains_file"; then
+    printf '%s\n' "$domain"
+    return 0
+  fi
+
+  return 1
 }
 
 _agent_model_domain() {
   # Prefer explicit persona metadata. Keep the case mapping as a compatibility
   # fallback for legacy agent files and external aliases.
-  local frontmatter_domain canonical_domain
+  local frontmatter_domain canonical_domain canonical_status
   if ! frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"; then
     echo "agents/run.sh: invalid model_domain metadata in ${AGENT_PERSONA}" >&2
     exit 3
@@ -197,6 +211,11 @@ _agent_model_domain() {
     if canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"; then
       printf '%s\n' "$canonical_domain"
       return 0
+    fi
+    canonical_status=$?
+    if (( canonical_status == 2 )); then
+      echo "agents/run.sh: invalid model_domain allowlist; refusing to run ${AGENT_PERSONA}" >&2
+      exit 3
     fi
 
     echo "agents/run.sh: WARN invalid model_domain '${frontmatter_domain}' in ${AGENT_PERSONA}; using legacy agent mapping." >&2
