@@ -167,6 +167,7 @@ collect_evidence() {
   local prs='[]'
   local repo_json owner repo repo_slug origin_url repo_ref all_pr_list pr_list pr_count index pr number threads pr_with_threads
   local local_tags remote_tags
+  local release_view
   local pr_list_limit=1000
   local -a pr_objects=()
 
@@ -192,8 +193,13 @@ collect_evidence() {
   tags="$(printf '%s\n%s\n' "$local_tags" "$remote_tags" | sort -u | json_string_array_from_lines)"
 
   if [[ "$post_release" -eq 1 && -n "$target_tag" ]]; then
-    local target_commit=""
-    target_commit="$(git -C "$WALTER_OS_HOME" rev-list -n 1 "$target_tag" 2>/dev/null || true)"
+    local local_target_commit="" remote_target_commit="" target_commit=""
+    local_target_commit="$(git -C "$WALTER_OS_HOME" rev-list -n 1 "$target_tag" 2>/dev/null || true)"
+    remote_target_commit="$(git -C "$WALTER_OS_HOME" ls-remote --tags origin "${target_tag}^{}" 2>/dev/null | awk 'NR == 1 {print $1}')"
+    if [[ -z "$remote_target_commit" ]]; then
+      remote_target_commit="$(git -C "$WALTER_OS_HOME" ls-remote --tags --refs origin "$target_tag" 2>/dev/null | awk 'NR == 1 {print $1}')"
+    fi
+    target_commit="${remote_target_commit:-$local_target_commit}"
     if [[ -n "$target_commit" ]]; then
       tag_targets="$(jq -nc --arg tag "$target_tag" --arg commit "$target_commit" '{($tag): $commit}')"
     fi
@@ -382,7 +388,9 @@ cmd_doctor() {
     local release_assets required_assets_json missing_assets_json missing_digest_json expected
     tag_target="$(jq -r --arg tag "$target_tag" '.release.tag_targets[$tag] // ""' <<<"$evidence_json")"
     expected="${expected_commit:-$tag_target}"
-    if [[ -n "$expected" && -n "$tag_target" && "$tag_target" != "$expected" ]]; then
+    if [[ -n "$expected_commit" && -z "$tag_target" ]] && json_array_contains "$tags" "$target_tag"; then
+      add_release_artifact_finding "tag $target_tag target could not be resolved for expected commit $expected_commit"
+    elif [[ -n "$expected" && -n "$tag_target" && "$tag_target" != "$expected" ]]; then
       add_release_artifact_finding "tag $target_tag points at $tag_target, expected $expected"
     fi
 

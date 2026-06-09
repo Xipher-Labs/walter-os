@@ -298,6 +298,84 @@ SH
   [[ "$output" != *"#400"* ]]
 }
 
+@test "#499: post-release live collection resolves remote-only tag target" {
+  local fake_bin="$TMP_DIR/bin"
+  local release_repo="$TMP_DIR/release-repo"
+  mkdir -p "$fake_bin" "$release_repo"
+  printf '0.6.1\n' > "$release_repo/VERSION"
+  printf '## [0.6.1]\n' > "$release_repo/CHANGELOG.md"
+
+  cat > "$fake_bin/git" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-C" ]]; then
+  shift 2
+fi
+
+case "${1:-}" in
+  tag)
+    exit 0
+    ;;
+  rev-list)
+    exit 128
+    ;;
+  ls-remote)
+    if [[ "$*" == *"--tags --refs origin v[0-9]*"* ]]; then
+      printf 'def456\trefs/tags/v0.6.1\n'
+      exit 0
+    fi
+    if [[ "$*" == *"--tags origin v0.6.1^{}"* ]]; then
+      exit 0
+    fi
+    if [[ "$*" == *"--tags --refs origin v0.6.1"* ]]; then
+      printf 'def456\trefs/tags/v0.6.1\n'
+      exit 0
+    fi
+    exit 0
+    ;;
+  remote)
+    if [[ "${2:-}" == "get-url" && "${3:-}" == "origin" ]]; then
+      printf 'git@github.com/Xipher-Labs/walter-os.git\n'
+      exit 0
+    fi
+    echo "unexpected git remote invocation: $*" >&2
+    exit 97
+    ;;
+  *)
+    echo "unexpected git invocation: $*" >&2
+    exit 98
+    ;;
+esac
+SH
+
+  cat > "$fake_bin/gh" <<'SH'
+#!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  "repo view")
+    printf '{"name":"walter-os","owner":{"login":"Xipher-Labs"}}\n'
+    ;;
+  "release view")
+    printf '{"tagName":"v0.6.1","targetCommitish":"main","isDraft":false,"isPrerelease":false,"assets":[{"name":"checksums.sha256","digest":"sha256:111"},{"name":"checksums.sha256.cosign.bundle","digest":"sha256:222"},{"name":"walter-os-v0.6.1.intoto.jsonl","digest":"sha256:333"},{"name":"walter-os-v0.6.1.sbom.cdx.json","digest":"sha256:444"},{"name":"walter-os-v0.6.1.source.tar.gz","digest":"sha256:555"}],"url":"https://github.com/Xipher-Labs/walter-os/releases/tag/v0.6.1"}\n'
+    ;;
+  "pr list")
+    echo "post-release mode should not collect PRs" >&2
+    exit 96
+    ;;
+  *)
+    echo "unexpected gh invocation: $*" >&2
+    exit 98
+    ;;
+esac
+SH
+  chmod +x "$fake_bin/git" "$fake_bin/gh"
+
+  run env PATH="$fake_bin:$PATH" WALTER_OS_HOME="$release_repo" \
+    bash "$REPO_ROOT/scripts/walter/subcommands/release.sh" doctor --target v0.6.1 --post-release --expected-commit def456 --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "ready"'
+  echo "$output" | jq -e '.release_artifact_findings == []'
+}
+
 @test "AC3: missing changelog entry blocks release" {
   local fixture="$TMP_DIR/changelog-drift.json"
   write_fixture "$fixture" "0.6.1" '["0.6.0"]' '["v0.6.0"]' "$healthy_prs"
@@ -376,6 +454,43 @@ SH
 
   [ "$status" -eq 1 ]
   echo "$output" | jq -e '.release_artifact_findings | index("tag v0.6.1 points at abc123, expected def456")'
+}
+
+@test "#499: post-release mode reports unresolved expected tag target" {
+  local fixture="$TMP_DIR/post-release-missing-tag-target.json"
+  local release_json
+  release_json="$(jq -nc '
+    {
+      exists: true,
+      tagName: "v0.6.1",
+      targetCommitish: "main",
+      isDraft: false,
+      isPrerelease: false,
+      assets: [
+        {name: "checksums.sha256", digest: "sha256:111"},
+        {name: "checksums.sha256.cosign.bundle", digest: "sha256:222"},
+        {name: "walter-os-v0.6.1.intoto.jsonl", digest: "sha256:333"},
+        {name: "walter-os-v0.6.1.sbom.cdx.json", digest: "sha256:444"},
+        {name: "walter-os-v0.6.1.source.tar.gz", digest: "sha256:555"}
+      ]
+    }')"
+  jq -nc \
+    --argjson release_json "$release_json" \
+    '{
+      release: {
+        version: "0.6.1",
+        changelog_versions: ["0.6.1"],
+        tags: ["v0.6.1"],
+        tag_targets: {},
+        github_release: $release_json
+      },
+      prs: []
+    }' > "$fixture"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --post-release --expected-commit def456 --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.release_artifact_findings | index("tag v0.6.1 target could not be resolved for expected commit def456")'
 }
 
 @test "AC4: unresolved review threads block release" {
