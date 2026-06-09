@@ -11,6 +11,47 @@ These settings live in GitHub, not in this repository — they are
 configured per-repo via the Settings UI or via `gh api`. This document
 is the canonical list of what to set.
 
+## Current Walter-OS `main` state
+
+Read-only GitHub API verification on 2026-06-09 shows the repository has
+the CodeReviewID-relevant protection enabled:
+
+- Required pull request reviews are enabled with 1 approving review.
+- Stale approvals are dismissed when new commits are pushed.
+- Administrators are included in protection enforcement.
+- Force pushes and branch deletion are blocked.
+- Linear history is required.
+- The maintainer account is listed in bypass allowances for solo-maintainer
+  recovery.
+
+The remaining OpenSSF Scorecard `CodeReviewID` alert is therefore not a
+missing branch-protection setting. The latest Scorecard evidence reports
+`Found 0/30 approved changesets`, which is a history signal: future merged
+PRs need approving reviews from another human account before Scorecard can
+observe approved changesets. See
+[`../operational/scorecard-hygiene.md`](../operational/scorecard-hygiene.md).
+
+Current required status-check contexts on `main`:
+
+- `Validate PR title format`
+- `gitleaks secret scan`
+- `semgrep custom rules`
+- `shellcheck`
+- `frontmatter lint`
+- `cross-reference lint (policy drift)`
+- `install.sh --dry-run`
+- `bats hooks tests`
+- `codeql analysis (javascript-typescript)`
+- `osv-scanner dependency scan / osv-scan`
+
+The OSV context includes `/ osv-scan` because the OSV workflow delegates to
+Google's reusable workflow; GitHub branch protection stores the emitted
+status-check context, not only the local YAML job name.
+
+Signed commits remain recommended hardening for `main`, but they were not
+part of the Scorecard `CodeReviewID` remediation: `required_signatures.enabled`
+was `false` in the same 2026-06-09 read-only check.
+
 ## Per-branch rules
 
 Apply identical settings to `main` and `staging`. Apply a softer profile
@@ -23,15 +64,18 @@ to `dev` (no required reviewer, but still require status checks).
       `Require approvals` both on.
 - [ ] Dismiss stale pull request approvals when new commits are pushed.
 - [ ] Require status checks to pass before merging. **Mark each of the
-      following as required** (names must match the workflow job names
-      exactly — copy from the Actions tab):
-    - `bats hooks tests`
-    - `shellcheck`
-    - `frontmatter lint`
-    - `gitleaks secret scan`
-    - `osv-scanner dependency scan`
-    - `Scorecard supply-chain analysis`
-    - `CodeQL`
+      following as required** (names must match GitHub status-check contexts
+      exactly — copy from the branch-protection UI or protection API):
+  - `bats hooks tests`
+  - `shellcheck`
+  - `frontmatter lint`
+  - `gitleaks secret scan`
+  - `Validate PR title format`
+  - `semgrep custom rules`
+  - `cross-reference lint (policy drift)`
+  - `install.sh --dry-run`
+  - `codeql analysis (javascript-typescript)`
+  - `osv-scanner dependency scan / osv-scan`
 - [ ] Require branches to be up to date before merging.
 - [ ] **Require signed commits.** This is the high-trust signal — every
       merged commit on `main` must be verifiably signed by a known
@@ -99,9 +143,12 @@ gh api -X PUT "repos/$OWNER_REPO/branches/$BRANCH/protection" \
       "shellcheck",
       "frontmatter lint",
       "gitleaks secret scan",
-      "osv-scanner dependency scan",
-      "Scorecard supply-chain analysis",
-      "CodeQL"
+      "osv-scanner dependency scan / osv-scan",
+      "Validate PR title format",
+      "semgrep custom rules",
+      "cross-reference lint (policy drift)",
+      "install.sh --dry-run",
+      "codeql analysis (javascript-typescript)"
     ]
   },
   "enforce_admins": true,

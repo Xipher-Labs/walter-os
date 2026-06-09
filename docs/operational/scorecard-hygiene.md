@@ -8,7 +8,7 @@ that must be changed in GitHub by an operator.
 
 | Alert | Rule | Repository-visible action | Remaining action |
 |---|---|---|---|
-| #45 | `CodeReviewID` | `AGENTS.md` and `docs/security/branch-protection.md` document the PR review policy and required branch protection. On 2026-06-07, `main` was updated to require one approval while preserving the solo-maintainer bypass. | Scorecard still reports `Found 0/30 approved changesets`. Clearing the alert requires future merged PRs with approving reviews, or an explicit solo-operator exception until a second human reviewer exists. |
+| #45 | `CodeReviewID` | `AGENTS.md` and `docs/security/branch-protection.md` document the PR review policy and required branch protection. On 2026-06-09, read-only GitHub API verification showed `main` requires one approval, dismisses stale approvals, includes administrators, blocks force pushes/deletions, and requires linear history while preserving the solo-maintainer bypass. | Scorecard still reports `Found 0/30 approved changesets`. This is now explicitly dispositioned as a history/operator-policy signal, not a missing repository patch. Clearing the alert requires future merged PRs with approving reviews from another human account, or accepting the solo-operator exception while the alert remains open. |
 | #46 | `MaintainedID` | This repository has active commits, CI, release docs, and an open maintenance process. | Scorecard still reports `Repository was created within the last 90 days`. No repo setting can clear this early-age signal; re-check after the 90-day window and the next Scorecard refresh. |
 | #47 | `SecurityPolicyID` | Root `SECURITY.md` exists and `.github/SECURITY.md` duplicates it for GitHub/Scorecard discoverability. | None expected after merge; wait for the next Scorecard run. |
 | #48 | `CIIBestPracticesID` | `docs/security/openssf-silver-checklist.md` and `docs/specs/openssf-badges.md` record the OpenSSF Best Practices badge path. | Manual process: file the OpenSSF Passing badge at bestpractices.dev, then add the approved badge URL to `README.md`. |
@@ -30,8 +30,7 @@ branch protection is not configured or the token lacks repository
 administration read permission. Do not infer protection from local hooks; the
 GitHub setting is the server-side control Scorecard can observe.
 
-Observed on 2026-06-07 from the read-only branch-protection endpoint after
-the review-protection setting update:
+Observed on 2026-06-09 from the read-only branch-protection endpoint:
 
 - `enforce_admins.enabled: true`
 - `required_pull_request_reviews.dismiss_stale_reviews: true`
@@ -42,6 +41,36 @@ the review-protection setting update:
 - `allow_force_pushes.enabled: false`
 - `allow_deletions.enabled: false`
 - `required_status_checks.strict: false`
+- `required_signatures.enabled: false`
+
+The 2026-06-09 required status-check contexts on `main` were:
+
+- `Validate PR title format`
+- `gitleaks secret scan`
+- `semgrep custom rules`
+- `shellcheck`
+- `frontmatter lint`
+- `cross-reference lint (policy drift)`
+- `install.sh --dry-run`
+- `bats hooks tests`
+- `codeql analysis (javascript-typescript)`
+- `osv-scanner dependency scan / osv-scan`
+
+The OSV context includes `/ osv-scan` because the local workflow calls
+Google's OSV reusable workflow; branch protection stores the emitted
+status-check context from GitHub, not just the local YAML job name.
+
+The current code-scanning alert #45 still reports:
+
+```text
+rule: CodeReviewID
+message: score is 0: Found 0/30 approved changesets
+ref: refs/heads/main
+```
+
+This means the branch-protection remediation is present, but Scorecard still
+needs approved changeset history. Do not open another repository patch for
+CodeReviewID unless the alert changes to report a missing setting.
 
 ## Manual GitHub setting for CodeReviewID
 
