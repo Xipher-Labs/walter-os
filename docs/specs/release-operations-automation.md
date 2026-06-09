@@ -70,6 +70,26 @@ completion, but it can flag structurally risky cases:
 - a stacked PR whose base is not the release base and therefore will not close
   issues until retargeted.
 
+### D5 — Post-release verification
+
+After a tag has been cut, the pre-release doctor intentionally blocks on the
+existing tag. Operators can switch to read-only post-release verification:
+
+```bash
+walter-os release doctor --target v0.6.1 --post-release
+```
+
+Post-release mode expects the tag to exist and validates the GitHub Release
+state plus required artifact metadata. Release-artifact drift is reported in a
+separate `release_artifact_findings` JSON array so callers can distinguish it
+from pre-release PR/readiness blockers.
+
+Operators who need to pin the exact intended commit can pass:
+
+```bash
+walter-os release doctor --target v0.6.1 --post-release --expected-commit <sha>
+```
+
 ## Acceptance Criteria
 
 - AC1: `walter-os help` documents `release doctor`.
@@ -82,6 +102,9 @@ completion, but it can flag structurally risky cases:
 - AC6: issue-closing hygiene problems return `block`.
 - AC7: `--json` emits `decision`, `counts`, `findings`, `warnings`, and
   `target`.
+- AC8: `--post-release` expects the target tag and GitHub Release to exist,
+  validates draft/prerelease state, required assets, asset digests, and reports
+  artifact drift separately from pre-release readiness findings.
 
 ## Related
 

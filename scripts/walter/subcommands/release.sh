@@ -11,7 +11,7 @@ WALTER_OS_HOME="${WALTER_OS_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 usage() {
   cat <<'EOF'
-Usage: walter-os release doctor --target <vX.Y.Z|X.Y.Z> [--base <branch>] [--json] [--fixture <path>]
+Usage: walter-os release doctor --target <vX.Y.Z|X.Y.Z> [--base <branch>] [--post-release] [--expected-commit <sha>] [--json] [--fixture <path>]
 
 Read-only release operations diagnostics. The doctor checks version,
 changelog, tag, open-PR check/review status, issue closure hygiene, and stacked
@@ -24,6 +24,11 @@ Subcommands:
 Options:
   --target      Target release tag, for example v0.6.1 or 0.6.1.
   --base        Release base branch. Default: main.
+  --post-release
+                Verify an existing GitHub Release and its artifact metadata.
+  --expected-commit
+                Expected commit SHA for the release tag in --post-release mode.
+                Defaults to the collected tag target when evidence includes one.
   --json        Print machine-readable JSON.
   --fixture     Read release evidence JSON from a file for tests/local audits.
 EOF
@@ -148,7 +153,7 @@ release_batch_prs() {
 }
 
 collect_evidence() {
-  local base_branch="$1"
+  local base_branch="$1" target_tag="${2:-}" post_release="${3:-0}"
 
   require_gh
 
@@ -157,9 +162,12 @@ collect_evidence() {
   local version=""
   local changelog_versions='[]'
   local tags='[]'
+  local tag_targets='{}'
+  local github_release='{"exists":false}'
   local prs='[]'
   local repo_json owner repo repo_slug origin_url repo_ref all_pr_list pr_list pr_count index pr number threads pr_with_threads
   local local_tags remote_tags
+  local release_view release_stderr release_error
   local pr_list_limit=1000
   local -a pr_objects=()
 
@@ -184,6 +192,19 @@ collect_evidence() {
   fi
   tags="$(printf '%s\n%s\n' "$local_tags" "$remote_tags" | sort -u | json_string_array_from_lines)"
 
+  if [[ "$post_release" -eq 1 && -n "$target_tag" ]]; then
+    local local_target_commit="" remote_target_commit="" target_commit=""
+    local_target_commit="$(git -C "$WALTER_OS_HOME" rev-list -n 1 "$target_tag" 2>/dev/null || true)"
+    remote_target_commit="$({ git -C "$WALTER_OS_HOME" ls-remote --tags origin "${target_tag}^{}" 2>/dev/null || true; } | awk 'NR == 1 {print $1}')"
+    if [[ -z "$remote_target_commit" ]]; then
+      remote_target_commit="$({ git -C "$WALTER_OS_HOME" ls-remote --tags --refs origin "$target_tag" 2>/dev/null || true; } | awk 'NR == 1 {print $1}')"
+    fi
+    target_commit="${remote_target_commit:-$local_target_commit}"
+    if [[ -n "$target_commit" ]]; then
+      tag_targets="$(jq -nc --arg tag "$target_tag" --arg commit "$target_commit" '{($tag): $commit}')"
+    fi
+  fi
+
   if ! origin_url="$(git -C "$WALTER_OS_HOME" remote get-url origin)"; then
     runtime_error "failed to read origin remote from $WALTER_OS_HOME"
   fi
@@ -195,6 +216,34 @@ collect_evidence() {
   owner="$(jq -r '.owner.login' <<<"$repo_json")"
   repo="$(jq -r '.name' <<<"$repo_json")"
   repo_slug="$owner/$repo"
+
+  if [[ "$post_release" -eq 1 && -n "$target_tag" ]]; then
+    release_stderr="$(mktemp "${TMPDIR:-/tmp}/walter-release-view.XXXXXX")" \
+      || runtime_error "failed to create temporary stderr file for gh release view"
+    if release_view="$(gh release view "$target_tag" --repo "$repo_slug" \
+        --json tagName,targetCommitish,isDraft,isPrerelease,assets,url 2>"$release_stderr")"; then
+      github_release="$(jq -c '. + {exists: true}' <<<"$release_view")"
+    else
+      release_error="$(tr '\n' ' ' < "$release_stderr" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      rm -f "$release_stderr"
+      if [[ ! "$release_error" =~ [Nn]ot[[:space:]-][Ff]ound && ! "$release_error" =~ 404 ]]; then
+        runtime_error "failed to read GitHub Release $target_tag with gh: ${release_error:-unknown error}"
+      fi
+      release_stderr=""
+    fi
+    [[ -z "${release_stderr:-}" ]] || rm -f "$release_stderr"
+  fi
+
+  if [[ "$post_release" -eq 1 ]]; then
+    jq -nc \
+      --arg version "$version" \
+      --argjson changelog_versions "$changelog_versions" \
+      --argjson tags "$tags" \
+      --argjson tag_targets "$tag_targets" \
+      --argjson github_release "$github_release" \
+      '{release: {version: $version, changelog_versions: $changelog_versions, tags: $tags, tag_targets: $tag_targets, github_release: $github_release}, prs: []}'
+    return 0
+  fi
 
   if ! all_pr_list="$(gh pr list --repo "$repo_slug" --state open --limit "$pr_list_limit" \
       --json number,title,body,baseRefName,headRefName,mergeable,reviewRequests,reviewDecision,closingIssuesReferences,statusCheckRollup)"; then
@@ -231,12 +280,14 @@ collect_evidence() {
     --arg version "$version" \
     --argjson changelog_versions "$changelog_versions" \
     --argjson tags "$tags" \
+    --argjson tag_targets "$tag_targets" \
+    --argjson github_release "$github_release" \
     --argjson prs "$prs" \
-    '{release: {version: $version, changelog_versions: $changelog_versions, tags: $tags}, prs: $prs}'
+    '{release: {version: $version, changelog_versions: $changelog_versions, tags: $tags, tag_targets: $tag_targets, github_release: $github_release}, prs: $prs}'
 }
 
 cmd_doctor() {
-  local target="" base_branch="main" fixture="" json_output=0
+  local target="" base_branch="main" fixture="" json_output=0 post_release=0 expected_commit=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -253,6 +304,15 @@ cmd_doctor() {
       --fixture)
         fixture="${2:-}"
         [[ -n "$fixture" ]] || usage_error "--fixture requires a path"
+        shift 2
+        ;;
+      --post-release)
+        post_release=1
+        shift
+        ;;
+      --expected-commit)
+        expected_commit="${2:-}"
+        [[ -n "$expected_commit" ]] || usage_error "--expected-commit requires a value"
         shift 2
         ;;
       --json)
@@ -280,9 +340,16 @@ cmd_doctor() {
 
   [[ -n "$target" ]] || usage_error "--target is required"
   valid_target_tag "$target" || usage_error "--target must look like vX.Y.Z or X.Y.Z"
+  if [[ -n "$expected_commit" && "$post_release" -eq 0 ]]; then
+    usage_error "--expected-commit requires --post-release"
+  fi
 
   local target_version="${target#v}"
   local target_tag="v${target_version}"
+  local mode="pre-release"
+  if [[ "$post_release" -eq 1 ]]; then
+    mode="post-release"
+  fi
   local evidence_json
 
   if [[ -n "$fixture" ]]; then
@@ -290,7 +357,7 @@ cmd_doctor() {
     [[ -r "$fixture" ]] || usage_error "fixture is not readable: $fixture"
     evidence_json="$(cat -- "$fixture")"
   else
-    evidence_json="$(collect_evidence "$base_branch")"
+    evidence_json="$(collect_evidence "$base_branch" "$target_tag" "$post_release")"
   fi
 
   if ! jq -e . >/dev/null 2>&1 <<<"$evidence_json"; then
@@ -299,11 +366,15 @@ cmd_doctor() {
 
   local findings_json='[]'
   local warnings_json='[]'
+  local release_artifact_findings_json='[]'
   add_finding() {
     findings_json="$(jq -c --arg msg "$1" '. + [$msg]' <<<"$findings_json")"
   }
   add_warning() {
     warnings_json="$(jq -c --arg msg "$1" '. + [$msg]' <<<"$warnings_json")"
+  }
+  add_release_artifact_finding() {
+    release_artifact_findings_json="$(jq -c --arg msg "$1" '. + [$msg]' <<<"$release_artifact_findings_json")"
   }
 
   local version changelog_versions tags
@@ -311,14 +382,86 @@ cmd_doctor() {
   changelog_versions="$(jq -c '.release.changelog_versions // []' <<<"$evidence_json")"
   tags="$(jq -c '.release.tags // []' <<<"$evidence_json")"
 
-  if [[ "$version" != "$target_version" ]]; then
-    add_finding "VERSION is ${version:-missing}, expected $target_version"
+  if [[ "$post_release" -eq 0 ]]; then
+    if [[ "$version" != "$target_version" ]]; then
+      add_finding "VERSION is ${version:-missing}, expected $target_version"
+    fi
+    if ! json_array_contains "$changelog_versions" "$target_version"; then
+      add_finding "CHANGELOG.md is missing ## [$target_version]"
+    fi
   fi
-  if ! json_array_contains "$changelog_versions" "$target_version"; then
-    add_finding "CHANGELOG.md is missing ## [$target_version]"
-  fi
-  if json_array_contains "$tags" "$target_tag"; then
+  if [[ "$post_release" -eq 1 ]]; then
+    if ! json_array_contains "$tags" "$target_tag"; then
+      add_release_artifact_finding "tag missing: $target_tag"
+    fi
+  elif json_array_contains "$tags" "$target_tag"; then
     add_finding "tag already exists: $target_tag"
+  fi
+
+  if [[ "$post_release" -eq 1 ]]; then
+    local tag_target github_release release_exists release_tag release_draft release_prerelease
+    local release_assets required_assets_json missing_assets_json missing_digest_json expected
+    tag_target="$(jq -r --arg tag "$target_tag" '.release.tag_targets[$tag] // ""' <<<"$evidence_json")"
+    expected="${expected_commit:-$tag_target}"
+    if [[ -z "$tag_target" ]] && json_array_contains "$tags" "$target_tag"; then
+      if [[ -n "$expected_commit" ]]; then
+        add_release_artifact_finding "tag $target_tag target could not be resolved for expected commit $expected_commit"
+      else
+        add_release_artifact_finding "tag $target_tag target could not be resolved"
+      fi
+    elif [[ -n "$expected" && -n "$tag_target" && "$tag_target" != "$expected" ]]; then
+      add_release_artifact_finding "tag $target_tag points at $tag_target, expected $expected"
+    fi
+
+    github_release="$(jq -c '.release.github_release // {exists:false}' <<<"$evidence_json")"
+    release_exists="$(jq -r '.exists // false' <<<"$github_release")"
+    if [[ "$release_exists" != "true" ]]; then
+      add_release_artifact_finding "GitHub Release missing: $target_tag"
+    else
+      release_tag="$(jq -r '.tagName // ""' <<<"$github_release")"
+      release_draft="$(jq -r '.isDraft // false' <<<"$github_release")"
+      release_prerelease="$(jq -r '.isPrerelease // false' <<<"$github_release")"
+      if [[ "$release_tag" != "$target_tag" ]]; then
+        add_release_artifact_finding "GitHub Release tag is ${release_tag:-missing}, expected $target_tag"
+      fi
+      if [[ "$release_draft" == "true" ]]; then
+        add_release_artifact_finding "GitHub Release is draft: $target_tag"
+      fi
+      if [[ "$release_prerelease" == "true" ]]; then
+        add_release_artifact_finding "GitHub Release is prerelease: $target_tag"
+      fi
+
+      required_assets_json="$(jq -nc --arg tag "$target_tag" '[
+        "checksums.sha256",
+        "checksums.sha256.cosign.bundle",
+        "walter-os-\($tag).intoto.jsonl",
+        "walter-os-\($tag).sbom.cdx.json",
+        "walter-os-\($tag).source.tar.gz"
+      ]')"
+      release_assets="$(jq -c '.assets // []' <<<"$github_release")"
+      missing_assets_json="$(jq -nc --argjson required "$required_assets_json" --argjson assets "$release_assets" '
+        ($assets | map(.name // "")) as $names
+        | [$required[] as $asset | select(($names | index($asset)) | not) | $asset]
+      ')"
+      while IFS= read -r expected_asset; do
+        [[ -n "$expected_asset" ]] || continue
+        add_release_artifact_finding "release asset missing: $expected_asset"
+      done < <(jq -r '.[]' <<<"$missing_assets_json")
+
+      missing_digest_json="$(jq -nc --argjson required "$required_assets_json" --argjson assets "$release_assets" '
+        [
+          $required[] as $name
+          | $assets[]
+          | select((.name // "") == $name)
+          | select((.digest // "") == "")
+          | $name
+        ]
+      ')"
+      while IFS= read -r asset_without_digest; do
+        [[ -n "$asset_without_digest" ]] || continue
+        add_release_artifact_finding "release asset missing digest: $asset_without_digest"
+      done < <(jq -r '.[]' <<<"$missing_digest_json")
+    fi
   fi
 
   local prs_total pr_blockers=0 pr_warnings=0
@@ -430,11 +573,13 @@ cmd_doctor() {
   done < <(jq -c '.prs[]?' <<<"$evidence_json")
 
   local findings_count warnings_count decision exit_code
+  local release_artifact_findings_count
+  release_artifact_findings_count="$(jq 'length' <<<"$release_artifact_findings_json")"
   findings_count="$(jq 'length' <<<"$findings_json")"
   warnings_count="$(jq 'length' <<<"$warnings_json")"
   decision="ready"
   exit_code=0
-  if [[ "$findings_count" -gt 0 ]]; then
+  if [[ "$findings_count" -gt 0 || "$release_artifact_findings_count" -gt 0 ]]; then
     decision="block"
     exit_code=1
   elif [[ "$warnings_count" -gt 0 ]]; then
@@ -446,24 +591,28 @@ cmd_doctor() {
     --argjson prs "$prs_total" \
     --argjson findings "$findings_count" \
     --argjson warnings "$warnings_count" \
+    --argjson release_artifact_findings "$release_artifact_findings_count" \
     --argjson pr_blockers "$pr_blockers" \
     --argjson pr_warnings "$pr_warnings" \
-    '{prs: $prs, findings: $findings, warnings: $warnings, pr_blockers: $pr_blockers, pr_warnings: $pr_warnings}')"
+    '{prs: $prs, findings: $findings, warnings: $warnings, release_artifact_findings: $release_artifact_findings, pr_blockers: $pr_blockers, pr_warnings: $pr_warnings}')"
 
   if [[ "$json_output" -eq 1 ]]; then
     jq -nc \
       --arg target "$target_tag" \
+      --arg mode "$mode" \
       --arg decision "$decision" \
       --arg base "$base_branch" \
       --argjson counts "$counts_json" \
       --argjson findings "$findings_json" \
       --argjson warnings "$warnings_json" \
-      '{target: $target, base: $base, decision: $decision, counts: $counts, findings: $findings, warnings: $warnings}'
+      --argjson release_artifact_findings "$release_artifact_findings_json" \
+      '{target: $target, mode: $mode, base: $base, decision: $decision, counts: $counts, findings: $findings, warnings: $warnings, release_artifact_findings: $release_artifact_findings}'
     exit "$exit_code"
   fi
 
   printf 'Walter-OS release doctor\n'
   printf 'Target: %s\n' "$target_tag"
+  printf 'Mode: %s\n' "$mode"
   printf 'Base: %s\n' "$base_branch"
   local status_label="PASS"
   if [[ "$decision" == "block" ]]; then
@@ -480,6 +629,12 @@ cmd_doctor() {
     printf '  none\n'
   else
     jq -r '.[] | "  - \(.)"' <<<"$findings_json"
+  fi
+  printf '\nRelease artifact findings:\n'
+  if [[ "$release_artifact_findings_count" -eq 0 ]]; then
+    printf '  none\n'
+  else
+    jq -r '.[] | "  - \(.)"' <<<"$release_artifact_findings_json"
   fi
   printf '\nWarnings:\n'
   if [[ "$warnings_count" -eq 0 ]]; then
