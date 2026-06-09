@@ -221,7 +221,7 @@ fi
 
 printf '%s\n' \
   '' \
-  'RESULT: no known capability-version drift signature found in the inspected logs.' \
+  'RESULT: no known runtime or registration blocker found in the inspected state.' \
   '' \
   'This does not prove registration is healthy. Run a live client registration' \
   'smoke test and confirm docker exec headscale headscale nodes list shows the' \

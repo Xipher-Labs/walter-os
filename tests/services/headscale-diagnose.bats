@@ -83,7 +83,8 @@ EOF
   run "$DIAGNOSE" --mock-log "$log_file"
 
   [ "$status" -eq 0 ]
-  echo "$output" | grep -Fq "no known capability-version drift signature"
+  echo "$output" | grep -Fq "no known runtime or registration blocker found"
+  ! echo "$output" | grep -Fq "no known capability-version drift signature"
   echo "$output" | grep -Fq "live client registration"
 }
 
@@ -134,7 +135,7 @@ EOF
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -Fq "Headscale: Headscale 9.9.9-test"
-  echo "$output" | grep -Fq "no known capability-version drift signature"
+  echo "$output" | grep -Fq "no known runtime or registration blocker found"
 }
 
 @test "headscale diagnose fails inconclusive when docker logs cannot be inspected" {
