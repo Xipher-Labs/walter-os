@@ -142,7 +142,7 @@ _agent_frontmatter_scalar() {
   [[ -n "$file" && -f "$file" && -n "$key" ]] || return 0
 
   awk -v key="$key" '
-    BEGIN { in_frontmatter = 0 }
+    BEGIN { in_frontmatter = 0; matches = 0; value = "" }
     {
       line = $0
       sub(/\r$/, "", line)
@@ -154,8 +154,17 @@ _agent_frontmatter_scalar() {
         sub(/^[^:]*:[[:space:]]*/, "", line)
         sub(/[[:space:]]+#.*$/, "", line)
         sub(/[[:space:]]+$/, "", line)
-        print line
-        exit
+        value = line
+        matches += 1
+      }
+    }
+    END {
+      if (matches > 1) {
+        print "duplicate " key " frontmatter keys" > "/dev/stderr"
+        exit 2
+      }
+      if (matches == 1) {
+        print value
       }
     }
   ' "$file"
@@ -180,7 +189,10 @@ _agent_model_domain() {
   # Prefer explicit persona metadata. Keep the case mapping as a compatibility
   # fallback for legacy agent files and external aliases.
   local frontmatter_domain canonical_domain
-  frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"
+  if ! frontmatter_domain="$(_agent_frontmatter_scalar "$AGENT_PERSONA" "model_domain")"; then
+    echo "agents/run.sh: invalid model_domain metadata in ${AGENT_PERSONA}" >&2
+    exit 3
+  fi
   if [[ -n "$frontmatter_domain" ]]; then
     if canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"; then
       printf '%s\n' "$canonical_domain"

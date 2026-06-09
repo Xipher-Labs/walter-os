@@ -86,6 +86,30 @@ teardown() {
   grep -q 'in_frontmatter && line == "---"' "$RUN_SH"
 }
 
+@test "run.sh fails closed on duplicate model_domain frontmatter keys" {
+  local helper persona
+  helper="$(mktemp -t walter-run-helper-XXXXXX)"
+  persona="$(mktemp -t walter-agent-persona-XXXXXX)"
+  awk '/^_agent_frontmatter_scalar\(\)/,/^}/' "$RUN_SH" > "$helper"
+  cat > "$persona" <<'PERSONA'
+---
+name: duplicate-domain
+description: Agent fixture with duplicate routing metadata.
+tools: Read
+model: router
+model_domain: backend_review
+model_domain: frontend
+---
+Body
+PERSONA
+
+  run bash -c 'source "$1"; _agent_frontmatter_scalar "$2" model_domain' bash "$helper" "$persona"
+  rm -f "$helper" "$persona"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"duplicate model_domain"* ]]
+}
+
 @test "run.sh keeps legacy Council agent domain fallback mapping" {
   grep -q "_agent_model_domain" "$RUN_SH"
   grep -q "coder|reviewer|security-auditor" "$RUN_SH"
@@ -107,10 +131,34 @@ teardown() {
       domain = data["model_domain"]
       abort("#{path}: missing model_domain") unless domain.is_a?(String)
       abort("#{path}: invalid model_domain #{domain.inspect}") unless allowed.include?(domain)
-      raw = parts[1].lines.grep(/\A[[:space:]]*model_domain[[:space:]]*:/).first
+      raw_domains = parts[1].lines.grep(/\A[[:space:]]*model_domain[[:space:]]*:/)
+      abort("#{path}: duplicate model_domain keys") unless raw_domains.length == 1
+      raw = raw_domains.first
       abort("#{path}: model_domain must be an unquoted scalar") unless raw&.match?(/\A[[:space:]]*model_domain[[:space:]]*:[[:space:]]*(#{allowed.join("|")})([[:space:]]+#.*)?[[:space:]]*\z/)
     end
   '
+}
+
+@test "frontmatter lint rejects duplicate agent model_domain keys" {
+  local fixture
+  fixture="$BATS_TEST_DIRNAME/../../agents/duplicate-model-domain-test.md"
+  cat > "$fixture" <<'AGENT'
+---
+name: duplicate-model-domain-test
+description: Temporary test fixture with duplicate model routing metadata.
+tools: Read
+model: router
+model_domain: backend_review
+model_domain: frontend
+---
+Temporary fixture.
+AGENT
+
+  run ruby "$BATS_TEST_DIRNAME/../../tests/lint-frontmatter.rb"
+  rm -f "$fixture"
+
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"duplicate model_domain"* ]]
 }
 
 @test "run.sh does not hardcode primary Council models" {
