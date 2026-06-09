@@ -82,9 +82,11 @@ end
 
 def validate_agent_metadata(data, frontmatter)
   domain = data["model_domain"]
-  raw_domain = frontmatter.each_line.grep(/\A[[:space:]]*model_domain[[:space:]]*:/).first
+  raw_domains = frontmatter.each_line.grep(/\A[[:space:]]*model_domain[[:space:]]*:/)
+  raw_domain = raw_domains.first
   domain_pattern = VALID_MODEL_DOMAINS.join("|")
 
+  return "'model_domain' must be declared exactly once (duplicate model_domain keys are not allowed)" unless raw_domains.length == 1
   return "'model_domain' must be a string" unless domain.is_a?(String)
   unless VALID_MODEL_DOMAINS.include?(domain)
     return "'model_domain' must be one of: #{VALID_MODEL_DOMAINS.join(', ')}"
