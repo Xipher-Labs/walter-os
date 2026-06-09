@@ -113,9 +113,15 @@ setup() {
   grep -Fq 'headscale-admin.${WALTER_DOMAIN}' "$CADDY_TEMPLATE"
   grep -Fq 'vpn.${WALTER_DOMAIN}' "$CADDY_TEMPLATE"
 
-  grep -Eq '^[[:space:]]+headscale$' "$CF_TUNNEL"
-  grep -Eq '^[[:space:]]+headscale-admin$' "$CF_TUNNEL"
-  grep -Eq '^[[:space:]]+vpn$' "$CF_TUNNEL"
+  local tunnel_subdomains direct_subdomains
+  tunnel_subdomains="$(sed -n '/^SUBDOMAINS=(/,/^)/p' "$CF_TUNNEL")"
+  direct_subdomains="$(sed -n '/^DIRECT_ROUTE_SUBDOMAINS=(/,/^)/p' "$CF_TUNNEL")"
+
+  grep -Eq '^[[:space:]]+headscale$' <<<"$direct_subdomains"
+  ! grep -Eq '^[[:space:]]+headscale$' <<<"$tunnel_subdomains"
+  grep -Fq 'Cloudflare does not support the WebSocket POSTs required by Headscale' "$CF_TUNNEL"
+  grep -Eq '^[[:space:]]+headscale-admin$' <<<"$tunnel_subdomains"
+  grep -Eq '^[[:space:]]+vpn$' <<<"$tunnel_subdomains"
 
   local access_loop
   access_loop="$(sed -n '/for sub in /,/; do/p' "$CF_ACCESS")"
@@ -129,7 +135,8 @@ setup() {
   [[ -f "$HOST_COMPOSE" ]]
 
   grep -Fq 'URL admin: headscale-admin.${WALTER_DOMAIN}' "$HOST_COMPOSE"
-  grep -Fq 'URL clients: headscale.${WALTER_DOMAIN}/derp + /key' "$HOST_COMPOSE"
+  grep -Fq 'URL clients: headscale.${WALTER_DOMAIN}' "$HOST_COMPOSE"
+  grep -Fq 'DNS-only direct route, no Cloudflare Tunnel or Access' "$HOST_COMPOSE"
 }
 
 @test "Headscale admin known issue uses current hostname" {

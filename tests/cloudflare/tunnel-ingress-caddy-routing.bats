@@ -2,8 +2,10 @@
 # tests/cloudflare/tunnel-ingress-caddy-routing.bats
 #
 # Regression guard for issue #174 — cloudflared tunnel ingress map gap.
-# After the fix, the tunnel must route EVERY subdomain that Caddy
-# already handles. The architecture is:
+# After the fix, the tunnel must route every Cloudflare-compatible subdomain
+# that Caddy already handles. Protocol-incompatible services must be listed in
+# DIRECT_ROUTE_SUBDOMAINS with an explicit comment and stay out of the tunnel.
+# The default architecture is:
 #
 #     internet --(TLS)--> cloudflared --(plain HTTP)--> Caddy --(Docker DNS)--> container
 #
@@ -11,11 +13,11 @@
 # The old config bypassed Caddy and routed 8 subdomains directly to host
 # ports, leaving 15+ services (grafana, matrix, element, posthog, n8n,
 # rocketchat, metabase, drawio, penpot, syncthing, openclaw, control-tower,
-# headscale, vpn, sync, posthog, postiz, hermes, etc.) publicly unreachable.
+# vpn, sync, posthog, postiz, hermes, etc.) publicly unreachable.
 #
-# The fix routes every subdomain to Caddy on host port 80, so the routing
-# table lives in ONE place (the Caddyfile) instead of being split across
-# cloudflared and Caddy with drift between them.
+# The fix routes every compatible subdomain to Caddy on host port 80, so the
+# routing table lives in ONE place (the Caddyfile) instead of being split
+# across cloudflared and Caddy with drift between them.
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -39,11 +41,20 @@ setup() {
 #                           directly — in that case this helper just
 #                           defers back to the array, which keeps any
 #                           future drift detectable.
+#
+#   _direct_route_exclusions : protocol-incompatible subdomains that Caddy
+#                              still serves but Cloudflare Tunnel must not.
 # ---------------------------------------------------------------------------
 _subdomains_array() {
   awk '/^SUBDOMAINS=\(/{capture=1; next} capture && /^\)/{capture=0} capture {print}' "$TUNNEL_SCRIPT" \
     | tr -s ' \t' '\n' \
     | grep -E '^[a-z][a-z0-9-]*$'
+}
+
+_direct_route_exclusions() {
+  awk '/^DIRECT_ROUTE_SUBDOMAINS=\(/{capture=1; next} capture && /^\)/{capture=0} capture {print}' "$TUNNEL_SCRIPT" \
+    | tr -s ' \t' '\n' \
+    | grep -E '^[a-z][a-z0-9-]*$' || true
 }
 
 _for_loop_subdomains() {
@@ -64,10 +75,10 @@ _for_loop_subdomains() {
 }
 
 # ---------------------------------------------------------------------------
-# AC-1: every subdomain Caddy knows about has a tunnel ingress entry
+# AC-1: every compatible Caddy subdomain has a tunnel ingress entry
 # ---------------------------------------------------------------------------
 
-@test "AC-1: tunnel ingress includes every subdomain from Caddyfile.template" {
+@test "AC-1: tunnel ingress includes every compatible subdomain from Caddyfile.template" {
   [[ -f "$CADDYFILE_TEMPLATE" ]] || skip "Caddyfile.template missing"
   [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
 
@@ -85,11 +96,15 @@ _for_loop_subdomains() {
   # set with the for-loop fallback (Copilot R1 #188). The ingress emitter
   # only iterates SUBDOMAINS, so that array is the source of truth that
   # must contain every Caddy subdomain.
-  local script_subs
+  local script_subs direct_subs
   script_subs=$(_subdomains_array | sort -u)
+  direct_subs=$(_direct_route_exclusions | sort -u)
 
   local missing=()
   while read -r sub; do
+    if grep -qE "^${sub}$" <<< "$direct_subs"; then
+      continue
+    fi
     if ! grep -qE "^${sub}$" <<< "$script_subs"; then
       missing+=("$sub")
     fi
@@ -98,8 +113,17 @@ _for_loop_subdomains() {
   if [[ ${#missing[@]} -gt 0 ]]; then
     printf 'Missing from SUBDOMAINS array: %s\n' "${missing[*]}"
     printf 'SUBDOMAINS currently contains:\n%s\n' "$script_subs"
+    printf 'DIRECT_ROUTE_SUBDOMAINS currently contains:\n%s\n' "$direct_subs"
     return 1
   fi
+}
+
+@test "AC-1b: headscale is direct-routed, not Cloudflare-tunnelled" {
+  [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
+
+  _direct_route_exclusions | grep -Fxq "headscale"
+  ! _subdomains_array | grep -Fxq "headscale"
+  grep -Fq "Cloudflare does not support the WebSocket POSTs required by Headscale" "$TUNNEL_SCRIPT"
 }
 
 # ---------------------------------------------------------------------------
@@ -185,10 +209,10 @@ _for_loop_subdomains() {
 }
 
 # ---------------------------------------------------------------------------
-# AC-4: CNAME loop covers every Caddy subdomain too
+# AC-4: CNAME loop covers every compatible Caddy subdomain too
 # ---------------------------------------------------------------------------
 
-@test "AC-4: add_cname loop covers every subdomain in the ingress" {
+@test "AC-4: add_cname loop covers every tunnel-compatible subdomain in the ingress" {
   [[ -f "$TUNNEL_SCRIPT" ]] || skip "tunnel script missing"
   [[ -f "$CADDYFILE_TEMPLATE" ]] || skip "Caddyfile.template missing"
 
@@ -205,11 +229,15 @@ _for_loop_subdomains() {
   # `${SUBDOMAINS[@]}`, so this asserts a real "would the CNAME be
   # created" property regardless of whether the loop is direct or array-
   # backed.
-  local loop_subs
+  local loop_subs direct_subs
   loop_subs=$(_for_loop_subdomains | sort -u)
+  direct_subs=$(_direct_route_exclusions | sort -u)
 
   local missing=()
   while read -r sub; do
+    if grep -qE "^${sub}$" <<< "$direct_subs"; then
+      continue
+    fi
     if ! grep -qE "^${sub}$" <<< "$loop_subs"; then
       missing+=("$sub")
     fi

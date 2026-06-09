@@ -86,6 +86,20 @@ If `/key` is reachable but `/machine/register` fails, the path is likely not a
 Cloudflare Access bypass problem. Check the Headscale logs before changing
 tunnel routing.
 
+If Headscale logs this instead:
+
+```text
+No Upgrade header in TS2021 request
+```
+
+the client registration path is going through an incompatible proxy path.
+Do not route `headscale.${WALTER_DOMAIN}` through Cloudflare Tunnel. Cloudflare
+does not support the WebSocket POSTs required by Headscale/Tailscale TS2021
+traffic. Keep `headscale-admin.${WALTER_DOMAIN}` behind Cloudflare Access, but
+publish the client control-plane hostname through a DNS-only direct origin path
+to Caddy/Headscale. Reference:
+<https://headscale.net/0.26.1/ref/integration/reverse-proxy/#cloudflare>.
+
 ## Resolution Paths
 
 ### Preferred During Outages
@@ -94,6 +108,19 @@ Use the Hetzner Cloud Firewall SSH allow-list break-glass path, repair the VM,
 and keep Headscale out of the critical recovery path until version compatibility
 is known-good. In Hetzner, the minimal action is to allow TCP/22 only from your
 current public IP/CIDR to Walter-VM, then remove that allow-list after recovery.
+
+### Direct Route Path
+
+For normal client registration, publish `headscale.${WALTER_DOMAIN}` outside
+Cloudflare Tunnel:
+
+1. Leave `headscale-admin.${WALTER_DOMAIN}` in Cloudflare Access.
+2. Create or update `headscale.${WALTER_DOMAIN}` as a DNS-only record that
+   reaches the Walter-VM origin/Caddy path.
+3. Remove any old proxied CNAME to `<tunnel-id>.cfargotunnel.com` for
+   `headscale.${WALTER_DOMAIN}`.
+4. Retry `tailscale up --login-server=https://headscale.${WALTER_DOMAIN}`.
+5. Confirm `docker exec headscale headscale nodes list` shows the joined node.
 
 ### Version Pin Path
 
