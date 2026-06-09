@@ -52,7 +52,7 @@ walter_agent_select_model() {
       echo "agents/model-selection.sh: WARN model '${model}' for domain '${domain}' requires LiteLLM; using '${fallback}'." >&2
       model="$fallback"
     else
-      env_hint="$(walter_model_env_for "$domain" || true)"
+      env_hint="$(walter_model_env_for "$domain")"
       env_hint="${env_hint:-WALTER_MODEL_DEFAULT}"
       echo "agents/model-selection.sh: model '${model}' for domain '${domain}' requires LiteLLM." >&2
       echo "agents/model-selection.sh: set LITELLM_BASE_URL and LITELLM_API_KEY, or set ${env_hint}=sonnet for direct Anthropic." >&2
