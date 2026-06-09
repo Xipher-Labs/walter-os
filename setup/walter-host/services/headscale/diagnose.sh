@@ -147,7 +147,12 @@ detect_container_state() {
   fi
 
   if command -v docker >/dev/null 2>&1; then
-    docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null || true
+    local state
+    if state="$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null)"; then
+      printf '%s\n' "$state"
+      return
+    fi
+    printf '%s\n' "missing"
   fi
 }
 

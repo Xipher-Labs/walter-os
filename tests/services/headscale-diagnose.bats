@@ -56,6 +56,34 @@ EOF
   echo "$output" | grep -Fq "deploy.sh --diagnose"
 }
 
+@test "headscale diagnose treats missing container as not running" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "No such object: headscale" >&2
+  exit 1
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "INFO stale registration request completed"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "Container state: missing"
+  echo "$output" | grep -Fq "Headscale container is not running"
+  ! echo "$output" | grep -Fq "stale registration request completed"
+}
+
 @test "headscale diagnose detects TS2021 websocket proxy warning" {
   [[ -x "$DIAGNOSE" ]]
 
@@ -123,6 +151,10 @@ EOF
 if [[ "$1" == "exec" ]]; then
   exit 1
 fi
+if [[ "$1" == "inspect" ]]; then
+  echo "running"
+  exit 0
+fi
 if [[ "$1" == "logs" ]]; then
   echo "INFO registration request completed"
   exit 0
@@ -145,6 +177,10 @@ EOF
 #!/usr/bin/env bash
 if [[ "$1" == "exec" ]]; then
   exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "running"
+  exit 0
 fi
 if [[ "$1" == "logs" ]]; then
   echo "Cannot connect to the Docker daemon" >&2
