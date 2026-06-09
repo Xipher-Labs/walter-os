@@ -13,18 +13,22 @@ Usage: walter-os preview bundle --pr <number> --url <url> --seed <path> --screen
        walter-os preview plan --dry-run --pr <number> --provider <provider> --app <name> --branch <branch> --seed <path> [--config <path>] [--out <dir>] [--json]
        walter-os preview capture --pr <number> --url <url> --name <slug> [--out <dir>] [--wait-ms <ms>] [--json]
        walter-os preview local --pr <number> --url <loopback-url> --seed <path> --screenshot <path> [--screenshot <path>...] [--config <path>] [--out <dir>] [--json]
+       walter-os preview static --pr <number> --dir <static-dir> --seed <path> [--name <slug>] [--config <path>] [--out <dir>] [--wait-ms <ms>] [--json]
        walter-os preview verify --pr <number> [--out <dir>] [--json]
 
 Creates a local preview evidence bundle from an existing preview URL, captures
 screenshots, writes a dry-run preview deployment plan, or records a loopback
-local preview adapter result. The commands do not deploy to cloud providers,
-mint credentials, or touch production secrets.
+local preview adapter result. The static command starts a loopback-only
+ephemeral server for an already-built static directory, captures evidence, and
+then shuts it down. The commands do not deploy to cloud providers, mint
+credentials, or touch production secrets.
 
 Subcommands:
   bundle    Build .walter/previews/preview-pr-<number>/ evidence bundle.
   capture   Capture a screenshot artifact from an existing preview URL.
   local     Package a loopback local preview as provider=local evidence.
   plan      Write a dry-run preview deployment plan.
+  static    Serve a static directory on loopback and package evidence.
   verify    Validate preview report or dry-run plan evidence.
 
 Options for bundle:
@@ -65,6 +69,16 @@ Options for local:
   --out <dir>            Output root. Defaults to .walter/previews.
   --json                 Print preview-report JSON instead of a short summary.
 
+Options for static:
+  --pr <number>          Pull request number.
+  --dir <static-dir>     Already-built static directory to serve locally.
+  --seed <path>          Seed data manifest or fixture used for preview.
+  --name <slug>          Screenshot basename. Defaults to home.
+  --config <path>        walter-repo-config.yaml path. Defaults to cwd.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --wait-ms <ms>         Playwright wait timeout before capture. Defaults to 1000.
+  --json                 Print preview-report JSON instead of a short summary.
+
 Options for verify:
   --pr <number>          Pull request number.
   --out <dir>            Output root. Defaults to .walter/previews.
@@ -103,6 +117,21 @@ resolve_npx() {
     return 0
   fi
   die_runtime "npx is required for preview capture"
+}
+
+resolve_python3() {
+  if [[ -n "${WALTER_PREVIEW_PYTHON:-}" ]]; then
+    if [[ -f "$WALTER_PREVIEW_PYTHON" && -x "$WALTER_PREVIEW_PYTHON" && ! -L "$WALTER_PREVIEW_PYTHON" ]]; then
+      printf '%s\n' "$WALTER_PREVIEW_PYTHON"
+      return 0
+    fi
+    die_runtime "python3 is required for preview static"
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+    return 0
+  fi
+  die_runtime "python3 is required for preview static"
 }
 
 sha256_file() {
@@ -163,6 +192,28 @@ validate_artifact() {
   reject_secret_like_artifact "$path"
 }
 
+validate_static_dir() {
+  local path="$1" find_root found_symlink="" found_secret=""
+  if [[ -z "$path" ]]; then
+    die_usage "static directory path cannot be empty"
+  fi
+  if [[ -L "$path" ]]; then
+    die_usage "refusing symlink static directory: $path"
+  fi
+  if [[ ! -d "$path" || ! -r "$path" ]]; then
+    die_usage "static directory is not a readable directory: $path"
+  fi
+  find_root="$(cp_operand "$path")"
+  found_symlink="$(find "$find_root" -type l -print -quit 2>/dev/null || true)"
+  if [[ -n "$found_symlink" ]]; then
+    die_usage "refusing symlink inside static directory: $found_symlink"
+  fi
+  while IFS= read -r found_secret; do
+    [[ -n "$found_secret" ]] || continue
+    reject_secret_like_artifact "$found_secret"
+  done < <(find "$find_root" -type f -print 2>/dev/null)
+}
+
 validate_positive_pr() {
   local pr="$1"
   [[ "$pr" =~ ^[1-9][0-9]*$ ]] || die_usage "--pr must be a positive integer"
@@ -210,6 +261,11 @@ validate_loopback_preview_url() {
   [[ "$url" =~ ^https?:// ]] || die_usage "preview URL must start with http:// or https://"
   [[ "$url" =~ $loopback_url_re ]] \
     || die_usage "local preview URL must use localhost, 127.0.0.1, or [::1]"
+}
+
+preview_report_deploy_invariant_ok() {
+  local value="$1"
+  [[ "$value" == "not performed" || "$value" == "local ephemeral" ]]
 }
 
 repo_config_path() {
@@ -785,6 +841,241 @@ cmd_local() {
   fi
 }
 
+cmd_static() {
+  require_jq
+
+  local pr="" static_dir="" seed="" name="home" config="" out_root=".walter/previews" wait_ms=1000 json_output=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --dir)
+        static_dir="${2:-}"
+        [[ -n "$static_dir" ]] || die_usage "--dir requires a value"
+        shift 2
+        ;;
+      --seed)
+        seed="${2:-}"
+        [[ -n "$seed" ]] || die_usage "--seed requires a value"
+        shift 2
+        ;;
+      --name)
+        name="${2:-}"
+        [[ -n "$name" ]] || die_usage "--name requires a value"
+        shift 2
+        ;;
+      --config)
+        config="${2:-}"
+        [[ -n "$config" ]] || die_usage "--config requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --wait-ms)
+        wait_ms="${2:-}"
+        [[ -n "$wait_ms" ]] || die_usage "--wait-ms requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  validate_positive_pr "$pr"
+  [[ -n "$static_dir" ]] || die_usage "--dir is required"
+  [[ -n "$seed" ]] || die_usage "--seed is required"
+  validate_slug "--name" "$name"
+  validate_wait_ms "$wait_ms"
+  validate_static_dir "$static_dir"
+  validate_artifact "$seed"
+
+  local config_path preview_enabled
+  config_path="$(repo_config_path "$config")"
+  preview_enabled="$(preview_deploy_enabled "$config_path")"
+  if [[ "$preview_enabled" != "true" ]]; then
+    die_usage "preview_deploy is not enabled in config: $config_path"
+  fi
+
+  local python_path npx_path static_abs tmp_dir port_file server_log server_pid="" port="" url=""
+  python_path="$(resolve_python3)"
+  npx_path="$(resolve_npx)"
+  if ! static_abs="$(cd "$static_dir" 2>/dev/null && pwd -P)"; then
+    die_usage "static directory is not a readable directory: $static_dir"
+  fi
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/walter-preview-static.XXXXXX")" \
+    || die_runtime "could not create preview static temp directory"
+  port_file="${tmp_dir}/port"
+  server_log="${tmp_dir}/server.log"
+
+  "$python_path" - "$static_abs" "$port_file" > "$server_log" 2>&1 <<'PY' &
+import http.server
+import os
+import socketserver
+import sys
+
+root = sys.argv[1]
+port_file = sys.argv[2]
+os.chdir(root)
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        pass
+
+with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+    port = httpd.server_address[1]
+    with open(port_file, "w", encoding="utf-8") as handle:
+        handle.write(str(port))
+    httpd.serve_forever()
+PY
+  server_pid="$!"
+
+  local attempts_remaining=50
+  while (( attempts_remaining > 0 )); do
+    if [[ -s "$port_file" ]]; then
+      port="$(cat "$port_file")"
+      break
+    fi
+    if ! kill -0 "$server_pid" 2>/dev/null; then
+      local server_error=""
+      server_error="$(cat "$server_log" 2>/dev/null || true)"
+      rm -f -- "$port_file" "$server_log"
+      rmdir "$tmp_dir" 2>/dev/null || true
+      die_runtime "preview static server failed to start${server_error:+: $server_error}"
+    fi
+    attempts_remaining=$((attempts_remaining - 1))
+    sleep 0.1
+  done
+  if [[ ! "$port" =~ ^[1-9][0-9]*$ ]]; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    rm -f -- "$port_file" "$server_log"
+    rmdir "$tmp_dir" 2>/dev/null || true
+    die_runtime "preview static server did not publish a port"
+  fi
+  url="http://127.0.0.1:${port}/"
+
+  local screenshot_tmp
+  if ! screenshot_tmp="$(mktemp "${tmp_dir}/${name}.XXXXXX.png")"; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    rm -f -- "$port_file" "$server_log"
+    rmdir "$tmp_dir" 2>/dev/null || true
+    die_runtime "could not create temporary screenshot path"
+  fi
+  if ! "$npx_path" --no-install playwright screenshot --wait-for-timeout "$wait_ms" "$url" "$screenshot_tmp"; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
+    rmdir "$tmp_dir" 2>/dev/null || true
+    die_runtime "preview screenshot capture failed"
+  fi
+
+  kill "$server_pid" 2>/dev/null || true
+  wait "$server_pid" 2>/dev/null || true
+
+  validate_artifact "$screenshot_tmp"
+
+  local bundle_dir seed_dir screenshot_dir report_path readme_path
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  seed_dir="${bundle_dir}/seed"
+  screenshot_dir="${bundle_dir}/screenshots"
+  report_path="${bundle_dir}/preview-report.json"
+  readme_path="${bundle_dir}/README.md"
+  mkdir -p -- "$seed_dir" "$screenshot_dir"
+
+  local seed_dest screenshot_dest screenshots_json generated_at report_json
+  seed_dest="$(copy_artifact "$seed" "$seed_dir")"
+  screenshot_dest="${screenshot_dir}/${name}.png"
+  if [[ -e "$screenshot_dest" ]]; then
+    rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
+    rmdir "$tmp_dir" 2>/dev/null || true
+    die_usage "duplicate artifact basename: ${name}.png"
+  fi
+  cp -p "$(cp_operand "$screenshot_tmp")" "$(cp_operand "$screenshot_dest")"
+  screenshots_json="$(jq -c \
+    --argjson item "$(artifact_json "$screenshot_tmp" "$screenshot_dest")" \
+    '. + [$item]' <<<"[]")"
+
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  report_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg url "$url" \
+    --arg provider "local-static" \
+    --arg generated_at "$generated_at" \
+    --arg bundle_dir "$bundle_dir" \
+    --arg config_path "$config_path" \
+    --arg static_dir "$static_abs" \
+    --argjson seed_manifest "$(artifact_json "$seed" "$seed_dest")" \
+    --argjson screenshots "$screenshots_json" \
+    '{
+      schema_version: 1,
+      kind: "preview-report",
+      provider: $provider,
+      pr: $pr,
+      url: $url,
+      generated_at: $generated_at,
+      bundle_dir: $bundle_dir,
+      config_path: $config_path,
+      static_dir: $static_dir,
+      seed_manifest: $seed_manifest,
+      screenshots: $screenshots,
+      actions: [
+        "serve_local_static_preview",
+        "apply_seed_fixture",
+        "capture_screenshots",
+        "write_preview_bundle"
+      ],
+      safety: {
+        preview_deploy: true,
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "local ephemeral",
+        hard_limit_floor: "preserved"
+      }
+    }')"
+
+  printf '%s\n' "$report_json" | jq . > "$report_path"
+  {
+    printf '# Local Static Preview Bundle PR #%s\n\n' "$pr"
+    printf -- '- URL: %s\n' "$url"
+    printf -- '- Provider: local-static\n'
+    printf -- "- Static directory: \`%s\`\n" "$static_abs"
+    printf -- "- Seed manifest: \`%s\`\n" "${seed_dest#"$bundle_dir"/}"
+    printf -- '- Screenshots: 1\n'
+    printf -- '- Safety: preview deploy enabled; credentials not minted; local ephemeral deploy only.\n'
+  } > "$readme_path"
+
+  rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
+  rmdir "$tmp_dir" 2>/dev/null || true
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$report_json" | jq .
+  else
+    printf 'preview: local-static bundle written %s\n' "$bundle_dir"
+    printf 'preview: report %s\n' "$report_path"
+  fi
+}
+
 cmd_bundle() {
   require_jq
 
@@ -971,7 +1262,7 @@ cmd_verify() {
         || findings+=("preview report production secret invariant failed")
       [[ "$(jq -r '.safety.credentials // empty' "$report_path")" == "not minted" ]] \
         || findings+=("preview report credential invariant failed")
-      [[ "$(jq -r '.safety.deploy // empty' "$report_path")" == "not performed" ]] \
+      preview_report_deploy_invariant_ok "$(jq -r '.safety.deploy // empty' "$report_path")" \
         || findings+=("preview report deploy invariant failed")
       [[ "$(jq -r '.safety.hard_limit_floor // empty' "$report_path")" == "preserved" ]] \
         || findings+=("preview report hard-limit invariant failed")
@@ -1092,6 +1383,9 @@ case "$cmd" in
     ;;
   local)
     cmd_local "$@"
+    ;;
+  static)
+    cmd_static "$@"
     ;;
   verify)
     cmd_verify "$@"

@@ -78,6 +78,49 @@ describe("readPreviewEvidence", () => {
     });
   });
 
+  it("accepts local ephemeral preview reports as safe evidence", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-236");
+    await mkdir(join(bundle, "screenshots"), { recursive: true });
+    await writeSeed(bundle);
+    await writeFile(join(bundle, "screenshots", "home.png"), "png", "utf8");
+    await writeJson(join(bundle, "preview-report.json"), {
+      schema_version: 1,
+      kind: "preview-report",
+      provider: "local-static",
+      pr: 236,
+      url: "http://127.0.0.1:43123/",
+      generated_at: "2026-06-04T12:00:00Z",
+      bundle_dir: ".walter/previews/preview-pr-236",
+      seed_manifest: {
+        path: ".walter/previews/preview-pr-236/seed/seed.json",
+        sha256: SHA256,
+      },
+      screenshots: [
+        {
+          path: ".walter/previews/preview-pr-236/screenshots/home.png",
+          sha256: SHA256,
+        },
+      ],
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "local ephemeral",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 236,
+      status: "complete",
+      provider: "local-static",
+      safetyOk: true,
+      findings: [],
+    });
+  });
+
   it("fails closed when the preview root cannot be read", async () => {
     const root = await makeRoot();
     await chmod(root, 0o000);
@@ -444,6 +487,50 @@ describe("readPreviewEvidence", () => {
     });
     expect(evidence.previews[0].findings).toContain(
       "preview plan seed path is missing or invalid"
+    );
+  });
+
+  it("keeps local ephemeral deploy states report-only", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-249");
+    await mkdir(bundle, { recursive: true });
+    await writeJson(join(bundle, "preview-plan.json"), {
+      schema_version: 1,
+      kind: "preview-plan",
+      pr: 249,
+      provider: "local-static",
+      app: "control-tower",
+      branch: "codex/preview",
+      bundle_dir: ".walter/previews/preview-pr-249",
+      actions: [
+        "deploy_ephemeral_preview",
+        "apply_seed_fixture",
+        "capture_screenshots",
+        "write_preview_bundle",
+      ],
+      seed_manifest: {
+        path: ".walter/previews/preview-pr-249/seed/seed.json",
+        sha256: SHA256,
+      },
+      safety: {
+        dry_run: true,
+        preview_deploy: true,
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "local ephemeral",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 249,
+      status: "invalid",
+      safetyOk: false,
+    });
+    expect(evidence.previews[0].findings).toContain(
+      "preview plan safety invariants failed"
     );
   });
 
