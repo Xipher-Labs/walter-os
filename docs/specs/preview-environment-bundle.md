@@ -16,6 +16,8 @@ artifact format for preview evidence.
   existing preview URL.
 - Add `walter-os preview local` as the first provider-shaped adapter for
   loopback previews that are already running on the operator machine.
+- Add `walter-os preview verify` so preview evidence can be checked before it
+  is used for PR Score, Control Tower, or human review.
 - Package an existing preview URL, seed manifest, and screenshots into a
   local report bundle with deterministic layout and artifact hashes.
 - Surface local preview plans, screenshots, and report bundles in Control Tower
@@ -72,15 +74,18 @@ preserving the same safety invariants as PR Score.
 
 ```text
 .walter/previews/preview-pr-<number>/
+  seed/
+    <seed basename>
   preview-plan.json
 ```
 
 The plan command requires `--dry-run`, a supported provider (`local`, `vercel`,
 `cloudflare-pages`, `netlify`, `railway`, or `forgejo-actions`), an app slug, a
-safe branch/ref, and a seed manifest. It does not deploy; it records the future
-provider steps (`deploy_ephemeral_preview`, `apply_seed_fixture`,
-`capture_screenshots`, `write_preview_bundle`) with `credentials: not minted`
-and `deploy: not performed`.
+safe branch/ref, and a seed manifest. It copies the seed into the preview bundle
+before writing the plan. It does not deploy; it records the future provider
+steps (`deploy_ephemeral_preview`, `apply_seed_fixture`, `capture_screenshots`,
+`write_preview_bundle`) with `credentials: not minted` and
+`deploy: not performed`.
 
 If `walter-repo-config.yaml` is absent or does not declare top-level
 `preview_deploy: true`, the plan command exits with a usage error before
@@ -94,6 +99,15 @@ accepts only `localhost`, `127.0.0.1`, or `[::1]` HTTP(S) URLs, requires
 `preview_deploy: true`, and records `use_existing_local_preview` instead of
 `deploy_ephemeral_preview`. It does not deploy a cloud preview, mint
 credentials, or connect to a remote provider.
+
+`walter-os preview verify --pr <number>` validates the evidence under
+`.walter/previews/preview-pr-<number>` or the directory passed with `--out`.
+If a `preview-report.json` exists, it verifies the report schema, PR number,
+HTTP(S) URL, seed and screenshot hashes, and safety invariants. If only a
+`preview-plan.json` exists, it verifies the dry-run plan schema, seed hash, and
+the `deploy: "not performed"` / `credentials: "not minted"` invariants. The
+command exits `0` for ready reports and valid dry-run plans, exits `1` for
+missing or invalid evidence, and emits machine-readable JSON with `--json`.
 
 ## Acceptance Criteria
 
@@ -116,6 +130,8 @@ credentials, or connect to a remote provider.
 - AC10: `walter-os preview local` packages a loopback preview as
   `provider: "local"` only when `preview_deploy: true` is configured, and
   rejects non-loopback URLs before writing a report.
+- AC11: `walter-os preview verify` validates ready report bundles and dry-run
+  plans, rejects missing or tampered evidence, and emits JSON findings.
 
 ## Related
 
