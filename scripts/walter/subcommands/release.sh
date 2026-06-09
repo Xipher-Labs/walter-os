@@ -167,7 +167,7 @@ collect_evidence() {
   local prs='[]'
   local repo_json owner repo repo_slug origin_url repo_ref all_pr_list pr_list pr_count index pr number threads pr_with_threads
   local local_tags remote_tags
-  local release_view
+  local release_view release_stderr release_error
   local pr_list_limit=1000
   local -a pr_objects=()
 
@@ -218,10 +218,20 @@ collect_evidence() {
   repo_slug="$owner/$repo"
 
   if [[ "$post_release" -eq 1 && -n "$target_tag" ]]; then
+    release_stderr="$(mktemp "${TMPDIR:-/tmp}/walter-release-view.XXXXXX")" \
+      || runtime_error "failed to create temporary stderr file for gh release view"
     if release_view="$(gh release view "$target_tag" --repo "$repo_slug" \
-        --json tagName,targetCommitish,isDraft,isPrerelease,assets,url 2>/dev/null)"; then
+        --json tagName,targetCommitish,isDraft,isPrerelease,assets,url 2>"$release_stderr")"; then
       github_release="$(jq -c '. + {exists: true}' <<<"$release_view")"
+    else
+      release_error="$(tr '\n' ' ' < "$release_stderr" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      rm -f "$release_stderr"
+      if [[ ! "$release_error" =~ [Nn]ot[[:space:]-][Ff]ound && ! "$release_error" =~ 404 ]]; then
+        runtime_error "failed to read GitHub Release $target_tag with gh: ${release_error:-unknown error}"
+      fi
+      release_stderr=""
     fi
+    [[ -z "${release_stderr:-}" ]] || rm -f "$release_stderr"
   fi
 
   if [[ "$post_release" -eq 1 ]]; then
@@ -390,8 +400,12 @@ cmd_doctor() {
     local release_assets required_assets_json missing_assets_json missing_digest_json expected
     tag_target="$(jq -r --arg tag "$target_tag" '.release.tag_targets[$tag] // ""' <<<"$evidence_json")"
     expected="${expected_commit:-$tag_target}"
-    if [[ -n "$expected_commit" && -z "$tag_target" ]] && json_array_contains "$tags" "$target_tag"; then
-      add_release_artifact_finding "tag $target_tag target could not be resolved for expected commit $expected_commit"
+    if [[ -z "$tag_target" ]] && json_array_contains "$tags" "$target_tag"; then
+      if [[ -n "$expected_commit" ]]; then
+        add_release_artifact_finding "tag $target_tag target could not be resolved for expected commit $expected_commit"
+      else
+        add_release_artifact_finding "tag $target_tag target could not be resolved"
+      fi
     elif [[ -n "$expected" && -n "$tag_target" && "$tag_target" != "$expected" ]]; then
       add_release_artifact_finding "tag $target_tag points at $tag_target, expected $expected"
     fi

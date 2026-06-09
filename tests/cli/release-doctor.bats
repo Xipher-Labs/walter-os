@@ -445,6 +445,73 @@ SH
   echo "$output" | jq -e '.release_artifact_findings | index("tag v0.6.1 target could not be resolved for expected commit def456")'
 }
 
+@test "#499: post-release live collection reports gh release errors" {
+  local fake_bin="$TMP_DIR/bin"
+  local release_repo="$TMP_DIR/release-repo"
+  mkdir -p "$fake_bin" "$release_repo"
+  printf '0.6.1\n' > "$release_repo/VERSION"
+  printf '## [0.6.1]\n' > "$release_repo/CHANGELOG.md"
+
+  cat > "$fake_bin/git" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-C" ]]; then
+  shift 2
+fi
+
+case "${1:-}" in
+  tag)
+    printf 'v0.6.1\n'
+    ;;
+  rev-list)
+    printf 'def456\n'
+    ;;
+  ls-remote)
+    if [[ "$*" == *"--tags --refs origin v[0-9]*"* ]]; then
+      printf 'def456\trefs/tags/v0.6.1\n'
+      exit 0
+    fi
+    printf 'def456\trefs/tags/v0.6.1\n'
+    ;;
+  remote)
+    if [[ "${2:-}" == "get-url" && "${3:-}" == "origin" ]]; then
+      printf 'git@github.com/Xipher-Labs/walter-os.git\n'
+      exit 0
+    fi
+    echo "unexpected git remote invocation: $*" >&2
+    exit 97
+    ;;
+  *)
+    echo "unexpected git invocation: $*" >&2
+    exit 98
+    ;;
+esac
+SH
+
+  cat > "$fake_bin/gh" <<'SH'
+#!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  "repo view")
+    printf '{"name":"walter-os","owner":{"login":"Xipher-Labs"}}\n'
+    ;;
+  "release view")
+    echo "API rate limit exceeded" >&2
+    exit 1
+    ;;
+  *)
+    echo "unexpected gh invocation: $*" >&2
+    exit 98
+    ;;
+esac
+SH
+  chmod +x "$fake_bin/git" "$fake_bin/gh"
+
+  run env PATH="$fake_bin:$PATH" WALTER_OS_HOME="$release_repo" \
+    bash "$REPO_ROOT/scripts/walter/subcommands/release.sh" doctor --target v0.6.1 --post-release --json
+
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"failed to read GitHub Release v0.6.1 with gh: API rate limit exceeded"* ]]
+}
+
 @test "AC3: missing changelog entry blocks release" {
   local fixture="$TMP_DIR/changelog-drift.json"
   write_fixture "$fixture" "0.6.1" '["0.6.0"]' '["v0.6.0"]' "$healthy_prs"
@@ -573,6 +640,43 @@ SH
 
   [ "$status" -eq 1 ]
   echo "$output" | jq -e '.release_artifact_findings | index("tag v0.6.1 target could not be resolved for expected commit def456")'
+}
+
+@test "#499: post-release mode reports unresolved tag target without expected commit" {
+  local fixture="$TMP_DIR/post-release-missing-tag-target-no-expected.json"
+  local release_json
+  release_json="$(jq -nc '
+    {
+      exists: true,
+      tagName: "v0.6.1",
+      targetCommitish: "main",
+      isDraft: false,
+      isPrerelease: false,
+      assets: [
+        {name: "checksums.sha256", digest: "sha256:111"},
+        {name: "checksums.sha256.cosign.bundle", digest: "sha256:222"},
+        {name: "walter-os-v0.6.1.intoto.jsonl", digest: "sha256:333"},
+        {name: "walter-os-v0.6.1.sbom.cdx.json", digest: "sha256:444"},
+        {name: "walter-os-v0.6.1.source.tar.gz", digest: "sha256:555"}
+      ]
+    }')"
+  jq -nc \
+    --argjson release_json "$release_json" \
+    '{
+      release: {
+        version: "0.6.1",
+        changelog_versions: ["0.6.1"],
+        tags: ["v0.6.1"],
+        tag_targets: {},
+        github_release: $release_json
+      },
+      prs: []
+    }' > "$fixture"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --post-release --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.release_artifact_findings | index("tag v0.6.1 target could not be resolved")'
 }
 
 @test "AC4: unresolved review threads block release" {
