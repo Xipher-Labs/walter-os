@@ -48,7 +48,7 @@ _walter_model_domain_rows() {
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%$'\r'}"
-    [[ -n "$line" && "${line#\#}" == "$line" ]] || continue
+    [[ -n "${line//[[:space:]]/}" && "${line#\#}" == "$line" ]] || continue
     IFS=$'\t' read -r domain env default description <<<"$line"
     if [[ -z "$domain" || -z "$env" || -z "$default" ||
       ! "$domain" =~ ^[a-z][a-z0-9_]*$ ||
@@ -314,7 +314,7 @@ walter_model_for() {
   local key slug env_key configured fallback
 
   key="$(_walter_model_domain_key "$requested")"
-  slug="$(_walter_model_domain_slug "$requested")"
+  slug="$(tr '[:upper:]' '[:lower:]' <<<"$key")"
 
   if [[ "$key" == "PHI" || "${WALTER_PHI_MODE:-0}" == "1" ]]; then
     export WALTER_MODEL_DOMAIN="phi"

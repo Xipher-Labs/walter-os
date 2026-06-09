@@ -22,7 +22,8 @@ setup() {
   unset WALTER_MODEL_PHI
   unset WALTER_MODEL_BRAINSTORM
   unset WALTER_MODEL_DEFAULT
-  unset WALTER_PHI_MODE
+  export WALTER_PHI_MODE=0
+  unset WALTER_MODEL_DOMAIN
 }
 
 teardown() {
@@ -152,6 +153,16 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"claude"* ]]
   [[ "$output" == *"WARN"* ]]
+}
+
+@test "model-router: whitespace-only domain table rows are ignored" {
+  local domains_file="$TMP_CONFIG/model-domains-whitespace.tsv"
+  printf '   \t  \nbackend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex\tBackend review\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "source '$ROUTER'; walter_model_for backend_review" 2>&1
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "codex" ]
 }
 
 @test "model-router: walter_model_domains fails when all rows are malformed" {
