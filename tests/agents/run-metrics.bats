@@ -276,6 +276,26 @@ TSV
   [[ "$output" == *"model domain table has no valid rows"* ]]
 }
 
+@test "run.sh rejects model domain rows with invalid defaults" {
+  local helper domains_file
+  helper="$(mktemp -t walter-run-domain-helper-XXXXXX)"
+  domains_file="$(mktemp -t walter-model-domains-XXXXXX)"
+  awk '/^_agent_model_domain_canonical\(\)/,/^}/' "$RUN_SH" > "$helper"
+  cat > "$domains_file" <<'TSV'
+backend_review	WALTER_MODEL_BACKEND_REVIEW	codex;rm	Backend review
+TSV
+
+  run bash -c '
+    source "$1"
+    export WALTER_MODEL_DOMAINS_FILE="$2"
+    _agent_model_domain_canonical backend_review
+  ' bash "$helper" "$domains_file"
+  rm -f "$helper" "$domains_file"
+
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"model domain table has no valid rows"* ]]
+}
+
 @test "run.sh does not hardcode primary Council models" {
   ! grep -q 'MODEL="haiku"' "$RUN_SH"
   ! grep -q 'MODEL="sonnet"' "$RUN_SH"

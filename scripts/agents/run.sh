@@ -188,7 +188,8 @@ _agent_model_domain_canonical() {
       NF >= 3 &&
       $1 ~ /^[a-z][a-z0-9_]*$/ &&
       $2 ~ /^WALTER_MODEL_[A-Z0-9_]+$/ &&
-      $3 != "" {
+      $3 ~ /^[A-Za-z0-9._\/@:+,\[\]-]+$/ &&
+      $3 !~ /(^,|,,|,$)/ {
         valid = 1
         if ($1 == domain) { found = 1 }
       }
