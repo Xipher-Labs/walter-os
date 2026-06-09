@@ -84,6 +84,35 @@ EOF
   ! echo "$output" | grep -Fq "stale registration request completed"
 }
 
+@test "headscale diagnose keeps docker daemon inspect errors inconclusive" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 3 ]
+  ! echo "$output" | grep -Fq "Container state: missing"
+  ! echo "$output" | grep -Fq "Headscale container is not running"
+  echo "$output" | grep -Fq "could not inspect Headscale logs"
+  echo "$output" | grep -Fq "Cannot connect to the Docker daemon"
+}
+
 @test "headscale diagnose detects TS2021 websocket proxy warning" {
   [[ -x "$DIAGNOSE" ]]
 

@@ -148,11 +148,13 @@ detect_container_state() {
 
   if command -v docker >/dev/null 2>&1; then
     local state
-    if state="$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null)"; then
+    if state="$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>&1)"; then
       printf '%s\n' "$state"
       return
     fi
-    printf '%s\n' "missing"
+    if grep -Eqi 'No such (object|container)' <<<"$state"; then
+      printf '%s\n' "missing"
+    fi
   fi
 }
 
