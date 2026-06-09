@@ -16,10 +16,11 @@ Run:
 walter doctor --enforcement
 ```
 
-The command checks the current machine only. It inspects Claude Code
-`~/.claude/settings.json` for Walter-managed `PreToolUse` hooks and, when
-`WALTER_WRAPPER_DIR` is set, verifies that the wrapper directory is the first
-entry in `PATH` and that high-risk tools resolve through that directory.
+The command checks the current machine only. It inspects Claude Code settings at
+`${CLAUDE_HOME:-$HOME/.claude}/settings.json` for Walter-managed `PreToolUse`
+hooks and, when `WALTER_WRAPPER_DIR` is set, verifies that the wrapper directory
+is the first entry in `PATH` and that high-risk tools resolve through that
+directory.
 
 ## How to read the result
 

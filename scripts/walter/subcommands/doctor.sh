@@ -134,11 +134,11 @@ doctor_command_has_hook_token() {
   local command="$1"
   local hook_path="$2"
   local token
-  local glob_was_on=0
+  local noglob_already_enabled=0
   local found=1
 
   case "$-" in
-    *f*) glob_was_on=1 ;;
+    *f*) noglob_already_enabled=1 ;;
     *) set -f ;;
   esac
   for token in $command; do
@@ -151,7 +151,7 @@ doctor_command_has_hook_token() {
       break
     fi
   done
-  if [[ "$glob_was_on" -eq 0 ]]; then
+  if [[ "$noglob_already_enabled" -eq 0 ]]; then
     set +f
   fi
   return "$found"
