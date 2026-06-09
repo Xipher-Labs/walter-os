@@ -120,6 +120,19 @@ teardown() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: missing domain table warning is emitted once" {
+  local count
+  run env WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" bash -c "
+    source '$ROUTER'
+    walter_model_domains >/dev/null
+    walter_models_print_effective >/dev/null
+  " 2>&1
+
+  [ "$status" -ne 0 ]
+  count="$(printf '%s\n' "$output" | grep -c "model domain table is missing or unreadable" || true)"
+  [ "$count" -eq 1 ]
+}
+
 @test "model-router: CRLF domain table rows do not leak carriage returns" {
   local domains_file="$TMP_CONFIG/model-domains-crlf.tsv"
   printf 'backend_review\tWALTER_MODEL_BACKEND_REVIEW\tcodex\tBackend review\r\n' > "$domains_file"
@@ -149,6 +162,21 @@ teardown() {
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"no valid rows"* ]]
+}
+
+@test "model-router: empty domain table warning is emitted once" {
+  local count domains_file="$TMP_CONFIG/model-domains-empty.tsv"
+  printf '# domain\tenv\tdefault\n' > "$domains_file"
+
+  run env WALTER_MODEL_DOMAINS_FILE="$domains_file" bash -c "
+    source '$ROUTER'
+    walter_model_domains >/dev/null
+    walter_models_print_effective >/dev/null
+  " 2>&1
+
+  [ "$status" -ne 0 ]
+  count="$(printf '%s\n' "$output" | grep -c "model domain table has no valid rows" || true)"
+  [ "$count" -eq 1 ]
 }
 
 @test "model-router: print effective fails when canonical table is missing" {

@@ -12,6 +12,21 @@
 # shellcheck disable=SC2034 # used by sourced callers
 WALTER_MODEL_ROUTER_VERSION=1
 
+_walter_model_warn_once() {
+  local key="${1:-}" message="${2:-}" warn_dir warn_file
+  [[ -n "$key" && -n "$message" ]] || return 0
+  warn_dir="${TMPDIR:-/tmp}/walter-model-router-warnings-$$"
+  warn_file="$warn_dir/$key"
+  if mkdir -p "$warn_dir" 2>/dev/null; then
+    if [[ ! -e "$warn_file" ]]; then
+      printf '%s\n' "$message" >&2
+      : > "$warn_file" 2>/dev/null || true
+    fi
+    return 0
+  fi
+  printf '%s\n' "$message" >&2
+}
+
 _walter_model_domains_file() {
   local script_dir
   if [[ -n "${WALTER_MODEL_DOMAINS_FILE:-}" ]]; then
@@ -26,7 +41,8 @@ _walter_model_domain_rows() {
   local file line domain env default description valid_count=0
   file="$(_walter_model_domains_file)"
   if [[ ! -r "$file" ]]; then
-    echo "walter-model-router: WARN model domain table is missing or unreadable: $file" >&2
+    _walter_model_warn_once "domains-unreadable" \
+      "walter-model-router: WARN model domain table is missing or unreadable: $file"
     return 1
   fi
 
@@ -45,7 +61,8 @@ _walter_model_domain_rows() {
   done < "$file"
 
   if (( valid_count == 0 )); then
-    echo "walter-model-router: WARN model domain table has no valid rows: $file" >&2
+    _walter_model_warn_once "domains-empty" \
+      "walter-model-router: WARN model domain table has no valid rows: $file"
     return 1
   fi
 }

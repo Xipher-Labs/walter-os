@@ -134,7 +134,7 @@ PERSONA
         domain, env_key, default_model = columns
         abort("invalid model domain name: #{domain}") unless domain.match?(/\A[a-z][a-z0-9_]*\z/)
         abort("invalid model domain env key: #{env_key}") unless env_key.match?(/\AWALTER_MODEL_[A-Z0-9_]+\z/)
-        abort("invalid model domain default: #{domain}") if default_model.nil? || default_model.empty?
+        abort("invalid model domain default: #{default_model.inspect}") if default_model.nil? || default_model.empty?
         domain
       end
     domain_pattern = Regexp.union(allowed).source

@@ -31,7 +31,7 @@ def load_model_domains
     domain, env_key, default_model = columns
     abort "invalid model domain name in #{path}: #{domain}" unless domain.match?(/\A[a-z][a-z0-9_]*\z/)
     abort "invalid model domain env key in #{path}: #{env_key}" unless env_key.match?(/\AWALTER_MODEL_[A-Z0-9_]+\z/)
-    abort "invalid model domain default in #{path}: #{domain}" if default_model.nil? || default_model.empty?
+    abort "invalid model domain default in #{path}: #{default_model.inspect}" if default_model.nil? || default_model.empty?
 
     rows << domain
   end
