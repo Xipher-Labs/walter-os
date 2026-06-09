@@ -143,6 +143,18 @@ output_without_router_warnings() {
   [[ "$output" == *"WARN"* ]]
 }
 
+@test "model-router: sourcing does not create warning temp dirs" {
+  local warn_tmp
+  warn_tmp="$TMP_CONFIG/router-warnings"
+  mkdir -p "$warn_tmp"
+  export TMPDIR="$warn_tmp"
+
+  run run_router bash -c "source '$ROUTER'"
+
+  [ "$status" -eq 0 ]
+  [ -z "$(find "$warn_tmp" -maxdepth 1 -type d -name 'walter-model-router-warnings.*' -print -quit)" ]
+}
+
 @test "model-router: missing domain table warning is emitted once" {
   local count
   run run_router WALTER_MODEL_DOMAINS_FILE="$TMP_CONFIG/missing-model-domains.tsv" bash -c "

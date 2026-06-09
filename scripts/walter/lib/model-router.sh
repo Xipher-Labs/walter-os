@@ -12,14 +12,16 @@
 # shellcheck disable=SC2034 # used by sourced callers
 WALTER_MODEL_ROUTER_VERSION=1
 
-if [[ -z "${__WALTER_MODEL_WARN_DIR:-}" ]]; then
+_walter_model_ensure_warn_dir() {
+  [[ -n "${__WALTER_MODEL_WARN_DIR:-}" ]] && return 0
   __WALTER_MODEL_WARN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/walter-model-router-warnings.XXXXXX" 2>/dev/null || true)"
-fi
+}
 
 _walter_model_warn_once() {
   local key="${1:-}" message="${2:-}" warn_file
   [[ -n "$key" && -n "$message" ]] || return 0
 
+  _walter_model_ensure_warn_dir
   if [[ -n "${__WALTER_MODEL_WARN_DIR:-}" ]]; then
     warn_file="$__WALTER_MODEL_WARN_DIR/$key"
     if [[ ! -e "$warn_file" ]]; then
@@ -76,6 +78,7 @@ _walter_model_domain_rows() {
 
 walter_model_domains() {
   local rows
+  _walter_model_ensure_warn_dir
   rows="$(_walter_model_domain_rows)" || return 1
   printf '%s\n' "$rows" | cut -f1
 }
@@ -147,6 +150,7 @@ _walter_model_domain_slug() {
 
 walter_model_default_for() {
   local slug
+  _walter_model_ensure_warn_dir
   slug="$(_walter_model_domain_slug "${1:-default}")"
   _walter_model_domain_field "$slug" default \
     || { [[ "$slug" == "phi" ]] && printf '%s\n' "local-ollama"; } \
@@ -156,6 +160,7 @@ walter_model_default_for() {
 
 walter_model_env_for() {
   local slug
+  _walter_model_ensure_warn_dir
   slug="$(_walter_model_domain_slug "${1:-default}")"
   _walter_model_domain_field "$slug" env \
     || { [[ "$slug" == "phi" ]] && printf '%s\n' "WALTER_MODEL_PHI"; } \
@@ -321,6 +326,7 @@ walter_model_for() {
   local requested="${1:-default}"
   local key slug env_key configured fallback
 
+  _walter_model_ensure_warn_dir
   key="$(_walter_model_domain_key "$requested")"
   slug="$(tr '[:upper:]' '[:lower:]' <<<"$key")"
 
@@ -383,6 +389,7 @@ walter_model_resolve() {
 
 walter_models_print_effective() {
   local domain domains
+  _walter_model_ensure_warn_dir
   domains="$(walter_model_domains)" || return 1
   while IFS= read -r domain; do
     [[ -n "$domain" ]] || continue
