@@ -28,6 +28,109 @@ setup() {
   echo "$output" | grep -Fq "RUNBOOK.md"
 }
 
+@test "headscale diagnose detects stopped container before reading stale logs" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "exited"
+  exit 0
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "INFO registration request completed"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "Headscale container is not running"
+  echo "$output" | grep -Fq "docker compose -f"
+  echo "$output" | grep -Fq "deploy.sh --diagnose"
+}
+
+@test "headscale diagnose treats missing container as not running" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "No such object: headscale" >&2
+  exit 1
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "INFO stale registration request completed"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "Container state: missing"
+  echo "$output" | grep -Fq "Headscale container is not running"
+  ! echo "$output" | grep -Fq "stale registration request completed"
+}
+
+@test "headscale diagnose keeps docker daemon inspect errors inconclusive" {
+  [[ -x "$DIAGNOSE" ]]
+
+  cat >"$TEST_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+if [[ "$1" == "logs" ]]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+exit 1
+EOF
+  chmod +x "$TEST_BIN/docker"
+
+  run env PATH="$TEST_BIN:/usr/bin:/bin" "$DIAGNOSE"
+
+  [ "$status" -eq 3 ]
+  ! echo "$output" | grep -Fq "Container state: missing"
+  ! echo "$output" | grep -Fq "Headscale container is not running"
+  echo "$output" | grep -Fq "could not inspect Headscale logs"
+  echo "$output" | grep -Fq "Cannot connect to the Docker daemon"
+}
+
+@test "headscale diagnose detects TS2021 websocket proxy warning" {
+  [[ -x "$DIAGNOSE" ]]
+
+  log_file="$BATS_TEST_TMPDIR/headscale.log"
+  printf '%s\n' \
+    'WRN No Upgrade header in TS2021 request. If headscale is behind a reverse proxy, make sure it is configured to pass WebSockets through.' \
+    > "$log_file"
+
+  run "$DIAGNOSE" --mock-log "$log_file"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -Fq "TS2021 WebSocket proxy warning detected"
+  echo "$output" | grep -Fq "reverse proxy is not passing WebSocket upgrade headers"
+  echo "$output" | grep -Fq "Cloudflare Tunnel/Caddy route"
+  echo "$output" | grep -Fq 'headscale.${WALTER_DOMAIN}'
+  ! echo "$output" | grep -Fq 'headscale.${WALTER_DOMAIN}.'
+}
+
 @test "headscale diagnose exits cleanly without capver signature" {
   [[ -x "$DIAGNOSE" ]]
 
@@ -37,7 +140,8 @@ setup() {
   run "$DIAGNOSE" --mock-log "$log_file"
 
   [ "$status" -eq 0 ]
-  echo "$output" | grep -Fq "no known capability-version drift signature"
+  echo "$output" | grep -Fq "no known runtime or registration blocker found"
+  ! echo "$output" | grep -Fq "no known capability-version drift signature"
   echo "$output" | grep -Fq "live client registration"
 }
 
@@ -57,6 +161,7 @@ setup() {
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -Fq "Usage: diagnose.sh [options]"
+  echo "$output" | grep -Fq "No known runtime or registration blocker found"
   ! echo "$output" | grep -Fq "setup/walter-host/services/headscale/diagnose.sh"
 }
 
@@ -75,6 +180,10 @@ EOF
 if [[ "$1" == "exec" ]]; then
   exit 1
 fi
+if [[ "$1" == "inspect" ]]; then
+  echo "running"
+  exit 0
+fi
 if [[ "$1" == "logs" ]]; then
   echo "INFO registration request completed"
   exit 0
@@ -87,7 +196,7 @@ EOF
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -Fq "Headscale: Headscale 9.9.9-test"
-  echo "$output" | grep -Fq "no known capability-version drift signature"
+  echo "$output" | grep -Fq "no known runtime or registration blocker found"
 }
 
 @test "headscale diagnose fails inconclusive when docker logs cannot be inspected" {
@@ -97,6 +206,10 @@ EOF
 #!/usr/bin/env bash
 if [[ "$1" == "exec" ]]; then
   exit 1
+fi
+if [[ "$1" == "inspect" ]]; then
+  echo "running"
+  exit 0
 fi
 if [[ "$1" == "logs" ]]; then
   echo "Cannot connect to the Docker daemon" >&2
@@ -131,6 +244,9 @@ EOF
 
   grep -Fq "deploy.sh --diagnose" "$runbook"
   grep -Fq "capability-version drift detected" "$runbook"
+  grep -Fq "Headscale container is not running" "$runbook"
+  grep -Fq "TS2021 WebSocket proxy warning detected" "$runbook"
+  ! grep -Fq 'Start it with `docker compose -f /opt/walter-vm/services/headscale/compose.yml' "$runbook"
 }
 
 @test "headscale deploy exposes diagnose mode" {
