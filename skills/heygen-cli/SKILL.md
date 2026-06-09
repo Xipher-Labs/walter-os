@@ -19,20 +19,19 @@ for `hcloud`, `postgres-cli`, `forgejo-cli`, etc.
 HeyGen bills per second of generated video. Every `heygen_generate_video`
 call costs real money.
 
-The functions are sourced into the operator's shell rather than invoked
-via `Bash` tool patterns that `approval-gate.sh` classifies today, so
-the approval-gate hook does NOT have a dedicated `heygen-generate`
-category yet (see `hooks/approval-gate.sh::CATEGORY_MIN_TIER`). The
-guardrails are layered instead:
+The approval-gate hook classifies paid HeyGen generation as the dedicated
+`heygen-generate` category (see `hooks/approval-gate.sh::CATEGORY_MIN_TIER`).
+That category requires a high-trust agent or an explicit operator-approved
+path before paid generation can run. The guardrails are layered:
 
 - **Code-level**: `_heygen_preflight` requires `HEYGEN_API_KEY`; an
   unauthenticated call exits 2 before any HTTP request.
 - **Convention**: every state-changing call (`heygen_generate_video`,
   `heygen_generate_from_template`) MUST be preceded by explicit operator
   confirmation in chat per the multi-agent autonomy spec §7.1.
-- **Followup TODO**: a dedicated approval-gate category is tracked as
-  follow-up work (see `skills/ai-spend-tripwire/SKILL.md`) — it will land
-  in a separate PR after the skill itself is merged.
+- **Approval gate**: paid functions and direct HeyGen generation endpoints
+  are categorized as `heygen-generate`; read-only list/status functions are
+  not blocked by this category.
 
 Read-only functions (`heygen_list_avatars`, `heygen_get_video_status`,
 `heygen_list_templates`, `heygen_list_voices`) are free and need no
@@ -187,10 +186,10 @@ The DevRel pipeline:
 - **Fail-fast on `--ratio`**: invalid ratios exit 2 rather than
   silently falling back to 16:9. Paid endpoint should never bill the
   operator for a dimension they didn't ask for.
-- **Audit-gate followup**: a dedicated `heygen-generate` category in
-  `hooks/approval-gate.sh::CATEGORY_MIN_TIER` is tracked as a
-  follow-up — until it lands, operators rely on the "explicit
-  confirmation in chat" convention described in §Money-spending.
+- **Approval-gate enforcement**: paid generation functions and direct
+  generation endpoint calls are classified as `heygen-generate`, which
+  requires high trust or explicit operator approval. Read-only list/status
+  calls remain free to run.
 
 ## Why no MCP
 

@@ -348,6 +348,41 @@ teardown() {
   [[ "$status" -eq 0 ]]
 }
 
+@test "CLI: paid HeyGen video generation is blocked for medium-tier agent" {
+  run "$HOOK" check "source skills/heygen-cli/heygen.sh; heygen_generate_video --avatar av --voice vo --script hi"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ heygen-generate|trust[[:space:]]tier ]]
+}
+
+@test "CLI: paid HeyGen template generation is blocked for medium-tier agent" {
+  run "$HOOK" check "heygen_generate_from_template template-123 --variables '{}'"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ heygen-generate|trust[[:space:]]tier ]]
+}
+
+@test "CLI: direct HeyGen generation endpoint is blocked for medium-tier agent" {
+  run "$HOOK" check "curl -X POST https://api.heygen.com/v2/video/generate -d '{}'"
+  [[ "$status" -eq 7 ]]
+  [[ "$output" =~ heygen-generate|trust[[:space:]]tier ]]
+}
+
+@test "CLI: paid HeyGen generation is allowed for high-tier agent" {
+  cat > "$WALTER_CONFIG/trust-tiers.yml" <<'TIERS'
+agents:
+  test-agent:
+    tier: high
+    overrides: {}
+TIERS
+
+  run "$HOOK" check "heygen_generate_video --avatar av --voice vo --script hi"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: read-only HeyGen calls remain allowed" {
+  run "$HOOK" check "heygen_list_avatars; heygen_get_video_status video-123"
+  [[ "$status" -eq 0 ]]
+}
+
 @test "CLI: walter-os cap verify remains allowed" {
   run "$HOOK" check "walter-os cap verify /tmp/cap-test.paseto"
   [[ "$status" -eq 0 ]]

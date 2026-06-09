@@ -220,6 +220,7 @@ declare -A CATEGORY_MIN_TIER=(
   [gh-pr-comment]="low"
   [gh-pr-review-approve]="high"
   [capability-token-mint]="high"
+  [heygen-generate]="high"
 )
 set -u
 
@@ -408,6 +409,17 @@ _is_capability_private_key_payload() {
   return 1
 }
 
+_is_heygen_paid_generation_payload() {
+  local payload="$1"
+  local normalized
+  local paid_function='(^|[[:space:];|&()])[$]?(heygen_generate_video|heygen_generate_from_template)([[:space:];|&()]|$)'
+  local paid_endpoint='api[.]heygen[.]com/(v[0-9]+/)?(video/generate|template/[^[:space:];|&()]+/generate)'
+
+  normalized="$(_shellish_normalize_payload "$payload")"
+
+  [[ "$normalized" =~ $paid_function ]] || [[ "$normalized" =~ $paid_endpoint ]]
+}
+
 # classify_command <tool> <payload> → category name or empty string
 # Returns the category slug for a command, or empty if not categorizable.
 _classify_command() {
@@ -420,6 +432,9 @@ _classify_command() {
       # comment operation.
       if _is_capability_token_mint_payload "$payload" || _is_capability_private_key_payload "$payload"; then
         echo "capability-token-mint"; return
+      fi
+      if _is_heygen_paid_generation_payload "$payload"; then
+        echo "heygen-generate"; return
       fi
       # git push to feature/* — but NOT force push (force-push is blocked-all)
       if [[ "$payload" =~ git[[:space:]]+push.*feature/ ]] && \
@@ -748,6 +763,7 @@ declare -a CONSENSUS_INELIGIBLE_CATEGORIES=(
   sql-destructive
   http-delete-managed-services
   money-spending
+  heygen-generate
   public-communication
   auth-crypto-phi-files
   env-file-writes
