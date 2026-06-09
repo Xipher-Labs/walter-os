@@ -23,3 +23,12 @@ setup() {
   [[ "$hooks_matrix" != *"tests/cloudflare/"* ]]
   [[ "$compose_matrix" == *"tests/cloudflare/"* ]]
 }
+
+@test "ci workflow cancels stale runs for the same branch or PR" {
+  [[ -f "$CI_WORKFLOW" ]]
+
+  grep -Eq '^concurrency:[[:space:]]*$' "$CI_WORKFLOW"
+  grep -Eq '^[[:space:]]+group:[[:space:]]+.*github\.workflow.*github\.event\.pull_request\.number.*\|\|.*github\.ref' "$CI_WORKFLOW"
+  grep -Eq '^[[:space:]]+cancel-in-progress:[[:space:]]+true[[:space:]]*$' "$CI_WORKFLOW"
+  grep -Fq 'Security workflows keep' "$CI_WORKFLOW"
+}

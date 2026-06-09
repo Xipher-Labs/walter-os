@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main, dev, staging]
 
+# Cancel stale CI matrices for the same branch/PR. Security workflows keep
+# separate runs so scan evidence remains attached to every pushed SHA.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
