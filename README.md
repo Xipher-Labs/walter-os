@@ -6,19 +6,19 @@
 
 [![License: Apache-2.0 + AGPL-3.0](https://img.shields.io/badge/License-Apache--2.0%20%2B%20AGPL--3.0-blue.svg)](#license)
 [![CI](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml/badge.svg)](https://github.com/xipher-labs/walter-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.6.1--alpha-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.2--alpha-orange.svg)](CHANGELOG.md)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg)](CHANGELOG.md)
 [![Security: default-deny egress](https://img.shields.io/badge/security-default--deny_egress-brightgreen.svg)](docs/operational/network-egress.md)
 
 </div>
 
-> **Status — alpha (v0.6.1).** Things iterate fast. **Pin to a tag** in production.
+> **Status — alpha (v0.6.2).** Things iterate fast. **Pin to a tag** in production.
 > Stability promise lands at v1.0 — see [the charter](docs/specs/walter-os-v1-0-stability-charter.md).
 > Breaking changes between minor versions are normal until then; every release is tagged + documented in [CHANGELOG.md](CHANGELOG.md).
-> v0.6.1 is the post-v0.6 operational hardening cut: signed audit-chain
-> follow-ups, provider-selection polish, AI-stack resilience tracking, and
-> CodeQL/Scorecard follow-up issues. Release notes:
-> [v0.6.1 release notes](docs/operational/v0.6.1-release-notes.md).
+> v0.6.2 is a tag-reconciliation patch after the v0.6.1 release: it keeps
+> v0.6.1 immutable and documents the post-tag Headscale, Cloudflare CI, and
+> local preview hardening now present on `main`. Release notes:
+> [v0.6.2 release notes](docs/operational/v0.6.2-release-notes.md).
 
 ---
 
@@ -477,7 +477,7 @@ path, so service-specific config sync and `.env` exclusions still apply.
 Major version bumps may include breaking changes — read the [CHANGELOG](CHANGELOG.md) entry for the target version before pulling. To pin an upgrade to a tagged release:
 
 ```bash
-walter-os upgrade --target v0.6.1
+walter-os upgrade --target v0.6.2
 ```
 
 The `quarterly-upgrade-cadence` skill formalizes the pre-bump snapshot + tier-by-tier rollout + rollback procedure.
@@ -492,7 +492,7 @@ Rollback: `git checkout <prev-tag>` + `./install.sh --upgrade`. Symlinks are re-
 walter-os/
 ├── AGENTS.md                    # Global agent contract (loaded by all four tools)
 ├── CHANGELOG.md                 # SemVer changelog
-├── VERSION                      # Single-source semver (0.6.1)
+├── VERSION                      # Single-source semver (0.6.2)
 ├── LICENSE                      # AGPL-3.0-or-later (canonical text)
 ├── LICENSE-APACHE               # Apache-2.0 (canonical text — default tree)
 ├── NOTICE                       # Operator attribution + dual-license map

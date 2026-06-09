@@ -69,6 +69,14 @@ requires the one-minor-version notice cycle.
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-06-09
+
+**Release tag reconciliation patch.**
+
+v0.6.1 remains immutable as the 2026-06-07 release. This patch documents the
+post-tag merge batch now on `main` and gives operators a clean follow-up tag to
+pin instead of force-moving the existing published release.
+
 ### Added
 
 - Added `walter doctor --enforcement` to report whether local tool execution is
@@ -77,12 +85,18 @@ requires the one-minor-version notice cycle.
   run `setup/walter-host/services/headscale/deploy.sh --diagnose` to detect the
   known Tailscale/Headscale capability-version drift signature and get the
   safer break-glass recovery path.
+- **Local preview adapter (#235).** Adds `walter-os preview local` so operators
+  can bring up deterministic local preview environments while the broader
+  ephemeral per-PR preview provider work remains tracked separately.
 
 ### Changed
 
 - Council agent personas now declare `model_domain` frontmatter so
   `scripts/agents/run.sh` routes through Walter's operator-configurable model
   domains instead of treating the compatibility `model` field as authoritative.
+- **Headscale direct route (#363).** Routes the Tailscale control-plane
+  hostname outside the Cloudflare Tunnel path while keeping admin access behind
+  the gated route.
 
 ### Fixed
 
@@ -93,6 +107,15 @@ requires the one-minor-version notice cycle.
 - **LiteLLM Claude shorthand (#428).** The default LiteLLM configs now expose
   `claude` as a Sonnet route so `walter ai configure` preferences work through
   both LiteLLM and direct Anthropic fallback.
+- **Cloudflare test routing (#494).** Routes Cloudflare-specific tests through
+  the service CI slice so unrelated hook changes do not run that suite by
+  accident.
+
+### Release Operations
+
+- **Release tag reconciliation (#496).** Documents the immutable v0.6.1 tag
+  decision and prepares v0.6.2 as the patch release for the post-tag merge
+  batch.
 
 ## [0.6.1] — 2026-06-07
 
@@ -1336,7 +1359,8 @@ See git log for details — no formal changelog was kept before 0.2.0.
 
 ---
 
-[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Xipher-Labs/walter-os/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.6.0
 [0.5.1]: https://github.com/Xipher-Labs/walter-os/releases/tag/v0.5.1
