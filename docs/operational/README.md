@@ -23,6 +23,7 @@ commands, expected outputs, and troubleshooting. The audience is a technical ope
 | [`scorecard-hygiene.md`](scorecard-hygiene.md) | OpenSSF Scorecard alert disposition for project hygiene, including code-visible fixes and manual GitHub settings |
 | [`pinned-dependency-alerts.md`](pinned-dependency-alerts.md) | Documented dispositions for pinned dependency, release action, and upstream workflow warnings |
 | [`capability-tokens.md`](capability-tokens.md) | Capability-token runtime state, daily-audit hygiene checks, and operator recovery steps |
+| [`enforcement-mode.md`](enforcement-mode.md) | `walter doctor --enforcement`, hook visibility, wrapper checks, and policy-only vs enforced modes |
 | [`anthropic-skills-delta-audit.md`](anthropic-skills-delta-audit.md) | Delta audit for upstream `anthropics/skills` versus plugin-exposed Anthropic skills |
 | [`hosting-providers-comparison.md`](hosting-providers-comparison.md) | VPS/cloud provider comparison for Walter-OS v0.2.0 adopters: specs, pricing, gotchas, and portability notes. Hetzner is default reference; 10 alternatives documented. |
 | [`knowledge-profile.md`](knowledge-profile.md) | Decision guide for Outline + Linkwarden versus Obsidian in personal, startup, and small-team installs |
