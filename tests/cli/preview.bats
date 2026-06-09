@@ -623,6 +623,323 @@ SH
   [[ "$output" == *"Usage: walter-os preview bundle"* ]]
 }
 
+@test "preview verify accepts a complete report bundle" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.pr == 235'
+  echo "$output" | jq -e '.status == "ready"'
+  echo "$output" | jq -e '.kind == "preview-report"'
+  echo "$output" | jq -e '.findings == []'
+  echo "$output" | jq -e '.screenshots == 1'
+}
+
+@test "preview verify rejects tampered screenshot hashes" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  printf 'tampered\n' > "$TMP_DIR/out/preview-pr-235/screenshots/home.png"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("screenshot hash mismatch: home.png")'
+}
+
+@test "preview verify rejects evidence paths outside the bundle" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  local external_shot="$TMP_DIR/external.png"
+  printf 'external screenshot\n' > "$external_shot"
+  local external_sha
+  if command -v sha256sum >/dev/null 2>&1; then
+    external_sha="$(sha256sum -- "$external_shot" | awk '{print $1}')"
+  else
+    external_sha="$(shasum -a 256 -- "$external_shot" | awk '{print $1}')"
+  fi
+  jq \
+    --arg path "$external_shot" \
+    --arg sha "$external_sha" \
+    '.screenshots[0].path = $path | .screenshots[0].sha256 = $sha' \
+    "$TMP_DIR/out/preview-pr-235/preview-report.json" \
+    > "$TMP_DIR/report.json"
+  mv "$TMP_DIR/report.json" "$TMP_DIR/out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("screenshot external.png path escapes preview bundle")'
+}
+
+@test "preview verify treats glob metacharacters in bundle paths literally" {
+  write_preview_artifacts
+
+  local glob_out="$TMP_DIR/out[ab]"
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$glob_out"
+
+  [ "$status" -eq 0 ]
+  mkdir -p "$TMP_DIR/outa/preview-pr-235/screenshots"
+  cp "$glob_out/preview-pr-235/screenshots/home.png" \
+    "$TMP_DIR/outa/preview-pr-235/screenshots/home.png"
+  jq \
+    --arg path "$TMP_DIR/outa/preview-pr-235/screenshots/home.png" \
+    '.screenshots[0].path = $path' \
+    "$glob_out/preview-pr-235/preview-report.json" \
+    > "$TMP_DIR/report.json"
+  mv "$TMP_DIR/report.json" "$glob_out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$glob_out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("screenshot home.png path escapes preview bundle")'
+}
+
+@test "preview verify rejects evidence paths through symlinked directories" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  mkdir -p "$TMP_DIR/external-shots"
+  cp "$shot_file" "$TMP_DIR/external-shots/home.png"
+  rm -r "$TMP_DIR/out/preview-pr-235/screenshots"
+  ln -s "$TMP_DIR/external-shots" "$TMP_DIR/out/preview-pr-235/screenshots"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("screenshot home.png path escapes preview bundle")'
+}
+
+@test "preview verify rejects report credential invariant drift" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  jq '.safety.credentials = "minted"' \
+    "$TMP_DIR/out/preview-pr-235/preview-report.json" \
+    > "$TMP_DIR/report.json"
+  mv "$TMP_DIR/report.json" "$TMP_DIR/out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview report credential invariant failed")'
+}
+
+@test "preview verify rejects symlinked report JSON" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  printf '{"schema_version":1}\n' > "$TMP_DIR/external-report.json"
+  rm "$TMP_DIR/out/preview-pr-235/preview-report.json"
+  ln -s "$TMP_DIR/external-report.json" "$TMP_DIR/out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview report is a symlink")'
+}
+
+@test "preview verify rejects non-file report JSON path" {
+  mkdir -p "$TMP_DIR/out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview report file is missing or unreadable")'
+}
+
+@test "preview verify accepts a dry-run preview plan" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app walter-web \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.status == "planned"'
+  echo "$output" | jq -e '.kind == "preview-plan"'
+  echo "$output" | jq -e '.findings == []'
+}
+
+@test "preview verify rejects plan production secret invariant drift" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app walter-web \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  jq '.safety.production_secrets = "allowed"' \
+    "$TMP_DIR/out/preview-pr-235/preview-plan.json" \
+    > "$TMP_DIR/plan.json"
+  mv "$TMP_DIR/plan.json" "$TMP_DIR/out/preview-pr-235/preview-plan.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview plan production secret invariant failed")'
+}
+
+@test "preview verify rejects symlinked plan JSON" {
+  write_preview_artifacts
+  write_preview_config
+
+  run bash "$WALTER_OS_BIN" preview plan \
+    --dry-run \
+    --pr 235 \
+    --provider vercel \
+    --app walter-web \
+    --branch feature/preview-plan \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  printf '{"schema_version":1}\n' > "$TMP_DIR/external-plan.json"
+  rm "$TMP_DIR/out/preview-pr-235/preview-plan.json"
+  ln -s "$TMP_DIR/external-plan.json" "$TMP_DIR/out/preview-pr-235/preview-plan.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview plan is a symlink")'
+}
+
+@test "preview verify rejects non-file plan JSON path" {
+  mkdir -p "$TMP_DIR/out/preview-pr-235/preview-plan.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview plan file is missing or unreadable")'
+}
+
+@test "preview verify fails when evidence is missing" {
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "missing"'
+  echo "$output" | jq -e '.findings | index("preview evidence missing")'
+}
+
 @test "help documents preview commands" {
   run bash "$WALTER_OS_BIN" help
 
@@ -631,4 +948,5 @@ SH
   [[ "$output" == *"preview capture"* ]]
   [[ "$output" == *"preview local"* ]]
   [[ "$output" == *"preview plan"* ]]
+  [[ "$output" == *"preview verify"* ]]
 }

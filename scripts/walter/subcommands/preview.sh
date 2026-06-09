@@ -13,6 +13,7 @@ Usage: walter-os preview bundle --pr <number> --url <url> --seed <path> --screen
        walter-os preview plan --dry-run --pr <number> --provider <provider> --app <name> --branch <branch> --seed <path> [--config <path>] [--out <dir>] [--json]
        walter-os preview capture --pr <number> --url <url> --name <slug> [--out <dir>] [--wait-ms <ms>] [--json]
        walter-os preview local --pr <number> --url <loopback-url> --seed <path> --screenshot <path> [--screenshot <path>...] [--config <path>] [--out <dir>] [--json]
+       walter-os preview verify --pr <number> [--out <dir>] [--json]
 
 Creates a local preview evidence bundle from an existing preview URL, captures
 screenshots, writes a dry-run preview deployment plan, or records a loopback
@@ -24,6 +25,7 @@ Subcommands:
   capture   Capture a screenshot artifact from an existing preview URL.
   local     Package a loopback local preview as provider=local evidence.
   plan      Write a dry-run preview deployment plan.
+  verify    Validate preview report or dry-run plan evidence.
 
 Options for bundle:
   --pr <number>          Pull request number.
@@ -62,6 +64,11 @@ Options for local:
   --config <path>        walter-repo-config.yaml path. Defaults to cwd.
   --out <dir>            Output root. Defaults to .walter/previews.
   --json                 Print preview-report JSON instead of a short summary.
+
+Options for verify:
+  --pr <number>          Pull request number.
+  --out <dir>            Output root. Defaults to .walter/previews.
+  --json                 Print verification JSON instead of a short summary.
 EOF
 }
 
@@ -268,6 +275,118 @@ copy_artifact() {
   printf '%s\n' "$dest"
 }
 
+findings_json() {
+  if [[ "$#" -eq 0 ]]; then
+    printf '[]\n'
+  else
+    printf '%s\n' "$@" | jq -R . | jq -s .
+  fi
+}
+
+resolve_evidence_path() {
+  local bundle_dir="$1" path="$2"
+  local bundle_trimmed="${bundle_dir%/}" bundle_abs relative_path bundle_prefix bundle_abs_prefix
+
+  case "$path" in
+    ..|../*|*/..|*/../*)
+      return 1
+      ;;
+  esac
+
+  if ! bundle_abs="$(cd "$bundle_trimmed" 2>/dev/null && pwd -P)"; then
+    return 1
+  fi
+
+  bundle_prefix="${bundle_trimmed}/"
+  bundle_abs_prefix="${bundle_abs}/"
+  if [[ "${path:0:${#bundle_prefix}}" == "$bundle_prefix" ]]; then
+    relative_path="${path:${#bundle_prefix}}"
+    printf '%s\n' "${bundle_trimmed}/${relative_path}"
+  elif [[ "${path:0:${#bundle_abs_prefix}}" == "$bundle_abs_prefix" ]]; then
+    relative_path="${path:${#bundle_abs_prefix}}"
+    printf '%s\n' "${bundle_trimmed}/${relative_path}"
+  elif [[ "$path" == /* ]]; then
+    return 1
+  else
+    printf '%s\n' "${bundle_trimmed}/${path}"
+  fi
+}
+
+verify_hash_artifact() {
+  local bundle_dir="$1" label="$2" path="$3" expected_sha="$4"
+  local resolved actual_sha bundle_physical resolved_base resolved_dir resolved_dir_physical resolved_physical
+
+  if [[ -z "$path" || "$path" == "null" ]]; then
+    printf '%s\n' "${label} path is missing"
+    return 0
+  fi
+  if [[ -z "$expected_sha" || "$expected_sha" == "null" || ! "$expected_sha" =~ ^[a-f0-9]{64}$ ]]; then
+    printf '%s\n' "${label} hash is missing or invalid"
+    return 0
+  fi
+
+  if ! resolved="$(resolve_evidence_path "$bundle_dir" "$path")"; then
+    printf '%s\n' "${label} path escapes preview bundle"
+    return 0
+  fi
+  if [[ -L "$resolved" ]]; then
+    printf '%s\n' "${label} is a symlink"
+    return 0
+  fi
+  if [[ ! -f "$resolved" || ! -r "$resolved" ]]; then
+    printf '%s\n' "${label} file is missing or unreadable"
+    return 0
+  fi
+  if ! bundle_physical="$(cd "$bundle_dir" 2>/dev/null && pwd -P)"; then
+    printf '%s\n' "${label} path escapes preview bundle"
+    return 0
+  fi
+  resolved_base="$(path_base "$resolved")"
+  resolved_dir="${resolved%/*}"
+  if [[ "$resolved_dir" == "$resolved" ]]; then
+    resolved_dir="."
+  fi
+  if ! resolved_dir_physical="$(cd "$resolved_dir" 2>/dev/null && pwd -P)"; then
+    printf '%s\n' "${label} file is missing or unreadable"
+    return 0
+  fi
+  resolved_physical="${resolved_dir_physical}/${resolved_base}"
+  local bundle_physical_prefix="${bundle_physical}/"
+  if [[ "${resolved_physical:0:${#bundle_physical_prefix}}" != "$bundle_physical_prefix" ]]; then
+    printf '%s\n' "${label} path escapes preview bundle"
+    return 0
+  fi
+
+  actual_sha="$(sha256_file "$resolved")"
+  if [[ "$actual_sha" != "$expected_sha" ]]; then
+    case "$label" in
+      screenshot\ *)
+        printf '%s\n' "screenshot hash mismatch: ${label#screenshot }"
+        ;;
+      *)
+        printf '%s\n' "${label} hash mismatch"
+        ;;
+    esac
+  fi
+}
+
+validate_evidence_json_file() {
+  local label="$1" path="$2"
+
+  if [[ -L "$path" ]]; then
+    printf '%s\n' "${label} is a symlink"
+    return 1
+  fi
+  if [[ ! -f "$path" || ! -r "$path" ]]; then
+    printf '%s\n' "${label} file is missing or unreadable"
+    return 1
+  fi
+  if ! jq -e . "$path" >/dev/null 2>&1; then
+    printf '%s\n' "${label} is not valid JSON"
+    return 1
+  fi
+}
+
 cmd_capture() {
   require_jq
 
@@ -466,11 +585,13 @@ cmd_plan() {
     die_usage "preview_deploy is not enabled in config: $config_path"
   fi
 
-  local bundle_dir plan_path generated_at plan_json
+  local bundle_dir seed_dir plan_path generated_at plan_json seed_dest
   bundle_dir="${out_root%/}/preview-pr-${pr}"
+  seed_dir="${bundle_dir}/seed"
   plan_path="${bundle_dir}/preview-plan.json"
-  mkdir -p -- "$bundle_dir"
+  mkdir -p -- "$seed_dir"
 
+  seed_dest="$(copy_artifact "$seed" "$seed_dir")"
   generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   plan_json="$(jq -nc \
     --argjson pr "$pr" \
@@ -480,7 +601,7 @@ cmd_plan() {
     --arg config_path "$config_path" \
     --arg generated_at "$generated_at" \
     --arg bundle_dir "$bundle_dir" \
-    --argjson seed "$(artifact_json "$seed" "$seed")" \
+    --argjson seed "$(artifact_json "$seed" "$seed_dest")" \
     '{
       schema_version: 1,
       kind: "preview-plan",
@@ -785,6 +906,177 @@ cmd_bundle() {
   fi
 }
 
+cmd_verify() {
+  require_jq
+
+  local pr="" out_root=".walter/previews" json_output=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)
+        pr="${2:-}"
+        [[ -n "$pr" ]] || die_usage "--pr requires a value"
+        shift 2
+        ;;
+      --out)
+        out_root="${2:-}"
+        [[ -n "$out_root" ]] || die_usage "--out requires a value"
+        shift 2
+        ;;
+      --json)
+        json_output=1
+        shift
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      -*)
+        die_usage "unknown option: $1"
+        ;;
+      *)
+        die_usage "unexpected argument: $1"
+        ;;
+    esac
+  done
+
+  validate_positive_pr "$pr"
+
+  local bundle_dir report_path plan_path status kind screenshots_count=0
+  local -a findings=()
+  bundle_dir="${out_root%/}/preview-pr-${pr}"
+  report_path="${bundle_dir}/preview-report.json"
+  plan_path="${bundle_dir}/preview-plan.json"
+
+  if [[ -e "$report_path" ]]; then
+    kind="preview-report"
+    local evidence_finding
+    if ! evidence_finding="$(validate_evidence_json_file "preview report" "$report_path")"; then
+      findings+=("$evidence_finding")
+    else
+      local report_pr report_kind report_schema report_url report_seed_path report_seed_sha
+      report_pr="$(jq -r '.pr // empty' "$report_path")"
+      report_kind="$(jq -r '.kind // "preview-report"' "$report_path")"
+      report_schema="$(jq -r '.schema_version // empty' "$report_path")"
+      report_url="$(jq -r '.url // empty' "$report_path")"
+      report_seed_path="$(jq -r '.seed_manifest.path // empty' "$report_path")"
+      report_seed_sha="$(jq -r '.seed_manifest.sha256 // empty' "$report_path")"
+      screenshots_count="$(jq -r 'if (.screenshots | type) == "array" then (.screenshots | length) else 0 end' "$report_path")"
+
+      [[ "$report_schema" == "1" ]] || findings+=("preview report schema is unsupported")
+      [[ "$report_kind" == "preview-report" ]] || findings+=("preview report kind is unsupported")
+      [[ "$report_pr" == "$pr" ]] || findings+=("preview report PR does not match")
+      [[ "$report_url" =~ ^https?:// ]] || findings+=("preview report URL is missing or invalid")
+      [[ "$(jq -r '.safety.production_secrets // empty' "$report_path")" == "rejected" ]] \
+        || findings+=("preview report production secret invariant failed")
+      [[ "$(jq -r '.safety.credentials // empty' "$report_path")" == "not minted" ]] \
+        || findings+=("preview report credential invariant failed")
+      [[ "$(jq -r '.safety.deploy // empty' "$report_path")" == "not performed" ]] \
+        || findings+=("preview report deploy invariant failed")
+      [[ "$(jq -r '.safety.hard_limit_floor // empty' "$report_path")" == "preserved" ]] \
+        || findings+=("preview report hard-limit invariant failed")
+
+      while IFS= read -r finding; do
+        [[ -n "$finding" ]] && findings+=("$finding")
+      done < <(verify_hash_artifact "$bundle_dir" "seed" "$report_seed_path" "$report_seed_sha")
+
+      if [[ "$screenshots_count" =~ ^[0-9]+$ ]] && (( screenshots_count > 0 )); then
+        local index screenshot_path screenshot_sha screenshot_label
+        for (( index = 0; index < screenshots_count; index++ )); do
+          screenshot_path="$(jq -r --argjson i "$index" '.screenshots[$i].path // empty' "$report_path")"
+          screenshot_sha="$(jq -r --argjson i "$index" '.screenshots[$i].sha256 // empty' "$report_path")"
+          screenshot_label="screenshot"
+          if [[ -n "$screenshot_path" ]]; then
+            screenshot_label="screenshot $(path_base "$screenshot_path")"
+          fi
+          while IFS= read -r finding; do
+            [[ -n "$finding" ]] && findings+=("$finding")
+          done < <(verify_hash_artifact "$bundle_dir" "$screenshot_label" "$screenshot_path" "$screenshot_sha")
+        done
+      else
+        findings+=("preview report screenshots are missing")
+      fi
+    fi
+    if [[ "${#findings[@]}" -eq 0 ]]; then
+      status="ready"
+    else
+      status="invalid"
+    fi
+  elif [[ -e "$plan_path" ]]; then
+    kind="preview-plan"
+    local evidence_finding
+    if ! evidence_finding="$(validate_evidence_json_file "preview plan" "$plan_path")"; then
+      findings+=("$evidence_finding")
+    else
+      local plan_pr plan_schema plan_kind plan_seed_path plan_seed_sha
+      plan_pr="$(jq -r '.pr // empty' "$plan_path")"
+      plan_schema="$(jq -r '.schema_version // empty' "$plan_path")"
+      plan_kind="$(jq -r '.kind // empty' "$plan_path")"
+      plan_seed_path="$(jq -r '.seed_manifest.path // empty' "$plan_path")"
+      plan_seed_sha="$(jq -r '.seed_manifest.sha256 // empty' "$plan_path")"
+
+      [[ "$plan_schema" == "1" ]] || findings+=("preview plan schema is unsupported")
+      [[ "$plan_kind" == "preview-plan" ]] || findings+=("preview plan kind is unsupported")
+      [[ "$plan_pr" == "$pr" ]] || findings+=("preview plan PR does not match")
+      [[ "$(jq -r '.safety.dry_run // empty' "$plan_path")" == "true" ]] \
+        || findings+=("preview plan dry-run invariant failed")
+      [[ "$(jq -r '.safety.preview_deploy // empty' "$plan_path")" == "true" ]] \
+        || findings+=("preview plan preview_deploy invariant failed")
+      [[ "$(jq -r '.safety.production_secrets // empty' "$plan_path")" == "rejected" ]] \
+        || findings+=("preview plan production secret invariant failed")
+      [[ "$(jq -r '.safety.credentials // empty' "$plan_path")" == "not minted" ]] \
+        || findings+=("preview plan credential invariant failed")
+      [[ "$(jq -r '.safety.deploy // empty' "$plan_path")" == "not performed" ]] \
+        || findings+=("preview plan deploy invariant failed")
+      [[ "$(jq -r '.safety.hard_limit_floor // empty' "$plan_path")" == "preserved" ]] \
+        || findings+=("preview plan hard-limit invariant failed")
+
+      while IFS= read -r finding; do
+        [[ -n "$finding" ]] && findings+=("$finding")
+      done < <(verify_hash_artifact "$bundle_dir" "seed" "$plan_seed_path" "$plan_seed_sha")
+    fi
+    if [[ "${#findings[@]}" -eq 0 ]]; then
+      status="planned"
+    else
+      status="invalid"
+    fi
+  else
+    kind="missing"
+    status="missing"
+    findings+=("preview evidence missing")
+  fi
+
+  local verify_json findings_payload
+  findings_payload="$(findings_json "${findings[@]}")"
+  verify_json="$(jq -nc \
+    --argjson pr "$pr" \
+    --arg status "$status" \
+    --arg kind "$kind" \
+    --arg bundle_dir "$bundle_dir" \
+    --argjson screenshots "$screenshots_count" \
+    --argjson findings "$findings_payload" \
+    '{
+      schema_version: 1,
+      kind: $kind,
+      pr: $pr,
+      status: $status,
+      bundle_dir: $bundle_dir,
+      screenshots: $screenshots,
+      findings: $findings
+    }')"
+
+  if [[ "$json_output" -eq 1 ]]; then
+    printf '%s\n' "$verify_json" | jq .
+  else
+    printf 'preview: %s %s\n' "$status" "$bundle_dir"
+    if [[ "${#findings[@]}" -gt 0 ]]; then
+      printf '%s\n' "${findings[@]}" >&2
+    fi
+  fi
+
+  [[ "$status" == "ready" || "$status" == "planned" ]]
+}
+
 cmd="${1:-help}"
 shift || true
 
@@ -800,6 +1092,9 @@ case "$cmd" in
     ;;
   local)
     cmd_local "$@"
+    ;;
+  verify)
+    cmd_verify "$@"
     ;;
   -h|--help|help)
     usage
