@@ -38,14 +38,37 @@ gh api -X POST \
   --input - <<<'{"reviewers":["copilot-pull-request-reviewer[bot]"]}'
 ```
 
-For Codex review (mandatory when PR exceeds Copilot's 20k-line cap, or when
-touching multi-service deployment paths):
+For Round 2 cross-review (mandatory when PR exceeds Copilot's 20k-line cap, or
+when touching multi-service deployment paths), first inspect the operator's
+declared AI capability routes and effective model routing:
 
 ```bash
-codex review --base main > /tmp/codex-review.txt 2>&1
+walter ai status
+walter-os status --models
 ```
 
+If `provider_codex` is available or the `code_review` /
+`infra_security_backend` route resolves to Codex, run:
+
+```bash
+CODEX_MINIMAL_HOME="$(mktemp -d "${TMPDIR:-/tmp}/codex-minimal.XXXXXX")"
+chmod 700 "$CODEX_MINIMAL_HOME"
+trap 'rm -rf "$CODEX_MINIMAL_HOME"' EXIT
+printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' \
+  > "$CODEX_MINIMAL_HOME/config.toml"
+cp ~/.codex/auth.json "$CODEX_MINIMAL_HOME/auth.json"
+chmod 600 "$CODEX_MINIMAL_HOME/config.toml" "$CODEX_MINIMAL_HOME/auth.json"
+CODEX_REVIEW_OUTPUT="$CODEX_MINIMAL_HOME/review.txt"
+: > "$CODEX_REVIEW_OUTPUT"
+chmod 600 "$CODEX_REVIEW_OUTPUT"
+CODEX_HOME="$CODEX_MINIMAL_HOME" codex review --base <target-branch> \
+  > "$CODEX_REVIEW_OUTPUT" 2>&1
+```
+
+- If Codex is unavailable, use the first declared reviewer route instead.
+- If no second reviewer is declared, document the gap and escalate before merge.
 - [ ] Copilot review requested (REST API above)
+- [ ] Round 2 cross-review completed or explicitly escalated
 
 ## Checklist
 
