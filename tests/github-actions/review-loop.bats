@@ -121,6 +121,15 @@ setup() {
   grep -q 'approval_policy = "never"' "$ACTION_YML"
   grep -q 'model = "gpt-5.5"' "$ACTION_YML"
   grep -q "auth.json" "$ACTION_YML"
+  awk '/Codex Round 2/,/printf/' "$ACTION_YML" \
+    | grep -qE 'umask[[:space:]]+077'
+  grep -qE 'if ! mkdir -p "\$CODEX_HOME_INPUT" \|\| ! chmod[[:space:]]+700[[:space:]]+"\$CODEX_HOME_INPUT"' "$ACTION_YML"
+  grep -qE 'chmod[[:space:]]+700[[:space:]]+"\$CODEX_HOME_INPUT"' "$ACTION_YML"
+  grep -q "Could not prepare secure CODEX_HOME" "$ACTION_YML"
+  grep -qE 'chmod[[:space:]]+600[[:space:]]+"\$CODEX_HOME_INPUT/config\.toml"' "$ACTION_YML"
+  grep -q "Could not write secure Codex config" "$ACTION_YML"
+  grep -qE 'chmod[[:space:]]+600[[:space:]]+"\$CODEX_HOME_INPUT/auth\.json"' "$ACTION_YML"
+  grep -q "Could not restrict.*auth.json permissions" "$ACTION_YML"
 }
 
 @test "AC-4: Codex step skips when no auth.json is mounted" {
@@ -142,9 +151,38 @@ setup() {
   fi
 }
 
+@test "AC-4: Codex step writes review output to a restricted temp file" {
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE 'umask[[:space:]]+077'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE '\[\[ ! -d "\$codex_output_dir" \]\]'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE 'codex_output_dir="/tmp"'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE 'if ! codex_output=.\$\(mktemp "\$codex_output_dir/codex-review\.XXXXXX"\)'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -q "Could not create secure Codex output file"
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE 'chmod[[:space:]]+600[[:space:]]+"\$codex_output"'
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -q "Could not restrict Codex output file permissions"
+  awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
+    | grep -qE '> "\$codex_output"[[:space:]]+2>&1'
+}
+
+@test "AC-4: review loop does not use fixed /tmp/codex-review.txt" {
+  if grep -R "/tmp/codex-review.txt" \
+    "$ACTION_YML" \
+    "$ACTION_README" \
+    "$WORKFLOW"; then
+    echo "review-loop surfaces should not use a fixed shared /tmp/codex-review.txt path" >&2
+    return 1
+  fi
+}
+
 @test "AC-4: Codex step only marks ran true after command success" {
   awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
-    | grep -qE 'if[[:space:]]+CODEX_HOME="\$CODEX_HOME_INPUT"[[:space:]]+codex[[:space:]]+review'
+    | grep -qE 'if[[:space:]]+CODEX_HOME="\$CODEX_HOME_INPUT"[[:space:]]+codex[[:space:]]+review.*> "\$codex_output"'
   awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
     | grep -q 'codex-ran=true'
   awk '/Codex Round 2/,/Collect findings/' "$ACTION_YML" \
@@ -160,6 +198,15 @@ setup() {
     echo "empty successful Codex output should not mark codex-ran=false" >&2
     return 1
   fi
+  awk '/if CODEX_HOME=.*codex review/,/Codex review failed/' "$ACTION_YML" \
+    | grep -q 'Output path: $codex_output'
+}
+
+@test "AC-4: Codex failure warning includes output path" {
+  awk '/else/,/echo "::endgroup::"/' "$ACTION_YML" \
+    | grep -q 'Codex review failed with exit code'
+  awk '/else/,/echo "::endgroup::"/' "$ACTION_YML" \
+    | grep -q 'Output path: $codex_output'
 }
 
 # ---------------------------------------------------------------------------

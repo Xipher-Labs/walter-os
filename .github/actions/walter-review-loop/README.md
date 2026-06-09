@@ -69,7 +69,7 @@ jobs:
 
 | Output | Description |
 |---|---|
-| `findings-json` | V1 placeholder. Currently always `[]`; the calling workflow reads raw outputs from PR comments + `/tmp/codex-review.txt`. Future iterations will parse findings into structured form. |
+| `findings-json` | V1 placeholder. Currently always `[]`; the calling workflow reads raw outputs from PR comments and the private Codex temp-file path logged by Round 2. Future iterations will parse findings into structured form. |
 | `rounds-completed` | JSON array listing which rounds actually ran. Subset of `['copilot-round-1', 'codex-round-2', 'collaborative-round-3']`. |
 | `status` | Overall verdict — `clean` / `findings` / `escalate`. v1 emits `escalate` when no rounds ran, `findings` otherwise; future iterations will parse severities and emit `clean` when all findings are MINOR/COSMETIC. |
 
