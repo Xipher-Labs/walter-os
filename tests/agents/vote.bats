@@ -128,9 +128,39 @@ MOCK_LLM
   rm -f "$MODEL_ARGS_FILE"
 }
 
-@test "vote_council keeps direct Anthropic fallback when LiteLLM is unset" {
+@test "vote_council honors direct Anthropic route when LiteLLM is unset" {
   [[ -f "$LIB" ]] || skip "vote.sh not found"
   MODEL_ARGS_FILE="$(mktemp -t walter-vote-direct-model-XXXXXX)"
+  export MODEL_ARGS_FILE MOCK_LIB_DIR WALTER_CONFIG LIB
+  export WALTER_MODEL_BACKEND_REVIEW="sonnet"
+  export WALTER_MODEL_ROUTER_SH="$BATS_TEST_DIRNAME/../../scripts/walter/lib/model-router.sh"
+  unset LITELLM_BASE_URL LITELLM_API_KEY
+
+  cat > "$MOCK_LIB_DIR/llm.sh" <<'MOCK_LLM'
+#!/usr/bin/env bash
+WALTER_LLM_LIB_VERSION=1
+llm_invoke() {
+  printf '%s\n' "$2" >> "$MODEL_ARGS_FILE"
+  echo "yes - direct fallback model accepted"
+}
+MOCK_LLM
+
+  result=$(bash -c '
+    export LLM_SH="$MOCK_LIB_DIR/llm.sh"
+    export WALTER_CONSENSUS_VOTES_LOG="/dev/null"
+    source "$LIB"
+    vote_council "test-direct" "fix model routing" "[\"researcher\",\"reviewer\"]" 2>/dev/null
+  ' 2>/dev/null || echo "FAILED")
+
+  echo "$result" | jq . >/dev/null 2>&1
+  grep -qFx "sonnet" "$MODEL_ARGS_FILE"
+  ! grep -qFx "haiku" "$MODEL_ARGS_FILE"
+  rm -f "$MODEL_ARGS_FILE"
+}
+
+@test "vote_council falls back only for LiteLLM-only route when LiteLLM is unset" {
+  [[ -f "$LIB" ]] || skip "vote.sh not found"
+  MODEL_ARGS_FILE="$(mktemp -t walter-vote-litellm-only-model-XXXXXX)"
   export MODEL_ARGS_FILE MOCK_LIB_DIR WALTER_CONFIG LIB
   export WALTER_MODEL_BACKEND_REVIEW="codex-routed"
   export WALTER_MODEL_ROUTER_SH="$BATS_TEST_DIRNAME/../../scripts/walter/lib/model-router.sh"

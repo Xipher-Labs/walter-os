@@ -48,15 +48,29 @@ _vote_model_router_sh() {
   echo "${script_dir}/../../walter/lib/model-router.sh"
 }
 
-_vote_select_model() {
-  local model="haiku"
-  local router_sh
-  router_sh="$(_vote_model_router_sh)"
+_vote_model_selection_sh() {
+  if [[ -n "${WALTER_MODEL_SELECTION_SH:-}" && -f "${WALTER_MODEL_SELECTION_SH}" ]]; then
+    echo "$WALTER_MODEL_SELECTION_SH"
+    return 0
+  fi
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  echo "${script_dir}/model-selection.sh"
+}
 
-  if [[ -n "${LITELLM_BASE_URL:-}" && -n "${LITELLM_API_KEY:-}" && -f "$router_sh" ]]; then
+_vote_select_model() {
+  local model="haiku" selected_model
+  local router_sh selection_sh
+  router_sh="$(_vote_model_router_sh)"
+  selection_sh="$(_vote_model_selection_sh)"
+
+  if [[ -f "$router_sh" && -f "$selection_sh" ]]; then
     # shellcheck disable=SC1090,SC1091
-    source "$router_sh"
-    walter_model_select_primary backend_review model || model="haiku"
+    source "$selection_sh"
+    local WALTER_MODEL_ROUTER_SH="${WALTER_MODEL_ROUTER_SH:-$router_sh}"
+    if walter_agent_select_model backend_review selected_model haiku; then
+      model="$selected_model"
+    fi
   fi
 
   printf '%s' "$model"
