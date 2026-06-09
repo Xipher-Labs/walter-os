@@ -366,6 +366,26 @@ teardown() {
   [[ "$output" =~ heygen-generate|trust[[:space:]]tier ]]
 }
 
+@test "CLI: HeyGen generation endpoint mentioned as text is allowed" {
+  run "$HOOK" check "echo https://api.heygen.com/v2/video/generate"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: HeyGen generation endpoint searched as text is allowed" {
+  run "$HOOK" check "grep -R https://api.heygen.com/v2/video/generate docs/"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: HeyGen generation function variable reference is allowed" {
+  run "$HOOK" check 'printf "%s\n" "$heygen_generate_video"'
+  [[ "$status" -eq 0 ]]
+}
+
+@test "CLI: HeyGen generation endpoint without POST or data is allowed" {
+  run "$HOOK" check "curl https://api.heygen.com/v2/video/generate"
+  [[ "$status" -eq 0 ]]
+}
+
 @test "CLI: paid HeyGen generation is allowed for high-tier agent" {
   cat > "$WALTER_CONFIG/trust-tiers.yml" <<'TIERS'
 agents:

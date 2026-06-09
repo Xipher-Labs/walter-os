@@ -412,12 +412,19 @@ _is_capability_private_key_payload() {
 _is_heygen_paid_generation_payload() {
   local payload="$1"
   local normalized
-  local paid_function='(^|[[:space:];|&()])[$]?(heygen_generate_video|heygen_generate_from_template)([[:space:];|&()]|$)'
+  local command_start='(^|[;|&({][[:space:]]*)'
+  local paid_function="${command_start}(heygen_generate_video|heygen_generate_from_template)([[:space:];|&)]|$)"
   local paid_endpoint='api[.]heygen[.]com/(v[0-9]+/)?(video/generate|template/[^[:space:];|&()]+/generate)'
+  local curl_prefix="${command_start}((sudo|env)[[:space:]]+)?curl[[:space:]]+[^;|&]*"
+  local post_or_data='((-X|--request)([=[:space:]]+)POST|(--data|--data-raw|--data-binary|--data-urlencode|--json|-d)([=[:space:]]|$))'
+  local curl_endpoint_then_write="${curl_prefix}${paid_endpoint}[^;|&]*${post_or_data}"
+  local curl_write_then_endpoint="${curl_prefix}${post_or_data}[^;|&]*${paid_endpoint}"
 
   normalized="$(_shellish_normalize_payload "$payload")"
 
-  [[ "$normalized" =~ $paid_function ]] || [[ "$normalized" =~ $paid_endpoint ]]
+  [[ "$normalized" =~ $paid_function ]] || \
+    [[ "$normalized" =~ $curl_endpoint_then_write ]] || \
+    [[ "$normalized" =~ $curl_write_then_endpoint ]]
 }
 
 # classify_command <tool> <payload> → category name or empty string
