@@ -28,7 +28,7 @@ Options:
                 Verify an existing GitHub Release and its artifact metadata.
   --expected-commit
                 Expected commit SHA for the release tag in --post-release mode.
-                Defaults to the collected tag target when live evidence is used.
+                Defaults to the collected tag target when evidence includes one.
   --json        Print machine-readable JSON.
   --fixture     Read release evidence JSON from a file for tests/local audits.
 EOF
