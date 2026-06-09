@@ -55,6 +55,26 @@ cd /opt/walter-vm/services/headscale
 ./deploy.sh --diagnose
 ```
 
+If an installed Walter-VM is missing `deploy.sh --diagnose` or the diagnostic
+output does not match this runbook, sync the latest Headscale service files from
+an up-to-date Walter-OS checkout before diagnosing. Run this from the operator
+machine that has the Walter-OS checkout and SSH access to `walter-vm`:
+
+```bash
+walter-os upgrade --local
+walter deploy headscale
+```
+
+`walter-os upgrade --local` updates the local checkout and runs the local
+install/audit/doctor upgrade checks.
+`walter deploy headscale` is not read-only: it syncs the latest Headscale
+service files to `/opt/walter-vm/services/headscale`, excludes the service
+`.env` file, then runs `docker compose pull` and `docker compose up -d` for
+Headscale. Use it as a controlled service rollout, not as a passive diagnostic.
+Re-run
+`./deploy.sh --diagnose` after the rollout so the live VM uses the latest
+diagnostic helper.
+
 If the helper prints one of these known blockers, follow the matching recovery
 path before treating Headscale as healthy:
 

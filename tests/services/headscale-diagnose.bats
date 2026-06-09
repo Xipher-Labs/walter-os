@@ -262,6 +262,19 @@ EOF
   grep -Fq "curl /key" "$runbook"
   grep -Fq "Headscale container is not running" "$runbook"
   grep -Fq "TS2021 WebSocket proxy warning detected" "$runbook"
+
+  diagnose_line="$(grep -Fn "deploy.sh --diagnose" "$runbook" | head -n1 | cut -d: -f1)"
+  rollout_line="$(grep -Fn "walter-os upgrade --local" "$runbook" | head -n1 | cut -d: -f1)"
+  [[ -n "$diagnose_line" ]]
+  [[ -n "$rollout_line" ]]
+  (( rollout_line > diagnose_line ))
+  (( rollout_line - diagnose_line < 40 ))
+
+  grep -Fq "walter-os upgrade --local" "$runbook"
+  grep -Fq "walter deploy headscale" "$runbook"
+  grep -Fq '`walter deploy headscale` is not read-only' "$runbook"
+  grep -Fq "docker compose pull" "$runbook"
+  grep -Fq "docker compose up -d" "$runbook"
   ! grep -Fq 'Start it with `docker compose -f /opt/walter-vm/services/headscale/compose.yml' "$runbook"
 }
 
