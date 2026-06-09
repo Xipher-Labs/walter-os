@@ -143,8 +143,20 @@ runs:
         # bypass config that inherits auth.json. The workflow that calls
         # this action is responsible for mounting auth.json at
         # ${CODEX_HOME_INPUT}/auth.json before the step runs.
-        mkdir -p "$CODEX_HOME_INPUT"
-        printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' > "$CODEX_HOME_INPUT/config.toml"
+        umask 077
+        if ! mkdir -p "$CODEX_HOME_INPUT" || ! chmod 700 "$CODEX_HOME_INPUT"; then
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not prepare secure CODEX_HOME at $CODEX_HOME_INPUT. Skipping Codex Round 2."
+          echo "::endgroup::"
+          exit 0
+        fi
+        if ! printf 'approval_policy = "never"\nmodel = "gpt-5.5"\n' > "$CODEX_HOME_INPUT/config.toml" \
+          || ! chmod 600 "$CODEX_HOME_INPUT/config.toml"; then
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not write secure Codex config. Skipping Codex Round 2."
+          echo "::endgroup::"
+          exit 0
+        fi
 
         if [[ ! -f "$CODEX_HOME_INPUT/auth.json" ]]; then
           echo "codex-ran=false" >> "$GITHUB_OUTPUT"
@@ -152,19 +164,42 @@ runs:
           echo "::endgroup::"
           exit 0
         fi
+        if ! chmod 600 "$CODEX_HOME_INPUT/auth.json"; then
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not restrict $CODEX_HOME_INPUT/auth.json permissions. Skipping Codex Round 2."
+          echo "::endgroup::"
+          exit 0
+        fi
 
-        if CODEX_HOME="$CODEX_HOME_INPUT" codex review --base "$BASE_BRANCH" > /tmp/codex-review.txt 2>&1; then
+        codex_output_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+        if [[ ! -d "$codex_output_dir" ]]; then
+          codex_output_dir="/tmp"
+        fi
+        if ! codex_output="$(mktemp "$codex_output_dir/codex-review.XXXXXX")"; then
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not create secure Codex output file. Skipping Codex Round 2."
+          echo "::endgroup::"
+          exit 0
+        fi
+        if ! chmod 600 "$codex_output"; then
+          echo "codex-ran=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not restrict Codex output file permissions. Skipping Codex Round 2."
+          echo "::endgroup::"
+          exit 0
+        fi
+
+        if CODEX_HOME="$CODEX_HOME_INPUT" codex review --base "$BASE_BRANCH" > "$codex_output" 2>&1; then
           echo "codex-ran=true" >> "$GITHUB_OUTPUT"
-          if [[ -s /tmp/codex-review.txt ]]; then
-            echo "::notice::Codex Round 2 complete. Output at /tmp/codex-review.txt ($(wc -l < /tmp/codex-review.txt) lines)."
+          if [[ -s "$codex_output" ]]; then
+            echo "::notice::Codex Round 2 complete. Output at $codex_output ($(wc -l < "$codex_output") lines)."
           else
-            echo "::warning::Codex Round 2 completed but produced no output."
+            echo "::warning::Codex Round 2 completed but produced no output. Output path: $codex_output"
           fi
         else
           codex_status=$?
           echo "codex-ran=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::Codex review failed with exit code $codex_status. Skipping Round 2 results."
-          cat /tmp/codex-review.txt >&2 || true
+          echo "::warning::Codex review failed with exit code $codex_status. Output path: $codex_output. Skipping Round 2 results."
+          cat "$codex_output" >&2 || true
         fi
         echo "::endgroup::"
 
@@ -203,8 +238,8 @@ runs:
         # findings-json — placeholder. A future iteration parses
         # Copilot review comments + Codex output into structured
         # findings. For v1 of this action, the calling workflow reads
-        # the raw outputs from /tmp/codex-review.txt and the PR
-        # comments via the GitHub API.
+        # raw Codex output from the private temp-file path logged by
+        # Round 2 and PR comments via the GitHub API.
         echo "findings-json=[]" >> "$GITHUB_OUTPUT"
 
         # Status verdict — v1 default is 'findings' if any round ran,
@@ -215,5 +250,5 @@ runs:
           echo "::warning::No review rounds completed. Status: escalate."
         else
           echo "status=findings" >> "$GITHUB_OUTPUT"
-          echo "::notice::Review loop complete. ${#rounds[@]} round(s) ran. See PR comments + /tmp/codex-review.txt for findings."
+          echo "::notice::Review loop complete. ${#rounds[@]} round(s) ran. See PR comments and Codex Round 2 logs for findings."
         fi

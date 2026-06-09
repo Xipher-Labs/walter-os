@@ -84,4 +84,4 @@ jobs:
           echo "- Rounds completed: \`${{ steps.review.outputs.rounds-completed }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Status: \`${{ steps.review.outputs.status }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "See PR comments for Copilot findings. Codex output (if Round 2 ran) is in the runner's \`/tmp/codex-review.txt\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "See PR comments for Copilot findings. Codex output (if Round 2 ran) is in the private temp-file path logged by the Round 2 step." >> "$GITHUB_STEP_SUMMARY"
