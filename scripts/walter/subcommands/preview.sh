@@ -193,7 +193,7 @@ validate_artifact() {
 }
 
 validate_static_dir() {
-  local path="$1" find_root found_symlink="" found_secret=""
+  local path="$1" find_root found_symlink="" found_files="" found_secret=""
   if [[ -z "$path" ]]; then
     die_usage "static directory path cannot be empty"
   fi
@@ -204,14 +204,31 @@ validate_static_dir() {
     die_usage "static directory is not a readable directory: $path"
   fi
   find_root="$(cp_operand "$path")"
-  found_symlink="$(find "$find_root" -type l -print -quit 2>/dev/null || true)"
+  if ! found_symlink="$(find "$find_root" -type l -print -quit 2>&1)"; then
+    die_usage "could not scan static directory: $found_symlink"
+  fi
   if [[ -n "$found_symlink" ]]; then
     die_usage "refusing symlink inside static directory: $found_symlink"
+  fi
+  if ! found_files="$(find "$find_root" -type f -print 2>&1)"; then
+    die_usage "could not scan static directory: $found_files"
   fi
   while IFS= read -r found_secret; do
     [[ -n "$found_secret" ]] || continue
     reject_secret_like_artifact "$found_secret"
-  done < <(find "$find_root" -type f -print 2>/dev/null)
+  done <<<"$found_files"
+}
+
+cleanup_static_preview() {
+  local server_pid="${1:-}" tmp_dir="${2:-}" screenshot_tmp="${3:-}" port_file="${4:-}" server_log="${5:-}"
+  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" 2>/dev/null; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
+  if [[ -n "$tmp_dir" ]]; then
+    rmdir "$tmp_dir" 2>/dev/null || true
+  fi
 }
 
 validate_positive_pr() {
@@ -915,7 +932,7 @@ cmd_static() {
     die_usage "preview_deploy is not enabled in config: $config_path"
   fi
 
-  local python_path npx_path static_abs tmp_dir port_file server_log server_pid="" port="" url=""
+  local python_path npx_path static_abs tmp_dir port_file server_log server_pid="" port="" url="" screenshot_tmp=""
   python_path="$(resolve_python3)"
   npx_path="$(resolve_npx)"
   if ! static_abs="$(cd "$static_dir" 2>/dev/null && pwd -P)"; then
@@ -926,6 +943,7 @@ cmd_static() {
     || die_runtime "could not create preview static temp directory"
   port_file="${tmp_dir}/port"
   server_log="${tmp_dir}/server.log"
+  trap 'cleanup_static_preview "$server_pid" "$tmp_dir" "$screenshot_tmp" "$port_file" "$server_log"' EXIT
 
   "$python_path" - "$static_abs" "$port_file" > "$server_log" 2>&1 <<'PY' &
 import http.server
@@ -958,35 +976,18 @@ PY
     if ! kill -0 "$server_pid" 2>/dev/null; then
       local server_error=""
       server_error="$(cat "$server_log" 2>/dev/null || true)"
-      rm -f -- "$port_file" "$server_log"
-      rmdir "$tmp_dir" 2>/dev/null || true
       die_runtime "preview static server failed to start${server_error:+: $server_error}"
     fi
     attempts_remaining=$((attempts_remaining - 1))
     sleep 0.1
   done
   if [[ ! "$port" =~ ^[1-9][0-9]*$ ]]; then
-    kill "$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
-    rm -f -- "$port_file" "$server_log"
-    rmdir "$tmp_dir" 2>/dev/null || true
     die_runtime "preview static server did not publish a port"
   fi
   url="http://127.0.0.1:${port}/"
 
-  local screenshot_tmp
-  if ! screenshot_tmp="$(mktemp "${tmp_dir}/${name}.XXXXXX.png")"; then
-    kill "$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
-    rm -f -- "$port_file" "$server_log"
-    rmdir "$tmp_dir" 2>/dev/null || true
-    die_runtime "could not create temporary screenshot path"
-  fi
+  screenshot_tmp="${tmp_dir}/${name}.png"
   if ! "$npx_path" --no-install playwright screenshot --wait-for-timeout "$wait_ms" "$url" "$screenshot_tmp"; then
-    kill "$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
-    rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
-    rmdir "$tmp_dir" 2>/dev/null || true
     die_runtime "preview screenshot capture failed"
   fi
 
@@ -1007,8 +1008,6 @@ PY
   seed_dest="$(copy_artifact "$seed" "$seed_dir")"
   screenshot_dest="${screenshot_dir}/${name}.png"
   if [[ -e "$screenshot_dest" ]]; then
-    rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
-    rmdir "$tmp_dir" 2>/dev/null || true
     die_usage "duplicate artifact basename: ${name}.png"
   fi
   cp -p "$(cp_operand "$screenshot_tmp")" "$(cp_operand "$screenshot_dest")"
@@ -1065,8 +1064,8 @@ PY
     printf -- '- Safety: preview deploy enabled; credentials not minted; local ephemeral deploy only.\n'
   } > "$readme_path"
 
-  rm -f -- "$screenshot_tmp" "$port_file" "$server_log"
-  rmdir "$tmp_dir" 2>/dev/null || true
+  cleanup_static_preview "$server_pid" "$tmp_dir" "$screenshot_tmp" "$port_file" "$server_log"
+  trap - EXIT
 
   if [[ "$json_output" -eq 1 ]]; then
     printf '%s\n' "$report_json" | jq .

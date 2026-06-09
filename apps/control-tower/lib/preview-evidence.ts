@@ -419,7 +419,7 @@ async function readPreviewItem(
     reportValid = result.valid;
     reportSafetyOk = result.safetyOk;
     url = result.url;
-    provider = provider ?? result.provider;
+    provider = result.provider;
     generatedAt = result.generatedAt;
     if (result.seedPath !== null && !(await isExistingFile(join(bundlePath, result.seedPath)))) {
       findings.push("preview report seed file missing or unreadable on disk");
