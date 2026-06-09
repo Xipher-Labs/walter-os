@@ -9,7 +9,7 @@ that must be changed in GitHub by an operator.
 | Alert | Rule | Repository-visible action | Remaining action |
 |---|---|---|---|
 | #45 | `CodeReviewID` | `AGENTS.md` and `docs/security/branch-protection.md` document the PR review policy and required branch protection. On 2026-06-09, read-only GitHub API verification showed `main` requires one approval, dismisses stale approvals, includes administrators, blocks force pushes/deletions, and requires linear history while preserving the solo-maintainer bypass. | Scorecard still reports `Found 0/30 approved changesets`. This is now explicitly dispositioned as a history/operator-policy signal, not a missing repository patch. Clearing the alert requires future merged PRs with approving reviews from another human account, or accepting the solo-operator exception while the alert remains open. |
-| #46 | `MaintainedID` | This repository has active commits, CI, release docs, and an open maintenance process. | Scorecard still reports `Repository was created within the last 90 days`. No repo setting can clear this early-age signal; re-check after the 90-day window and the next Scorecard refresh. |
+| #46 | `MaintainedID` | This repository has active commits, CI, release docs, and an open maintenance process. Issue #424 records the current Scorecard evidence. | Scorecard still reports `Repository was created within the last 90 days`. No repo setting can clear this early-age signal; recheck after 2026-08-11 once the weekly Scorecard run or a push-to-`main` Scorecard run has refreshed the alert. |
 | #47 | `SecurityPolicyID` | Root `SECURITY.md` exists and `.github/SECURITY.md` duplicates it for GitHub/Scorecard discoverability. | None expected after merge; wait for the next Scorecard run. |
 | #48 | `CIIBestPracticesID` | `docs/security/openssf-silver-checklist.md`, `docs/specs/openssf-badges.md`, and `docs/operational/openssf-badge-filing-runbook.md` record the OpenSSF Best Practices badge path. | Manual process: file the OpenSSF Passing badge at bestpractices.dev, record the approved project URL here as evidence, then add the approved badge URL to `README.md`. |
 | #50 | `FuzzingID` | Control Tower now includes a bounded `fast-check` property-based fuzz target for prompt-sanitization boundaries. | Re-run Scorecard after merge. If the alert remains open, keep the fuzz target for coverage but treat Scorecard detection as requiring a stronger integration such as OSS-Fuzz or CIFuzz. |
@@ -85,6 +85,19 @@ For `main`, configure branch protection or a repository ruleset with:
 
 Do not make this change from automation unless the operator explicitly asks
 for that single GitHub settings update.
+
+## MaintainedID repo-age disposition
+
+Issue #424 tracks Alert #46 (`MaintainedID`). The current Scorecard evidence is
+not actionable by repository patch: Scorecard reports
+`project was created within the last 90 days` /
+`Repository was created within the last 90 days`.
+
+The Walter-OS repository was created on 2026-05-13, so the earliest useful
+recheck for this specific repo-age signal is 2026-08-11. After that date, wait
+for either the weekly Scorecard run or a push-to-`main` Scorecard run to refresh
+the alert. If the alert remains open after that refresh, re-triage with the
+then-current Scorecard output instead of assuming the same cause.
 
 ## Fuzzing follow-up candidates
 
