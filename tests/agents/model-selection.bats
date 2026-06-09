@@ -66,6 +66,7 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
+  local last_line
   last_line="$(printf '%s\n' "$output" | tail -1)"
   [ "$last_line" = "sonnet" ]
 }
@@ -82,6 +83,7 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
+  local last_line
   last_line="$(printf '%s\n' "$output" | tail -1)"
   [ "$last_line" = "codex" ]
 }
@@ -96,6 +98,7 @@ teardown() {
   ' _ "$LIB" "$ROUTER"
 
   [ "$status" -eq 0 ]
+  local last_line
   last_line="$(printf '%s\n' "$output" | tail -1)"
   [ "$last_line" = "sonnet" ]
 }

@@ -208,11 +208,12 @@ _agent_model_domain() {
     exit 3
   fi
   if [[ -n "$frontmatter_domain" ]]; then
-    if canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"; then
+    canonical_domain="$(_agent_model_domain_canonical "$frontmatter_domain")"
+    canonical_status=$?
+    if (( canonical_status == 0 )); then
       printf '%s\n' "$canonical_domain"
       return 0
     fi
-    canonical_status=$?
     if (( canonical_status == 2 )); then
       echo "agents/run.sh: invalid model_domain allowlist; refusing to run ${AGENT_PERSONA}" >&2
       exit 3
