@@ -195,9 +195,9 @@ collect_evidence() {
   if [[ "$post_release" -eq 1 && -n "$target_tag" ]]; then
     local local_target_commit="" remote_target_commit="" target_commit=""
     local_target_commit="$(git -C "$WALTER_OS_HOME" rev-list -n 1 "$target_tag" 2>/dev/null || true)"
-    remote_target_commit="$(git -C "$WALTER_OS_HOME" ls-remote --tags origin "${target_tag}^{}" 2>/dev/null | awk 'NR == 1 {print $1}')"
+    remote_target_commit="$({ git -C "$WALTER_OS_HOME" ls-remote --tags origin "${target_tag}^{}" 2>/dev/null || true; } | awk 'NR == 1 {print $1}')"
     if [[ -z "$remote_target_commit" ]]; then
-      remote_target_commit="$(git -C "$WALTER_OS_HOME" ls-remote --tags --refs origin "$target_tag" 2>/dev/null | awk 'NR == 1 {print $1}')"
+      remote_target_commit="$({ git -C "$WALTER_OS_HOME" ls-remote --tags --refs origin "$target_tag" 2>/dev/null || true; } | awk 'NR == 1 {print $1}')"
     fi
     target_commit="${remote_target_commit:-$local_target_commit}"
     if [[ -n "$target_commit" ]]; then
@@ -369,11 +369,13 @@ cmd_doctor() {
   changelog_versions="$(jq -c '.release.changelog_versions // []' <<<"$evidence_json")"
   tags="$(jq -c '.release.tags // []' <<<"$evidence_json")"
 
-  if [[ "$version" != "$target_version" ]]; then
-    add_finding "VERSION is ${version:-missing}, expected $target_version"
-  fi
-  if ! json_array_contains "$changelog_versions" "$target_version"; then
-    add_finding "CHANGELOG.md is missing ## [$target_version]"
+  if [[ "$post_release" -eq 0 ]]; then
+    if [[ "$version" != "$target_version" ]]; then
+      add_finding "VERSION is ${version:-missing}, expected $target_version"
+    fi
+    if ! json_array_contains "$changelog_versions" "$target_version"; then
+      add_finding "CHANGELOG.md is missing ## [$target_version]"
+    fi
   fi
   if [[ "$post_release" -eq 1 ]]; then
     if ! json_array_contains "$tags" "$target_tag"; then
