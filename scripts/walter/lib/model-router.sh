@@ -54,7 +54,8 @@ _walter_model_domain_rows() {
       ! "$domain" =~ ^[a-z][a-z0-9_]*$ ||
       ! "$env" =~ ^WALTER_MODEL_[A-Z0-9_]+$ ]] ||
       ! walter_model_value_valid "$default"; then
-      echo "walter-model-router: WARN ignoring malformed model domain row in $file" >&2
+      _walter_model_warn_once "domains-malformed" \
+        "walter-model-router: WARN ignoring malformed model domain row in $file"
       continue
     fi
     valid_count=$((valid_count + 1))
