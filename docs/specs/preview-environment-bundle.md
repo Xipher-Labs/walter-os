@@ -119,9 +119,9 @@ command exits.
 If a `preview-report.json` exists, it verifies the report schema, PR number,
 HTTP(S) URL, seed and screenshot hashes, and safety invariants. Report safety
 allows `deploy: "not performed"` for externally packaged evidence and
-`deploy: "local ephemeral"` for `preview static`; credentials must remain
-`not minted`. If only a `preview-plan.json` exists, it verifies the dry-run plan
-schema, seed hash, and the `deploy: "not performed"` /
+`deploy: "local ephemeral"` only when `provider: "local-static"`; credentials
+must remain `not minted`. If only a `preview-plan.json` exists, it verifies the
+dry-run plan schema, seed hash, and the `deploy: "not performed"` /
 `credentials: "not minted"` invariants. The command exits `0` for ready reports
 and valid dry-run plans, exits `1` for missing or invalid evidence, and emits
 machine-readable JSON with `--json`.
@@ -151,8 +151,9 @@ machine-readable JSON with `--json`.
   plans, rejects missing or tampered evidence, and emits JSON findings.
 - AC12: `walter-os preview static` serves an already-built static directory on
   loopback, captures a screenshot, writes `provider: "local-static"` evidence
-  with `deploy: "local ephemeral"`, and rejects symlinks or secret-like files in
-  the static tree before starting the server.
+  with `deploy: "local ephemeral"`, and rejects symlinks, non-regular entries,
+  scan errors, or secret-like files in the static tree before starting the
+  server.
 
 ## Related
 

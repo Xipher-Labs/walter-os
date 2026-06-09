@@ -201,7 +201,7 @@ function validatePreviewReport(
     ? payload.screenshots
     : [];
   const safetyOk = hasSafetyInvariants(payload.safety, {
-    allowLocalEphemeralDeploy: true,
+    allowLocalEphemeralDeploy: payload.provider === "local-static",
   });
 
   if (payload.schema_version !== 1) {

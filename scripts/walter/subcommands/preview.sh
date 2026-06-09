@@ -166,16 +166,24 @@ cp_operand() {
   esac
 }
 
-reject_secret_like_artifact() {
+secret_like_artifact_name() {
   local path="$1" base lower
   base="$(path_base "$path")"
   lower="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
 
   case "$lower" in
     .env|.env.*|*.env|*.pem|*.key|*.p12|*.pfx|id_rsa|id_dsa|id_ed25519|*secret*|*token*|*credential*)
-      die_usage "refusing secret-like artifact: $path"
+      return 0
       ;;
   esac
+  return 1
+}
+
+reject_secret_like_artifact() {
+  local path="$1"
+  if secret_like_artifact_name "$path"; then
+    die_usage "refusing secret-like artifact: $path"
+  fi
 }
 
 validate_artifact() {
@@ -193,7 +201,7 @@ validate_artifact() {
 }
 
 validate_static_dir() {
-  local path="$1" find_root found_symlink="" found_files="" found_secret=""
+  local path="$1" find_root scan_tmp scan_err scan_error bad_entry found_secret secret_entry=""
   if [[ -z "$path" ]]; then
     die_usage "static directory path cannot be empty"
   fi
@@ -204,19 +212,36 @@ validate_static_dir() {
     die_usage "static directory is not a readable directory: $path"
   fi
   find_root="$(cp_operand "$path")"
-  if ! found_symlink="$(find "$find_root" -type l -print -quit 2>&1)"; then
-    die_usage "could not scan static directory: $found_symlink"
+  scan_tmp="$(mktemp "${TMPDIR:-/tmp}/walter-preview-scan.XXXXXX")" \
+    || die_runtime "could not create static directory scan path"
+  scan_err="$(mktemp "${TMPDIR:-/tmp}/walter-preview-scan-err.XXXXXX")" \
+    || die_runtime "could not create static directory scan error path"
+
+  if ! find "$find_root" \( -type l -o \( ! -type f ! -type d \) \) -print -quit > "$scan_tmp" 2> "$scan_err"; then
+    scan_error="$(cat "$scan_err" 2>/dev/null || true)"
+    rm -f -- "$scan_tmp" "$scan_err"
+    die_usage "could not scan static directory: $scan_error"
   fi
-  if [[ -n "$found_symlink" ]]; then
-    die_usage "refusing symlink inside static directory: $found_symlink"
+  if [[ -s "$scan_tmp" ]]; then
+    bad_entry="$(cat "$scan_tmp")"
+    rm -f -- "$scan_tmp" "$scan_err"
+    die_usage "refusing non-regular entry inside static directory: $bad_entry"
   fi
-  if ! found_files="$(find "$find_root" -type f -print 2>&1)"; then
-    die_usage "could not scan static directory: $found_files"
+  if ! find "$find_root" -type f -print0 > "$scan_tmp" 2> "$scan_err"; then
+    scan_error="$(cat "$scan_err" 2>/dev/null || true)"
+    rm -f -- "$scan_tmp" "$scan_err"
+    die_usage "could not scan static directory: $scan_error"
   fi
-  while IFS= read -r found_secret; do
-    [[ -n "$found_secret" ]] || continue
-    reject_secret_like_artifact "$found_secret"
-  done <<<"$found_files"
+  while IFS= read -r -d '' found_secret; do
+    if secret_like_artifact_name "$found_secret"; then
+      secret_entry="$found_secret"
+      break
+    fi
+  done < "$scan_tmp"
+  rm -f -- "$scan_tmp" "$scan_err"
+  if [[ -n "$secret_entry" ]]; then
+    die_usage "refusing secret-like artifact: $secret_entry"
+  fi
 }
 
 cleanup_static_preview() {
@@ -281,8 +306,8 @@ validate_loopback_preview_url() {
 }
 
 preview_report_deploy_invariant_ok() {
-  local value="$1"
-  [[ "$value" == "not performed" || "$value" == "local ephemeral" ]]
+  local value="$1" provider="$2"
+  [[ "$value" == "not performed" || ( "$value" == "local ephemeral" && "$provider" == "local-static" ) ]]
 }
 
 repo_config_path() {
@@ -1244,11 +1269,12 @@ cmd_verify() {
     if ! evidence_finding="$(validate_evidence_json_file "preview report" "$report_path")"; then
       findings+=("$evidence_finding")
     else
-      local report_pr report_kind report_schema report_url report_seed_path report_seed_sha
+      local report_pr report_kind report_schema report_url report_provider report_seed_path report_seed_sha
       report_pr="$(jq -r '.pr // empty' "$report_path")"
       report_kind="$(jq -r '.kind // "preview-report"' "$report_path")"
       report_schema="$(jq -r '.schema_version // empty' "$report_path")"
       report_url="$(jq -r '.url // empty' "$report_path")"
+      report_provider="$(jq -r '.provider // empty' "$report_path")"
       report_seed_path="$(jq -r '.seed_manifest.path // empty' "$report_path")"
       report_seed_sha="$(jq -r '.seed_manifest.sha256 // empty' "$report_path")"
       screenshots_count="$(jq -r 'if (.screenshots | type) == "array" then (.screenshots | length) else 0 end' "$report_path")"
@@ -1261,7 +1287,7 @@ cmd_verify() {
         || findings+=("preview report production secret invariant failed")
       [[ "$(jq -r '.safety.credentials // empty' "$report_path")" == "not minted" ]] \
         || findings+=("preview report credential invariant failed")
-      preview_report_deploy_invariant_ok "$(jq -r '.safety.deploy // empty' "$report_path")" \
+      preview_report_deploy_invariant_ok "$(jq -r '.safety.deploy // empty' "$report_path")" "$report_provider" \
         || findings+=("preview report deploy invariant failed")
       [[ "$(jq -r '.safety.hard_limit_floor // empty' "$report_path")" == "preserved" ]] \
         || findings+=("preview report hard-limit invariant failed")

@@ -236,7 +236,7 @@ preview_report_status() {
   local payload="$1" expected_pr="$2"
   jq -nc --argjson report "$payload" --argjson expected_pr "$expected_pr" '
     def sha256_ok: type == "string" and test("^[A-Fa-f0-9]{64}$");
-    def report_deploy_ok: . == "not performed" or . == "local ephemeral";
+    def report_deploy_ok($provider): . == "not performed" or (. == "local ephemeral" and $provider == "local-static");
     ($report | if type == "object" then . else {} end) as $r |
     ($r.seed_manifest | if type == "object" then . else {} end) as $seed |
     ($r.screenshots | if type == "array" then . else [] end) as $screenshots |
@@ -252,7 +252,7 @@ preview_report_status() {
         ([$screenshots[] | select(((if type == "object" then (.sha256 // "") else "" end) | sha256_ok) | not)] | length == 0) and
         ($safety.production_secrets == "rejected") and
         ($safety.credentials == "not minted") and
-        ($safety.deploy | report_deploy_ok) and
+        ($safety.deploy | report_deploy_ok($r.provider // "")) and
         ($safety.hard_limit_floor == "preserved")
       )
     }'

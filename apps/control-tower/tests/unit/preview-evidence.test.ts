@@ -121,6 +121,51 @@ describe("readPreviewEvidence", () => {
     });
   });
 
+  it("rejects local ephemeral preview reports without local-static provider", async () => {
+    const root = await makeRoot();
+    const bundle = join(root, "preview-pr-251");
+    await mkdir(join(bundle, "screenshots"), { recursive: true });
+    await writeSeed(bundle);
+    await writeFile(join(bundle, "screenshots", "home.png"), "png", "utf8");
+    await writeJson(join(bundle, "preview-report.json"), {
+      schema_version: 1,
+      kind: "preview-report",
+      provider: "vercel",
+      pr: 251,
+      url: "http://127.0.0.1:43123/",
+      generated_at: "2026-06-04T12:00:00Z",
+      bundle_dir: ".walter/previews/preview-pr-251",
+      seed_manifest: {
+        path: ".walter/previews/preview-pr-251/seed/seed.json",
+        sha256: SHA256,
+      },
+      screenshots: [
+        {
+          path: ".walter/previews/preview-pr-251/screenshots/home.png",
+          sha256: SHA256,
+        },
+      ],
+      safety: {
+        production_secrets: "rejected",
+        credentials: "not minted",
+        deploy: "local ephemeral",
+        hard_limit_floor: "preserved",
+      },
+    });
+
+    const evidence = await readPreviewEvidence(root);
+
+    expect(evidence.previews[0]).toMatchObject({
+      pr: 251,
+      status: "invalid",
+      provider: "vercel",
+      safetyOk: false,
+    });
+    expect(evidence.previews[0].findings).toContain(
+      "preview report safety invariants failed"
+    );
+  });
+
   it("fails closed when the preview root cannot be read", async () => {
     const root = await makeRoot();
     await chmod(root, 0o000);

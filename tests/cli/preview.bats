@@ -537,7 +537,30 @@ SH
     --out "$TMP_DIR/out"
 
   [ "$status" -eq 64 ]
-  [[ "$output" == *"refusing symlink inside static directory"* ]]
+  [[ "$output" == *"refusing non-regular entry inside static directory"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
+  [[ ! -e "$FAKE_NPX_LOG" ]]
+}
+
+@test "preview static rejects non-regular entries inside the static directory" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 is required"
+  command -v mkfifo >/dev/null 2>&1 || skip "mkfifo is required"
+  install_fake_npx
+  write_preview_artifacts
+  write_preview_config
+  static_dir="$TMP_DIR/static-site"
+  mkdir -p "$static_dir"
+  mkfifo "$static_dir/pipe"
+
+  run bash "$WALTER_OS_BIN" preview static \
+    --pr 235 \
+    --dir "$static_dir" \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"refusing non-regular entry inside static directory"* ]]
   [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
   [[ ! -e "$FAKE_NPX_LOG" ]]
 }
@@ -710,6 +733,32 @@ SH
   echo "$output" | jq -e '.kind == "preview-report"'
   echo "$output" | jq -e '.findings == []'
   echo "$output" | jq -e '.screenshots == 1'
+}
+
+@test "preview verify rejects local ephemeral reports from non-local-static providers" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  jq '.provider = "vercel" | .safety.deploy = "local ephemeral"' \
+    "$TMP_DIR/out/preview-pr-235/preview-report.json" \
+    > "$TMP_DIR/report.json"
+  mv "$TMP_DIR/report.json" "$TMP_DIR/out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview report deploy invariant failed")'
 }
 
 @test "preview verify rejects tampered screenshot hashes" {
