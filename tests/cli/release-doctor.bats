@@ -838,6 +838,69 @@ SH
   echo "$output" | jq -e '.findings | index("PR #304 closes issues but lacks verification evidence")'
 }
 
+@test "AC6: negated closing keywords block release" {
+  local fixture="$TMP_DIR/negated-closing-keyword.json"
+  local prs
+  prs="$(jq -c '.[0].body = "This is partial progress for #423 and does not close #423.\n\n## Verification\n- bats tests/oss/scorecard-hygiene.bats" | .[0].closingIssuesReferences = [{"number": 423}]' <<<"$healthy_prs")"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.findings | index("PR #304 uses a negated closing keyword; use Refs #... and avoid close/fix/resolve near issue numbers")'
+}
+
+@test "AC6: contracted and cannot negations block release" {
+  local fixture="$TMP_DIR/contracted-negated-closing-keyword.json"
+  local prs
+  prs="$(jq -c '.[0].body = "This shouldn'\''t close #423 yet, and cannot resolve #424 today.\n\n## Verification\n- bats tests/oss/scorecard-hygiene.bats" | .[0].closingIssuesReferences = [{"number": 423}]' <<<"$healthy_prs")"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.findings | index("PR #304 uses a negated closing keyword; use Refs #... and avoid close/fix/resolve near issue numbers")'
+}
+
+@test "AC6: notice before closing keyword is not negation" {
+  local fixture="$TMP_DIR/notice-closing-keyword.json"
+  local prs
+  prs="$(jq -c '.[0].body = "Notice: Closes #302 after verification.\n\n## Verification\n- bats tests/agents/plane-pr-sync-webhook.bats"' <<<"$healthy_prs")"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "ready"'
+  echo "$output" | jq -e '.findings == []'
+}
+
+@test "AC6: not sure before closing keyword is not negation" {
+  local fixture="$TMP_DIR/not-sure-closing-keyword.json"
+  local prs
+  prs="$(jq -c '.[0].body = "Not sure. Closes #302 after verification.\n\n## Verification\n- bats tests/agents/plane-pr-sync-webhook.bats"' <<<"$healthy_prs")"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "ready"'
+  echo "$output" | jq -e '.findings == []'
+}
+
+@test "AC6: word prefix before closing keyword is not negation" {
+  local fixture="$TMP_DIR/word-prefix-closing-keyword.json"
+  local prs
+  prs="$(jq -c '.[0].body = "Cantilever note. Closes #302 after verification.\n\n## Verification\n- bats tests/agents/plane-pr-sync-webhook.bats"' <<<"$healthy_prs")"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "ready"'
+  echo "$output" | jq -e '.findings == []'
+}
+
 @test "AC7: --json emits release doctor contract" {
   local fixture="$TMP_DIR/ready-json.json"
   write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$healthy_prs"

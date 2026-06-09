@@ -109,6 +109,14 @@ body_has_closing_keyword() {
   grep -Eiq '(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+' <<<"$body"
 }
 
+body_has_negated_closing_keyword() {
+  local body="$1"
+  local closing='(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+'
+
+  grep -Eiq "(^|[^[:alnum:]_])((do|does|did|should|would|will|must|can|could)[[:space:]]+not|cannot|doesn'?t|don'?t|didn'?t|shouldn'?t|wouldn'?t|won'?t|mustn'?t|can'?t|couldn'?t)([^[:alnum:]_]|$)[^#]{0,80}${closing}" <<<"$body" \
+    || grep -Eiq "(^|[^[:alnum:]_])not[[:space:]:,;-]{0,8}${closing}" <<<"$body"
+}
+
 fetch_review_threads() {
   local owner="$1" repo="$2" number="$3"
   # shellcheck disable=SC2016 # GraphQL variables are intentionally literal.
@@ -466,7 +474,7 @@ cmd_doctor() {
 
   local prs_total pr_blockers=0 pr_warnings=0
   local pr number base mergeable body checks_total checks_failed checks_pending
-  local unresolved_threads closing_count body_closes closes_issues review_requests review_decision
+  local unresolved_threads closing_count body_closes negated_closes closes_issues review_requests review_decision
   local review_threads_fetched review_threads_total
   prs_total="$(jq '[.prs[]?] | length' <<<"$evidence_json")"
 
@@ -514,6 +522,10 @@ cmd_doctor() {
     body_closes=0
     if body_has_closing_keyword "$body"; then
       body_closes=1
+    fi
+    negated_closes=0
+    if body_has_negated_closing_keyword "$body"; then
+      negated_closes=1
     fi
     closes_issues=$((closing_count + body_closes))
     review_requests="$(jq '[.reviewRequests[]?] | length' <<<"$pr")"
@@ -568,6 +580,11 @@ cmd_doctor() {
 
     if [[ "$closes_issues" -gt 0 ]] && ! body_has_verification "$body"; then
       add_finding "PR #$number closes issues but lacks verification evidence"
+      pr_blockers=$((pr_blockers + 1))
+    fi
+
+    if [[ "$negated_closes" -gt 0 ]]; then
+      add_finding "PR #$number uses a negated closing keyword; use Refs #... and avoid close/fix/resolve near issue numbers"
       pr_blockers=$((pr_blockers + 1))
     fi
   done < <(jq -c '.prs[]?' <<<"$evidence_json")
