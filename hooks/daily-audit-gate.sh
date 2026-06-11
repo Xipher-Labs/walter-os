@@ -74,8 +74,13 @@ block() {
 if [[ -f "$STATUS" ]] && command -v jq >/dev/null 2>&1; then
   SEV="$(jq -r '.severity // 0' "$STATUS" 2>/dev/null || echo 0)"
   STATUS_DATE="$(jq -r '.date // "unknown"' "$STATUS" 2>/dev/null || echo unknown)"
+  # AC-7 (enforcement-audit-deadlock-fix): point at the report the status JSON
+  # actually references, not a hardcoded today path — the unresolved CRITICAL
+  # commonly comes from an earlier day, so ${TODAY_REPORT} would 404.
+  STATUS_REPORT="$(jq -r '.report // ""' "$STATUS" 2>/dev/null || echo "")"
+  [[ -n "$STATUS_REPORT" ]] || STATUS_REPORT="$TODAY_REPORT"
   if [[ "$SEV" -ge 3 ]]; then
-    block "Walter-OS audit (${STATUS_DATE}): CRITICAL findings unresolved. See ${TODAY_REPORT}. Run 'walter-os ack <id>' or fix before continuing."
+    block "Walter-OS audit (${STATUS_DATE}): CRITICAL findings unresolved. See ${STATUS_REPORT}. Run 'walter-os ack <id>' or fix before continuing."
   fi
 fi
 
