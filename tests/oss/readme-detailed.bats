@@ -170,14 +170,19 @@ setup() {
   grep -qE "Apache" README.md
 }
 
-# ── v0.6.2 release-relevant content ────────────────────────────────────────
+# ── version / release-relevant content ─────────────────────────────────────
+#
+# Derive the expected version from the VERSION file so the README badge + status
+# line cannot silently drift from the released semver (they did at v0.7.0).
 
-@test "README.md version badge reflects v0.6.2-alpha" {
-  grep -qF "v0.6.2--alpha" README.md
+@test "README.md version badge reflects the VERSION file" {
+  local v; v="$(cat "$REPO_ROOT/VERSION")"
+  grep -qF "version-v${v}--alpha" README.md
 }
 
-@test "README.md status line names v0.6.2" {
-  grep -qE "v0\.6\.2" README.md
+@test "README.md status line names the current version" {
+  local v; v="$(cat "$REPO_ROOT/VERSION")"
+  grep -qF "alpha (v${v})" README.md
 }
 
 @test "README.md explains configurable LLM providers" {
