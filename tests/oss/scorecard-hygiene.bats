@@ -69,3 +69,15 @@ setup() {
   grep -Fq "docs/operational/openssf-badge-filing-runbook.md" "$f"
   grep -Fq "openssf-badge-filing-runbook.md" "$index"
 }
+
+@test "Scorecard hygiene runbook documents MaintainedID repo-age disposition" {
+  local f="$REPO_ROOT/docs/operational/scorecard-hygiene.md"
+  [[ -f "$f" ]]
+
+  grep -Fq "Issue #424" "$f"
+  grep -Fq "Alert #46" "$f"
+  grep -Fq "project was created" "$f"
+  grep -Fq "within the last 90 days" "$f"
+  grep -Fq "not actionable by repository patch" "$f"
+  grep -Fq "2026-08-11" "$f"
+}
