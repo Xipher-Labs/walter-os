@@ -90,7 +90,11 @@ _runner_audit_append() {
   # shellcheck source=/dev/null
   source "$audit_lib" || return 1
   declare -F walter_audit_append >/dev/null 2>&1 || return 1
-  input="$(cat "$input_file")"
+  # Treat an unreadable/empty captured payload as an append failure so the
+  # caller fails closed instead of signing a row with missing context.
+  # (Copilot review round 2.)
+  input="$(cat "$input_file")" || return 1
+  [[ -n "$input" ]] || return 1
   walter_audit_set_repo_from_hook_input "$input" 2>/dev/null || true
   tool="$(printf '%s' "$input" | jq -er '.tool_name // "unknown"' 2>/dev/null)" || tool="unknown"
   reason="$(jq -er '.reason // ""' "$out_file" 2>/dev/null)" || reason=""
@@ -100,6 +104,13 @@ _runner_audit_append() {
   # silent default — so a malformed child cannot be audited as a forged allow.
   WALTER_AUDIT_DELEGATED=0 walter_audit_append "$tool" "$input" "$decision" "$hook_name" "$reason" >/dev/null
 }
+
+# Test hook: allow sourcing only the function definitions (no hook dispatch)
+# so the security-critical audit-append path can be unit-tested. The real hook
+# invocation never sets this flag.
+if [[ "${WALTER_SANDBOX_HOOK_RUNNER_LIB:-0}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 profile="walter-hook-default"
 no_sandbox=0
@@ -173,15 +184,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Capture the hook event: feed it to the sandboxed child via stdin AND use it
-# to write the signed audit row from this un-sandboxed context (D1). The child
-# runs with WALTER_AUDIT_DELEGATED=1 (exported only inside the subshell, so it
-# never leaks to this shell's own append).
-# Capture stdin to a file (byte-faithful: command substitution would strip
-# trailing newlines) so it can be both fed to the sandboxed child unchanged AND
-# used to write the signed audit row from this un-sandboxed context (D1).
+# Capture the hook event to a file (byte-faithful: command substitution would
+# strip trailing newlines) so it can be both fed to the sandboxed child via
+# stdin unchanged AND used to write the signed audit row from this un-sandboxed
+# context (D1). The child runs with WALTER_AUDIT_DELEGATED=1, exported only
+# inside the subshell so it never leaks to this shell's own append.
 in_file="${tmp_dir}/stdin"
-cat > "$in_file"
+# Fail closed if stdin cannot be captured byte-for-byte: a partial/empty
+# capture would otherwise run the hook on the wrong payload AND sign an audit
+# row for it. (Copilot review round 2.)
+if ! cat > "$in_file"; then
+  _emit_block "sandbox hook runner: cannot capture stdin for $hook; refusing to run unverified payload"
+fi
 
 if (
      export WALTER_AUDIT_DELEGATED=1

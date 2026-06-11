@@ -90,3 +90,40 @@ _append() {
   run bash -c "source '$AUDIT_LIB'; _walter_audit_verify_chain_file_unlocked '$chain'"
   [ "$status" -ne 0 ]
 }
+
+@test "D1: a sandboxed hook via the runner writes exactly one signed row with the hook decision_source" {
+  command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
+  RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
+  STUB="$BATS_TEST_TMPDIR/stub-hook.sh"
+  cat > "$STUB" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n' '{"decision":"allow"}'
+SH
+  chmod +x "$STUB"
+
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}' | WALTER_OS_HOME='$REPO_ROOT' '$RUNNER' -- '$STUB'"
+
+  # The child decision is relayed unchanged...
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  # ...and the un-sandboxed runner wrote exactly one signed row for it, with
+  # decision_source = the hook basename and decision = the emitted decision.
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" -eq 1 ]
+  jq -e '.decision_source == "stub-hook" and .decision == "allow" and (.sig | length) > 0' "$(_chain_path)"
+}
+
+@test "D1: runner fails closed when the captured stdin cannot be read" {
+  # Exercises _runner_audit_append's read-failure guard directly (Copilot
+  # review round 2): a missing input file must be treated as an append
+  # failure, not signed as an empty-context row.
+  run bash -c "
+    set -uo pipefail
+    export WALTER_OS_HOME='$REPO_ROOT'
+    WALTER_SANDBOX_HOOK_RUNNER_LIB=1 source '$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh'
+    out='$BATS_TEST_TMPDIR/out.json'; printf '%s' '{\"decision\":\"allow\"}' > \"\$out\"
+    _runner_audit_append '$BATS_TEST_TMPDIR/does-not-exist' \"\$out\" '/x/stub-hook.sh' allow
+  "
+  [ "$status" -ne 0 ]
+  [ ! -e "$(_chain_path)" ]
+}
