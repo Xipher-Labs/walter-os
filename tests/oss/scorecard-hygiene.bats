@@ -40,6 +40,9 @@ setup() {
 
   grep -Fq "Issue #396" "$f"
   grep -qi "manual GitHub setting" "$f"
+  grep -Fq "Found 0/30 approved changesets" "$f"
+  grep -Fq "history/operator-policy signal" "$f"
+  grep -Fq "required_signatures.enabled: false" "$f"
   grep -Fq 'fast-check' "$f"
   grep -Fq 'sanitize.fuzz.test.ts' "$f"
 }
