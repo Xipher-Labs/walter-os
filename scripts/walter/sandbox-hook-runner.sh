@@ -82,20 +82,22 @@ _audit_bypass() {
 # "no decision relayed without an audit row" invariant.
 # Refs: docs/specs/enforcement-audit-deadlock-fix.md
 _runner_audit_append() {
-  local input="$1" out_file="$2" hook_path="$3"
-  local audit_lib tool decision reason hook_name
+  local input_file="$1" out_file="$2" hook_path="$3" decision="$4"
+  local audit_lib input tool reason hook_name
   audit_lib="${WALTER_OS_HOME}/scripts/walter/lib/audit-chain.sh"
   [[ -f "$audit_lib" ]] || return 1
   command -v jq >/dev/null 2>&1 || return 1
   # shellcheck source=/dev/null
   source "$audit_lib" || return 1
   declare -F walter_audit_append >/dev/null 2>&1 || return 1
+  input="$(cat "$input_file")"
   walter_audit_set_repo_from_hook_input "$input" 2>/dev/null || true
   tool="$(printf '%s' "$input" | jq -er '.tool_name // "unknown"' 2>/dev/null)" || tool="unknown"
-  decision="$(jq -er '.decision // "allow"' "$out_file" 2>/dev/null)" || decision="allow"
   reason="$(jq -er '.reason // ""' "$out_file" 2>/dev/null)" || reason=""
   hook_name="${hook_path##*/}"
   hook_name="${hook_name%.sh}"
+  # The decision is the strictly-validated value from the caller — never a
+  # silent default — so a malformed child cannot be audited as a forged allow.
   WALTER_AUDIT_DELEGATED=0 walter_audit_append "$tool" "$input" "$decision" "$hook_name" "$reason" >/dev/null
 }
 
@@ -175,12 +177,16 @@ trap cleanup EXIT
 # to write the signed audit row from this un-sandboxed context (D1). The child
 # runs with WALTER_AUDIT_DELEGATED=1 (exported only inside the subshell, so it
 # never leaks to this shell's own append).
-HOOK_INPUT="$(cat)"
+# Capture stdin to a file (byte-faithful: command substitution would strip
+# trailing newlines) so it can be both fed to the sandboxed child unchanged AND
+# used to write the signed audit row from this un-sandboxed context (D1).
+in_file="${tmp_dir}/stdin"
+cat > "$in_file"
 
-if printf '%s' "$HOOK_INPUT" | (
+if (
      export WALTER_AUDIT_DELEGATED=1
      walter_sandbox_run "$profile" "$hook" "$@"
-   ) >"$out_file" 2>"$err_file"; then
+   ) < "$in_file" >"$out_file" 2>"$err_file"; then
   status=0
 else
   status=$?
@@ -192,10 +198,16 @@ if [[ "$status" -ne 0 ]]; then
   _emit_block "sandbox hook runner: sandboxed hook failed for $hook: $err"
 fi
 
-# The child decided. Record the signed audit row from here (un-sandboxed)
-# BEFORE relaying the decision, so a decision is never surfaced without a
-# matching audit row. Fail-closed if the append itself fails.
-if ! _runner_audit_append "$HOOK_INPUT" "$out_file" "$hook"; then
+# Strictly validate the child's decision. The child must emit a single JSON
+# object with an explicit "allow"/"block" decision; anything else fails CLOSED
+# rather than being audited + relayed as a silent allow (no fail-open path).
+decision="$(jq -er 'if type == "object" and (.decision == "allow" or .decision == "block") then .decision else empty end' "$out_file" 2>/dev/null)" || {
+  _emit_block "sandbox hook runner: $hook emitted no parseable allow/block decision; refusing to relay"
+}
+
+# Record the signed audit row BEFORE relaying the decision, so a decision is
+# never surfaced without a matching row. Fail-closed if the append fails.
+if ! _runner_audit_append "$in_file" "$out_file" "$hook" "$decision"; then
   _emit_block "sandbox hook runner: audit-chain append failed for $hook; refusing unaudited decision"
 fi
 
