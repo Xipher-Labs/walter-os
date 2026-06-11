@@ -39,6 +39,12 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+# Cross-platform sandbox gate: true when the configured provider exists
+# (sandbox-exec on Darwin, nsjail/firejail on Linux), not just sandbox-exec.
+_sandbox_available() {
+  bash -c "source '$REPO_ROOT/scripts/walter/lib/sandbox.sh' 2>/dev/null; walter_sandbox_check walter-hook-default" >/dev/null 2>&1
+}
+
 _append() {
   bash -c "source '$AUDIT_LIB'; walter_audit_append Bash '$1' allow network-gate ''"
 }
@@ -92,7 +98,7 @@ _append() {
 }
 
 @test "D1: a sandboxed hook via the runner writes exactly one signed row with the hook decision_source" {
-  command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
+  _sandbox_available || skip "no sandbox provider available on this platform"
   RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
   STUB="$BATS_TEST_TMPDIR/stub-hook.sh"
   cat > "$STUB" <<'SH'
@@ -114,7 +120,7 @@ SH
 }
 
 @test "D1: ambient WALTER_SANDBOX_HOOK_RUNNER_LIB does not bypass enforcement when executed" {
-  command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
+  _sandbox_available || skip "no sandbox provider available on this platform"
   RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
   STUB="$BATS_TEST_TMPDIR/lib-flag-stub.sh"
   cat > "$STUB" <<'SH'
@@ -133,7 +139,7 @@ SH
 }
 
 @test "D1: runner refuses a hook that emits more than one decision object" {
-  command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
+  _sandbox_available || skip "no sandbox provider available on this platform"
   RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
   STUB="$BATS_TEST_TMPDIR/multi-hook.sh"
   cat > "$STUB" <<'SH'
