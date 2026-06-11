@@ -44,3 +44,34 @@ setup() {
   run "${WALTER_OS_BIN}" doctor
   [[ "$output" == *"Walter-OS"* ]]
 }
+
+@test "walter-os doctor --enforcement delegates to enforcement doctor" {
+  test_home="$BATS_TEST_TMPDIR/home-enforcement"
+  mkdir -p "$test_home/.config/walter-os"
+  : >"$test_home/.config/walter-os/env"
+
+  run env -u WALTER_WRAPPER_DIR -u CLAUDE_HOME \
+    HOME="$test_home" \
+    WALTER_CONFIG="$test_home/.config/walter-os" \
+    WALTER_OS_HOME="$REPO_ROOT" \
+    "$WALTER_OS_BIN" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Walter-OS enforcement doctor"* ]]
+  [[ "$output" == *"Enforcement mode: policy-only"* ]]
+}
+
+@test "walter-os doctor --enforcement passes default WALTER_OS_HOME to subcommand" {
+  test_home="$BATS_TEST_TMPDIR/home-enforcement-default"
+  mkdir -p "$test_home/.config/walter-os"
+  ln -s "$REPO_ROOT" "$test_home/walter-os"
+
+  run env -u WALTER_OS_HOME -u WALTER_WRAPPER_DIR -u CLAUDE_HOME \
+    HOME="$test_home" \
+    WALTER_CONFIG="$test_home/.config/walter-os" \
+    "$WALTER_OS_BIN" doctor --enforcement
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Walter-OS enforcement doctor"* ]]
+  [[ "$output" != *"WALTER_OS_HOME required"* ]]
+}

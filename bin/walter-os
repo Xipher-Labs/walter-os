@@ -2625,7 +2625,17 @@ case "$cmd" in
   release)            exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/release.sh" "$@" ;;
   repo-config)        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/repo-config.sh" "$@" ;;
   version)            cmd_version "$@" ;;
-  doctor)             cmd_doctor "$@" ;;
+  doctor)
+    case "${1:-}" in
+      --enforcement|--hooks|--hook-enforcement)
+        export WALTER_OS_HOME
+        exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/doctor.sh" "$@"
+        ;;
+      *)
+        cmd_doctor "$@"
+        ;;
+    esac
+    ;;
   uninstall)          cmd_uninstall "$@" ;;
   -h|--help|help) print_help ;;
   *)

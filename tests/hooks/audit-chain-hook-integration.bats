@@ -8,6 +8,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   command -v jq >/dev/null 2>&1 || skip "jq required"
   SESSION_LIB="$REPO_ROOT/scripts/walter/lib/session-state.sh"
+  TEST_BASH="$(command -v bash)"
   TMP_HOME="$(mktemp -d)"
   TMP_CFG="$TMP_HOME/.config/walter-os"
   TEST_REPO="$TMP_HOME/repo"
@@ -89,7 +90,7 @@ _approval_gate_no_jq() {
   mkdir -p "$mock_bin"
   printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
   chmod +x "$mock_bin/jq"
-  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$REPO_ROOT/hooks/approval-gate.sh"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$TEST_BASH" "$REPO_ROOT/hooks/approval-gate.sh"
 }
 
 _approval_gate_no_yq() {
@@ -99,7 +100,7 @@ _approval_gate_no_yq() {
   ln -sf "$real_jq" "$mock_bin/jq"
   printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/yq"
   chmod +x "$mock_bin/yq"
-  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$REPO_ROOT/hooks/approval-gate.sh"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$TEST_BASH" "$REPO_ROOT/hooks/approval-gate.sh"
 }
 
 _bash_denylist() {
@@ -111,7 +112,7 @@ _bash_denylist_no_jq() {
   mkdir -p "$mock_bin"
   printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
   chmod +x "$mock_bin/jq"
-  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/bash-denylist.sh"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$TEST_BASH" "$REPO_ROOT/hooks/bash-denylist.sh"
 }
 
 _network_gate_bash() {
@@ -123,7 +124,7 @@ _network_gate_no_jq() {
   mkdir -p "$mock_bin"
   printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
   chmod +x "$mock_bin/jq"
-  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/network-gate.sh"
+  _hook_event Bash "$command" | PATH="$mock_bin:/usr/bin:/bin" "$TEST_BASH" "$REPO_ROOT/hooks/network-gate.sh"
 }
 
 _network_gate_tool() {
@@ -156,7 +157,7 @@ _wiki_validator_no_jq() {
   printf '#!/usr/bin/env bash\nexit 127\n' > "$mock_bin/jq"
   chmod +x "$mock_bin/jq"
   jq -n --arg path "$file_path" --arg cwd "$TEST_REPO" '{"tool_name":"Write","cwd":$cwd,"tool_input":{"file_path":$path}}' \
-    | PATH="$mock_bin:/usr/bin:/bin" bash "$REPO_ROOT/hooks/wiki-validator-hook.sh"
+    | PATH="$mock_bin:/usr/bin:/bin" "$TEST_BASH" "$REPO_ROOT/hooks/wiki-validator-hook.sh"
 }
 
 _rows() {
