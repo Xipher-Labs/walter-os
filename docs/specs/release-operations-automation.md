@@ -69,6 +69,8 @@ completion, but it can flag structurally risky cases:
 - a PR with closing issue references but no verification evidence;
 - a stacked PR whose base is not the release base and therefore will not close
   issues until retargeted.
+- a PR body with negated closing phrases such as "does not close #123"; GitHub
+  still parses the closing keyword and may auto-close the issue on merge.
 
 ### D5 — Post-release verification
 
