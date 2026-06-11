@@ -50,8 +50,9 @@ setup() {
   mkdir -p "$test_home/.config/walter-os"
   : >"$test_home/.config/walter-os/env"
 
-  run env \
+  run env -u WALTER_WRAPPER_DIR -u CLAUDE_HOME \
     HOME="$test_home" \
+    WALTER_CONFIG="$test_home/.config/walter-os" \
     WALTER_OS_HOME="$REPO_ROOT" \
     "$WALTER_OS_BIN" doctor --enforcement
 
@@ -65,8 +66,9 @@ setup() {
   mkdir -p "$test_home/.config/walter-os"
   ln -s "$REPO_ROOT" "$test_home/walter-os"
 
-  run env -u WALTER_OS_HOME \
+  run env -u WALTER_OS_HOME -u WALTER_WRAPPER_DIR -u CLAUDE_HOME \
     HOME="$test_home" \
+    WALTER_CONFIG="$test_home/.config/walter-os" \
     "$WALTER_OS_BIN" doctor --enforcement
 
   [ "$status" -eq 1 ]
