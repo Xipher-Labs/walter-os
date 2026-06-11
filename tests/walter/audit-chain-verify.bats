@@ -324,8 +324,11 @@ SH
 
   run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after tail tamper' allow approval-gate ok"
 
+  # D2 (enforcement-audit-deadlock-fix): append verifies the chain TAIL, so a
+  # tampered final row is still rejected (its row_hash no longer matches). The
+  # row-number label comes from the tail verifier, not the full-chain walk.
   [ "$status" -eq 1 ]
-  [[ "$output" == *"row 2: row_hash mismatch"* ]]
+  [[ "$output" == *"row_hash mismatch"* ]]
   [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
 }
 
@@ -351,16 +354,24 @@ SH
   [[ "$output" == *"row 1: non-canonical JSON"* ]]
 }
 
-@test "B-1: append rejects existing tampered chain before adding row" {
+@test "B-1: append tolerates an earlier tampered row; full verify still catches it" {
+  # D2 (enforcement-audit-deadlock-fix): append verifies only the chain TAIL +
+  # root, so a tampered EARLIER row no longer bricks every subsequent append
+  # (the prior O(n^2) full-verify-per-append was the poison-the-whole-day DoS).
+  # The tamper remains detectable by `walter audit verify`. See also
+  # tests/walter/audit-chain-deadlock-fix.bats.
   _make_chain
   first="$(sed -n '1p' "$(_chain_path)" | jq -cS '.decision_reason = "tampered"')"
   second="$(sed -n '2p' "$(_chain_path)")"
   printf '%s\n%s\n' "$first" "$second" > "$(_chain_path)"
 
   run bash -c "source '$AUDIT_LIB'; walter_audit_append Bash 'after tamper' allow approval-gate ok"
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "3" ]
 
-  [ "$status" -eq 1 ]
-  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" = "2" ]
+  # The earlier-row tamper is still caught by the full verifier.
+  run bash -c "source '$AUDIT_LIB'; walter_audit_verify_chain 2026-05-31"
+  [ "$status" -ne 0 ]
 }
 
 @test "B-1: append rejects tampered final row before adding row" {

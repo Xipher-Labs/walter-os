@@ -959,12 +959,60 @@ _walter_audit_root_matches_rotated_chain() {
   return 1
 }
 
+# D2 (enforcement-audit-deadlock-fix): O(1) append-time verification. Verify
+# only the LAST row's hash + signature here; the root chain-head match is
+# checked by the caller via _walter_audit_verify_root_unlocked, and prev_hash
+# chaining still binds every row. Full-chain verification stays in
+# `walter audit verify` / close-day, so a corrupt EARLIER row no longer bricks
+# every subsequent append for the day, and append cost stops being O(n^2).
+# Refs: docs/specs/enforcement-audit-deadlock-fix.md
+_walter_audit_verify_tail_unlocked() {
+  local line="$1" tmp_dir verify_status
+  if ! _walter_audit_jq_available; then
+    echo "walter-audit-chain: jq required" >&2
+    return 3
+  fi
+  if ! printf '%s\n' "$line" | jq -e 'type == "object"' >/dev/null 2>&1; then
+    echo "walter-audit-chain: tail row: invalid JSON object" >&2
+    return 1
+  fi
+  _walter_audit_verify_row_hash "$line" "tail" || return 1
+  tmp_dir="$(_walter_audit_mktemp_dir audit-verify-tail)" || {
+    echo "walter-audit-chain: temporary directory unavailable for tail signature verification" >&2
+    return 1
+  }
+  _walter_audit_verify_row_signature "$line" "tail" "$tmp_dir"
+  verify_status=$?
+  rm -rf "$tmp_dir"
+  return "$verify_status"
+}
+
 walter_audit_append() {
   [[ "$#" -eq 5 ]] || {
     echo "walter-audit-chain: usage: walter_audit_append <tool> <input> <decision> <source> <reason>" >&2
     return 2
   }
   local tool="$1" input="$2" decision="$3" source="$4" reason="$5"
+  # D1 (enforcement-audit-deadlock-fix): when a sandboxed safety hook runs under
+  # sandbox-hook-runner.sh, the runner performs the signed append from its
+  # un-sandboxed context (the hook sandbox profile is read-only and denies
+  # reading the session signing key, so the child literally cannot sign or
+  # write). The child's inline append becomes a no-op success so its fail-closed
+  # path is not tripped; the runner writes the real row. Hooks that run
+  # un-sandboxed (approval-gate, branch-flow-guard) never set this flag.
+  # Refs: docs/specs/enforcement-audit-deadlock-fix.md
+  #
+  # Hardening: honor the delegated flag ONLY for the two hooks that are
+  # actually run via sandbox-hook-runner.sh. This stops an attacker who can set
+  # WALTER_AUDIT_DELEGATED=1 in the ambient environment (e.g. via prompt
+  # injection) from silently suppressing the audit rows of the un-sandboxed,
+  # audit-critical hooks (approval-gate, branch-flow-guard), which always write
+  # their own rows.
+  if [[ "${WALTER_AUDIT_DELEGATED:-0}" == "1" ]]; then
+    case "$source" in
+      network-gate|bash-denylist) return 0 ;;
+    esac
+  fi
   local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id session_status sig sign_status chain_created prev_chain_root prev_chain_root_status prev_chain_root_field row_date_status
   audit_dir="$(walter_audit_dir)"
   lock_path="$(walter_audit_lock_path)"
@@ -1037,7 +1085,7 @@ walter_audit_append() {
       _walter_audit_release_lock "$lock_path"
       return 1
     fi
-    _walter_audit_verify_chain_file_unlocked "$chain_path" >/dev/null || {
+    _walter_audit_verify_tail_unlocked "$previous_line" >/dev/null || {
       exec 9>&-
       _walter_audit_release_lock "$lock_path"
       return 1
