@@ -901,6 +901,19 @@ SH
   echo "$output" | jq -e '.findings == []'
 }
 
+@test "AC6: unrelated negation in a separate sentence is not negation" {
+  local fixture="$TMP_DIR/unrelated-negation-closing-keyword.json"
+  local prs
+  prs="$(jq -c '.[0].body = "Cannot wait to ship this. Closes #302 after verification.\n\n## Verification\n- bats tests/agents/plane-pr-sync-webhook.bats"' <<<"$healthy_prs")"
+  write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$prs"
+
+  run bash "$WALTER_OS_BIN" release doctor --target v0.6.1 --fixture "$fixture" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "ready"'
+  echo "$output" | jq -e '.findings == []'
+}
+
 @test "AC7: --json emits release doctor contract" {
   local fixture="$TMP_DIR/ready-json.json"
   write_fixture "$fixture" "0.6.1" '["0.6.1"]' '["v0.6.0"]' "$healthy_prs"
