@@ -105,11 +105,14 @@ _runner_audit_append() {
   WALTER_AUDIT_DELEGATED=0 walter_audit_append "$tool" "$input" "$decision" "$hook_name" "$reason" >/dev/null
 }
 
-# Test hook: allow sourcing only the function definitions (no hook dispatch)
-# so the security-critical audit-append path can be unit-tested. The real hook
-# invocation never sets this flag.
-if [[ "${WALTER_SANDBOX_HOOK_RUNNER_LIB:-0}" == "1" ]]; then
-  return 0 2>/dev/null || exit 0
+# Test hook: allow sourcing only the function definitions (no hook dispatch) so
+# the security-critical audit-append path can be unit-tested. This is honored
+# ONLY when the script is actually SOURCED (BASH_SOURCE[0] != $0). When the
+# runner is EXECUTED as a real hook, an ambient/user-controlled
+# WALTER_SANDBOX_HOOK_RUNNER_LIB must NOT short-circuit dispatch — doing so would
+# turn enforcement into a silent fail-OPEN no-op. (Copilot review on #521.)
+if [[ "${WALTER_SANDBOX_HOOK_RUNNER_LIB:-0}" == "1" && "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
 fi
 
 profile="walter-hook-default"

@@ -113,6 +113,25 @@ SH
   jq -e '.decision_source == "stub-hook" and .decision == "allow" and (.sig | length) > 0' "$(_chain_path)"
 }
 
+@test "D1: ambient WALTER_SANDBOX_HOOK_RUNNER_LIB does not bypass enforcement when executed" {
+  command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
+  RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
+  STUB="$BATS_TEST_TMPDIR/lib-flag-stub.sh"
+  cat > "$STUB" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n' '{"decision":"allow"}'
+SH
+  chmod +x "$STUB"
+
+  # The test-sourcing flag set in the ambient env must NOT make the EXECUTED
+  # runner exit 0 with no decision (silent fail-open). It must still dispatch.
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"x\"}}' | WALTER_SANDBOX_HOOK_RUNNER_LIB=1 WALTER_OS_HOME='$REPO_ROOT' '$RUNNER' -- '$STUB'"
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
 @test "D1: runner refuses a hook that emits more than one decision object" {
   command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
   RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
