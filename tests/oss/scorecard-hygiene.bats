@@ -46,3 +46,26 @@ setup() {
   grep -Fq 'fast-check' "$f"
   grep -Fq 'sanitize.fuzz.test.ts' "$f"
 }
+
+@test "OpenSSF Best Practices filing runbook documents operator action" {
+  local f="$REPO_ROOT/docs/operational/openssf-badge-filing-runbook.md"
+  [[ -f "$f" ]]
+
+  grep -Fq "CIIBestPracticesID" "$f"
+  grep -Fiq "issue #423" "$f"
+  grep -Fq "https://www.bestpractices.dev/en/projects/new" "$f"
+  grep -Fq "https://www.bestpractices.dev/en/criteria/0" "$f"
+  grep -Fq "Do not add an OpenSSF" "$f"
+  grep -Fq "approved" "$f"
+  grep -Fq "project URL" "$f"
+  grep -Fq "README.md" "$f"
+  grep -Fq "Scorecard" "$f"
+}
+
+@test "Scorecard hygiene links the OpenSSF filing runbook" {
+  local f="$REPO_ROOT/docs/operational/scorecard-hygiene.md"
+  local index="$REPO_ROOT/docs/operational/README.md"
+
+  grep -Fq "docs/operational/openssf-badge-filing-runbook.md" "$f"
+  grep -Fq "openssf-badge-filing-runbook.md" "$index"
+}
