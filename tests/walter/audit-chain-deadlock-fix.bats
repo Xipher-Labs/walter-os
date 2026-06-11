@@ -51,6 +51,16 @@ _append() {
   [ ! -e "$(_chain_path)" ]
 }
 
+@test "D1: delegated flag does NOT suppress audit-critical un-sandboxed hooks" {
+  # An ambient WALTER_AUDIT_DELEGATED=1 must not silence approval-gate's own
+  # audit row — only network-gate/bash-denylist (run via the runner) are
+  # delegated.
+  run bash -c "source '$AUDIT_LIB'; WALTER_AUDIT_DELEGATED=1 walter_audit_append Bash 'rm -rf /' block approval-gate 'blocked'"
+  [ "$status" -eq 0 ]
+  [ -s "$(_chain_path)" ]
+  [ "$(wc -l < "$(_chain_path)")" -eq 1 ]
+}
+
 @test "D1: append still writes exactly one row when WALTER_AUDIT_DELEGATED is unset" {
   run _append "git status"
   [ "$status" -eq 0 ]

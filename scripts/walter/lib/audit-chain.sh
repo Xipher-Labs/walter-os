@@ -1001,8 +1001,17 @@ walter_audit_append() {
   # path is not tripped; the runner writes the real row. Hooks that run
   # un-sandboxed (approval-gate, branch-flow-guard) never set this flag.
   # Refs: docs/specs/enforcement-audit-deadlock-fix.md
+  #
+  # Hardening: honor the delegated flag ONLY for the two hooks that are
+  # actually run via sandbox-hook-runner.sh. This stops an attacker who can set
+  # WALTER_AUDIT_DELEGATED=1 in the ambient environment (e.g. via prompt
+  # injection) from silently suppressing the audit rows of the un-sandboxed,
+  # audit-critical hooks (approval-gate, branch-flow-guard), which always write
+  # their own rows.
   if [[ "${WALTER_AUDIT_DELEGATED:-0}" == "1" ]]; then
-    return 0
+    case "$source" in
+      network-gate|bash-denylist) return 0 ;;
+    esac
   fi
   local audit_dir chain_path root_path last_hex lock_path previous_line previous_hash pre_write_size retry_count row row_hash row_without_hash summary timestamp row_date root_hash session_id session_status sig sign_status chain_created prev_chain_root prev_chain_root_status prev_chain_root_field row_date_status
   audit_dir="$(walter_audit_dir)"
