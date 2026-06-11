@@ -113,12 +113,10 @@ body_has_negated_closing_keyword() {
   local body="$1"
   local closing='(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+'
 
-  # A negation only blocks when it DIRECTLY precedes the closing keyword
-  # (whitespace only between them). The old `[^#]{0,80}` gap caused false
-  # positives like "Cannot wait to ship this. Closes #123" where the negation
-  # is unrelated to the closing reference. Word boundaries on the negation
-  # group also keep "Notice"/"Cantilever"/"Not sure" from matching.
-  # Copilot review round 1.
+  # Match a negation only when it directly precedes the closing keyword: a
+  # leading non-word boundary, the negation token, then whitespace, then the
+  # closing keyword. The old `[^#]{0,80}` gap let an unrelated negation in a
+  # separate sentence ("Cannot wait to ship this. Closes #123") block release.
   local neg="((do|does|did|should|would|will|must|can|could)[[:space:]]+not|cannot|doesn'?t|don'?t|didn'?t|shouldn'?t|wouldn'?t|won'?t|mustn'?t|can'?t|couldn'?t|not)"
   grep -Eiq "(^|[^[:alnum:]_])${neg}[[:space:]]+${closing}" <<<"$body"
 }
