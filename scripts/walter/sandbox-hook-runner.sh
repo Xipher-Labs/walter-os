@@ -215,8 +215,14 @@ fi
 # Strictly validate the child's decision. The child must emit a single JSON
 # object with an explicit "allow"/"block" decision; anything else fails CLOSED
 # rather than being audited + relayed as a silent allow (no fail-open path).
-decision="$(jq -er 'if type == "object" and (.decision == "allow" or .decision == "block") then .decision else empty end' "$out_file" 2>/dev/null)" || {
-  _emit_block "sandbox hook runner: $hook emitted no parseable allow/block decision; refusing to relay"
+# Slurp (-s) so the child's stdout is treated as ONE document: require exactly
+# one top-level object with an explicit allow/block decision. This rejects 0
+# objects (empty), >1 objects (a multi-object stream whose first object is what
+# `cat "$out_file"` relays while a later one could be what got signed), and
+# trailing junk — so the signed decision cannot diverge from the relayed bytes.
+# (Adversarial review finding A.)
+decision="$(jq -ers 'if length == 1 and (.[0] | type == "object") and (.[0].decision == "allow" or .[0].decision == "block") then .[0].decision else empty end' "$out_file" 2>/dev/null)" || {
+  _emit_block "sandbox hook runner: $hook did not emit a single allow/block decision object; refusing to relay"
 }
 
 # Record the signed audit row BEFORE relaying the decision, so a decision is

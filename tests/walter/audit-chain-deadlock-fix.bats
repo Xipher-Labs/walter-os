@@ -113,6 +113,27 @@ SH
   jq -e '.decision_source == "stub-hook" and .decision == "allow" and (.sig | length) > 0' "$(_chain_path)"
 }
 
+@test "D1: runner refuses a hook that emits more than one decision object" {
+  command -v sandbox-exec >/dev/null 2>&1 || skip "sandbox-exec not available on this platform"
+  RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
+  STUB="$BATS_TEST_TMPDIR/multi-hook.sh"
+  cat > "$STUB" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n%s\n' '{"decision":"block"}' '{"decision":"allow"}'
+SH
+  chmod +x "$STUB"
+
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"x\"}}' | WALTER_OS_HOME='$REPO_ROOT' '$RUNNER' -- '$STUB'"
+
+  # A multi-object stream is rejected fail-closed (signed != relayed otherwise).
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '(.reason | test("single allow/block decision object"))'
+  # nothing signed for a rejected stream
+  [ ! -e "$(_chain_path)" ]
+}
+
 @test "D1: runner fails closed when the captured stdin cannot be read" {
   # Exercises _runner_audit_append's read-failure guard directly (Copilot
   # review round 2): a missing input file must be treated as an append
