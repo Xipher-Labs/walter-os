@@ -75,6 +75,47 @@ requires the one-minor-version notice cycle.
   release tag, GitHub Release state, required asset names, and asset digests
   without tripping the pre-release "tag already exists" blocker.
 
+## [0.7.0] — 2026-06-11
+
+**Enforcement deadlock recovery.** Restores a working agent shell after the
+audit-chain self-deadlock, plus preview, CI, and Scorecard hardening.
+
+### Added
+
+- **Static local preview adapter (#504).** `walter-os preview local` gains a
+  deterministic static-site adapter and preview-evidence verification feeding
+  `pr-score`.
+
+### Changed
+
+- **CI run hygiene (#507).** Per-event `concurrency` groups cancel superseded
+  in-progress runs without cross-cancelling PR vs push workflows.
+
+### Fixed
+
+- **Audit-chain enforcement deadlock (#519).** Sandboxed safety hooks
+  (`network-gate`, `bash-denylist`) could not write the required signed audit
+  row under the read-only, key-blind hook sandbox, so every Bash call was
+  blocked with "audit-chain append failed; refusing unaudited decision" — and a
+  single bad row poisoned the whole day, taking Write/Read down with it. The
+  un-sandboxed `sandbox-hook-runner.sh` now performs the signed append (D1),
+  `walter_audit_append` verifies only the chain tail instead of the full day
+  (D2 — removes the O(n²) cost and the poison-the-day failure), and the runner
+  fails closed on an unparseable child decision. `daily-audit-gate.sh` now
+  points its CRITICAL block message at the real report path.
+- **Enforcement doctor tests (#513).** Unset ambient enforcement vars so
+  `doctor --enforcement` tests are not flaky on configured machines.
+- **Negated closing-keyword detector (#512).** The release-doctor negation
+  regex now requires the negation to directly precede the closing keyword, so
+  an unrelated negation ("Cannot wait to ship this. Closes #123") no longer
+  blocks a release.
+
+### Docs
+
+- MaintainedID repo-age Scorecard disposition (#510), CodeReview Scorecard
+  disposition (#505), OpenSSF badge filing runbook (#508), Headscale helper
+  rollout (#509).
+
 ## [0.6.2] — 2026-06-09
 
 **Release tag reconciliation patch.**
