@@ -23,6 +23,10 @@ on:
   schedule:
     - cron: '45 3 * * 3'   # weekly Wednesday 03:45 UTC
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   actions: read
   contents: read

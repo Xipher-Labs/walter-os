@@ -17,6 +17,10 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # Permissions: read repo content + request PR reviewers. The action does
 # NOT need broader scopes in v1.
 permissions:
@@ -79,9 +83,11 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## Walter-OS review loop" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Rounds completed: \`${{ steps.review.outputs.rounds-completed }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Status: \`${{ steps.review.outputs.status }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "See PR comments for Copilot findings. Codex output (if Round 2 ran) is in the private temp-file path logged by the Round 2 step." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Walter-OS review loop"
+            echo ""
+            echo "- Rounds completed: \`${{ steps.review.outputs.rounds-completed }}\`"
+            echo "- Status: \`${{ steps.review.outputs.status }}\`"
+            echo ""
+            echo "See PR comments for Copilot findings. Codex output (if Round 2 ran) is in the private temp-file path logged by the Round 2 step."
+          } >> "$GITHUB_STEP_SUMMARY"

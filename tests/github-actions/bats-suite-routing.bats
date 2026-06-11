@@ -28,7 +28,41 @@ setup() {
   [[ -f "$CI_WORKFLOW" ]]
 
   grep -Eq '^concurrency:[[:space:]]*$' "$CI_WORKFLOW"
-  grep -Eq '^[[:space:]]+group:[[:space:]]+.*github\.workflow.*github\.event\.pull_request\.number.*\|\|.*github\.ref' "$CI_WORKFLOW"
+  grep -Eq '^[[:space:]]+group:[[:space:]]+.*github\.workflow.*github\.event_name.*github\.event\.pull_request\.number.*\|\|.*github\.ref' "$CI_WORKFLOW"
   grep -Eq '^[[:space:]]+cancel-in-progress:[[:space:]]+true[[:space:]]*$' "$CI_WORKFLOW"
-  grep -Fq 'Security workflows keep' "$CI_WORKFLOW"
+  grep -Fq 'the check rollup focused on the latest commit' "$CI_WORKFLOW"
+}
+
+@test "workflows cancel stale runs within each trigger and branch or PR" {
+  local workflow
+  for workflow in \
+    ci \
+    codeql \
+    control-tower \
+    gitleaks \
+    osv-scanner \
+    pr-review \
+    pr-title-lint \
+    readme-lint \
+    semgrep
+  do
+    local path="$REPO_ROOT/.github/workflows/${workflow}.yml"
+    [[ -f "$path" ]] || {
+      echo "missing workflow: $path"
+      return 1
+    }
+
+    grep -Eq '^concurrency:[[:space:]]*$' "$path" || {
+      echo "missing concurrency block: $path"
+      return 1
+    }
+    grep -Eq '^[[:space:]]+group:[[:space:]]+.*github\.workflow.*github\.event_name.*github\.event\.pull_request\.number.*\|\|.*github\.ref' "$path" || {
+      echo "missing event-aware branch/PR concurrency group: $path"
+      return 1
+    }
+    grep -Eq '^[[:space:]]+cancel-in-progress:[[:space:]]+true[[:space:]]*$' "$path" || {
+      echo "missing cancel-in-progress: $path"
+      return 1
+    }
+  done
 }
