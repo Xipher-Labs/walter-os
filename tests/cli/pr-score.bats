@@ -328,6 +328,48 @@ write_preview_plan() {
   echo "$output" | jq -e '.findings | index("invalid preview report") | not'
 }
 
+@test "AC4: local ephemeral preview report contributes preview evidence" {
+  local fixture="$TMP_DIR/local-static-preview.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+  jq '.provider = "local-static" | .safety.deploy = "local ephemeral"' \
+    "$report" > "$TMP_DIR/local-static-report.json"
+  mv "$TMP_DIR/local-static-report.json" "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.components.preview.points == 10'
+  echo "$output" | jq -e '.preview.report.valid == true'
+  echo "$output" | jq -e '.findings | index("invalid preview report") | not'
+}
+
+@test "AC4: local ephemeral preview report requires local-static provider" {
+  local fixture="$TMP_DIR/local-static-provider-required.json"
+  local report="$TMP_DIR/preview-report.json"
+  write_fixture \
+    "$fixture" \
+    "[FEAT] -TECHNICAL- add PR readiness score" \
+    '[{"name":"shellcheck","status":"COMPLETED","conclusion":"SUCCESS"}]' \
+    '[{"path":"scripts/walter/subcommands/pr-score.sh"}]'
+  write_preview_report "$report"
+  jq '.provider = "vercel" | .safety.deploy = "local ephemeral"' \
+    "$report" > "$TMP_DIR/local-static-report.json"
+  mv "$TMP_DIR/local-static-report.json" "$report"
+
+  run bash "$WALTER_OS_BIN" pr-score --fixture "$fixture" --preview-report "$report" --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.components.preview.points == 0'
+  echo "$output" | jq -e '.preview.report.valid == false'
+  echo "$output" | jq -e '.findings | index("invalid preview report")'
+}
+
 @test "AC4: preview plan without report is human-review evidence" {
   local fixture="$TMP_DIR/clean-plan.json"
   local plan="$TMP_DIR/preview-plan.json"

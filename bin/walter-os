@@ -85,6 +85,8 @@
 #                               Package local loopback preview evidence (no deploy)
 #   preview plan --dry-run --pr N --provider NAME --app NAME --branch REF --seed FILE
 #                               Plan preview deploy contract (no deploy)
+#   preview static --pr N --dir DIR --seed FILE
+#                               Serve local static preview and package evidence
 #   preview verify --pr N       Validate preview report or plan evidence
 #   feature-state {init|validate|record-post-merge}
 #                               Manage .walter/features/<id>/state.yaml ledgers

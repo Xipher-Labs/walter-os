@@ -96,12 +96,19 @@ function normalizeArtifactPath(
   return normalized;
 }
 
-function hasSafetyInvariants(safety: unknown): boolean {
+function hasSafetyInvariants(
+  safety: unknown,
+  options: { allowLocalEphemeralDeploy?: boolean } = {}
+): boolean {
   if (!isObject(safety)) return false;
+  const deployOk =
+    safety.deploy === "not performed" ||
+    (options.allowLocalEphemeralDeploy === true &&
+      safety.deploy === "local ephemeral");
   return (
     safety.production_secrets === "rejected" &&
     safety.credentials === "not minted" &&
-    safety.deploy === "not performed" &&
+    deployOk &&
     safety.hard_limit_floor === "preserved"
   );
 }
@@ -168,6 +175,7 @@ function validatePreviewReport(
   valid: boolean;
   safetyOk: boolean;
   url: string | null;
+  provider: string | null;
   generatedAt: string | null;
   screenshots: number;
   seedPath: string | null;
@@ -179,6 +187,7 @@ function validatePreviewReport(
       valid: false,
       safetyOk: false,
       url: null,
+      provider: null,
       generatedAt: null,
       screenshots: 0,
       seedPath: null,
@@ -191,7 +200,9 @@ function validatePreviewReport(
   const screenshots = Array.isArray(payload.screenshots)
     ? payload.screenshots
     : [];
-  const safetyOk = hasSafetyInvariants(payload.safety);
+  const safetyOk = hasSafetyInvariants(payload.safety, {
+    allowLocalEphemeralDeploy: payload.provider === "local-static",
+  });
 
   if (payload.schema_version !== 1) {
     findings.push("preview report schema version is unsupported");
@@ -270,6 +281,7 @@ function validatePreviewReport(
     valid,
     safetyOk,
     url: isHttpUrl(payload.url) ? payload.url : null,
+    provider: stringValue(payload.provider),
     generatedAt: stringValue(payload.generated_at),
     screenshots: screenshots.length,
     seedPath,
@@ -407,6 +419,7 @@ async function readPreviewItem(
     reportValid = result.valid;
     reportSafetyOk = result.safetyOk;
     url = result.url;
+    provider = result.provider;
     generatedAt = result.generatedAt;
     if (result.seedPath !== null && !(await isExistingFile(join(bundlePath, result.seedPath)))) {
       findings.push("preview report seed file missing or unreadable on disk");

@@ -478,6 +478,93 @@ SH
   [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
 }
 
+@test "preview static serves a static directory and writes local ephemeral evidence" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 is required"
+  install_fake_npx
+  write_preview_artifacts
+  write_preview_config
+  static_dir="$TMP_DIR/static-site"
+  mkdir -p "$static_dir"
+  printf '<!doctype html><title>Preview</title><h1>PR 235</h1>\n' > "$static_dir/index.html"
+
+  run bash "$WALTER_OS_BIN" preview static \
+    --pr 235 \
+    --dir "$static_dir" \
+    --seed "$seed_file" \
+    --name home \
+    --config "$config_file" \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.kind == "preview-report"'
+  echo "$output" | jq -e '.provider == "local-static"'
+  echo "$output" | jq -e '.url | test("^http://127[.]0[.]0[.]1:[0-9]+/$")'
+  echo "$output" | jq -e '.safety.preview_deploy == true'
+  echo "$output" | jq -e '.safety.credentials == "not minted"'
+  echo "$output" | jq -e '.safety.deploy == "local ephemeral"'
+  echo "$output" | jq -e '.actions | index("serve_local_static_preview")'
+  [[ -f "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
+  [[ -f "$TMP_DIR/out/preview-pr-235/seed/seed.json" ]]
+  [[ -f "$TMP_DIR/out/preview-pr-235/screenshots/home.png" ]]
+  [[ "$(cat "$FAKE_NPX_LOG")" == *"http://127.0.0.1:"* ]]
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.status == "ready"'
+  echo "$output" | jq -e '.findings == []'
+}
+
+@test "preview static rejects symlinks inside the static directory" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 is required"
+  install_fake_npx
+  write_preview_artifacts
+  write_preview_config
+  static_dir="$TMP_DIR/static-site"
+  mkdir -p "$static_dir"
+  printf '<!doctype html>\n' > "$TMP_DIR/external.html"
+  ln -s "$TMP_DIR/external.html" "$static_dir/index.html"
+
+  run bash "$WALTER_OS_BIN" preview static \
+    --pr 235 \
+    --dir "$static_dir" \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"refusing non-regular entry inside static directory"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
+  [[ ! -e "$FAKE_NPX_LOG" ]]
+}
+
+@test "preview static rejects non-regular entries inside the static directory" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 is required"
+  command -v mkfifo >/dev/null 2>&1 || skip "mkfifo is required"
+  install_fake_npx
+  write_preview_artifacts
+  write_preview_config
+  static_dir="$TMP_DIR/static-site"
+  mkdir -p "$static_dir"
+  mkfifo "$static_dir/pipe"
+
+  run bash "$WALTER_OS_BIN" preview static \
+    --pr 235 \
+    --dir "$static_dir" \
+    --seed "$seed_file" \
+    --config "$config_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"refusing non-regular entry inside static directory"* ]]
+  [[ ! -e "$TMP_DIR/out/preview-pr-235/preview-report.json" ]]
+  [[ ! -e "$FAKE_NPX_LOG" ]]
+}
+
 @test "preview bundle copies seed and screenshots into a report bundle" {
   write_preview_artifacts
 
@@ -646,6 +733,32 @@ SH
   echo "$output" | jq -e '.kind == "preview-report"'
   echo "$output" | jq -e '.findings == []'
   echo "$output" | jq -e '.screenshots == 1'
+}
+
+@test "preview verify rejects local ephemeral reports from non-local-static providers" {
+  write_preview_artifacts
+
+  run bash "$WALTER_OS_BIN" preview bundle \
+    --pr 235 \
+    --url https://preview.example/pr-235 \
+    --seed "$seed_file" \
+    --screenshot "$shot_file" \
+    --out "$TMP_DIR/out"
+
+  [ "$status" -eq 0 ]
+  jq '.provider = "vercel" | .safety.deploy = "local ephemeral"' \
+    "$TMP_DIR/out/preview-pr-235/preview-report.json" \
+    > "$TMP_DIR/report.json"
+  mv "$TMP_DIR/report.json" "$TMP_DIR/out/preview-pr-235/preview-report.json"
+
+  run bash "$WALTER_OS_BIN" preview verify \
+    --pr 235 \
+    --out "$TMP_DIR/out" \
+    --json
+
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.status == "invalid"'
+  echo "$output" | jq -e '.findings | index("preview report deploy invariant failed")'
 }
 
 @test "preview verify rejects tampered screenshot hashes" {
@@ -948,5 +1061,6 @@ SH
   [[ "$output" == *"preview capture"* ]]
   [[ "$output" == *"preview local"* ]]
   [[ "$output" == *"preview plan"* ]]
+  [[ "$output" == *"preview static"* ]]
   [[ "$output" == *"preview verify"* ]]
 }

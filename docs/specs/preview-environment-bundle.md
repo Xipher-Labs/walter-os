@@ -16,6 +16,9 @@ artifact format for preview evidence.
   existing preview URL.
 - Add `walter-os preview local` as the first provider-shaped adapter for
   loopback previews that are already running on the operator machine.
+- Add `walter-os preview static` as the first self-contained ephemeral adapter:
+  serve an already-built static directory on loopback, capture evidence, and
+  tear the server down without cloud credentials.
 - Add `walter-os preview verify` so preview evidence can be checked before it
   is used for PR Score, Control Tower, or human review.
 - Package an existing preview URL, seed manifest, and screenshots into a
@@ -30,7 +33,7 @@ artifact format for preview evidence.
 
 ## Non-Goals
 
-- Do not deploy preview environments in this slice.
+- Do not deploy cloud preview environments in this slice.
 - Do not mint credentials, call cloud providers, or touch production secrets.
 - Do not merge PRs or relax the hard-limit floor.
 
@@ -100,14 +103,28 @@ accepts only `localhost`, `127.0.0.1`, or `[::1]` HTTP(S) URLs, requires
 `deploy_ephemeral_preview`. It does not deploy a cloud preview, mint
 credentials, or connect to a remote provider.
 
+`walter-os preview static` writes the same report bundle layout, but records
+`provider: "local-static"` for an ephemeral loopback server started by the
+command. The command requires an already-built static directory, `python3`, an
+already-available local Playwright CLI through `npx --no-install`, a seed
+manifest, and `preview_deploy: true`. It rejects symlinked static directories,
+symlinks inside the static tree, and secret-like file names before starting the
+server. Its report records `deploy: "local ephemeral"` to distinguish the local
+loopback server from dry-run plans and cloud provider deployments. The server is
+bound to `127.0.0.1`, used only for screenshot capture, and shut down before the
+command exits.
+
 `walter-os preview verify --pr <number>` validates the evidence under
 `.walter/previews/preview-pr-<number>` or the directory passed with `--out`.
 If a `preview-report.json` exists, it verifies the report schema, PR number,
-HTTP(S) URL, seed and screenshot hashes, and safety invariants. If only a
-`preview-plan.json` exists, it verifies the dry-run plan schema, seed hash, and
-the `deploy: "not performed"` / `credentials: "not minted"` invariants. The
-command exits `0` for ready reports and valid dry-run plans, exits `1` for
-missing or invalid evidence, and emits machine-readable JSON with `--json`.
+HTTP(S) URL, seed and screenshot hashes, and safety invariants. Report safety
+allows `deploy: "not performed"` for externally packaged evidence and
+`deploy: "local ephemeral"` only when `provider: "local-static"`; credentials
+must remain `not minted`. If only a `preview-plan.json` exists, it verifies the
+dry-run plan schema, seed hash, and the `deploy: "not performed"` /
+`credentials: "not minted"` invariants. The command exits `0` for ready reports
+and valid dry-run plans, exits `1` for missing or invalid evidence, and emits
+machine-readable JSON with `--json`.
 
 ## Acceptance Criteria
 
@@ -132,6 +149,11 @@ missing or invalid evidence, and emits machine-readable JSON with `--json`.
   rejects non-loopback URLs before writing a report.
 - AC11: `walter-os preview verify` validates ready report bundles and dry-run
   plans, rejects missing or tampered evidence, and emits JSON findings.
+- AC12: `walter-os preview static` serves an already-built static directory on
+  loopback, captures a screenshot, writes `provider: "local-static"` evidence
+  with `deploy: "local ephemeral"`, and rejects symlinks, non-regular entries,
+  scan errors, or secret-like files in the static tree before starting the
+  server.
 
 ## Related
 
