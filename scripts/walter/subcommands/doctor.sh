@@ -23,6 +23,15 @@ while [[ "$WALTER_OS_HOME" != "/" && "$WALTER_OS_HOME" == */ ]]; do
   WALTER_OS_HOME="${WALTER_OS_HOME%/}"
 done
 WALTER_CONFIG="${WALTER_CONFIG:-$HOME/.config/walter-os}"
+HIGH_RISK_TOOLS_LIB="${WALTER_OS_HOME}/scripts/walter/lib/high-risk-tools.sh"
+if [[ -f "$HIGH_RISK_TOOLS_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$HIGH_RISK_TOOLS_LIB"
+else
+  walter_high_risk_tools() {
+    printf '%s\n' gh curl hcloud cloudflared docker vercel railway stripe
+  }
+fi
 
 # ---------- arg parse ----------
 CLIENT_ONLY=0
@@ -260,8 +269,12 @@ doctor_check_wrapper_path() {
   local installed=0
   local wrapped=0
   local wrapper_in_path=0
-  local -a high_risk_tools=(gh curl hcloud cloudflared docker vercel railway stripe)
+  local -a high_risk_tools=()
   local -a path_entries=()
+
+  while IFS= read -r tool; do
+    [[ -n "$tool" ]] && high_risk_tools+=("$tool")
+  done < <(walter_high_risk_tools)
 
   if [[ -z "$wrapper_dir" ]]; then
     log_info "high-risk tool wrappers not configured (set WALTER_WRAPPER_DIR to enable this check)"

@@ -101,6 +101,8 @@
 #   session {status|restart}    Manage time-bounded session state (#122 A-4)
 #   cap {mint|list|verify|revoke}
 #                               Manage session capability tokens (#122 A-2)
+#   wrappers {setup|status|env}
+#                               Manage high-risk tool PATH wrappers
 #   svc {up|stop|down|restart|ps|logs|apply} <name> [--host H] [--dry-run]
 #                               Manage Walter-VM service compose lifecycle
 #   version                     Show current version + optional update check
@@ -2571,7 +2573,7 @@ esac
 if [[ "${1:-}" =~ ^(-h|--help|help)$ ]]; then
   case "$cmd" in
     # Subcommands that delegate to scripts with their own help support:
-    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|svc|pr-score|post-merge-check|semantic-gates|preview|feature-state|release|repo-config)
+    sync|upgrade|sync-repos|profile-bootstrap|onboard|secrets-identity-init|secrets-keychain-init|secrets-bootstrap|secrets-pull|syncthing-bootstrap|agent-memory|wiki|agents|lessons|spend|mode|new|bridge|overlay|egress|session|cap|wrappers|svc|pr-score|post-merge-check|semantic-gates|preview|feature-state|release|repo-config)
       ;; # let the subcommand handle it (passes through "$@")
     *)
       print_help; exit 0 ;;
@@ -2613,6 +2615,7 @@ case "$cmd" in
   egress)             cmd_egress "$@" ;;
   session)            exec "${WALTER_OS_HOME}/scripts/walter/subcommands/session.sh" "$@" ;;
   cap)                exec "${WALTER_OS_HOME}/scripts/walter/subcommands/cap.sh" "$@" ;;
+  wrappers)           exec bash "${WALTER_OS_HOME}/scripts/walter/subcommands/wrappers.sh" "$@" ;;
   svc)                cmd_svc "$@" ;;
   content)            cmd_content "$@" ;;
   analyst)            cmd_content analyst "$@" ;;
