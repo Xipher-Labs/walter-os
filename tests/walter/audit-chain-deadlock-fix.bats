@@ -39,6 +39,12 @@ _chain_path() {
   printf '%s/audit/chain-2026-05-31.jsonl\n' "$WALTER_CONFIG"
 }
 
+# Cross-platform sandbox gate: true when the configured provider exists
+# (sandbox-exec on Darwin, nsjail/firejail on Linux), not just sandbox-exec.
+_sandbox_available() {
+  bash -c "source '$REPO_ROOT/scripts/walter/lib/sandbox.sh' 2>/dev/null; walter_sandbox_check walter-hook-default" >/dev/null 2>&1
+}
+
 _append() {
   bash -c "source '$AUDIT_LIB'; walter_audit_append Bash '$1' allow network-gate ''"
 }
@@ -89,4 +95,81 @@ _append() {
   perl -0pi -e 's/"input_summary":"one"/"input_summary":"bad"/' "$chain"
   run bash -c "source '$AUDIT_LIB'; _walter_audit_verify_chain_file_unlocked '$chain'"
   [ "$status" -ne 0 ]
+}
+
+@test "D1: a sandboxed hook via the runner writes exactly one signed row with the hook decision_source" {
+  _sandbox_available || skip "no sandbox provider available on this platform"
+  RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
+  STUB="$BATS_TEST_TMPDIR/stub-hook.sh"
+  cat > "$STUB" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n' '{"decision":"allow"}'
+SH
+  chmod +x "$STUB"
+
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}' | WALTER_OS_HOME='$REPO_ROOT' '$RUNNER' -- '$STUB'"
+
+  # The child decision is relayed unchanged...
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "allow"'
+  # ...and the un-sandboxed runner wrote exactly one signed row for it, with
+  # decision_source = the hook basename and decision = the emitted decision.
+  [ "$(wc -l < "$(_chain_path)" | tr -d ' ')" -eq 1 ]
+  jq -e '.decision_source == "stub-hook" and .decision == "allow" and (.sig | length) > 0' "$(_chain_path)"
+}
+
+@test "D1: ambient WALTER_SANDBOX_HOOK_RUNNER_LIB does not bypass enforcement when executed" {
+  _sandbox_available || skip "no sandbox provider available on this platform"
+  RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
+  STUB="$BATS_TEST_TMPDIR/lib-flag-stub.sh"
+  cat > "$STUB" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n' '{"decision":"allow"}'
+SH
+  chmod +x "$STUB"
+
+  # The test-sourcing flag set in the ambient env must NOT make the EXECUTED
+  # runner exit 0 with no decision (silent fail-open). It must still dispatch.
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"x\"}}' | WALTER_SANDBOX_HOOK_RUNNER_LIB=1 WALTER_OS_HOME='$REPO_ROOT' '$RUNNER' -- '$STUB'"
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  echo "$output" | jq -e '.decision == "allow"'
+}
+
+@test "D1: runner refuses a hook that emits more than one decision object" {
+  _sandbox_available || skip "no sandbox provider available on this platform"
+  RUNNER="$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh"
+  STUB="$BATS_TEST_TMPDIR/multi-hook.sh"
+  cat > "$STUB" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n%s\n' '{"decision":"block"}' '{"decision":"allow"}'
+SH
+  chmod +x "$STUB"
+
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"x\"}}' | WALTER_OS_HOME='$REPO_ROOT' '$RUNNER' -- '$STUB'"
+
+  # A multi-object stream is rejected fail-closed (signed != relayed otherwise).
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+  echo "$output" | jq -e '(.reason | test("single allow/block decision object"))'
+  # nothing signed for a rejected stream
+  [ ! -e "$(_chain_path)" ]
+}
+
+@test "D1: runner fails closed when the captured stdin cannot be read" {
+  # Exercises _runner_audit_append's read-failure guard directly (Copilot
+  # review round 2): a missing input file must be treated as an append
+  # failure, not signed as an empty-context row.
+  run bash -c "
+    set -uo pipefail
+    export WALTER_OS_HOME='$REPO_ROOT'
+    WALTER_SANDBOX_HOOK_RUNNER_LIB=1 source '$REPO_ROOT/scripts/walter/sandbox-hook-runner.sh'
+    out='$BATS_TEST_TMPDIR/out.json'; printf '%s' '{\"decision\":\"allow\"}' > \"\$out\"
+    _runner_audit_append '$BATS_TEST_TMPDIR/does-not-exist' \"\$out\" '/x/stub-hook.sh' allow
+  "
+  [ "$status" -ne 0 ]
+  [ ! -e "$(_chain_path)" ]
 }
