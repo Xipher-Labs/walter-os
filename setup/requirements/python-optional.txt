@@ -7,7 +7,7 @@ pytest==9.0.3
 
 # skills/nanobanana/scripts/generate.py
 google-genai==2.2.0
-pillow==12.2.0
+pillow==12.3.0
 
 # skills/devrel-analyst/scripts/query.py and setup/walter-host/singer/
 psycopg2-binary==2.9.12
