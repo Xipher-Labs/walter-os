@@ -29,10 +29,11 @@ project_doc_max_bytes = 32768
 
 # ---------- approval policy ----------
 
-# "auto-approve" | "untrusted" | "on-failure" | "never"
-# Walter-OS recommends "untrusted" globally — Codex prompts for any new
-# command. Override to "on-failure" once you trust your own commands.
-approval_policy = "untrusted"
+# "on-request" | "never"
+# Walter-OS recommends "on-request" globally so Codex decides when an
+# operation needs operator approval. Older approval policy names are rejected
+# by newer Codex releases.
+approval_policy = "on-request"
 
 # Sandbox mode for tool execution: "danger-full-access" | "workspace-write" |
 # "read-only". Stay in "workspace-write" — keeps Codex out of $HOME outside
