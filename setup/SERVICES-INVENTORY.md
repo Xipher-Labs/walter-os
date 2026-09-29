@@ -58,6 +58,7 @@ Layer 4 — optional / profile-gated:
   openclaw           [profile: assistant]
   rocketchat         [profile: comms]
   chatgpt-codex-router  (LiteLLM-internal subscription bridge — port 1456)
+  chatgpt-codex-router-solx (second ChatGPT account, compose override — port 1459)
   claude-sub-router     (LiteLLM-internal subscription bridge — port 1457)
   gemini-sub-router     (LiteLLM-internal subscription bridge — port 1458)
 
@@ -360,6 +361,20 @@ Layer 7 — meta:
 | Env vars required | `CCR_APIKEY` (Bearer token for LiteLLM auth; generate: `openssl rand -hex 32`) |
 | Per-service dir | `setup/walter-host/services/chatgpt-codex-router/` (docker-compose.yml, Dockerfile, server.js, package.json, RUNBOOK.md, .env.template, SUGGESTIONS.md) |
 | Note | OpenAI-compatible thin bridge wrapping the Codex CLI. Runs as non-root `appuser` (uid 1001). Referenced by LiteLLM via `http://chatgpt-codex-router:1456/v1`. |
+
+### chatgpt-codex-router-solx (second ChatGPT account bridge)
+
+| Field | Value |
+|---|---|
+| Image | Built from `setup/walter-host/services/chatgpt-codex-router/Dockerfile` (same as `chatgpt-codex-router`) |
+| Port | 127.0.0.1:1459 → 1456 (OpenAI-compatible API) |
+| RAM | ~80–250 MB (Node.js + Codex CLI subprocess) |
+| Volumes | `${CODEX_SOLX_HOME:-${HOME}/.codex-solx}:/home/appuser/.codex:rw` (second account's OAuth creds) |
+| Network | LiteLLM's Docker network (internal only — no Caddy vhost) |
+| Startup deps | none |
+| Env vars required | `CCR_SOLX_APIKEY` (distinct Bearer token; injected as the container's `CCR_APIKEY`; LiteLLM reads the same value as `os.environ/CCR_SOLX_APIKEY`) |
+| Per-service dir | `setup/walter-host/services/chatgpt-codex-router/docker-compose.solx.yml` (compose override; enable with `COMPOSE_FILE=docker-compose.yml:docker-compose.solx.yml`) |
+| Note | Optional. Every LiteLLM deployment on `chatgpt-codex-router` has a twin here under the same `model_name`, so Codex groups load-balance across two accounts and survive one account's usage limit via LiteLLM cooldown. See the router RUNBOOK. |
 
 ### claude-sub-router (Claude Code CLI subscription bridge)
 

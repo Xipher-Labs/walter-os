@@ -44,5 +44,6 @@ openclaw	ui	18789	18789	tcp	localhost	standalone/openclaw	OpenClaw control UI.
 posthog	replay-server	19000	19000	tcp	localhost	standalone/posthog	PostHog standalone replay service.
 posthog	replay-worker	19001	19001	tcp	localhost	standalone/posthog	PostHog standalone replay worker.
 chatgpt-codex-router	api	1456	1456	tcp	localhost	standalone/chatgpt-codex-router	Local ChatGPT Codex router.
+chatgpt-codex-router-solx	api	1459	1456	tcp	localhost	standalone/chatgpt-codex-router	Second ChatGPT account router (docker-compose.solx.yml override).
 claude-sub-router	api	1457	1457	tcp	localhost	standalone/claude-sub-router	Local Claude subscription router.
 gemini-sub-router	api	1458	1458	tcp	localhost	standalone/gemini-sub-router	Local Gemini subscription router.
