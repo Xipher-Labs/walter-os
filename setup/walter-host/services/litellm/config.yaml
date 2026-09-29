@@ -47,17 +47,36 @@ model_list:
 
   # chatgpt-codex-router exposes the operator's ChatGPT/Codex session as an
   # OpenAI-compatible API.
+  #
+  # Every chatgpt-codex-router deployment has a twin on
+  # chatgpt-codex-router-solx (a second ChatGPT account, see
+  # chatgpt-codex-router/docker-compose.solx.yml). Same model_name = one
+  # load-balanced group; when one account hits its usage limit the cooldown in
+  # router_settings takes that deployment out of rotation and the other serves.
+  # Keep the pairs in sync (tests/services/chatgpt-codex-router-secondary.bats).
   - model_name: codex-sub
     litellm_params:
       model: openai/gpt-5
       api_base: http://chatgpt-codex-router:1456/v1
       api_key: os.environ/CCR_APIKEY
 
+  - model_name: codex-sub
+    litellm_params:
+      model: openai/gpt-5
+      api_base: http://chatgpt-codex-router-solx:1456/v1
+      api_key: os.environ/CCR_SOLX_APIKEY
+
   - model_name: codex-sub-think
     litellm_params:
       model: openai/o4-mini
       api_base: http://chatgpt-codex-router:1456/v1
       api_key: os.environ/CCR_APIKEY
+
+  - model_name: codex-sub-think
+    litellm_params:
+      model: openai/o4-mini
+      api_base: http://chatgpt-codex-router-solx:1456/v1
+      api_key: os.environ/CCR_SOLX_APIKEY
 
   # claude-sub-router exposes the operator's Claude subscription as an
   # OpenAI-compatible API.
@@ -147,6 +166,16 @@ model_list:
 
 router_settings:
   routing_strategy: usage-based-routing-v2
+  # Reactive cooldown: after `allowed_fails` failures within a minute a
+  # deployment leaves rotation for `cooldown_time` seconds, so traffic moves to
+  # the other deployment of the same model_name (e.g. the second Codex account)
+  # or down the fallback chain. Prompt/schema errors are not health signals, so
+  # they never trigger a cooldown.
+  allowed_fails: 3
+  cooldown_time: 300
+  allowed_fails_policy:
+    ContentPolicyViolationErrorAllowedFails: 1000
+    BadRequestErrorAllowedFails: 1000
   redis_host: os.environ/REDIS_HOST
   # Fallback chain: when budget cap (or upstream rate-limit) hits primary,
   # LiteLLM tries the next entry. Order = preference.

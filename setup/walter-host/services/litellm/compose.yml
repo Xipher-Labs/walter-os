@@ -55,6 +55,8 @@ services:
       # Subscription router aliases. Pass the same keys each router uses so
       # LiteLLM can authenticate through the internal OpenAI-compatible hop.
       CCR_APIKEY: ${CCR_APIKEY:-}
+      # Second ChatGPT account router (chatgpt-codex-router-solx).
+      CCR_SOLX_APIKEY: ${CCR_SOLX_APIKEY:-}
       CSR_APIKEY: ${CSR_APIKEY:-}
       GSR_APIKEY: ${GSR_APIKEY:-}
     ports:
