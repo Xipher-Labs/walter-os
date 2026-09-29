@@ -16,6 +16,8 @@
 #   2. litellm-db saturation — pg_stat_activity vs max_connections; heal = restart
 #   3. Per-model probe       — claude-sub-haiku / gemini-sub / codex-sub via the
 #                              gateway; heal = restart the matching sub-router
+#   4. Per-account probe     — each Codex router (one per ChatGPT account)
+#                              directly; alert only (usage limits don't heal)
 #
 # Runs every 5 min via cron (see cron.example). Reuses the Telegram config of
 # walter-vm-watchdog.sh.
@@ -42,6 +44,13 @@ PROBES=(
   "gemini-sub:gemini-sub-router"
   "codex-sub:chatgpt-codex-router"
 )
+# One Codex router per ChatGPT account, probed directly (section 4). Absent
+# containers are skipped, so hosts with a single account need no change.
+ACCOUNT_PROBE_ROUTERS=(
+  "chatgpt-codex-router"
+  "chatgpt-codex-router-solx"
+)
+CODEX_ACCOUNT_PROBE_MODEL="${CODEX_ACCOUNT_PROBE_MODEL:-gpt-5-mini}"
 MODEL_TIMEOUT="${LITELLM_MODEL_PROBE_TIMEOUT:-50}"  # gemini-sub legitimately takes ~35s
 MODEL_EXEC_TIMEOUT="${LITELLM_MODEL_EXEC_TIMEOUT:-70s}"
 LITELLM_RESTART_SETTLE_SECONDS="${LITELLM_RESTART_SETTLE_SECONDS:-20}"
@@ -276,6 +285,30 @@ PY' 2>/dev/null | tr -d ' \n' || true)
   else
     state_set "$restart_key" 0
     transition "$key" "0" "" "model \`$model\` healthy again"
+  fi
+done
+
+# ---------- 4. Per-account Codex router probe ----------
+# codex-sub is load-balanced across one router per ChatGPT account, so the
+# gateway probe above keeps passing while ONE account is exhausted (LiteLLM
+# cools that deployment down and serves from the other). Probe each router
+# directly so a spent account is visible before the second one runs out too.
+# Alert only: a usage-limit failure is not fixed by restarting the router.
+# Routers that are not deployed on this host are skipped silently.
+for router in "${ACCOUNT_PROBE_ROUTERS[@]}"; do
+  docker inspect "$router" >/dev/null 2>&1 || continue
+  key="account_${router//[^a-zA-Z0-9]/_}"
+  # The router key is expanded inside the container; it never reaches the host.
+  # shellcheck disable=SC2016  # expanded by the container shell on purpose
+  account_code=$(timeout "$MODEL_EXEC_TIMEOUT" docker exec -e M="$CODEX_ACCOUNT_PROBE_MODEL" -e T="$MODEL_TIMEOUT" "$router" \
+    sh -c 'curl -s -o /dev/null -w "%{http_code}" --max-time "$T" -X POST http://localhost:1456/v1/chat/completions -H "Authorization: Bearer $CCR_APIKEY" -H "Content-Type: application/json" -d "{\"model\":\"$M\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}"' \
+    2>/dev/null | tr -d ' \n' || true)
+  if [[ "$account_code" == "200" ]]; then
+    transition "$key" "0" "" "Codex account behind \`$router\` answering again"
+  else
+    transition "$key" "1" \
+      "Codex router \`$router\` returned \`${account_code:-none}\` for \`$CODEX_ACCOUNT_PROBE_MODEL\` (not restarted). Likely the ChatGPT account hit its usage limit; LiteLLM keeps serving from the other account. Diagnose: RUNBOOK.md \"Diagnose account exhaustion\"." \
+      "Codex account behind \`$router\` answering again"
   fi
 done
 
